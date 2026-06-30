@@ -233,7 +233,8 @@ ${context}
     return { answer, disclaimer, suggestedFollowups, needsHumanExpert };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    if (isZaiConfigurationError(e)) {
+    const configurationFallback = isZaiConfigurationError(e);
+    if (configurationFallback) {
       console.warn("[Expert LLM skipped]", message);
     } else {
       console.error("[Expert LLM error]", e);
@@ -241,17 +242,29 @@ ${context}
     // 폴백: 검색된 문서를 직접 조합
     const fallback = docs.length > 0
       ? `## ${pickLangText(docs[0].title, lang)}\n\n${pickLangText(docs[0].content, lang)}\n\n📚 출처: ${docs[0].source}`
-      : "일시적 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
+      : {
+          ko: "관련 공식 문서를 충분히 찾지 못했습니다. 비자·체류, 서류, 거절 대응, 유학원 운영 중 어느 영역인지 조금 더 구체적으로 알려주세요. 개별 사례의 판단·서류 작성·제출 대행은 행정사 상담을 권장합니다.",
+          vi: "Chưa tìm thấy đủ tài liệu chính thức liên quan. Hãy cho biết rõ hơn về visa/lưu trú, hồ sơ, kháng từ chối, hoặc vận hành tư vấn du học. Trường hợp cá nhân nên tư vấn luật sư hành chính.",
+          mn: "Холбогдох албан эх сурвалж хангалттай олдсонгүй. Виз/байршил, баримт бичиг, татгалзлын хариу, эсвэл сургалтын зөвлөгөөний үйл ажиллагааны аль хэсэг болохыг тодруулна уу. Тусгай тохиолдолд мэргэжлийн зөвлөгөө авна уу.",
+          en: "I could not find enough relevant official source material. Please specify whether this is about visa/stay, documents, refusal response, or study-agency operations. Individual case decisions and filing work should go through an administrative scrivener.",
+        }[lang];
 
     return {
       answer: fallback,
-      disclaimer: {
-        ko: "⚠️ 오류로 인해 검색된 문서를 직접 표시합니다.",
-        vi: "⚠️ Lỗi, hiển thị tài liệu trực tiếp.",
-        mn: "⚠️ Алдаа, баримтыг шууд харуулж байна.",
-        en: "⚠️ Error, showing document directly.",
-      }[lang],
-      suggestedFollowups: [],
+      disclaimer: configurationFallback
+        ? {
+            ko: "⚠️ 현재 외부 LLM 없이 공식 문서 기반 요약으로 답변합니다. 개별 사례 판단은 행정사 상담을 권장합니다.",
+            vi: "⚠️ Hiện trả lời bằng tóm tắt tài liệu chính thức khi chưa có LLM ngoài. Trường hợp cá nhân nên tư vấn luật sư hành chính.",
+            mn: "⚠️ Гадаад LLM-гүй үед албан эх сурвалжийн хураангуйгаар хариулж байна. Тусгай тохиолдолд мэргэжлийн зөвлөгөө авна уу.",
+            en: "⚠️ Answering from official-source summaries while no external LLM is configured. Individual cases should be reviewed by an administrative scrivener.",
+          }[lang]
+        : {
+            ko: "⚠️ 생성 모델 응답에 실패해 검색된 공식 문서를 직접 요약했습니다.",
+            vi: "⚠️ Lỗi phản hồi mô hình, đang tóm tắt trực tiếp tài liệu chính thức đã tìm được.",
+            mn: "⚠️ Загварын хариу амжилтгүй болсон тул олдсон албан эх сурвалжийг шууд хураангуйллаа.",
+            en: "⚠️ Model response failed, so I summarized the retrieved official source material directly.",
+          }[lang],
+      suggestedFollowups: generateFollowups(question, lang, mode),
       needsHumanExpert,
     };
   }
