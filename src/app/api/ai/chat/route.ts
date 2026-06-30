@@ -3,9 +3,9 @@ import { pickLangText, type KnowledgeDoc } from "@/lib/data/knowledge";
 import type { Lang } from "@/lib/i18n/translations";
 import { findFAQ, AI_DEFAULT_REPLY } from "@/lib/data/faq";
 import { db } from "@/lib/db";
-import { hybridSearch, initVectorStore, getStoreStats } from "@/lib/embeddings/vector-store";
+import { hybridSearch, initVectorStore, initTransformerStore, getStoreStats } from "@/lib/embeddings/vector-store";
 
-// POST /api/ai/chat - RAG 기반 채팅 (Vector Search + LLM)
+// POST /api/ai/chat - RAG 기반 채팅 (Transformer Vector Search + LLM)
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -18,11 +18,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Vector Store 초기화 (lazy)
+    // 1. Vector Store 초기화 (TF-IDF 동기 + Transformer 비동기)
     initVectorStore();
+    await initTransformerStore();
 
-    // 2. 하이브리드 검색 (임베딩 + 키워드)
-    const searchResults = hybridSearch(question, { topK: 3 });
+    // 2. 하이브리드 검색 (Transformer + Keyword)
+    const searchResults = await hybridSearch(question, { topK: 3 });
     const docs: KnowledgeDoc[] = searchResults.map((r) => r.doc);
 
     // 3. FAQ 룰베이스 확인 (빠른 응답)
@@ -38,9 +39,11 @@ export async function POST(req: NextRequest) {
       vectorScore: Number(r.vectorScore.toFixed(3)),
       keywordScore: r.keywordScore,
       matchedKeywords: r.matchedKeywords,
+      method: r.method,
       category: r.doc.category,
       docSource: r.doc.source,
     }));
+    const storeStats = getStoreStats();
 
     // 4. LLM 호출 (검색된 문서를 컨텍스트로 활용)
     if (docs.length > 0) {
@@ -56,7 +59,6 @@ export async function POST(req: NextRequest) {
         }
       } catch (llmErr) {
         console.error("[LLM Error]", llmErr);
-        // LLM 실패시 검색된 문서를 직접 답변으로
         if (faq) {
           answer = faq[lang] + "\n\n📚 " + pickLangText(docs[0].content, lang);
         } else {
@@ -86,6 +88,7 @@ export async function POST(req: NextRequest) {
           retrievedDocs: JSON.stringify({
             docIds: retrievedDocIds,
             searchMeta,
+            storeMethod: storeStats.method,
           }),
         },
       });
@@ -103,6 +106,7 @@ export async function POST(req: NextRequest) {
         source: d.source,
       })),
       searchMeta,
+      storeStats,
     });
   } catch (e) {
     console.error("[POST /api/ai/chat]", e);
@@ -113,6 +117,7 @@ export async function POST(req: NextRequest) {
 // GET /api/ai/chat - Vector Store 상태 조회 (디버그용)
 export async function GET() {
   initVectorStore();
+  // transformer는 lazy load — 별도 요청시에만 초기화
   return NextResponse.json(getStoreStats());
 }
 

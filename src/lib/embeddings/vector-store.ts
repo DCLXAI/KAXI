@@ -1,17 +1,26 @@
-// Vector Store — 임베딩 기반 문서 검색
-// 인메모리 인덱스 + 파일 캐싱 (운영시 외부 Vector DB로 교체 가능)
-// 하이브리드 모드: 임베딩 코사인 유사도 + 키워드 매칭 결합
+// Transformer 기반 Vector Store
+// - 1차: multilingual-e5-small (384차원 의미 임베딩)
+// - 폴백: TF-IDF vectorizer.ts (vocabulary 기반 희소 벡터)
+// 하이브리드 검색 (transformer + keyword) 지원
 
 import { KNOWLEDGE_DOCS, type KnowledgeDoc } from "../data/knowledge";
 import type { Lang } from "../i18n/translations";
 import {
   fitVectorizer,
-  vectorize,
-  cosineSimilarity,
+  vectorize as tfidfVectorize,
+  cosineSimilarity as tfidfCosine,
   multilingualText,
-  type Vectorizer,
-  type Vector,
+  type Vectorizer as TFIDFVectorizer,
 } from "./vectorizer";
+import {
+  embedText,
+  embedBatch,
+  cosineSim,
+  isTransformerAvailable,
+  type EmbeddingVector,
+} from "./transformer-embedder";
+import * as fs from "fs";
+import * as path from "path";
 
 export interface ScoredDoc {
   doc: KnowledgeDoc;
@@ -19,28 +28,89 @@ export interface ScoredDoc {
   vectorScore: number;
   keywordScore: number;
   matchedKeywords: string[];
+  method: "transformer" | "tfidf";
 }
 
 interface VectorStore {
-  vectorizer: Vectorizer | null;
-  docVectors: Vector[];
+  tfidfVectorizer: TFIDFVectorizer | null;
+  tfidfDocVectors: number[][];
+  transformerDocVectors: EmbeddingVector[]; // 384-dim normalized
   docIds: string[];
   ready: boolean;
+  method: "transformer" | "tfidf" | "mixed";
 }
 
-// 싱글톤 인스턴스
 let store: VectorStore = {
-  vectorizer: null,
-  docVectors: [],
+  tfidfVectorizer: null,
+  tfidfDocVectors: [],
+  transformerDocVectors: [],
   docIds: [],
   ready: false,
+  method: "tfidf",
 };
 
-// 초기화 (lazy — 첫 검색시 또는 명시적 호출시)
+const CACHE_FILE = "/home/z/my-project/data/vector-store/embeddings-cache.json";
+
+// 다국어 결합 텍스트에서 각 언어별로 분리 (transformer용)
+// transformer는 다국어를 이해하므로 한 언어당 임베딩 → 평균
+function multilingualChunks(doc: KnowledgeDoc): string[] {
+  return [
+    `${doc.title.ko} ${doc.content.ko}`,
+    `${doc.title.en} ${doc.content.en}`,
+    `${doc.title.vi} ${doc.content.vi}`,
+    `${doc.title.mn} ${doc.content.mn}`,
+  ];
+}
+
+// 문서 임베딩 (4개 언어 평균)
+async function embedDoc(doc: KnowledgeDoc): Promise<EmbeddingVector> {
+  const chunks = multilingualChunks(doc);
+  const { vectors } = await embedBatch(chunks);
+  // 4개 언어 벡터 평균
+  const dim = vectors[0].length;
+  const avg = new Float32Array(dim);
+  for (const v of vectors) {
+    for (let i = 0; i < dim; i++) {
+      avg[i] += v[i];
+    }
+  }
+  // L2 정규화
+  let norm = 0;
+  for (let i = 0; i < dim; i++) norm += avg[i] * avg[i];
+  norm = Math.sqrt(norm) || 1;
+  for (let i = 0; i < dim; i++) avg[i] /= norm;
+  return avg;
+}
+
+// 캐시에서 로드
+function loadCache(): Record<string, number[]> | null {
+  try {
+    if (fs.existsSync(CACHE_FILE)) {
+      const data = fs.readFileSync(CACHE_FILE, "utf-8");
+      return JSON.parse(data);
+    }
+  } catch (e) {
+    console.error("[VectorStore] Cache load error:", e);
+  }
+  return null;
+}
+
+// 캐시에 저장
+function saveCache(cache: Record<string, number[]>): void {
+  try {
+    fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true });
+    fs.writeFileSync(CACHE_FILE, JSON.stringify(cache));
+    console.log(`[VectorStore] Cache saved: ${Object.keys(cache).length} embeddings`);
+  } catch (e) {
+    console.error("[VectorStore] Cache save error:", e);
+  }
+}
+
+// 동기 초기화 (TF-IDF만 — transformer는 async init 필요)
 export function initVectorStore(): void {
   if (store.ready) return;
 
-  // 각 문서를 다국어 결합 텍스트로 변환
+  // TF-IDF vectorizer 학습 (폴백용)
   const docTexts = KNOWLEDGE_DOCS.map((d) =>
     multilingualText({
       title: d.title,
@@ -48,26 +118,95 @@ export function initVectorStore(): void {
       keywords: d.keywords,
     })
   );
-
-  // Vectorizer 학습 (vocabulary + IDF)
-  const vectorizer = fitVectorizer(docTexts);
-
-  // 각 문서를 벡터화
-  const docVectors = docTexts.map((t) => vectorize(t, vectorizer));
+  const tfidfVectorizer = fitVectorizer(docTexts);
+  const tfidfDocVectors = docTexts.map((t) => tfidfVectorize(t, tfidfVectorizer));
 
   store = {
-    vectorizer,
-    docVectors,
+    ...store,
+    tfidfVectorizer,
+    tfidfDocVectors,
     docIds: KNOWLEDGE_DOCS.map((d) => d.id),
     ready: true,
+    method: "tfidf",
   };
 
   console.log(
-    `[VectorStore] Initialized: ${store.docIds.length} docs, dim=${vectorizer.dim}`
+    `[VectorStore] TF-IDF ready: ${store.docIds.length} docs, dim=${tfidfVectorizer.dim}`
   );
 }
 
-// 키워드 매칭 점수 (기존 로직 유지, 보조 신호로 활용)
+// 비동기 초기화 (Transformer 모델 로드 + 문서 임베딩)
+export async function initTransformerStore(): Promise<void> {
+  if (store.method === "transformer" || store.method === "mixed") return;
+
+  initVectorStore(); // TF-IDF 먼저 초기화 (폴백 보장)
+
+  if (!isTransformerAvailable()) {
+    console.log("[VectorStore] Transformer unavailable, using TF-IDF only");
+    return;
+  }
+
+  // 캐시 확인
+  const cache = loadCache();
+  const cachedVectors: Record<string, EmbeddingVector> = {};
+
+  if (cache) {
+    for (const doc of KNOWLEDGE_DOCS) {
+      if (cache[doc.id]) {
+        cachedVectors[doc.id] = new Float32Array(cache[doc.id]);
+      }
+    }
+    console.log(`[VectorStore] Cache hit: ${Object.keys(cachedVectors).length}/${KNOWLEDGE_DOCS.length}`);
+  }
+
+  // 캐시 안된 문서 임베딩
+  const newCache: Record<string, number[]> = { ...(cache || {}) };
+  let allSuccess = true;
+
+  for (const doc of KNOWLEDGE_DOCS) {
+    if (cachedVectors[doc.id]) continue;
+
+    try {
+      console.log(`[VectorStore] Embedding: ${doc.id}`);
+      const vec = await embedDoc(doc);
+      cachedVectors[doc.id] = vec;
+      newCache[doc.id] = Array.from(vec);
+    } catch (e) {
+      console.error(`[VectorStore] Embed failed for ${doc.id}:`, e);
+      allSuccess = false;
+    }
+  }
+
+  // 캐시 저장
+  if (Object.keys(newCache).length > (cache ? Object.keys(cache).length : 0)) {
+    saveCache(newCache);
+  }
+
+  // transformerDocVectors 구성 (KNOWLEDGE_DOCS 순서대로)
+  const transformerDocVectors: EmbeddingVector[] = [];
+  let transformerCoverage = 0;
+  for (const doc of KNOWLEDGE_DOCS) {
+    if (cachedVectors[doc.id]) {
+      transformerDocVectors.push(cachedVectors[doc.id]);
+      transformerCoverage++;
+    } else {
+      // 빈 벡터로 채움 (해당 문서는 TF-IDF로만 검색)
+      transformerDocVectors.push(new Float32Array(384));
+    }
+  }
+
+  store = {
+    ...store,
+    transformerDocVectors,
+    method: transformerCoverage === KNOWLEDGE_DOCS.length ? "transformer" : "mixed",
+  };
+
+  console.log(
+    `[VectorStore] Transformer ready: ${transformerCoverage}/${KNOWLEDGE_DOCS.length} docs embedded, method=${store.method}`
+  );
+}
+
+// 키워드 매칭 점수
 function keywordScore(query: string, doc: KnowledgeDoc): { score: number; matched: string[] } {
   const q = query.toLowerCase().trim();
   if (!q) return { score: 0, matched: [] };
@@ -90,7 +229,6 @@ function keywordScore(query: string, doc: KnowledgeDoc): { score: number; matche
     }
   }
 
-  // 제목 매칭 가중치
   for (const lang of ["ko", "vi", "mn", "en"] as Lang[]) {
     const title = doc.title[lang].toLowerCase();
     for (const w of words) {
@@ -103,34 +241,97 @@ function keywordScore(query: string, doc: KnowledgeDoc): { score: number; matche
   return { score, matched };
 }
 
-// 하이브리드 검색: 임베딩 + 키워드 결합
-export function hybridSearch(
+// 동의어 확장 (한국어 일상어 → 공식 용어)
+const SYNONYMS: Record<string, string[]> = {
+  "돈": ["비용", "cost", "chi phí", "зардал"],
+  "얼마": ["비용", "가격", "cost", "price"],
+  "비싸": ["비용", "cost", "높은"],
+  "폭리": ["비용", "브로커", "redflag"],
+  "거절": ["거절", "refusal", "보장", "보증"],
+  "어떡해": ["대응", "해결", "방법"],
+  "학교": ["대학", "어학당", "school", "university"],
+  "대학교": ["대학", "university", "학위"],
+  "어학당": ["언어", "language", "한국어"],
+  "한국어": ["언어", "korean", "language", "topik"],
+  "서류": ["documents", "hồ sơ", "barimt", "증명서"],
+  "끝나고": ["수료", "전환", "transfer"],
+  "가려면": ["진학", "전환", "입학"],
+  "허위": ["fake", "가짜", "거짓", "위조"],
+  "잔고증명": ["재정", "financial", "잔고"],
+  "필요해요": ["필요", "required", "요구"],
+  "받아요": ["검사", "진단", "test"],
+  "어디서": ["장소", "병원", "지정"],
+};
+
+function expandSynonyms(query: string): string {
+  let expanded = query;
+  for (const [key, syns] of Object.entries(SYNONYMS)) {
+    if (query.includes(key)) {
+      expanded += " " + syns.join(" ");
+    }
+  }
+  return expanded;
+}
+
+// 하이브리드 검색 (비동기 — Transformer 사용시)
+export async function hybridSearch(
   query: string,
   options: {
     topK?: number;
     vectorWeight?: number;
     keywordWeight?: number;
   } = {}
-): ScoredDoc[] {
+): Promise<ScoredDoc[]> {
   const topK = options.topK ?? 3;
-  const vectorWeight = options.vectorWeight ?? 1.2; // 임베딩 가중치 증가
+  const vectorWeight = options.vectorWeight ?? 1.2;
   const keywordWeight = options.keywordWeight ?? 0.6;
 
   if (!store.ready) initVectorStore();
   if (!query.trim()) return [];
 
-  // 동의어 확장 (한국어 일상 표현 → 공식 용어)
+  // Transformer 사용 가능시 비동기 초기화
+  if (isTransformerAvailable() && store.method === "tfidf") {
+    await initTransformerStore();
+  }
+
+  // 동의어 확장
   const expandedQuery = expandSynonyms(query);
 
-  // 쿼리 벡터화 (확장된 쿼리 사용)
-  const queryVec = vectorize(expandedQuery, store.vectorizer!);
+  // 쿼리 임베딩 (transformer 또는 TF-IDF)
+  let queryVec: EmbeddingVector;
+  let method: "transformer" | "tfidf" = "tfidf";
+
+  if (store.method === "transformer" || store.method === "mixed") {
+    try {
+      const result = await embedText(query, { vectorizer: store.tfidfVectorizer! });
+      queryVec = result.vector;
+      method = result.method;
+    } catch {
+      // 폴백: TF-IDF만 사용
+      queryVec = new Float32Array(tfidfVectorize(expandedQuery, store.tfidfVectorizer!));
+      method = "tfidf";
+    }
+  } else {
+    queryVec = new Float32Array(tfidfVectorize(expandedQuery, store.tfidfVectorizer!));
+    method = "tfidf";
+  }
 
   // 각 문서에 대해 점수 계산
   const scored: ScoredDoc[] = KNOWLEDGE_DOCS.map((doc, i) => {
-    const vScore = cosineSimilarity(queryVec, store.docVectors[i]);
-    const { score: kScore, matched } = keywordScore(query, doc);
+    // 벡터 점수
+    let vScore: number;
+    if (method === "transformer" && store.transformerDocVectors[i]) {
+      vScore = cosineSim(queryVec, store.transformerDocVectors[i]);
+    } else {
+      // TF-IDF 폴백
+      vScore = tfidfCosine(
+        Array.from(queryVec),
+        store.tfidfDocVectors[i]
+      );
+    }
 
-    // 정규화: 벡터 점수는 0~1, 키워드 점수는 로그 스케일 정규화
+    // 키워드 점수
+    const { score: kScore, matched } = keywordScore(query, doc);
     const kScoreNorm = kScore > 0 ? Math.log(1 + kScore) / Math.log(20) : 0;
 
     const combined = vScore * vectorWeight + kScoreNorm * keywordWeight;
@@ -141,84 +342,27 @@ export function hybridSearch(
       vectorScore: vScore,
       keywordScore: kScore,
       matchedKeywords: matched,
+      method,
     };
   });
 
   return scored
-    .filter((s) => s.score > 0.03) // 임계값 낮춤 (의미적 검색 허용)
+    .filter((s) => s.score > 0.03)
     .sort((a, b) => b.score - a.score)
     .slice(0, topK);
 }
 
-// 동의어 확장 — 일상어를 공식 용어로 변환하여 임베딩 질 향상
-const SYNONYMS: Record<string, string[]> = {
-  // 비용 관련
-  "돈": ["비용", "cost", "chi phí", "зардал"],
-  "얼마": ["비용", "가격", "cost", "price"],
-  "비싸": ["비용", "cost", "높은"],
-  "폭리": ["비용", "브로커", "redflag"],
-  // 비자 관련
-  "거절": ["거절", "refusal", "보장", "보증"],
-  "어떡해": ["대응", "해결", "방법"],
-  // 학교 관련
-  "학교": ["대학", "어학당", "school", "university"],
-  "대학교": ["대학", "university", "학위"],
-  "어학당": ["언어", "language", "한국어"],
-  "한국어": ["언어", "korean", "language", "topik"],
-  // 서류 관련
-  "서류": ["documents", "hồ sơ", "barimt", "증명서"],
-  "서류들": ["documents", "증명서"],
-  // 전환
-  "끝나고": ["수료", "전환", "transfer"],
-  "가려면": ["진학", "전환", "입학"],
-  // 경고
-  "허위": ["fake", "가짜", "거짓", "위조"],
-  "잔고증명": ["재정", "financial", "잔고"],
-  // 기타
-  "필요해요": ["필요", "required", "요구"],
-  "받아요": ["검사", "진단", "test"],
-  "어디서": ["장소", "병원", "지정"],
-};
-
-function expandSynonyms(query: string): string {
-  let expanded = query;
-
-  for (const [key, syns] of Object.entries(SYNONYMS)) {
-    if (query.includes(key)) {
-      expanded += " " + syns.join(" ");
-    }
-  }
-
-  return expanded;
-}
-
-// 순수 임베딩 검색 (키워드 없는 의미 검색용)
-export function semanticSearch(query: string, topK = 3): ScoredDoc[] {
-  if (!store.ready) initVectorStore();
-  if (!query.trim()) return [];
-
-  const queryVec = vectorize(query, store.vectorizer!);
-
-  const scored: ScoredDoc[] = KNOWLEDGE_DOCS.map((doc, i) => ({
-    doc,
-    score: cosineSimilarity(queryVec, store.docVectors[i]),
-    vectorScore: cosineSimilarity(queryVec, store.docVectors[i]),
-    keywordScore: 0,
-    matchedKeywords: [],
-  }));
-
-  return scored
-    .filter((s) => s.score > 0.1)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, topK);
-}
-
-// 디버그용 — 스토어 상태 조회
+// 디버그용
 export function getStoreStats() {
   return {
     ready: store.ready,
     docCount: store.docIds.length,
-    dim: store.vectorizer?.dim ?? 0,
-    vocabSize: store.vectorizer?.vocabulary.length ?? 0,
+    method: store.method,
+    transformerAvailable: isTransformerAvailable(),
+    tfidfDim: store.tfidfVectorizer?.dim ?? 0,
+    transformerDim: store.transformerDocVectors[0]?.length ?? 0,
+    transformerCoverage: store.transformerDocVectors.filter(
+      (v) => v.length > 0 && v.some((x) => x !== 0)
+    ).length,
   };
 }
