@@ -37,5 +37,7 @@ jobs:
         run: bun run test:quality
       - name: Verify data governance policy
         run: bun run test:governance
+      - name: Verify privacy guards
+        run: bun run test:privacy
       - name: Build
         run: bun run build

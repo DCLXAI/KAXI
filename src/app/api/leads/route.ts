@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { canWriteRuntimeDatabase, db } from "@/lib/db";
 import { getAdminContext, jsonError, parsePositiveInt, rateLimit, requireAdmin } from "@/lib/api/security";
 import { preparePiiField, readPiiField, retentionUntil } from "@/lib/privacy/pii";
 
@@ -85,6 +85,12 @@ export async function POST(req: NextRequest) {
     if (!nickname || !nationality || !pathKey) return jsonError("Missing required fields: nickname, nationality, pathKey", 400);
     if (String(nickname).length > 80) return jsonError("Nickname is too long", 413);
     if (contact && String(contact).length > 160) return jsonError("Contact is too long", 413);
+    if (!canWriteRuntimeDatabase()) {
+      return NextResponse.json(
+        { error: "Writable production database is not configured", persisted: false },
+        { status: 503 }
+      );
+    }
 
     const protectedContact = preparePiiField(contact ? String(contact) : null, {
       kind: "contact",

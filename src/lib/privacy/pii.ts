@@ -31,6 +31,10 @@ export function isPiiEncryptionConfigured(): boolean {
   return Boolean(encryptionKey());
 }
 
+function canStoreUnencryptedPlaintext(): boolean {
+  return process.env.PII_ALLOW_UNENCRYPTED_PLAINTEXT === "true" && process.env.NODE_ENV !== "production";
+}
+
 export function hashPii(value: string | null | undefined): string | null {
   const normalized = value ? normalizeForHash(value) : "";
   if (!normalized) return null;
@@ -102,17 +106,20 @@ export function preparePiiField(
 
   const ciphertext = encryptPii(trimmed);
   const encrypted = Boolean(ciphertext);
-  const safePlaintext = encrypted
-    ? options.kind === "contact"
-      ? redactContact(trimmed)
-      : redactSensitiveText(trimmed).slice(0, options.maxPlainLength || 240)
-    : trimmed.slice(0, options.maxPlainLength || trimmed.length);
+  const redactedPlaintext = options.kind === "contact"
+    ? redactContact(trimmed)
+    : redactSensitiveText(trimmed).slice(0, options.maxPlainLength || 240);
+  const safePlaintext = encrypted || canStoreUnencryptedPlaintext()
+    ? redactedPlaintext
+    : options.kind === "contact"
+      ? redactedPlaintext
+      : "[redacted-unencrypted]";
 
   return {
     plaintext: safePlaintext,
     ciphertext,
     hash: hashPii(trimmed),
-    redacted: encrypted,
+    redacted: encrypted || safePlaintext !== trimmed,
   };
 }
 

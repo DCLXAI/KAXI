@@ -35,7 +35,10 @@ export async function POST(req: NextRequest) {
       question: question || null,
     });
 
-    return NextResponse.json({ request: serializePartnerRequest(request) }, { status: 201 });
+    return NextResponse.json(
+      { request: serializePartnerRequest(request), persisted: (request as any).persisted !== false },
+      { status: (request as any).persisted === false ? 202 : 201 }
+    );
   } catch (e) {
     console.error("[POST /api/partner-requests]", e);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

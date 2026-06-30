@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+import { canWriteRuntimeDatabase, db } from "@/lib/db";
 import { parsePositiveInt } from "@/lib/api/security";
 import { preparePiiField, retentionUntil } from "@/lib/privacy/pii";
 
@@ -40,7 +40,25 @@ export async function createPartnerRequest(input: CreatePartnerRequestInput) {
   const protectedQuestion = preparePiiField(question, { kind: "text", maxPlainLength: 240 });
   let finalLeadId = input.leadId || "anonymous";
 
-  if (finalLeadId === "anonymous") {
+  if (!canWriteRuntimeDatabase()) {
+    return {
+      id: `unpersisted-${Date.now()}`,
+      createdAt: new Date(),
+      leadId: finalLeadId,
+      partnerType,
+      question: protectedQuestion.plaintext,
+      questionCiphertext: protectedQuestion.ciphertext,
+      questionHash: protectedQuestion.hash,
+      questionRedacted: protectedQuestion.redacted,
+      retentionUntil: null,
+      deleteRequestedAt: null,
+      deletedAt: null,
+      status: "unpersisted",
+      persisted: false,
+    };
+  }
+
+  if (finalLeadId === "anonymous" || finalLeadId.startsWith("local-")) {
     const lead = await createAnonymousLead();
     finalLeadId = lead.id;
   }

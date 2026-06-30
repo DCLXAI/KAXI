@@ -18,6 +18,7 @@
 - `ADMIN_ROLE`: `owner`, `admin`, or `viewer`. `viewer` can read admin dashboards but cannot mutate data.
 - `ADMIN_MFA_TOTP_SECRET`: Optional base32 TOTP secret for admin MFA.
 - `DATA_ENCRYPTION_KEY`, `PII_HASH_SECRET`: Required before production writes. Encrypts contact/free-form question payloads and hashes them for deletion lookup.
+- `PII_ALLOW_UNENCRYPTED_PLAINTEXT`: Local development escape hatch only. Keep `false` in production.
 - `PRIVACY_CHATLOG_RETENTION_DAYS`, `PRIVACY_PARTNER_REQUEST_RETENTION_DAYS`, `PRIVACY_LEAD_RETENTION_DAYS`: Retention windows enforced by `/api/privacy/retention`.
 - `CRON_SECRET`: Required for Vercel Cron to call `/api/privacy/retention`.
 - `AGENT_BACKEND`: Agent backend selector. Defaults to `codex`; set `zai` only when explicit Z.ai settings are present.
@@ -48,7 +49,7 @@ The checked-in schema is still MVP-oriented. Production must use a managed relat
 2. Do not use `prisma db push` against production.
 3. Keep personal/local demo user data out of deployment artifacts.
 4. Treat `Lead`, `PartnerRequest`, `ChatLog.question`, and `AgentRequestLedger.ip/userId` as user data.
-5. `Lead.contact`, `PartnerRequest.question`, and `ChatLog.question` are stored with ciphertext/hash columns when `DATA_ENCRYPTION_KEY` is set. Existing plaintext columns keep only a masked display value.
+5. `Lead.contact`, `PartnerRequest.question`, and `ChatLog.question` are stored with ciphertext/hash columns when `DATA_ENCRYPTION_KEY` is set. Existing plaintext columns keep only a masked display value; without an encryption key, free-form text is stored as `[redacted-unencrypted]` unless the local-only `PII_ALLOW_UNENCRYPTED_PLAINTEXT=true` escape hatch is set outside production.
 6. Deletion requests are accepted through `POST /api/privacy/delete-request` with `leadId`, `contact`, or an exact `question`. The request does not reveal whether a record exists.
 7. Retention is enforced by `POST /api/privacy/retention` for admins and daily Vercel Cron `GET /api/privacy/retention`.
 8. Before analytics export, use the redacted ChatLog analysis route or scripts; free-form questions are masked for emails, phone numbers, and private messenger handles.
@@ -95,9 +96,10 @@ Production admin login should use `ADMIN_PASSWORD_HASH` and optional `ADMIN_MFA_
 
 ## CI Quality Gates
 
-GitHub Actions restores runtime artifacts during `bun install --frozen-lockfile`, then runs typecheck, lint, `test:vector`, `test:quality`, `test:governance`, and production build.
+GitHub Actions restores runtime artifacts during `bun install --frozen-lockfile`, then runs typecheck, lint, `test:vector`, `test:quality`, `test:governance`, `test:privacy`, and production build.
 `test:vector` verifies the restored model/vector cache can retrieve expected KAXI source documents.
 `test:quality` validates the multilingual evaluation set in `quality/multilingual-eval-cases.json`, including expected source document, refusal expectation, and cost-format labels.
+`test:privacy` verifies PII encryption/redaction behavior and hosted SQLite write guards.
 
 ## AI Cost Controls
 
