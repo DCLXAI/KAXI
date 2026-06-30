@@ -130,7 +130,7 @@ Before treating KAXI as production-ready, `/api/readiness` must report `status: 
 
 The app supports shared IP rate limits and daily quotas through `RateLimitBucket`.
 
-Use `RATE_LIMIT_BACKEND=database` with a reachable managed production DB for Vercel multi-instance deployments. `auto` uses the shared database when it is configured and falls back to memory for local/read-only demo SQLite.
+Use `RATE_LIMIT_BACKEND=database` with a reachable managed production DB for Vercel multi-instance deployments. `auto` uses the shared database when it is configured and falls back to memory only outside hosted/production runtimes. In production, finite limits fail closed with HTTP 503 if the shared limiter backend is unavailable; set a specific limit to `0` only for intentionally disabled endpoints.
 
 ## Agent Grounding
 

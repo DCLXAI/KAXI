@@ -1,5 +1,7 @@
 import { getReadinessPayload } from "../src/lib/ops/readiness";
 import { getRuntimeDatabaseInfo } from "../src/lib/db";
+import { NextRequest } from "next/server";
+import { rateLimit } from "../src/lib/api/security";
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -92,6 +94,38 @@ function testDatabaseRuntimeInfo() {
   }
 }
 
+async function testProductionRateLimitFailsClosedWithoutSharedBackend() {
+  const snapshot = { ...process.env };
+  try {
+    Object.assign(process.env, {
+      NODE_ENV: "production",
+      VERCEL_ENV: "production",
+      VERCEL: "1",
+      DATABASE_URL: "file:./db/custom.db",
+      RATE_LIMIT_BACKEND: "auto",
+    });
+    delete process.env.TURSO_DATABASE_URL;
+    delete process.env.TURSO_AUTH_TOKEN;
+    delete process.env.DATABASE_AUTH_TOKEN;
+
+    const req = new NextRequest("https://kaxi.local/api/guard", {
+      headers: { "x-forwarded-for": "203.0.113.10" },
+    });
+    const res = await rateLimit(req, { key: "readiness:guard", limit: 1, windowMs: 60_000 });
+    if (!res || res.status !== 503) {
+      fail(`production rate limit without shared backend should fail closed, got ${res?.status || "pass"}`);
+    }
+
+    const disabled = await rateLimit(req, { key: "readiness:disabled", limit: 0, windowMs: 60_000 });
+    if (disabled) {
+      fail(`disabled production rate limit should pass, got ${disabled.status}`);
+    }
+  } finally {
+    restoreEnv(snapshot);
+  }
+}
+
 await testProductionReadinessFlagsMissingOpsConfig();
 testDatabaseRuntimeInfo();
+await testProductionRateLimitFailsClosedWithoutSharedBackend();
 console.log("PASS readiness guards");

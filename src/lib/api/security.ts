@@ -118,6 +118,26 @@ function canUseDatabaseRateLimit(): boolean {
   return canUseSharedRuntimeDatabase();
 }
 
+function isProductionRuntime(): boolean {
+  return (
+    process.env.NODE_ENV === "production" ||
+    process.env.VERCEL_ENV === "production" ||
+    process.env.VERCEL === "1"
+  );
+}
+
+function shouldFailClosedRateLimit(): boolean {
+  const backend = (process.env.RATE_LIMIT_BACKEND || "auto").toLowerCase();
+  return isProductionRuntime() || backend === "database";
+}
+
+function rateLimitUnavailableResponse() {
+  return NextResponse.json(
+    { error: "Shared rate limit backend unavailable" },
+    { status: 503 }
+  );
+}
+
 function memoryRateLimit(
   req: NextRequest,
   { key, limit, windowMs }: RateLimitRule
@@ -188,6 +208,7 @@ async function databaseRateLimit(
     return null;
   } catch (err) {
     console.warn("[rateLimit database fallback]", err instanceof Error ? err.message : err);
+    if (shouldFailClosedRateLimit()) return rateLimitUnavailableResponse();
     return memoryRateLimit(req, { key, limit, windowMs });
   }
 }
@@ -196,9 +217,10 @@ export async function rateLimit(
   req: NextRequest,
   rule: RateLimitRule
 ): Promise<NextResponse | null> {
-  return canUseDatabaseRateLimit()
-    ? databaseRateLimit(req, rule)
-    : memoryRateLimit(req, rule);
+  if (!Number.isFinite(rule.limit) || rule.limit <= 0) return null;
+  if (canUseDatabaseRateLimit()) return databaseRateLimit(req, rule);
+  if (shouldFailClosedRateLimit()) return rateLimitUnavailableResponse();
+  return memoryRateLimit(req, rule);
 }
 
 export async function consumeDailyQuota(

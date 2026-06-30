@@ -173,12 +173,9 @@ async function testHostedSqliteGuards() {
     }),
   });
   const partnerRes = await partners.POST(partnerReq);
-  const partnerBody = await partnerRes.json();
-  if (partnerRes.status !== 202 || partnerBody.persisted !== false) {
-    fail(`partner guard expected 202 persisted=false, got ${partnerRes.status}`);
-  }
-  if (JSON.stringify(partnerBody).includes("user@example.com")) {
-    fail("partner unpersisted response leaked PII");
+  if (partnerRes.status !== 503) {
+    const partnerBody = await partnerRes.json().catch(() => ({}));
+    fail(`hosted partner guard expected shared limiter 503, got ${partnerRes.status}: ${JSON.stringify(partnerBody)}`);
   }
 }
 
