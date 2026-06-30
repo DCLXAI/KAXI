@@ -81,7 +81,14 @@ Visa, immigration, school-accreditation, and cost guidance are time-sensitive.
 ## Admin Access
 
 Admin APIs require `x-admin-key: $ADMIN_API_KEY` or `Authorization: Bearer $ADMIN_API_KEY`.
-Do not expose admin navigation in public product surfaces. Direct hash routes may exist for demo access, but server-side guards are mandatory.
+Do not expose admin navigation in public product surfaces. Admin UI routes such as `/admin` and `/synonyms` are real Next.js routes, but server-side API guards remain mandatory.
+Prefer session login through `/login`; the browser API-key fallback is intentionally memory-only and should be used only for temporary operations.
+
+## CI Quality Gates
+
+GitHub Actions restores runtime artifacts during `bun install --frozen-lockfile`, then runs typecheck, lint, `test:vector`, `test:quality`, and production build.
+`test:vector` verifies the restored model/vector cache can retrieve expected KAXI source documents.
+`test:quality` validates the multilingual evaluation set in `quality/multilingual-eval-cases.json`, including expected source document, refusal expectation, and cost-format labels.
 
 ## AI Cost Controls
 
@@ -129,7 +136,7 @@ CODEX_API_KEY=...
 ### Browser-to-Local Codex Bridge
 
 When the developer MacBook is on, the deployed site can use that Mac's current Codex CLI through a localhost bridge.
-This is intended for the owner opening `https://kaxi.vercel.app/#agent` on the same Mac, not for public multi-user production.
+This is intended for the owner opening `https://kaxi.vercel.app/agent` on the same Mac, not for public multi-user production.
 
 Start the bridge:
 

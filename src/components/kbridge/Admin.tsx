@@ -64,21 +64,12 @@ export function Admin() {
   }, [adminKey, fetchLeads, hasAdminAccess, lang]);
 
   useEffect(() => {
-    const saved = sessionStorage.getItem("kb-admin-key") || "";
-    if (saved) {
-      setAdminKey(saved);
-      setKeyInput(saved);
-    }
-  }, []);
-
-  useEffect(() => {
     if (hasAdminAccess) loadAll();
   }, [loadAll]);
 
   const unlock = () => {
     const trimmed = keyInput.trim();
     if (!trimmed) return;
-    sessionStorage.setItem("kb-admin-key", trimmed);
     setAdminKey(trimmed);
   };
 
@@ -91,7 +82,7 @@ export function Admin() {
             <CardDescription>
               {status === "loading"
                 ? lang === "ko" ? "세션 확인 중..." : "Checking session..."
-                : lang === "ko" ? "로그인하거나 관리자 API 키를 입력하세요." : "Sign in or enter the admin API key."}
+                : lang === "ko" ? "세션 로그인을 권장합니다. API 키는 현재 화면에서만 임시 사용됩니다." : "Session login is preferred. API key fallback is kept only for this tab."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -103,6 +94,7 @@ export function Admin() {
               value={keyInput}
               onChange={(e) => setKeyInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && unlock()}
+              placeholder={lang === "ko" ? "임시 관리자 API 키" : "Temporary admin API key"}
               autoComplete="off"
             />
             <Button className="w-full" onClick={unlock}>

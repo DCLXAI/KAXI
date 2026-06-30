@@ -202,5 +202,5 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`[codex-local-bridge] listening on http://${HOST}:${PORT}`);
-  console.log("[codex-local-bridge] open https://kaxi.vercel.app/#agent on this Mac to use local Codex CLI");
+  console.log("[codex-local-bridge] open https://kaxi.vercel.app/agent on this Mac to use local Codex CLI");
 });

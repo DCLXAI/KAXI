@@ -63,7 +63,7 @@ function statusIcon(status: DocStatus) {
   }
 }
 
-export function Documents() {
+export function Documents({ onNavigate }: { onNavigate: (v: string) => void }) {
   const { lang } = useLangStore();
   const { docs, setStatus, upload } = useDocsStore();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -202,7 +202,7 @@ export function Documents() {
                     variant="outline"
                     size="sm"
                     className="w-full mt-3 text-xs"
-                    onClick={() => (window.location.hash = "partners")}
+                    onClick={() => onNavigate("partners")}
                   >
                     {tr("docs_connect_admin", lang)}
                   </Button>

@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: file:${{ github.workspace }}/db/custom.db
+      MODEL_CACHE_DIR: ${{ github.workspace }}/data/model-cache
+      VECTOR_CACHE_FILE: ${{ github.workspace }}/data/vector-store/embeddings-cache.json
+      RESTORE_MODEL_CACHE_ON_INSTALL: "true"
+      TRANSFORMERS_ALLOW_REMOTE: "false"
+      TRANSFORMERS_ALLOW_LOCAL: "true"
+      ZAI_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install and restore runtime artifacts
+        run: bun install --frozen-lockfile
+      - name: Typecheck app
+        run: bunx tsc --noEmit
+      - name: Typecheck scripts
+        run: bunx tsc --noEmit -p tsconfig.scripts.json
+      - name: Typecheck e2e
+        run: bun run test:e2e:types
+      - name: Lint
+        run: bun run lint
+      - name: Verify vector cache search
+        run: bun run test:vector
+      - name: Verify multilingual quality dataset
+        run: bun run test:quality
+      - name: Build
+        run: bun run build

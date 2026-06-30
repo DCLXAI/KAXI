@@ -1,8 +1,13 @@
 // Vector Search smoke test
 // Run: bun run scripts/test-vector-search.ts
 
+import { join } from "path";
 import { KNOWLEDGE_DOCS } from "../src/lib/data/knowledge";
 import { getStoreStats, hybridSearch, initVectorStore } from "../src/lib/embeddings/vector-store";
+
+if (!process.env.DATABASE_URL || process.env.DATABASE_URL.includes("/home/z/")) {
+  process.env.DATABASE_URL = `file:${join(process.cwd(), "db", "custom.db")}`;
+}
 
 const TEST_QUERIES = [
   { q: "D-2 비자 서류", expect: "visa-documents" },

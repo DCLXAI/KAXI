@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { signOut, useSession } from "next-auth/react";
 import { useLangStore } from "@/store/kbridge";
 import { LANGS, tr, type Lang } from "@/lib/i18n/translations";
+import { viewToPath } from "@/lib/kbridge/views";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -50,31 +52,29 @@ export function LangSwitcher() {
 
 export function NavItem({
   active,
-  onClick,
+  href,
   label,
 }: {
   active: boolean;
-  onClick: () => void;
+  href: string;
   label: string;
 }) {
   return (
-    <button
-      onClick={onClick}
+    <Link
+      href={href}
       className={`text-sm font-medium transition-colors hover:text-foreground ${
         active ? "text-foreground" : "text-muted-foreground"
       }`}
     >
       {label}
-    </button>
+    </Link>
   );
 }
 
 export function Header({
   currentView,
-  onNavigate,
 }: {
   currentView: string;
-  onNavigate: (v: string) => void;
 }) {
   const { lang } = useLangStore();
   const { data: session } = useSession();
@@ -100,21 +100,21 @@ export function Header({
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4">
-        <button
-          onClick={() => onNavigate("home")}
+        <Link
+          href="/"
           className="flex items-center gap-2 font-bold"
         >
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-black">
             K
           </div>
           <span className="hidden sm:inline text-base">KAXI</span>
-        </button>
+        </Link>
         <nav className="ml-4 hidden md:flex items-center gap-4 overflow-x-auto">
           {navItems.slice(1).map((item) => (
             <NavItem
               key={item.key}
               active={currentView === item.key}
-              onClick={() => onNavigate(item.key)}
+              href={viewToPath(item.key)}
               label={item.label}
             />
           ))}
@@ -160,7 +160,7 @@ export function Header({
             <NavItem
               key={item.key}
               active={currentView === item.key}
-              onClick={() => onNavigate(item.key)}
+              href={viewToPath(item.key)}
               label={item.label}
             />
           ))}
