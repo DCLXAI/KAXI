@@ -93,7 +93,7 @@ function LoginForm() {
                 onChange={(event) => setOtp(event.target.value)}
                 disabled={loading}
                 autoComplete="one-time-code"
-                placeholder="Optional unless MFA is enabled"
+                placeholder="Required in production"
               />
             </div>
             {error && (
@@ -107,7 +107,7 @@ function LoginForm() {
             </Button>
           </form>
           <div className="mt-4 pt-4 border-t text-xs text-muted-foreground text-center">
-            `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH` 또는 `ADMIN_PASSWORD`, `NEXTAUTH_SECRET` 환경변수가 필요합니다.
+            운영 환경은 `ADMIN_PASSWORD_HASH`, `ADMIN_MFA_TOTP_SECRET`, `NEXTAUTH_SECRET`이 필요합니다.
           </div>
         </CardContent>
       </Card>

@@ -1,6 +1,43 @@
 import { createHmac, scryptSync, timingSafeEqual } from "crypto";
 
 const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+const ADMIN_ROLES = new Set(["owner", "admin", "viewer"]);
+
+export type AdminRole = "owner" | "admin" | "viewer";
+
+function configured(value: string | undefined): boolean {
+  const trimmed = value?.trim() || "";
+  return Boolean(trimmed) && !/replace-with-/i.test(trimmed);
+}
+
+export function isSecureAdminAuthRequired(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.NODE_ENV === "production" || env.VERCEL === "1" || Boolean(env.VERCEL_ENV);
+}
+
+export function getConfiguredAdminRole(env: NodeJS.ProcessEnv = process.env): AdminRole | null {
+  const role = env.ADMIN_ROLE?.trim();
+  if (role && ADMIN_ROLES.has(role)) return role as AdminRole;
+  return isSecureAdminAuthRequired(env) ? null : "owner";
+}
+
+export function isAdminLoginConfigurationReady(env: NodeJS.ProcessEnv = process.env): boolean {
+  const secure = isSecureAdminAuthRequired(env);
+  const hashConfigured = configured(env.ADMIN_PASSWORD_HASH);
+  const plainConfigured = configured(env.ADMIN_PASSWORD);
+
+  if (!configured(env.ADMIN_EMAIL) || !getConfiguredAdminRole(env)) return false;
+
+  if (secure) {
+    return (
+      configured(env.NEXTAUTH_SECRET) &&
+      hashConfigured &&
+      !plainConfigured &&
+      configured(env.ADMIN_MFA_TOTP_SECRET)
+    );
+  }
+
+  return hashConfigured || plainConfigured;
+}
 
 function safeEqual(a: string, b: string): boolean {
   const left = Buffer.from(a);
@@ -50,6 +87,12 @@ export function verifyTotp(code: string | undefined, secret: string | undefined)
   return false;
 }
 
+export function verifyAdminMfa(code: string | undefined, env: NodeJS.ProcessEnv = process.env): boolean {
+  const secret = env.ADMIN_MFA_TOTP_SECRET;
+  if (isSecureAdminAuthRequired(env) && !configured(secret)) return false;
+  return verifyTotp(code, secret);
+}
+
 export function verifyPasswordHash(password: string, encodedHash: string): boolean {
   if (encodedHash.startsWith("sha256:")) {
     const expected = encodedHash.slice("sha256:".length);
@@ -69,10 +112,16 @@ export function verifyPasswordHash(password: string, encodedHash: string): boole
   return false;
 }
 
-export function verifyAdminPassword(password: string): boolean {
-  const hash = process.env.ADMIN_PASSWORD_HASH?.trim();
-  if (hash) return verifyPasswordHash(password, hash);
+export function verifyAdminPassword(password: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  const hash = env.ADMIN_PASSWORD_HASH?.trim();
+  const plain = env.ADMIN_PASSWORD || "";
 
-  const plain = process.env.ADMIN_PASSWORD || "";
+  if (isSecureAdminAuthRequired(env)) {
+    if (!hash || !configured(hash) || configured(plain)) return false;
+    return verifyPasswordHash(password, hash);
+  }
+
+  if (hash && configured(hash)) return verifyPasswordHash(password, hash);
+
   return Boolean(plain) && safeEqual(password, plain);
 }

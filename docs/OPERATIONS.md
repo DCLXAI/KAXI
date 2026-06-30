@@ -17,7 +17,7 @@
 - `NEXTAUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`: Required for session-based admin login. Generate the hash with `bun run admin:hash-password -- <password>`.
 - `ADMIN_PASSWORD`: Local/demo fallback only. Do not use plaintext admin passwords in production.
 - `ADMIN_ROLE`: `owner`, `admin`, or `viewer`. `viewer` can read admin dashboards but cannot mutate data.
-- `ADMIN_MFA_TOTP_SECRET`: Optional base32 TOTP secret for admin MFA.
+- `ADMIN_MFA_TOTP_SECRET`: Base32 TOTP secret for admin MFA. Required in hosted/production admin login.
 - `DATA_ENCRYPTION_KEY`, `PII_HASH_SECRET`: Required before production writes. Encrypts contact/free-form question payloads and hashes them for deletion lookup.
 - `PII_ALLOW_UNENCRYPTED_PLAINTEXT`: Local development escape hatch only. Keep `false` in production.
 - `PRIVACY_CHATLOG_RETENTION_DAYS`, `PRIVACY_PARTNER_REQUEST_RETENTION_DAYS`, `PRIVACY_LEAD_RETENTION_DAYS`: Retention windows enforced by `/api/privacy/retention`.
@@ -101,7 +101,7 @@ Visa, immigration, school-accreditation, and cost guidance are time-sensitive.
 Admin APIs require a session login or break-glass `x-admin-key: $ADMIN_API_KEY` / `Authorization: Bearer $ADMIN_API_KEY`.
 Do not expose admin navigation in public product surfaces. Admin UI routes such as `/admin` and `/synonyms` are real Next.js routes, but server-side API guards remain mandatory.
 Prefer session login through `/login`; the browser API-key fallback is intentionally memory-only and should be used only for temporary operations.
-Production admin login should use `ADMIN_PASSWORD_HASH` and optional `ADMIN_MFA_TOTP_SECRET`. Admin actions and privacy operations are written to `AdminAuditLog`; inspect with `GET /api/audit-logs`.
+Production/hosted admin login fails closed unless `NEXTAUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`, a valid `ADMIN_ROLE`, and `ADMIN_MFA_TOTP_SECRET` are configured, and plaintext `ADMIN_PASSWORD` is empty. Admin actions and privacy operations are written to `AdminAuditLog`; inspect with `GET /api/audit-logs`.
 
 ## CI Quality Gates
 
