@@ -8,6 +8,19 @@
 - `VECTOR_CACHE_FILE`: Optional embedding cache file path. Defaults to `data/vector-store/embeddings-cache.json`.
 - `AI_*_RATE_LIMIT`, `AI_*_DAILY_QUOTA`: Optional AI abuse and cost controls.
 
+## Runtime Artifacts
+
+The public repository includes compressed demo runtime artifacts under `runtime-artifacts/`.
+They are restored automatically by `postinstall` through `scripts/restore-runtime-artifacts.ts`.
+
+Included artifacts:
+
+- `multilingual-e5-small` model cache, stored as gzip files so no single GitHub file exceeds 100 MB.
+- Vector embedding cache for the bundled knowledge base.
+- Sanitized SQLite MVP database with `Synonym` seed data and empty `Lead`, `PartnerRequest`, and `ChatLog` tables.
+
+The restore script only creates missing files. It does not overwrite local runtime data.
+
 ## Database Policy
 
 The checked-in schema is still MVP-oriented. Production must use a managed relational database, preferably Postgres.
