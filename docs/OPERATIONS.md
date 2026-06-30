@@ -5,7 +5,7 @@
 - `DATABASE_URL`: Local Prisma SQLite URL. `file:./db/custom.db` is acceptable for local demos only.
 - `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`: Managed libSQL/Turso database for production writes. The current Prisma schema uses the `sqlite` provider, so do not point production at Postgres unless the Prisma provider/migrations are intentionally migrated too.
 - `ADMIN_API_KEY`: Break-glass admin API key for admin APIs. Prefer session login for day-to-day operations.
-- `MODEL_CACHE_DIR`: Optional local cache path for Transformer models. Defaults to `data/model-cache`.
+- `MODEL_CACHE_DIR`: Optional local cache path for Transformer models. Defaults to `data/model-cache` locally and `/tmp/kaxi-model-cache` on Vercel/serverless runtimes.
 - `VECTOR_CACHE_FILE`: Optional embedding cache file path. Defaults to `data/vector-store/embeddings-cache.json`.
 - `RESTORE_MODEL_CACHE_ON_INSTALL`: Set `true` to decompress the local Transformer model during install. Vercel builds skip this by default to keep function bundles under file-size limits.
 - `AI_*_RATE_LIMIT`, `AI_*_DAILY_QUOTA`: Optional AI abuse and cost controls. Use `0` to disable a specific limit.

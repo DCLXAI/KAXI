@@ -1,5 +1,6 @@
 import { runAgentPreflight } from "../src/lib/agent/preflight";
 import { buildAgentMeta } from "../src/lib/agent/meta";
+import { resolveModelCacheDir } from "../src/lib/embeddings/transformer-embedder";
 import { TOOL_MAP } from "../src/lib/agent/tools";
 
 function fail(message: string): never {
@@ -107,8 +108,25 @@ function testAgentMetaDoesNotEchoPii() {
   }
 }
 
+function testVercelModelCacheDefaultsToTmp() {
+  const defaultLocal = resolveModelCacheDir({});
+  const defaultVercel = resolveModelCacheDir({ VERCEL: "1" });
+  const configured = resolveModelCacheDir({ VERCEL: "1", MODEL_CACHE_DIR: "/custom/cache" });
+
+  if (!defaultLocal.endsWith("data/model-cache")) {
+    fail(`local model cache default should be data/model-cache, got ${defaultLocal}`);
+  }
+  if (defaultVercel !== "/tmp/kaxi-model-cache") {
+    fail(`Vercel model cache default should use /tmp, got ${defaultVercel}`);
+  }
+  if (configured !== "/custom/cache") {
+    fail(`MODEL_CACHE_DIR override not respected, got ${configured}`);
+  }
+}
+
 await testPartnerToolDryRun();
 await testPreflightDoesNotPersistPartnerRequest();
 await testAgentStatusRoute();
 testAgentMetaDoesNotEchoPii();
+testVercelModelCacheDefaultsToTmp();
 console.log("PASS agent guards");

@@ -7,10 +7,6 @@ import type { FeatureExtractionPipeline } from "@xenova/transformers";
 import { vectorize as tfidfVectorize, type Vectorizer as TFIDFVectorizer } from "./vectorizer";
 import * as path from "path";
 
-// 로컬 캐시 (재다운로드 방지)
-const MODEL_CACHE_DIR =
-  process.env.MODEL_CACHE_DIR || path.join(process.cwd(), "data", "model-cache");
-
 const MODEL_NAME = "Xenova/multilingual-e5-small";
 const EMBED_DIM = 384;
 
@@ -19,6 +15,19 @@ export type EmbeddingVector = Float32Array;
 let extractorPromise: Promise<FeatureExtractionPipeline | null> | null = null;
 let loadFailed = false;
 
+type ModelCacheEnv = Partial<Record<"MODEL_CACHE_DIR" | "VERCEL" | "VERCEL_ENV", string | undefined>>;
+
+export function resolveModelCacheDir(env: ModelCacheEnv = process.env): string {
+  const configured = env.MODEL_CACHE_DIR?.trim();
+  if (configured) return configured;
+
+  if (env.VERCEL === "1" || env.VERCEL_ENV) {
+    return path.join("/tmp", "kaxi-model-cache");
+  }
+
+  return path.join(process.cwd(), "data", "model-cache");
+}
+
 // 모델 lazy 로드 (싱글톤)
 export async function getEmbedder(): Promise<FeatureExtractionPipeline | null> {
   if (loadFailed) return null;
@@ -26,7 +35,7 @@ export async function getEmbedder(): Promise<FeatureExtractionPipeline | null> {
     extractorPromise = (async () => {
       try {
         const { pipeline, env } = await import("@xenova/transformers");
-        env.cacheDir = MODEL_CACHE_DIR;
+        env.cacheDir = resolveModelCacheDir();
         env.allowRemoteModels = process.env.TRANSFORMERS_ALLOW_REMOTE !== "false";
         env.allowLocalModels = process.env.TRANSFORMERS_ALLOW_LOCAL === "true";
 

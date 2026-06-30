@@ -2,9 +2,10 @@
 // 다국어 sentence-transformer 모델 다운로드 + 임베딩 생성 검증
 
 import { pipeline, env } from "@xenova/transformers";
+import { resolveModelCacheDir } from "../src/lib/embeddings/transformer-embedder";
 
 // 로컬 캐시 사용 (재다운로드 방지)
-env.cacheDir = "/home/z/my-project/data/model-cache";
+env.cacheDir = resolveModelCacheDir();
 
 // 온디스크 모델 허용
 env.allowRemoteModels = true;
