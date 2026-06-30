@@ -1,8 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// K-Bridge Gateway Prisma Schema
+// SQLite for MVP (7/22 데모). 운영환경 전환시 Postgres 등으로 변경.
 
 generator client {
   provider = "prisma-client-js"
@@ -13,20 +10,105 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// 유학 경로 진단을 완료한 사용자 (리드)
+model Lead {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 기본 정보
+  nickname    String
+  nationality String   // vn, mn, cn, uz, other
+  age         Int
+  education   String   // highschool, college, university, master
+  koreanLevel String   // none, topik1, topik2, topik3
+  goal        String   // language, degree, transfer, career, unsure
+  budget      Int      // KRW
+  region      String   // seoul, gyeonggi, ...
+  usingBroker Boolean  @default(false)
+  brokerCost  Int      @default(0)
+  hasHistory  Boolean  @default(false)
+
+  // 진단 결과 (snapshot)
+  pathKey        String  // goal_language, goal_degree, ...
+  estimatedCost  Int     // KRW
+  prepTime       String
+  requiredDocs   String  // JSON array of translation keys
+  warningsJson   String  // JSON array of {ko,vi,mn,en}
+  nextActionsJson String // JSON array
+
+  // 연락처 (선택)
+  contact     String?
+  contactType String? // email, zalo, wechat, telegram
+
+  // 상담 요청
+  partnerRequests PartnerRequest[]
+
+  @@index([createdAt])
+  @@index([nationality])
+  @@index([pathKey])
 }
 
-model Post {
+// 파트너 상담 요청
+model PartnerRequest {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+
+  leadId      String
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  partnerType String   // admin, translation, academy, admission, settlement
+  question    String?
+  status      String   @default("pending") // pending, contacted, closed
+
+  @@index([leadId])
+  @@index([partnerType])
+  @@index([status])
+}
+
+// 학교 데이터 (수동 시드 — 운영시 관리자 페이지에서 편집)
+// 현재는 src/lib/data/schools.ts 사용하지만, 운영 확장용으로 스키마만 정의
+model School {
+  id                  String   @id
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  nameKo              String
+  nameVi              String
+  nameMn              String
+  nameEn              String
+
+  region              String
+  program             String
+  tuitionPerSemester  Int
+  dormitoryAvailable  Boolean  @default(false)
+  dormitoryCost       Int?
+  koreanRequirement   String
+  accreditation       String   // accredited, standard, caution
+  topikLevel          Int?
+  intake              String   // JSON array
+  officialUrl         String
+  notesKo             String
+  notesVi             String
+  notesMn             String
+  notesEn             String
+
+  @@index([region])
+  @@index([program])
+  @@index([accreditation])
+}
+
+// AI 대화 로그 (RAG 검증/개선용)
+model ChatLog {
   id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  lang      String
+  question  String
+  answer    String
+  source    String   // rule, rag
+  retrievedDocs String? // JSON
+
+  @@index([createdAt])
+  @@index([lang])
 }

@@ -5,7 +5,7 @@ import { persist } from "zustand/middleware";
 import type { Lang } from "../i18n/translations";
 import type { DiagnosisInput, PathRecommendation } from "../data/diagnosis";
 
-// --- 언어 설정 ---
+// --- 언어 설정 (클라이언트 persist) ---
 interface LangState {
   lang: Lang;
   setLang: (l: Lang) => void;
@@ -21,10 +21,10 @@ export const useLangStore = create<LangState>()(
   )
 );
 
-// --- 진단 결과 / 리드 ---
+// --- 리드 (서버 동기화) ---
 export interface Lead {
   id: string;
-  createdAt: number;
+  createdAt: string;
   nickname: string;
   nationality: string;
   goal: string;
@@ -33,49 +33,154 @@ export interface Lead {
   brokerCost: number;
   usingBroker: boolean;
   hasHistory: boolean;
-  input: DiagnosisInput;
-  recommendation: PathRecommendation;
+  age: number;
+  education: string;
+  koreanLevel: string;
+  region: string;
+  estimatedCost: number;
+  prepTime: string;
+  requiredDocs: string[];
+  warnings: { ko: string; vi: string; mn: string; en: string }[];
+  nextActions: { ko: string; vi: string; mn: string; en: string }[];
+  partnerRequests?: { id: string; partnerType: string; status: string }[];
 }
 
 interface LeadState {
   currentDiagnosis: { input: DiagnosisInput; recommendation: PathRecommendation } | null;
+  currentLeadId: string | null;
   leads: Lead[];
-  saveDiagnosis: (nickname: string, input: DiagnosisInput, recommendation: PathRecommendation) => void;
+  loading: boolean;
+  savingDiagnosis: boolean;
+  saveDiagnosis: (nickname: string, input: DiagnosisInput, recommendation: PathRecommendation) => Promise<string | null>;
+  fetchLeads: () => Promise<void>;
   clearCurrent: () => void;
 }
 
-export const useLeadStore = create<LeadState>()(
-  persist(
-    (set) => ({
-      currentDiagnosis: null,
-      leads: [],
-      saveDiagnosis: (nickname, input, recommendation) => {
-        const lead: Lead = {
-          id: `lead-${Date.now()}`,
-          createdAt: Date.now(),
+export const useLeadStore = create<LeadState>()((set, get) => ({
+  currentDiagnosis: null,
+  currentLeadId: null,
+  leads: [],
+  loading: false,
+  savingDiagnosis: false,
+
+  saveDiagnosis: async (nickname, input, recommendation) => {
+    set({ savingDiagnosis: true });
+    try {
+      const res = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           nickname: nickname || "익명",
           nationality: input.nationality,
+          age: Number(input.age) || 0,
+          education: input.education,
+          koreanLevel: input.korean,
           goal: input.goal,
-          pathKey: recommendation.pathKey,
           budget: input.budget,
-          brokerCost: input.brokerCost,
+          region: input.region,
           usingBroker: input.usingBroker,
+          brokerCost: input.brokerCost,
           hasHistory: input.hasHistory,
-          input,
-          recommendation,
-        };
-        set((state) => ({
-          leads: [lead, ...state.leads].slice(0, 100),
-          currentDiagnosis: { input, recommendation },
-        }));
-      },
-      clearCurrent: () => set({ currentDiagnosis: null }),
-    }),
-    { name: "kb-leads" }
-  )
-);
+          pathKey: recommendation.pathKey,
+          estimatedCost: recommendation.estimatedCost,
+          prepTime: recommendation.prepTime.en,
+          requiredDocs: recommendation.requiredDocs,
+          warnings: recommendation.warnings,
+          nextActions: recommendation.nextActions,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to save lead");
+      const { lead } = await res.json();
+      set({
+        currentDiagnosis: { input, recommendation },
+        currentLeadId: lead.id,
+        leads: [lead, ...get().leads].slice(0, 100),
+      });
+      return lead.id;
+    } catch (e) {
+      console.error("[saveDiagnosis]", e);
+      // fallback: 로컬 상태에만 저장
+      const localLead: Lead = {
+        id: `local-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        nickname: nickname || "익명",
+        nationality: input.nationality,
+        goal: input.goal,
+        pathKey: recommendation.pathKey,
+        budget: input.budget,
+        brokerCost: input.brokerCost,
+        usingBroker: input.usingBroker,
+        hasHistory: input.hasHistory,
+        age: Number(input.age) || 0,
+        education: input.education,
+        koreanLevel: input.korean,
+        region: input.region,
+        estimatedCost: recommendation.estimatedCost,
+        prepTime: recommendation.prepTime.en,
+        requiredDocs: recommendation.requiredDocs,
+        warnings: recommendation.warnings,
+        nextActions: recommendation.nextActions,
+      };
+      set({
+        currentDiagnosis: { input, recommendation },
+        currentLeadId: localLead.id,
+        leads: [localLead, ...get().leads].slice(0, 100),
+      });
+      return localLead.id;
+    } finally {
+      set({ savingDiagnosis: false });
+    }
+  },
 
-// --- 서류 워크스페이스 ---
+  fetchLeads: async () => {
+    set({ loading: true });
+    try {
+      const res = await fetch("/api/leads");
+      if (!res.ok) throw new Error("Failed to fetch leads");
+      const { leads } = await res.json();
+      set({ leads });
+    } catch (e) {
+      console.error("[fetchLeads]", e);
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  clearCurrent: () => set({ currentDiagnosis: null, currentLeadId: null }),
+}));
+
+// --- 파트너 요청 (서버 동기화) ---
+interface PartnerState {
+  submitting: boolean;
+  submitPartnerRequest: (leadId: string | null, partnerType: string, question?: string) => Promise<boolean>;
+}
+
+export const usePartnerStore = create<PartnerState>()((set) => ({
+  submitting: false,
+  submitPartnerRequest: async (leadId, partnerType, question) => {
+    set({ submitting: true });
+    try {
+      const res = await fetch("/api/partner-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: leadId || "anonymous",
+          partnerType,
+          question: question || null,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to submit");
+      return true;
+    } catch (e) {
+      console.error("[submitPartnerRequest]", e);
+      return false;
+    } finally {
+      set({ submitting: false });
+    }
+  },
+}));
+
+// --- 서류 워크스페이스 (클라이언트 persist, 향후 서버 동기화 가능) ---
 export type DocStatus =
   | "done"
   | "translation"
@@ -86,7 +191,7 @@ export type DocStatus =
   | "not_yet";
 
 export interface DocItem {
-  key: string; // translation key
+  key: string;
   status: DocStatus;
   fileName?: string;
   uploadedAt?: number;

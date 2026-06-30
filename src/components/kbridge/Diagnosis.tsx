@@ -12,13 +12,14 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { CheckCircle2, Clock, FileText, AlertTriangle, ArrowRight, Save } from "lucide-react";
+import { CheckCircle2, Clock, FileText, AlertTriangle, ArrowRight, Save, Loader2 } from "lucide-react";
 
 export function Diagnosis({ onNavigate }: { onNavigate: (v: string) => void }) {
   const { lang } = useLangStore();
-  const { saveDiagnosis } = useLeadStore();
+  const { saveDiagnosis, savingDiagnosis } = useLeadStore();
   const [result, setResult] = useState<ReturnType<typeof recommendPath> | null>(null);
   const [showSave, setShowSave] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [nickname, setNickname] = useState("");
 
   const [input, setInput] = useState<DiagnosisInput>({
@@ -40,15 +41,25 @@ export function Diagnosis({ onNavigate }: { onNavigate: (v: string) => void }) {
     const rec = recommendPath(input);
     setResult(rec);
     setShowSave(false);
+    setSaveError(null);
     setTimeout(() => {
       document.getElementById("result-section")?.scrollIntoView({ behavior: "smooth" });
     }, 100);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!result) return;
-    saveDiagnosis(nickname || "익명", input, result);
-    setShowSave(true);
+    setSaveError(null);
+    const leadId = await saveDiagnosis(nickname || "익명", input, result);
+    if (leadId) {
+      setShowSave(true);
+    } else {
+      setSaveError(
+        lang === "ko"
+          ? "저장 중 오류가 발생했습니다. 다시 시도해주세요."
+          : "Save error. Please retry."
+      );
+    }
   };
 
   const pathLabel = tr(result?.pathKey as any ?? "goal_language", lang);
@@ -337,9 +348,14 @@ export function Diagnosis({ onNavigate }: { onNavigate: (v: string) => void }) {
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
                   className="sm:max-w-xs"
+                  disabled={savingDiagnosis}
                 />
-                <Button onClick={save} className="gap-2">
-                  <Save className="h-4 w-4" />
+                <Button onClick={save} className="gap-2" disabled={savingDiagnosis}>
+                  {savingDiagnosis ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
                   {tr("diagnose_save_lead", lang)}
                 </Button>
               </div>
@@ -347,11 +363,17 @@ export function Diagnosis({ onNavigate }: { onNavigate: (v: string) => void }) {
                 <Alert>
                   <CheckCircle2 className="h-4 w-4" />
                   <AlertDescription>
-                    {lang === "ko" && "저장되었습니다! 이제 학교 비교로 진행하세요."}
-                    {lang === "vi" && "Đã lưu! Tiếp tục so sánh trường."}
-                    {lang === "mn" && "Хадгаллаа! Сургууль харьцуулах."}
-                    {lang === "en" && "Saved! Continue to school comparison."}
+                    {lang === "ko" && "저장되었습니다! 관리자 화면에서도 확인 가능합니다. 이제 학교 비교로 진행하세요."}
+                    {lang === "vi" && "Đã lưu! Có thể xem ở trang quản trị."}
+                    {lang === "mn" && "Хадгаллаа! Админ хуудаснаас харна."}
+                    {lang === "en" && "Saved! Visible in admin page."}
                   </AlertDescription>
+                </Alert>
+              )}
+              {saveError && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>{saveError}</AlertDescription>
                 </Alert>
               )}
               <div className="flex flex-wrap gap-2 pt-2">

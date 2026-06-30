@@ -1,19 +1,55 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLangStore, useLeadStore } from "@/store/kbridge";
 import { tr, type Lang } from "@/lib/i18n/translations";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Search, Trash2, Eye } from "lucide-react";
+import { Search, Eye, RefreshCw, Users, AlertTriangle, Clock, TrendingUp } from "lucide-react";
+
+interface Stats {
+  totalLeads: number;
+  totalRequests: number;
+  pendingRequests: number;
+  brokerUsers: number;
+  recentLeads: number;
+  byNationality: { nationality: string; _count: number }[];
+  byPath: { pathKey: string; _count: number }[];
+}
 
 export function Admin() {
   const { lang } = useLangStore();
-  const { leads } = useLeadStore();
+  const { leads, fetchLeads, loading } = useLeadStore();
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+
+  const loadAll = useCallback(async () => {
+    await Promise.all([
+      fetchLeads(),
+      (async () => {
+        setStatsLoading(true);
+        try {
+          const res = await fetch("/api/stats");
+          if (res.ok) {
+            const s = await res.json();
+            setStats(s);
+          }
+        } catch (e) {
+          console.error("[stats]", e);
+        } finally {
+          setStatsLoading(false);
+        }
+      })(),
+    ]);
+  }, [fetchLeads]);
+
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
 
   const filtered = leads.filter((l) =>
     !q ||
@@ -25,10 +61,92 @@ export function Admin() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">{tr("admin_title", lang)}</h1>
-        <p className="text-muted-foreground mt-2">{tr("admin_subtitle", lang)}</p>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h1 className="text-3xl font-bold">{tr("admin_title", lang)}</h1>
+          <p className="text-muted-foreground mt-2">{tr("admin_subtitle", lang)}</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={loadAll} disabled={loading}>
+          <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} />
+          {lang === "ko" ? "새로고침" : lang === "vi" ? "Tải lại" : lang === "mn" ? "Шинэчлэх" : "Refresh"}
+        </Button>
       </div>
+
+      {/* 통계 대시보드 */}
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Card>
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-center gap-2 text-muted-foreground text-xs">
+                <Users className="h-3.5 w-3.5" />
+                {lang === "ko" ? "총 리드" : lang === "vi" ? "Tổng lead" : lang === "mn" ? "Нийт лид" : "Total leads"}
+              </div>
+              <div className="text-2xl font-bold mt-1">{stats.totalLeads}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {lang === "ko" ? `최근 7일 ${stats.recentLeads}건` : `Last 7d: ${stats.recentLeads}`}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-center gap-2 text-muted-foreground text-xs">
+                <Clock className="h-3.5 w-3.5" />
+                {lang === "ko" ? "상담 대기" : lang === "vi" ? "Chờ tư vấn" : lang === "mn" ? "Хүлээж буй" : "Pending"}
+              </div>
+              <div className="text-2xl font-bold mt-1">{stats.pendingRequests}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {lang === "ko" ? `총 요청 ${stats.totalRequests}건` : `Total: ${stats.totalRequests}`}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-center gap-2 text-muted-foreground text-xs">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                {lang === "ko" ? "브로커 이용자" : lang === "vi" ? "Dùng môi giới" : lang === "mn" ? "Зуучлагчтай" : "Broker users"}
+              </div>
+              <div className="text-2xl font-bold mt-1">{stats.brokerUsers}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {stats.totalLeads > 0 ? `${Math.round((stats.brokerUsers / stats.totalLeads) * 100)}%` : "—"}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-center gap-2 text-muted-foreground text-xs">
+                <TrendingUp className="h-3.5 w-3.5" />
+                {lang === "ko" ? "주요 경로" : lang === "vi" ? "Lộ trình chính" : lang === "mn" ? "Гол маршрут" : "Top path"}
+              </div>
+              <div className="text-base font-bold mt-1 truncate">
+                {stats.byPath.length > 0 ? tr(stats.byPath[0].pathKey as any, lang) : "—"}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {stats.byPath.length > 0 ? `${stats.byPath[0]._count} ${lang === "ko" ? "건" : "leads"}` : ""}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* 국적별 분포 */}
+      {stats && stats.byNationality.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">
+              {lang === "ko" ? "국적별 분포" : lang === "vi" ? "Theo quốc tịch" : lang === "mn" ? "Үндэслэлээр" : "By nationality"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {stats.byNationality.map((n) => (
+                <Badge key={n.nationality} variant="outline" className="gap-1">
+                  {n.nationality.toUpperCase()}: {n._count}
+                </Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -48,7 +166,11 @@ export function Admin() {
           </div>
         </CardHeader>
         <CardContent>
-          {filtered.length === 0 ? (
+          {loading && leads.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground text-sm">
+              {lang === "ko" ? "로딩 중..." : "Loading..."}
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground text-sm">
               {tr("admin_empty", lang)}
             </div>
@@ -106,7 +228,7 @@ export function Admin() {
       {/* 상세 모달 */}
       {sel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setSelected(null)}>
-          <Card className="w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+          <Card className="w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg">{sel.nickname}</CardTitle>
@@ -137,22 +259,39 @@ export function Admin() {
                   </div>
                 </div>
               </div>
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">{tr("result_required_docs", lang)}</div>
-                <div className="flex flex-wrap gap-1">
-                  {sel.recommendation.requiredDocs.map((k) => (
-                    <Badge key={k} variant="outline" className="text-xs">{tr(k as any, lang)}</Badge>
-                  ))}
+
+              {sel.requiredDocs && sel.requiredDocs.length > 0 && (
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">{tr("result_required_docs", lang)}</div>
+                  <div className="flex flex-wrap gap-1">
+                    {sel.requiredDocs.map((k) => (
+                      <Badge key={k} variant="outline" className="text-xs">{tr(k as any, lang)}</Badge>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              {sel.recommendation.warnings.length > 0 && (
+              )}
+
+              {sel.warnings && sel.warnings.length > 0 && (
                 <div>
                   <div className="text-xs text-muted-foreground mb-1">{tr("result_warnings", lang)}</div>
                   <ul className="list-disc pl-5 space-y-1 text-xs">
-                    {sel.recommendation.warnings.map((w, i) => (
+                    {sel.warnings.map((w, i) => (
                       <li key={i}>{w[lang]}</li>
                     ))}
                   </ul>
+                </div>
+              )}
+
+              {sel.partnerRequests && sel.partnerRequests.length > 0 && (
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">{tr("partners_title", lang)}</div>
+                  <div className="flex flex-wrap gap-1">
+                    {sel.partnerRequests.map((p) => (
+                      <Badge key={p.id} variant="outline" className="text-xs">
+                        {tr(`partner_${p.partnerType}` as any, lang)} · {p.status}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
               )}
             </CardContent>

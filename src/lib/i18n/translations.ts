@@ -90,13 +90,13 @@ export const t = {
 
   // 학교 비교
   schools_title: { ko: "학교·어학당 비교", vi: "So sánh trường/lớp tiếng", mn: "Сургууль/хэлний курс харьцуулалт", en: "School comparison" },
-  schools_subtitle: { ko: "검증 가능한 20개 학교 DB. 인증 여부와 비자심사 강화 여부를 반드시 확인하세요.", vi: "20 trường đã xác minh. Kiểm tra trạng thái认证 và visa.", mn: "20 шалгасан сургууль.认证 болон визийн байдлыг шалга.", en: "20 verified schools. Check accreditation & visa status." },
+  schools_subtitle: { ko: "검증 가능한 50개 학교 DB. 인증 여부와 비자심사 강화 여부를 반드시 확인하세요.", vi: "50 trường đã xác minh. Kiểm tra trạng thái công nhận và visa.", mn: "50 шалгасан сургууль. Итгэмжлэл болон визийн байдлыг шалга.", en: "50 verified schools. Check accreditation & visa status." },
   filter_region: { ko: "지역", vi: "Khu vực", mn: "Бүс", en: "Region" },
   filter_program: { ko: "과정", vi: "Khóa học", mn: "Курс", en: "Program" },
-  filter_accreditation: { ko: "인증", vi: "Đ认证", mn: "Итгэмжлэл", en: "Accreditation" },
+  filter_accreditation: { ko: "인증", vi: "Công nhận", mn: "Итгэмжлэл", en: "Accreditation" },
   filter_tuition_max: { ko: "최대 등록금 (학기)", vi: "Học phí tối đa/kỳ", mn: "Хамгийн их төлбөр/семестр", en: "Max tuition/semester" },
   filter_reset: { ko: "초기화", vi: "Đặt lại", mn: "Шинэчлэх", en: "Reset" },
-  school_accredited: { ko: "인증대학", vi: "Đã认证", mn: "Итгэмжлэгдсэн", en: "Accredited" },
+  school_accredited: { ko: "인증대학", vi: "Đã công nhận", mn: "Итгэмжлэгдсэн", en: "Accredited" },
   school_non_accredited: { ko: "일반", vi: "Thông thường", mn: "Энгийн", en: "Standard" },
   school_caution: { ko: "비자심사 강화", vi: "Visa kiểm tra gắt", mn: "Виз шалгалт хатуу", en: "Visa strict" },
   school_dormitory: { ko: "기숙사", vi: "Ký túc xá", mn: "Дотуур байр", en: "Dormitory" },

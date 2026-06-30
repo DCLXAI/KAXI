@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useLangStore } from "@/store/kbridge";
+import { useLangStore, useLeadStore, usePartnerStore } from "@/store/kbridge";
 import { tr, type Lang } from "@/lib/i18n/translations";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,9 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Scale, Languages, BookOpen, School, Home, CheckCircle2, Ban } from "lucide-react";
+import { Scale, Languages, BookOpen, School, Home, CheckCircle2, Ban, Loader2 } from "lucide-react";
 
 interface PartnerType {
   key: string;
@@ -121,21 +120,43 @@ const PARTNERS: PartnerType[] = [
 
 export function Partners() {
   const { lang } = useLangStore();
+  const { currentLeadId } = useLeadStore();
+  const { submitting, submitPartnerRequest } = usePartnerStore();
   const [open, setOpen] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
   const [question, setQuestion] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const submit = () => {
-    setSubmitted(true);
-    setTimeout(() => {
-      setOpen(null);
-      setSubmitted(false);
-      setName("");
-      setContact("");
-      setQuestion("");
-    }, 2000);
+  const submit = async () => {
+    setError(null);
+    setSubmitted(false);
+    const ok = await submitPartnerRequest(
+      currentLeadId,
+      open!,
+      `${name} (${contact}): ${question}`
+    );
+    if (ok) {
+      setSubmitted(true);
+      setTimeout(() => {
+        setOpen(null);
+        setSubmitted(false);
+        setName("");
+        setContact("");
+        setQuestion("");
+      }, 2000);
+    } else {
+      setError(
+        lang === "ko"
+          ? "요청 중 오류가 발생했습니다."
+          : lang === "vi"
+          ? "Lỗi khi gửi."
+          : lang === "mn"
+          ? "Алдаа гарлаа."
+          : "Error submitting."
+      );
+    }
   };
 
   return (
@@ -210,21 +231,21 @@ export function Partners() {
                 <Alert>
                   <CheckCircle2 className="h-4 w-4" />
                   <AlertDescription>
-                    {lang === "ko" && "요청이 접수되었습니다!"}
-                    {lang === "vi" && "Đã gửi!"}
-                    {lang === "mn" && "Илгээгдлээ!"}
-                    {lang === "en" && "Submitted!"}
+                    {lang === "ko" && "요청이 접수되었습니다! 담당자가 24시간 내 연락드립니다."}
+                    {lang === "vi" && "Đã gửi! Liên hệ trong 24h."}
+                    {lang === "mn" && "Илгээгдлээ! 24 цагийн дотор."}
+                    {lang === "en" && "Submitted! Contact within 24h."}
                   </AlertDescription>
                 </Alert>
               ) : (
                 <>
                   <div className="space-y-2">
                     <Label>{lang === "ko" ? "이름" : lang === "vi" ? "Tên" : lang === "mn" ? "Нэр" : "Name"}</Label>
-                    <Input value={name} onChange={(e) => setName(e.target.value)} />
+                    <Input value={name} onChange={(e) => setName(e.target.value)} disabled={submitting} />
                   </div>
                   <div className="space-y-2">
                     <Label>{lang === "ko" ? "연락처 (이메일/Zalo/WeChat)" : lang === "vi" ? "Liên hệ" : lang === "mn" ? "Холбоо" : "Contact"}</Label>
-                    <Input value={contact} onChange={(e) => setContact(e.target.value)} />
+                    <Input value={contact} onChange={(e) => setContact(e.target.value)} disabled={submitting} />
                   </div>
                   <div className="space-y-2">
                     <Label>{lang === "ko" ? "문의 내용" : lang === "vi" ? "Nội dung" : lang === "mn" ? "Агуулга" : "Question"}</Label>
@@ -232,9 +253,16 @@ export function Partners() {
                       rows={3}
                       value={question}
                       onChange={(e) => setQuestion(e.target.value)}
+                      disabled={submitting}
                     />
                   </div>
-                  <Button className="w-full" onClick={submit}>
+                  {error && (
+                    <Alert variant="destructive">
+                      <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                  )}
+                  <Button className="w-full" onClick={submit} disabled={submitting}>
+                    {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                     {tr("partner_request", lang)}
                   </Button>
                 </>
