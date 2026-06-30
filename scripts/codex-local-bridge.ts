@@ -49,6 +49,10 @@ function applyCors(req: IncomingMessage, res: ServerResponse): boolean {
 }
 
 function clientKey(req: IncomingMessage): string {
+  const forwardedFor = req.headers["x-forwarded-for"];
+  if (typeof forwardedFor === "string" && forwardedFor.trim()) {
+    return forwardedFor.split(",")[0]?.trim() || "unknown";
+  }
   return req.socket.remoteAddress || "unknown";
 }
 

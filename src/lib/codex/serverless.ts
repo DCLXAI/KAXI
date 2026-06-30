@@ -135,10 +135,11 @@ export function isCodexServerlessEnabled(): boolean {
   return getAgentBackend() === "codex" || process.env.CODEX_SERVERLESS_ENABLED === "true";
 }
 
-export function getAgentBackend(): "codex" | "zai" | "tool-fallback" {
+export function getAgentBackend(): "codex" | "zai" | "tool-fallback" | "remote-bridge" {
   const configured = process.env.AGENT_BACKEND?.trim().toLowerCase();
   if (configured === "zai") return "zai";
   if (configured === "tool-fallback") return "tool-fallback";
+  if (configured === "remote-bridge") return "remote-bridge";
   return "codex";
 }
 

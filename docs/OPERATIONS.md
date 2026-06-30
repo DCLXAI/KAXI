@@ -137,6 +137,37 @@ Useful bridge environment variables:
 
 Do not bind the bridge to `0.0.0.0` or expose it through a tunnel without `CODEX_BRIDGE_TOKEN`.
 
+### Public Users Through A Mac Tunnel
+
+For external users, do not expose the bridge token in browser JavaScript.
+Use Vercel as the server-side proxy:
+
+```env
+AGENT_BACKEND=remote-bridge
+CODEX_REMOTE_BRIDGE_URL=https://<tunnel-host>/api/ai/agent
+CODEX_REMOTE_BRIDGE_TOKEN=<same-secret-as-CODEX_BRIDGE_TOKEN-on-the-Mac>
+CODEX_REMOTE_BRIDGE_TIMEOUT_MS=55000
+```
+
+On the Mac:
+
+```bash
+export CODEX_BRIDGE_TOKEN=<long-random-secret>
+bun run codex:bridge
+```
+
+Then expose `http://127.0.0.1:8787` through a tunnel such as Cloudflare Tunnel, ngrok, or Tailscale Funnel.
+The tunnel URL goes only into Vercel server environment variables as `CODEX_REMOTE_BRIDGE_URL`.
+The public frontend continues calling `/api/ai/agent`, and Vercel forwards to the Mac bridge with the secret token.
+
+Minimum safety rules:
+
+1. Keep `CODEX_BRIDGE_TOKEN` enabled for any tunnel.
+2. Keep `CODEX_BRIDGE_RATE_LIMIT`, `AI_AGENT_RATE_LIMIT`, and `AI_AGENT_DAILY_QUOTA` low.
+3. Keep Codex sandbox `read-only` and `CODEX_USE_USER_CONFIG=false`.
+4. Do not run the bridge from a directory containing private files that external prompts should never inspect.
+5. Turn off the tunnel when public testing is over.
+
 `/api/codex/exec` remains guarded by `requireAdmin` for direct admin-only tests.
 For `/api/ai/agent`, set `CODEX_AGENT_REQUIRE_ADMIN=true` if Codex should be private/internal only.
 

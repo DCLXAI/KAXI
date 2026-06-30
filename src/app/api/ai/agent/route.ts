@@ -9,6 +9,7 @@ import {
   runCodexServerless,
   shouldRequireAdminForCodexAgent,
 } from "@/lib/codex/serverless";
+import { isRemoteCodexBridgeEnabled, runRemoteCodexBridge } from "@/lib/codex/remote-bridge";
 import {
   consumeDailyQuota,
   parsePositiveInt,
@@ -50,6 +51,47 @@ export async function POST(req: NextRequest) {
     const lang = parsed.value.lang as Lang;
 
     const configuredBackend = getAgentBackend();
+    if (configuredBackend === "remote-bridge" || isRemoteCodexBridgeEnabled()) {
+      try {
+        const result = await runRemoteCodexBridge({
+          question,
+          lang,
+          history,
+          requestIp:
+            req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+            req.headers.get("x-real-ip") ||
+            undefined,
+          timeoutMs: parsePositiveInt(process.env.CODEX_REMOTE_BRIDGE_TIMEOUT_MS, 55_000),
+        });
+
+        return NextResponse.json({
+          answer: result.answer,
+          backend: result.backend,
+          codexMode: result.codexMode,
+          steps: result.steps,
+          toolResults: result.toolResults,
+          iterations: result.iterations,
+          durationMs: result.durationMs,
+        });
+      } catch (bridgeErr) {
+        console.warn(
+          "[Remote Codex bridge fallback]",
+          bridgeErr instanceof Error ? bridgeErr.message : bridgeErr
+        );
+        if (configuredBackend === "remote-bridge") {
+          const ctx: ToolContext = { lang, leadId };
+          const fallback = await runFallbackAgent(question, lang, ctx);
+          return NextResponse.json({
+            answer: fallback.answer,
+            backend: "tool-fallback",
+            steps: fallback.steps,
+            toolResults: fallback.toolResults,
+            iterations: fallback.iterations,
+          });
+        }
+      }
+    }
+
     if (configuredBackend === "codex") {
       if (shouldRequireAdminForCodexAgent()) {
         const unauthorized = await requireAdmin(req);
