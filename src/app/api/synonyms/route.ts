@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { invalidateSynonymCache } from "@/lib/embeddings/vector-store";
+import { jsonError, requireAdmin } from "@/lib/api/security";
 
 // GET /api/synonyms - 동의어 목록 조회
 export async function GET(req: NextRequest) {
   try {
+    const unauthorized = requireAdmin(req);
+    if (unauthorized) return unauthorized;
+
     const searchParams = req.nextUrl.searchParams;
     const category = searchParams.get("category");
     const origin = searchParams.get("origin");
@@ -45,15 +49,17 @@ export async function GET(req: NextRequest) {
 // POST /api/synonyms - 동의어 추가
 export async function POST(req: NextRequest) {
   try {
+    const unauthorized = requireAdmin(req);
+    if (unauthorized) return unauthorized;
+
     const body = await req.json();
     const { source, targets, category, origin, enabled } = body || {};
 
     if (!source || !Array.isArray(targets) || targets.length === 0) {
-      return NextResponse.json(
-        { error: "source (string) and targets (string[]) required" },
-        { status: 400 }
-      );
+      return jsonError("source (string) and targets (string[]) required", 400);
     }
+    if (String(source).length > 80) return jsonError("source is too long", 413);
+    if (targets.length > 20) return jsonError("too many targets", 413);
 
     const synonym = await db.synonym.create({
       data: {

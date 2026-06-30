@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { requireAdmin } from "@/lib/api/security";
 
 // GET /api/chatlog/analyze - ChatLog 분석 (언어/패턴/빈도)
 export async function GET(req: NextRequest) {
   try {
+    const unauthorized = requireAdmin(req);
+    if (unauthorized) return unauthorized;
+
     const searchParams = req.nextUrl.searchParams;
-    const days = Number(searchParams.get("days") || "30");
+    const days = Math.min(Math.max(Number(searchParams.get("days") || "30"), 1), 90);
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
     // 1. 기본 통계

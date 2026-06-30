@@ -2,8 +2,8 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Lang } from "../i18n/translations";
-import type { DiagnosisInput, PathRecommendation } from "../data/diagnosis";
+import type { Lang } from "@/lib/i18n/translations";
+import type { DiagnosisInput, PathRecommendation } from "@/lib/data/diagnosis";
 
 // --- 언어 설정 (클라이언트 persist) ---
 interface LangState {
@@ -52,7 +52,7 @@ interface LeadState {
   loading: boolean;
   savingDiagnosis: boolean;
   saveDiagnosis: (nickname: string, input: DiagnosisInput, recommendation: PathRecommendation) => Promise<string | null>;
-  fetchLeads: () => Promise<void>;
+  fetchLeads: (adminKey?: string) => Promise<void>;
   clearCurrent: () => void;
 }
 
@@ -132,10 +132,12 @@ export const useLeadStore = create<LeadState>()((set, get) => ({
     }
   },
 
-  fetchLeads: async () => {
+  fetchLeads: async (adminKey) => {
     set({ loading: true });
     try {
-      const res = await fetch("/api/leads");
+      const res = await fetch("/api/leads", {
+        headers: adminKey ? { "x-admin-key": adminKey } : undefined,
+      });
       if (!res.ok) throw new Error("Failed to fetch leads");
       const { leads } = await res.json();
       set({ leads });

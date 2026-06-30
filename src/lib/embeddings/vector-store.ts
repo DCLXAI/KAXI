@@ -49,7 +49,9 @@ let store: VectorStore = {
   method: "tfidf",
 };
 
-const CACHE_FILE = "/home/z/my-project/data/vector-store/embeddings-cache.json";
+const CACHE_FILE =
+  process.env.VECTOR_CACHE_FILE ||
+  path.join(process.cwd(), "data", "vector-store", "embeddings-cache.json");
 
 // 다국어 결합 텍스트에서 각 언어별로 분리 (transformer용)
 // transformer는 다국어를 이해하므로 한 언어당 임베딩 → 평균

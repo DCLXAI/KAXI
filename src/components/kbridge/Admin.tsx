@@ -22,18 +22,30 @@ interface Stats {
 export function Admin() {
   const { lang } = useLangStore();
   const { leads, fetchLeads, loading } = useLeadStore();
+  const [adminKey, setAdminKey] = useState("");
+  const [keyInput, setKeyInput] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
 
   const loadAll = useCallback(async () => {
+    if (!adminKey) return;
+    setAuthError(null);
     await Promise.all([
-      fetchLeads(),
+      fetchLeads(adminKey),
       (async () => {
         setStatsLoading(true);
         try {
-          const res = await fetch("/api/stats");
+          const res = await fetch("/api/stats", {
+            headers: { "x-admin-key": adminKey },
+          });
+          if (res.status === 401 || res.status === 503) {
+            setAuthError(lang === "ko" ? "관리자 키를 확인하세요." : "Check the admin key.");
+            setStats(null);
+            return;
+          }
           if (res.ok) {
             const s = await res.json();
             setStats(s);
@@ -45,11 +57,53 @@ export function Admin() {
         }
       })(),
     ]);
-  }, [fetchLeads]);
+  }, [adminKey, fetchLeads, lang]);
 
   useEffect(() => {
-    loadAll();
+    const saved = sessionStorage.getItem("kb-admin-key") || "";
+    if (saved) {
+      setAdminKey(saved);
+      setKeyInput(saved);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (adminKey) loadAll();
   }, [loadAll]);
+
+  const unlock = () => {
+    const trimmed = keyInput.trim();
+    if (!trimmed) return;
+    sessionStorage.setItem("kb-admin-key", trimmed);
+    setAdminKey(trimmed);
+  };
+
+  if (!adminKey) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-16">
+        <Card>
+          <CardHeader>
+            <CardTitle>{lang === "ko" ? "관리자 인증" : "Admin Access"}</CardTitle>
+            <CardDescription>
+              {lang === "ko" ? "관리자 API 키를 입력하세요." : "Enter the admin API key."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Input
+              type="password"
+              value={keyInput}
+              onChange={(e) => setKeyInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && unlock()}
+              autoComplete="off"
+            />
+            <Button className="w-full" onClick={unlock}>
+              {lang === "ko" ? "접속" : "Unlock"}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const filtered = leads.filter((l) =>
     !q ||
@@ -71,6 +125,11 @@ export function Admin() {
           {lang === "ko" ? "새로고침" : lang === "vi" ? "Tải lại" : lang === "mn" ? "Шинэчлэх" : "Refresh"}
         </Button>
       </div>
+      {authError && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {authError}
+        </div>
+      )}
 
       {/* 통계 대시보드 */}
       {stats && (

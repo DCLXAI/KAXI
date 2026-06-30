@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { invalidateSynonymCache } from "@/lib/embeddings/vector-store";
+import { requireAdmin } from "@/lib/api/security";
 
 // PATCH /api/synonyms/[id] - 동의어 수정 (활성화/비활성화, targets 변경)
 export async function PATCH(
@@ -8,6 +9,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const unauthorized = requireAdmin(req);
+    if (unauthorized) return unauthorized;
+
     const { id } = await params;
     const body = await req.json();
     const { targets, category, enabled, origin } = body || {};
@@ -42,6 +46,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const unauthorized = requireAdmin(_req);
+    if (unauthorized) return unauthorized;
+
     const { id } = await params;
     await db.synonym.delete({ where: { id } });
     invalidateSynonymCache();

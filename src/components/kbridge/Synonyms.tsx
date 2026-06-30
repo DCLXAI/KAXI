@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLangStore } from "@/store/kbridge";
 import { tr } from "@/lib/i18n/translations";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -59,6 +59,8 @@ interface ChatlogAnalysis {
 
 export function Synonyms() {
   const { lang } = useLangStore();
+  const [adminKey, setAdminKey] = useState("");
+  const [keyInput, setKeyInput] = useState("");
   const [synonyms, setSynonyms] = useState<Synonym[]>([]);
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState("");
@@ -73,33 +75,49 @@ export function Synonyms() {
   const [newCategory, setNewCategory] = useState("general");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const authHeaders = useMemo(
+    () => (adminKey ? { "x-admin-key": adminKey } : undefined),
+    [adminKey]
+  );
 
   const fetchSynonyms = useCallback(async () => {
+    if (!adminKey) return;
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (category !== "all") params.set("category", category);
       if (origin !== "all") params.set("origin", origin);
       if (q) params.set("q", q);
-      const res = await fetch(`/api/synonyms?${params}`);
+      const res = await fetch(`/api/synonyms?${params}`, { headers: authHeaders });
+      if (res.status === 401 || res.status === 503) throw new Error("관리자 키를 확인하세요");
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
       setSynonyms(data.synonyms);
     } catch (e) {
       console.error(e);
+      setError(e instanceof Error ? e.message : "Failed");
     } finally {
       setLoading(false);
     }
-  }, [category, origin, q]);
+  }, [adminKey, authHeaders, category, origin, q]);
 
   const fetchAnalysis = useCallback(async () => {
+    if (!adminKey) return;
     try {
-      const res = await fetch("/api/chatlog/analyze?days=30");
+      const res = await fetch("/api/chatlog/analyze?days=30", { headers: authHeaders });
       if (!res.ok) return;
       const data = await res.json();
       setAnalysis(data);
     } catch (e) {
       console.error(e);
+    }
+  }, [adminKey, authHeaders]);
+
+  useEffect(() => {
+    const saved = sessionStorage.getItem("kb-admin-key") || "";
+    if (saved) {
+      setAdminKey(saved);
+      setKeyInput(saved);
     }
   }, []);
 
@@ -108,11 +126,18 @@ export function Synonyms() {
     fetchAnalysis();
   }, [fetchSynonyms, fetchAnalysis]);
 
+  const unlock = () => {
+    const trimmed = keyInput.trim();
+    if (!trimmed) return;
+    sessionStorage.setItem("kb-admin-key", trimmed);
+    setAdminKey(trimmed);
+  };
+
   const toggleEnabled = async (id: string, current: boolean) => {
     try {
       await fetch(`/api/synonyms/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ enabled: !current }),
       });
       fetchSynonyms();
@@ -124,7 +149,7 @@ export function Synonyms() {
   const remove = async (id: string) => {
     if (!confirm("삭제하시겠습니까?")) return;
     try {
-      await fetch(`/api/synonyms/${id}`, { method: "DELETE" });
+      await fetch(`/api/synonyms/${id}`, { method: "DELETE", headers: authHeaders });
       fetchSynonyms();
     } catch (e) {
       console.error(e);
@@ -144,7 +169,7 @@ export function Synonyms() {
         .filter(Boolean);
       const res = await fetch("/api/synonyms", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({
           source: newSource.trim(),
           targets,
@@ -173,7 +198,7 @@ export function Synonyms() {
     try {
       const res = await fetch("/api/synonyms/suggest", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ days: 30, topN: 15 }),
       });
       if (!res.ok) throw new Error("Failed");
@@ -193,7 +218,7 @@ export function Synonyms() {
     try {
       const res = await fetch("/api/synonyms", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({
           source: s.source,
           targets: s.targets,
@@ -213,6 +238,30 @@ export function Synonyms() {
   };
 
   return (
+    !adminKey ? (
+      <div className="mx-auto max-w-md px-4 py-16">
+        <Card>
+          <CardHeader>
+            <CardTitle>{lang === "ko" ? "관리자 인증" : "Admin Access"}</CardTitle>
+            <CardDescription>
+              {lang === "ko" ? "동의어 사전 관리를 위해 관리자 API 키를 입력하세요." : "Enter the admin API key."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Input
+              type="password"
+              value={keyInput}
+              onChange={(e) => setKeyInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && unlock()}
+              autoComplete="off"
+            />
+            <Button className="w-full" onClick={unlock}>
+              {lang === "ko" ? "접속" : "Unlock"}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    ) : (
     <div className="mx-auto max-w-6xl px-4 py-10 space-y-6">
       <div className="flex items-start justify-between gap-2">
         <div>
@@ -524,5 +573,6 @@ export function Synonyms() {
         </CardContent>
       </Card>
     </div>
+    )
   );
 }

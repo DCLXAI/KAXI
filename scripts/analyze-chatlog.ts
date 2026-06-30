@@ -14,7 +14,7 @@ async function main() {
     console.log(`\n[${log.lang}] Q: ${log.question}`);
     console.log(`  Source: ${log.source}`);
     try {
-      const parsed = JSON.parse(log.retrievedDocs);
+      const parsed = JSON.parse(log.retrievedDocs || "{}");
       console.log(`  Retrieved docIds: ${parsed.docIds?.join(", ") ?? "N/A"}`);
       console.log(`  Method: ${parsed.storeMethod ?? "N/A"}`);
       if (parsed.searchMeta?.[0]) {
@@ -22,7 +22,7 @@ async function main() {
         console.log(`  Top match: ${top.id} (score: ${top.score}, vec: ${top.vectorScore}, kw: ${top.keywordScore})`);
       }
     } catch {
-      console.log(`  Retrieved (raw): ${log.retrievedDocs.substring(0, 200)}`);
+      console.log(`  Retrieved (raw): ${(log.retrievedDocs || "").substring(0, 200)}`);
     }
     console.log(`  Answer: ${log.answer.substring(0, 100)}...`);
   }
