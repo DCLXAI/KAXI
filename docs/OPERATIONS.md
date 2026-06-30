@@ -8,7 +8,7 @@
 - `MODEL_CACHE_DIR`: Optional local cache path for Transformer models. Defaults to `data/model-cache` locally and `/tmp/kaxi-model-cache` on Vercel/serverless runtimes.
 - `VECTOR_CACHE_FILE`: Optional embedding cache file path. Defaults to `data/vector-store/embeddings-cache.json`.
 - `RESTORE_MODEL_CACHE_ON_INSTALL`: Set `true` to decompress the local Transformer model during install. Vercel builds skip this by default to keep function bundles under file-size limits.
-- `AI_*_RATE_LIMIT`, `AI_*_DAILY_QUOTA`: Optional AI abuse and cost controls. Use `0` to disable a specific limit.
+- `AI_*_RATE_LIMIT`, `AI_*_DAILY_QUOTA`: Optional AI abuse and cost controls. Use `0` to disable a specific limit. Public Agent and Consult demos default to disabled limits until a managed shared limiter is configured.
 - `RATE_LIMIT_BACKEND`: `auto`, `database`, or `memory`. Use `database` with a writable shared production DB so Vercel instances share quota.
 - `AI_AGENT_PREFLIGHT_ENABLED`: Enables deterministic server-side tool/RAG preflight before Codex bridge calls.
 - `AI_AGENT_PREFLIGHT_TIMEOUT_MS`, `AI_AGENT_CONTEXT_MAX_CHARS`, `AI_AGENT_GROUNDED_QUESTION_MAX_CHARS`: Bound preflight latency and context sent to the LLM bridge.
@@ -240,7 +240,7 @@ When the remote bridge is unavailable, `/api/ai/agent` returns a built-in `tool-
 Minimum safety rules:
 
 1. Keep `CODEX_BRIDGE_TOKEN` enabled for any tunnel.
-2. For public stress testing, set `CODEX_BRIDGE_RATE_LIMIT=0`, `AI_AGENT_RATE_LIMIT=0`, and `AI_AGENT_DAILY_QUOTA=0`.
+2. For public stress testing, set `CODEX_BRIDGE_RATE_LIMIT=0`, `AI_AGENT_RATE_LIMIT=0`, `AI_AGENT_DAILY_QUOTA=0`, `AI_CONSULT_RATE_LIMIT=0`, and `AI_CONSULT_DAILY_QUOTA=0`.
 3. Keep Codex sandbox `read-only` and `CODEX_USE_USER_CONFIG=false`.
 4. Do not run the bridge from a directory containing private files that external prompts should never inspect.
 5. Turn off the tunnel when public testing is over.

@@ -202,6 +202,54 @@ async function testRemoteBridgeFailureFallsBackToTools() {
   }
 }
 
+async function testConsultRouteDoesNotRequireSharedLimiterWhenDisabled() {
+  const snapshot = { ...process.env };
+  try {
+    Object.assign(process.env, {
+      NODE_ENV: "production",
+      VERCEL_ENV: "production",
+      VERCEL: "1",
+      DATABASE_URL: "file:./db/custom.db",
+      RATE_LIMIT_BACKEND: "auto",
+      AI_CONSULT_RATE_LIMIT: "0",
+      AI_CONSULT_DAILY_QUOTA: "0",
+      AI_EMBEDDING_INIT_TIMEOUT_MS: "1",
+      AI_LLM_TIMEOUT_MS: "1000",
+      ZAI_ENABLED: "false",
+    });
+    delete process.env.TURSO_DATABASE_URL;
+    delete process.env.TURSO_AUTH_TOKEN;
+    delete process.env.DATABASE_AUTH_TOKEN;
+    delete process.env.DATA_ENCRYPTION_KEY;
+
+    const route = await import("../src/app/api/ai/consult/route");
+    const req = new NextRequest("https://kaxi.local/api/ai/consult", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-forwarded-for": "203.0.113.77",
+      },
+      body: JSON.stringify({
+        question: "행정사 AI",
+        lang: "ko",
+        history: [],
+        mode: "general",
+      }),
+    });
+    const res = await route.POST(req);
+    const body = await res.json();
+
+    if (res.status !== 200 || !body.answer || body.error === "Shared rate limit backend unavailable") {
+      fail(`consult route should answer when limits are disabled: status=${res.status} body=${JSON.stringify(body)}`);
+    }
+    if (String(body.answer).includes("일시적 오류가 발생했습니다")) {
+      fail(`consult route should not return temporary error fallback: ${JSON.stringify(body)}`);
+    }
+  } finally {
+    restoreEnv(snapshot);
+  }
+}
+
 function testAgentMetaDoesNotEchoPii() {
   const meta = buildAgentMeta({
     lang: "ko",
@@ -291,6 +339,7 @@ await testPreflightCarriesPlannerContext();
 await testFallbackPartnerRequestStaysDraft();
 await testAgentStatusRoute();
 await testRemoteBridgeFailureFallsBackToTools();
+await testConsultRouteDoesNotRequireSharedLimiterWhenDisabled();
 testAgentMetaDoesNotEchoPii();
 testAgentMetaClarifyingQuestions();
 testVercelModelCacheDefaultsToTmp();
