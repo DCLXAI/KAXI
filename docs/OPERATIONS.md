@@ -6,7 +6,7 @@
 - `ADMIN_API_KEY`: Required for admin APIs, lead exports, chat-log analysis, and synonym management.
 - `MODEL_CACHE_DIR`: Optional local cache path for Transformer models. Defaults to `data/model-cache`.
 - `VECTOR_CACHE_FILE`: Optional embedding cache file path. Defaults to `data/vector-store/embeddings-cache.json`.
-- `AI_*_RATE_LIMIT`, `AI_*_DAILY_QUOTA`: Optional AI abuse and cost controls.
+- `AI_*_RATE_LIMIT`, `AI_*_DAILY_QUOTA`: Optional AI abuse and cost controls. Use `0` to disable a specific limit.
 - `NEXTAUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`: Required for session-based admin login.
 - `AGENT_BACKEND`: Agent backend selector. Defaults to `codex`; set `zai` only when `.z-ai-config` is present.
 - `CODEX_AUTH_MODE`: `auto`, `local`, or `api-key`. `auto` uses the current local Codex CLI login in local dev and API-key mode on Vercel.
@@ -163,7 +163,7 @@ The public frontend continues calling `/api/ai/agent`, and Vercel forwards to th
 Minimum safety rules:
 
 1. Keep `CODEX_BRIDGE_TOKEN` enabled for any tunnel.
-2. Keep `CODEX_BRIDGE_RATE_LIMIT`, `AI_AGENT_RATE_LIMIT`, and `AI_AGENT_DAILY_QUOTA` low.
+2. For public stress testing, set `CODEX_BRIDGE_RATE_LIMIT=0`, `AI_AGENT_RATE_LIMIT=0`, and `AI_AGENT_DAILY_QUOTA=0`.
 3. Keep Codex sandbox `read-only` and `CODEX_USE_USER_CONFIG=false`.
 4. Do not run the bridge from a directory containing private files that external prompts should never inspect.
 5. Turn off the tunnel when public testing is over.

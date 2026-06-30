@@ -12,6 +12,7 @@ import {
 import { isRemoteCodexBridgeEnabled, runRemoteCodexBridge } from "@/lib/codex/remote-bridge";
 import {
   consumeDailyQuota,
+  parseLimit,
   parsePositiveInt,
   rateLimit,
   requireAdmin,
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
   try {
     const limited = rateLimit(req, {
       key: "ai:agent",
-      limit: parsePositiveInt(process.env.AI_AGENT_RATE_LIMIT, 6),
+      limit: parseLimit(process.env.AI_AGENT_RATE_LIMIT, 6),
       windowMs: 60 * 1000,
     });
     if (limited) return limited;
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
     const quotaExceeded = consumeDailyQuota(
       req,
       "ai:agent",
-      parsePositiveInt(process.env.AI_AGENT_DAILY_QUOTA, 30)
+      parseLimit(process.env.AI_AGENT_DAILY_QUOTA, 30)
     );
     if (quotaExceeded) return quotaExceeded;
 

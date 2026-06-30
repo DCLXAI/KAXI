@@ -7,7 +7,7 @@ const HOST = process.env.CODEX_BRIDGE_HOST?.trim() || "127.0.0.1";
 const PORT = Number(process.env.CODEX_BRIDGE_PORT || 8787);
 const MAX_BODY_BYTES = Number(process.env.CODEX_BRIDGE_MAX_BODY_BYTES || 32_000);
 const MAX_QUESTION_CHARS = Number(process.env.CODEX_BRIDGE_MAX_CHARS || 4_000);
-const RATE_LIMIT = Number(process.env.CODEX_BRIDGE_RATE_LIMIT || 6);
+const RATE_LIMIT = parseLimit(process.env.CODEX_BRIDGE_RATE_LIMIT, 6);
 const RATE_WINDOW_MS = 60_000;
 const REQUIRED_TOKEN = process.env.CODEX_BRIDGE_TOKEN?.trim();
 
@@ -28,6 +28,16 @@ const allowedOrigins = new Set(
 );
 
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+
+function parseLimit(value: string | undefined, fallback: number): number {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized && ["0", "false", "off", "none", "unlimited", "disabled"].includes(normalized)) {
+    return 0;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
 
 function json(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
@@ -57,6 +67,8 @@ function clientKey(req: IncomingMessage): string {
 }
 
 function checkRateLimit(req: IncomingMessage): boolean {
+  if (!Number.isFinite(RATE_LIMIT) || RATE_LIMIT <= 0) return true;
+
   const key = clientKey(req);
   const now = Date.now();
   const current = rateBuckets.get(key);

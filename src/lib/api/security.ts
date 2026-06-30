@@ -69,6 +69,8 @@ export function rateLimit(
   req: NextRequest,
   { key, limit, windowMs }: RateLimitRule
 ): NextResponse | null {
+  if (!Number.isFinite(limit) || limit <= 0) return null;
+
   const now = Date.now();
   const bucketKey = `${key}:${getClientIp(req)}`;
   const bucket = buckets.get(bucketKey);
@@ -110,6 +112,15 @@ export function consumeDailyQuota(
 export function parsePositiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+export function parseLimit(value: string | undefined, fallback: number): number {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized && ["0", "false", "off", "none", "unlimited", "disabled"].includes(normalized)) {
+    return 0;
+  }
+
+  return parsePositiveInt(value, fallback);
 }
 
 export function sanitizeAiBody(
