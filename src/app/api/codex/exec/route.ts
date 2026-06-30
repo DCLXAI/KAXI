@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     answer: result.answer,
+    codexMode: result.mode,
     stdout: result.stdout,
     stderr: result.stderr,
     durationMs: result.durationMs,

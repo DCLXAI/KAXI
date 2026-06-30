@@ -9,7 +9,8 @@
 - `AI_*_RATE_LIMIT`, `AI_*_DAILY_QUOTA`: Optional AI abuse and cost controls.
 - `NEXTAUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`: Required for session-based admin login.
 - `AGENT_BACKEND`: Agent backend selector. Defaults to `codex`; set `zai` only when `.z-ai-config` is present.
-- `CODEX_API_KEY`: Required when `AGENT_BACKEND=codex`.
+- `CODEX_AUTH_MODE`: `auto`, `local`, or `api-key`. `auto` uses the current local Codex CLI login in local dev and API-key mode on Vercel.
+- `CODEX_API_KEY`: Required on Vercel when `AGENT_BACKEND=codex`.
 - `CODEX_AGENT_REQUIRE_ADMIN`: Optional guard for `/api/ai/agent` Codex execution. Keep `false` for public demo, `true` for private/internal use.
 
 ## Runtime Artifacts
@@ -81,6 +82,26 @@ For production, replace the in-memory limiter with Redis/Upstash or a database-b
 The app routes `/api/ai/agent` to Codex CLI by default (`AGENT_BACKEND=codex`).
 Set `AGENT_BACKEND=zai` only if the deployment includes a valid `.z-ai-config`.
 If Codex credentials are missing or a Codex run fails, `/api/ai/agent` falls back to the built-in tool engine instead of returning 500.
+
+Local development can reuse the Codex CLI login already present on the developer machine:
+
+```bash
+CODEX_AUTH_MODE=auto bun run dev
+```
+
+In local mode the app runs the system `codex` binary, defaults `CODEX_HOME` to `~/.codex`, and returns `backend: "codex-cli-local"` from `/api/ai/agent`.
+Use `CODEX_CLI_PATH` or `CODEX_LOCAL_HOME` only when the CLI binary or auth cache lives somewhere non-standard.
+Set `CODEX_USE_USER_CONFIG=true` only for trusted local experiments that should load the user's full Codex config.
+
+Vercel Production cannot access the developer machine's current Codex CLI session.
+Do not copy `~/.codex/auth.json` into source control, chat, or public deployment artifacts.
+For production Codex CLI execution, set:
+
+```env
+AGENT_BACKEND=codex
+CODEX_AUTH_MODE=api-key
+CODEX_API_KEY=...
+```
 
 `/api/codex/exec` remains guarded by `requireAdmin` for direct admin-only tests.
 For `/api/ai/agent`, set `CODEX_AGENT_REQUIRE_ADMIN=true` if Codex should be private/internal only.

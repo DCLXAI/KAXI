@@ -1,12 +1,11 @@
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
+import { homedir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import type { Lang } from "@/lib/i18n/translations";
 
-const execFileAsync = promisify(execFile);
 const require = createRequire(import.meta.url);
 
 interface CodexExecOptions {
@@ -21,10 +20,92 @@ export interface CodexExecResult {
   stdout: string;
   stderr: string;
   durationMs: number;
+  mode: CodexRunMode;
 }
+
+type CodexRunMode = "local-auth" | "api-key";
 
 function truncate(value: string, max: number): string {
   return value.length > max ? `${value.slice(0, max)}\n...[truncated]` : value;
+}
+
+function extractStdoutAnswer(stdout: string): string {
+  const ignored = new Set(["codex", "tokens used"]);
+  const lines = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !ignored.has(line.toLowerCase()))
+    .filter((line) => !line.startsWith("OpenAI Codex v"))
+    .filter((line) => !line.startsWith("--------"))
+    .filter((line) => !line.startsWith("workdir:"))
+    .filter((line) => !line.startsWith("model:"))
+    .filter((line) => !line.startsWith("provider:"))
+    .filter((line) => !line.startsWith("approval:"))
+    .filter((line) => !line.startsWith("sandbox:"))
+    .filter((line) => !line.startsWith("reasoning "))
+    .filter((line) => !line.startsWith("session id:"))
+    .filter((line) => !/^\d{1,3}(,\d{3})*$/.test(line));
+
+  return lines.at(-1) || "";
+}
+
+function runCommand(
+  command: string,
+  args: string[],
+  options: { cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number; maxBuffer: number }
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: options.cwd,
+      env: options.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    let timedOut = false;
+
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn();
+    };
+
+    const append = (kind: "stdout" | "stderr", chunk: Buffer) => {
+      if (kind === "stdout") stdout += chunk.toString("utf8");
+      else stderr += chunk.toString("utf8");
+
+      if (stdout.length + stderr.length > options.maxBuffer) {
+        child.kill("SIGTERM");
+        finish(() => reject(new Error("Codex CLI output exceeded max buffer")));
+      }
+    };
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+    }, options.timeoutMs);
+
+    child.stdout.on("data", (chunk: Buffer) => append("stdout", chunk));
+    child.stderr.on("data", (chunk: Buffer) => append("stderr", chunk));
+    child.on("error", (error) => finish(() => reject(error)));
+    child.on("close", (code, signal) => {
+      finish(() => {
+        if (code === 0) {
+          resolve({ stdout, stderr });
+          return;
+        }
+
+        const suffix = timedOut
+          ? `timed out after ${options.timeoutMs}ms`
+          : `exited with code ${code ?? "null"}${signal ? ` signal ${signal}` : ""}`;
+        reject(new Error(`Codex CLI ${suffix}: ${truncate(stderr || stdout, 1000)}`));
+      });
+    });
+  });
 }
 
 function buildPrompt({ question, lang, history = [] }: Omit<CodexExecOptions, "timeoutMs">): string {
@@ -33,7 +114,7 @@ function buildPrompt({ question, lang, history = [] }: Omit<CodexExecOptions, "t
     .map((item) => `${item.role === "user" ? "User" : "Assistant"}: ${item.content}`)
     .join("\n");
 
-  return `You are running as an experimental Codex CLI bridge inside a Vercel Serverless Function.
+  return `You are running as an experimental Codex CLI bridge for K-Bridge Gateway.
 
 Hard constraints:
 - Treat this environment as read-only and ephemeral.
@@ -65,28 +146,49 @@ export function shouldRequireAdminForCodexAgent(): boolean {
   return process.env.CODEX_AGENT_REQUIRE_ADMIN === "true";
 }
 
+function isHostedRuntime(): boolean {
+  return process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV);
+}
+
+function getLocalCodexHome(): string {
+  return process.env.CODEX_LOCAL_HOME?.trim() || process.env.CODEX_HOME?.trim() || join(homedir(), ".codex");
+}
+
+export function getCodexRunMode(): CodexRunMode {
+  const configured = process.env.CODEX_AUTH_MODE?.trim().toLowerCase();
+  if (configured === "api-key") return "api-key";
+
+  if (configured === "local") {
+    if (isHostedRuntime()) {
+      throw new Error("CODEX_AUTH_MODE=local cannot run on Vercel; set CODEX_API_KEY instead");
+    }
+    return "local-auth";
+  }
+
+  return isHostedRuntime() ? "api-key" : "local-auth";
+}
+
 export async function runCodexServerless({
   question,
   lang,
   history,
   timeoutMs,
 }: CodexExecOptions): Promise<CodexExecResult> {
+  const mode = getCodexRunMode();
   const apiKey = process.env.CODEX_API_KEY || process.env.OPENAI_API_KEY;
-  if (!apiKey) {
+  if (mode === "api-key" && !apiKey) {
     throw new Error("CODEX_API_KEY or OPENAI_API_KEY is not configured");
   }
 
-  const codexBin = require.resolve("@openai/codex/bin/codex.js");
   const runId = randomUUID();
-  const codexHome = join("/tmp", `codex-home-${runId}`);
+  const codexHome = mode === "local-auth" ? getLocalCodexHome() : join("/tmp", `codex-home-${runId}`);
   const outputFile = join("/tmp", `codex-output-${runId}.txt`);
   await mkdir(codexHome, { recursive: true });
 
   const prompt = buildPrompt({ question, lang, history });
-  const args = [
-    codexBin,
+  const command = mode === "local-auth" ? process.env.CODEX_CLI_PATH?.trim() || "codex" : process.execPath;
+  const execArgs = [
     "exec",
-    "--ignore-user-config",
     "--ignore-rules",
     "--skip-git-repo-check",
     "--ephemeral",
@@ -102,6 +204,12 @@ export async function runCodexServerless({
     outputFile,
   ];
 
+  if (process.env.CODEX_USE_USER_CONFIG !== "true") {
+    execArgs.splice(1, 0, "--ignore-user-config");
+  }
+
+  const args = mode === "api-key" ? [require.resolve("@openai/codex/bin/codex.js"), ...execArgs] : execArgs;
+
   if (process.env.CODEX_MODEL?.trim()) {
     args.push("--model", process.env.CODEX_MODEL.trim());
   }
@@ -110,17 +218,16 @@ export async function runCodexServerless({
 
   const startedAt = Date.now();
   try {
-    const { stdout, stderr } = await execFileAsync(process.execPath, args, {
+    const { stdout, stderr } = await runCommand(command, args, {
       cwd: process.cwd(),
-      timeout: timeoutMs,
+      timeoutMs,
       maxBuffer: 1024 * 1024,
       env: {
         PATH: process.env.PATH || "",
-        HOME: "/tmp",
+        HOME: mode === "local-auth" ? process.env.HOME || homedir() : "/tmp",
         TMPDIR: "/tmp",
         CODEX_HOME: codexHome,
-        CODEX_API_KEY: apiKey,
-        OPENAI_API_KEY: apiKey,
+        ...(mode === "api-key" && apiKey ? { CODEX_API_KEY: apiKey, OPENAI_API_KEY: apiKey } : {}),
         NODE_ENV: process.env.NODE_ENV || "production",
       },
     });
@@ -129,17 +236,21 @@ export async function runCodexServerless({
     try {
       answer = (await readFile(outputFile, "utf8")).trim();
     } catch {
-      answer = stdout.trim();
+      answer = "";
     }
+    if (!answer) answer = extractStdoutAnswer(stdout) || stdout.trim();
 
     return {
       answer: answer || "Codex completed without a final message.",
       stdout: truncate(stdout, 20_000),
       stderr: truncate(stderr, 20_000),
       durationMs: Date.now() - startedAt,
+      mode,
     };
   } finally {
-    await rm(codexHome, { recursive: true, force: true }).catch(() => undefined);
+    if (mode === "api-key") {
+      await rm(codexHome, { recursive: true, force: true }).catch(() => undefined);
+    }
     await rm(outputFile, { force: true }).catch(() => undefined);
   }
 }

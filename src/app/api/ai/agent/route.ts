@@ -66,7 +66,8 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({
           answer: result.answer,
-          backend: "codex-cli",
+          backend: result.mode === "local-auth" ? "codex-cli-local" : "codex-cli",
+          codexMode: result.mode,
           steps: [
             {
               type: "final_answer",
