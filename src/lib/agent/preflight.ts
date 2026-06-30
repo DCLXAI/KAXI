@@ -1,5 +1,5 @@
 import type { AgentStep } from "@/lib/agent/agent";
-import { analyzeAgentIntent } from "@/lib/agent/planner";
+import { analyzeAgentIntent, type AgentIntentAnalysis } from "@/lib/agent/planner";
 import { sanitizeToolArgsForDisplay, TOOL_MAP, type ToolContext, type ToolResult } from "@/lib/agent/tools";
 import type { Lang } from "@/lib/i18n/translations";
 import { redactSensitiveText } from "@/lib/privacy/pii";
@@ -101,9 +101,27 @@ function summarizeToolResult(item: ToolResult, lang: Lang): string[] {
   return lines;
 }
 
-function buildGroundingContext(toolResults: ToolResult[], lang: Lang): string {
-  if (toolResults.length === 0) return "";
-  return toolResults.flatMap((item) => summarizeToolResult(item, lang)).join("\n");
+function summarizePlannerContext(analysis: AgentIntentAnalysis): string[] {
+  const lines = [
+    "### planner",
+    `Intent confidence: ${analysis.confidence}`,
+    `Missing slots: ${analysis.missingSlots.length > 0 ? analysis.missingSlots.join(", ") : "none"}`,
+  ];
+
+  if (analysis.plan.length > 0) {
+    lines.push("Planned tools:");
+    for (const planned of analysis.plan) {
+      lines.push(`- ${planned.tool}: ${planned.reason}`);
+    }
+  }
+
+  return lines;
+}
+
+function buildGroundingContext(toolResults: ToolResult[], lang: Lang, analysis: AgentIntentAnalysis): string {
+  const plannerLines = summarizePlannerContext(analysis);
+  const toolLines = toolResults.flatMap((item) => summarizeToolResult(item, lang));
+  return [...plannerLines, ...toolLines].join("\n");
 }
 
 function buildGroundedQuestion(question: string, groundingContext: string): string {
@@ -174,7 +192,7 @@ export async function runAgentPreflight(
     await runTool(planned.tool, planned.args, preflightCtx, steps, toolResults);
   }
 
-  const groundingContext = buildGroundingContext(toolResults, lang);
+  const groundingContext = buildGroundingContext(toolResults, lang, analysis);
   return {
     enabled: true,
     groundedQuestion: buildGroundedQuestion(question, groundingContext),

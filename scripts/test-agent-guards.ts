@@ -1,7 +1,7 @@
 import { runAgentPreflight } from "../src/lib/agent/preflight";
 import { runFallbackAgent } from "../src/lib/agent/fallback";
 import { buildAgentMeta } from "../src/lib/agent/meta";
-import { analyzeAgentIntent } from "../src/lib/agent/planner";
+import { analyzeAgentIntent, type AgentMissingSlot } from "../src/lib/agent/planner";
 import { resolveModelCacheDir } from "../src/lib/embeddings/transformer-embedder";
 import { TOOL_MAP } from "../src/lib/agent/tools";
 
@@ -79,6 +79,24 @@ function testPlannerUnderstandsMultilingualRequests() {
   }
 }
 
+function testPlannerSurfacesMissingSlots() {
+  const vague = analyzeAgentIntent("비자 서류랑 학교 추천해줘", "ko");
+  if (vague.confidence === "high") {
+    fail(`vague planner should not be high confidence: ${JSON.stringify(vague)}`);
+  }
+  const expectedSlots: AgentMissingSlot[] = ["region", "program", "visa_type", "nationality"];
+  for (const slot of expectedSlots) {
+    if (!vague.missingSlots.includes(slot)) {
+      fail(`vague planner missing slot ${slot}: ${JSON.stringify(vague)}`);
+    }
+  }
+
+  const specific = analyzeAgentIntent("베트남 학생 D-4 서울 어학당 500만원 예산으로 추천해줘", "ko");
+  if (specific.confidence !== "high" || specific.missingSlots.length > 0) {
+    fail(`specific planner should be high confidence: ${JSON.stringify(specific)}`);
+  }
+}
+
 async function testPreflightUsesDiagnosisPlanner() {
   const result = await runAgentPreflight(
     "고졸이고 TOPIK 2급, 예산 500만원인데 한국 유학 맞춤 로드맵 진단해줘",
@@ -88,6 +106,21 @@ async function testPreflightUsesDiagnosisPlanner() {
 
   if (!result.toolResults.some((item) => item.tool === "diagnose_path")) {
     fail(`preflight should call diagnose_path for personalized roadmap: ${JSON.stringify(result)}`);
+  }
+}
+
+async function testPreflightCarriesPlannerContext() {
+  const result = await runAgentPreflight(
+    "비자 서류랑 학교 추천해줘",
+    "ko",
+    { lang: "ko", leadId: "local-agent-guard" }
+  );
+
+  if (!result.groundingContext.includes("Intent confidence") || !result.groundingContext.includes("Missing slots")) {
+    fail(`preflight should include planner context: ${JSON.stringify(result)}`);
+  }
+  if (!result.groundedQuestion.includes("KAXI server-side tool context")) {
+    fail(`grounded question should include tool context: ${result.groundedQuestion}`);
   }
 }
 
@@ -165,8 +198,28 @@ function testAgentMetaDoesNotEchoPii() {
   if (meta.quality.officialSourceCount !== 1 || !meta.plan.includes("공식 정보 검색")) {
     fail(`agent meta quality/plan incomplete: ${serialized}`);
   }
+  if (!meta.quality.intentConfidence || typeof meta.quality.missingSlotCount !== "number") {
+    fail(`agent meta quality missing intent diagnostics: ${serialized}`);
+  }
   if (serialized.includes("user@example.com")) {
     fail("agent meta leaked raw email from question");
+  }
+}
+
+function testAgentMetaClarifyingQuestions() {
+  const meta = buildAgentMeta({
+    lang: "ko",
+    question: "비자 서류랑 학교 추천해줘",
+    backend: "tool-fallback",
+    grounded: true,
+    toolResults: [],
+  });
+
+  if (meta.clarifyingQuestions.length === 0 || meta.quality.missingSlotCount === 0) {
+    fail(`agent meta should expose clarifying questions: ${JSON.stringify(meta)}`);
+  }
+  if (!meta.clarifyingQuestions.some((item) => item.slot === "visa_type")) {
+    fail(`agent meta should ask for visa type: ${JSON.stringify(meta)}`);
   }
 }
 
@@ -189,9 +242,12 @@ function testVercelModelCacheDefaultsToTmp() {
 await testPartnerToolDryRun();
 await testPreflightDoesNotPersistPartnerRequest();
 testPlannerUnderstandsMultilingualRequests();
+testPlannerSurfacesMissingSlots();
 await testPreflightUsesDiagnosisPlanner();
+await testPreflightCarriesPlannerContext();
 await testFallbackPartnerRequestStaysDraft();
 await testAgentStatusRoute();
 testAgentMetaDoesNotEchoPii();
+testAgentMetaClarifyingQuestions();
 testVercelModelCacheDefaultsToTmp();
 console.log("PASS agent guards");

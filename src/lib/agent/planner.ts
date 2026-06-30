@@ -14,6 +14,18 @@ export interface PlannedToolCall {
   reason: string;
 }
 
+export type AgentIntentConfidence = "low" | "medium" | "high";
+
+export type AgentMissingSlot =
+  | "region"
+  | "program"
+  | "budget"
+  | "visa_type"
+  | "nationality"
+  | "education"
+  | "korean_level"
+  | "goal";
+
 export interface AgentIntentAnalysis {
   text: string;
   smallTalk: boolean;
@@ -36,6 +48,8 @@ export interface AgentIntentAnalysis {
   goal: "language" | "degree" | "transfer" | "career" | "unsure";
   usingBroker: boolean;
   hasHistory: boolean;
+  confidence: AgentIntentConfidence;
+  missingSlots: AgentMissingSlot[];
   plan: PlannedToolCall[];
 }
 
@@ -131,6 +145,63 @@ function detectGoal(text: string): AgentIntentAnalysis["goal"] {
   if (includesAny(text, ["취업", "career", "nghề", "nghe", "ажил"])) return "career";
   if (includesAny(text, ["학위", "대학", "degree", "đại học", "dai hoc", "их сургууль"])) return "degree";
   return "unsure";
+}
+
+function hasExplicitVisaType(text: string): boolean {
+  return /d-2|d2|d-4|d4|어학|어학당|한국어|language|tiếng hàn|tieng han|хэлний|학위|대학교|대학원|degree|university|graduate|đại học|dai hoc|их сургууль|магистр/i.test(text);
+}
+
+function hasBudgetSignal(text: string): boolean {
+  return /예산|budget|ngân sách|ngan sach|төсөв|төсөвтэй|비용|견적|cost|chi phí|chi phi|зардал/i.test(text);
+}
+
+function hasEducationSignal(text: string): boolean {
+  return includesAny(text, [
+    "고졸",
+    "고등학교",
+    "대졸",
+    "대학교 졸업",
+    "전문대",
+    "석사",
+    "master",
+    "bachelor",
+    "college",
+    "cao đẳng",
+    "cao dang",
+    "thạc sĩ",
+    "thac si",
+    "магистр",
+    "их сургууль төгс",
+  ]);
+}
+
+function hasKoreanLevelSignal(text: string): boolean {
+  return /topik|토픽|[123]급|한국어|korean|tiếng hàn|tieng han|солонгос хэл/i.test(text);
+}
+
+function hasGoalSignal(text: string): boolean {
+  return includesAny(text, [
+    "어학",
+    "한국어",
+    "language",
+    "tiếng hàn",
+    "tieng han",
+    "хэлний",
+    "편입",
+    "transfer",
+    "chuyển tiếp",
+    "chuyen tiep",
+    "취업",
+    "career",
+    "nghề",
+    "nghe",
+    "ажил",
+    "학위",
+    "degree",
+    "đại học",
+    "dai hoc",
+    "их сургууль",
+  ]);
 }
 
 function detectPartnerType(text: string): string {
@@ -237,6 +308,20 @@ export function analyzeAgentIntent(question: string, lang?: Lang): AgentIntentAn
     }
   }
 
+  const missingSlots = new Set<AgentMissingSlot>();
+  if ((school || cost) && region === "all") missingSlots.add("region");
+  if (school && program === "all") missingSlots.add("program");
+  if (hasBudgetSignal(text) && !budget) missingSlots.add("budget");
+  if (documents && !hasExplicitVisaType(text)) missingSlots.add("visa_type");
+  if ((documents || diagnosis) && nationality === "other") missingSlots.add("nationality");
+  if (diagnosis && !hasEducationSignal(text)) missingSlots.add("education");
+  if (diagnosis && !hasKoreanLevelSignal(text)) missingSlots.add("korean_level");
+  if (diagnosis && !hasGoalSignal(text)) missingSlots.add("goal");
+
+  const missingCount = missingSlots.size;
+  const confidence: AgentIntentConfidence =
+    smallTalk || safety ? "high" : plan.length === 0 || missingCount >= 3 ? "low" : missingCount > 0 ? "medium" : "high";
+
   return {
     text,
     smallTalk,
@@ -259,6 +344,8 @@ export function analyzeAgentIntent(question: string, lang?: Lang): AgentIntentAn
     goal,
     usingBroker,
     hasHistory,
+    confidence,
+    missingSlots: Array.from(missingSlots),
     plan,
   };
 }

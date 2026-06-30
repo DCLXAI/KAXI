@@ -106,10 +106,17 @@ interface AgentSuggestion {
   prompt: string;
 }
 
+interface AgentClarifyingQuestion {
+  slot: string;
+  label: string;
+  prompt: string;
+}
+
 interface AgentMeta {
   summary: string;
   plan: string[];
   sources: AgentSource[];
+  clarifyingQuestions: AgentClarifyingQuestion[];
   suggestions: AgentSuggestion[];
   safetyFlags: string[];
   quality: {
@@ -117,6 +124,8 @@ interface AgentMeta {
     grounded: boolean;
     toolCount: number;
     officialSourceCount: number;
+    intentConfidence: "low" | "medium" | "high";
+    missingSlotCount: number;
     durationMs?: number;
   };
 }
@@ -585,6 +594,12 @@ export function Agent() {
                           Grounded
                         </Badge>
                       )}
+                      {m.meta?.quality.intentConfidence && (
+                        <Badge variant="outline" className="text-[10px] gap-0.5">
+                          <Brain className="h-2.5 w-2.5" />
+                          {m.meta.quality.intentConfidence}
+                        </Badge>
+                      )}
                       {typeof m.durationMs === "number" && (
                         <Badge variant="outline" className="text-[10px]">
                           {Math.round(m.durationMs / 1000)}s
@@ -607,6 +622,27 @@ export function Agent() {
                     {m.meta?.safetyFlags && m.meta.safetyFlags.length > 0 && (
                       <div className="mt-3 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
                         {m.meta.safetyFlags[0]}
+                      </div>
+                    )}
+                    {m.meta?.clarifyingQuestions && m.meta.clarifyingQuestions.length > 0 && (
+                      <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 dark:border-amber-800/70 dark:bg-amber-950/30">
+                        <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-amber-800 dark:text-amber-200">
+                          <AlertCircle className="h-3 w-3" />
+                          {lang === "ko" ? "정확도를 높이려면" : "To improve accuracy"}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {m.meta.clarifyingQuestions.map((item) => (
+                            <button
+                              key={`${item.slot}-${item.label}`}
+                              type="button"
+                              disabled={loading}
+                              onClick={() => send(item.prompt)}
+                              className="inline-flex max-w-full items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-left text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <span className="font-medium">{item.label}</span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     )}
                     {m.meta?.sources && m.meta.sources.length > 0 && (

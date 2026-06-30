@@ -1,6 +1,6 @@
 import type { Lang } from "@/lib/i18n/translations";
 import type { AgentResponse, AgentStep } from "@/lib/agent/agent";
-import { analyzeAgentIntent } from "@/lib/agent/planner";
+import { analyzeAgentIntent, type AgentIntentAnalysis, type AgentMissingSlot } from "@/lib/agent/planner";
 import { sanitizeToolArgsForDisplay, TOOL_MAP, type ToolContext, type ToolResult } from "@/lib/agent/tools";
 
 async function runTool(
@@ -41,7 +41,55 @@ async function runTool(
   return toolResult;
 }
 
-function formatFallbackAnswer(lang: Lang, question: string, toolResults: ToolResult[]): string {
+const MISSING_SLOT_LABELS: Record<Lang, Record<AgentMissingSlot, string>> = {
+  ko: {
+    region: "희망 지역",
+    program: "과정",
+    budget: "6개월 예산",
+    visa_type: "D-2/D-4 비자 종류",
+    nationality: "국적",
+    education: "최종 학력",
+    korean_level: "한국어/TOPIK 수준",
+    goal: "유학 목표",
+  },
+  vi: {
+    region: "khu vực mong muốn",
+    program: "chương trình",
+    budget: "ngân sách 6 tháng",
+    visa_type: "loại visa D-2/D-4",
+    nationality: "quốc tịch",
+    education: "trình độ học vấn",
+    korean_level: "trình độ tiếng Hàn/TOPIK",
+    goal: "mục tiêu du học",
+  },
+  mn: {
+    region: "хүссэн бүс",
+    program: "хөтөлбөр",
+    budget: "6 сарын төсөв",
+    visa_type: "D-2/D-4 виз",
+    nationality: "иргэншил",
+    education: "боловсрол",
+    korean_level: "солонгос хэл/TOPIK",
+    goal: "суралцах зорилго",
+  },
+  en: {
+    region: "preferred region",
+    program: "program type",
+    budget: "6-month budget",
+    visa_type: "D-2/D-4 visa type",
+    nationality: "nationality",
+    education: "education level",
+    korean_level: "Korean/TOPIK level",
+    goal: "study goal",
+  },
+};
+
+function formatFallbackAnswer(
+  lang: Lang,
+  question: string,
+  toolResults: ToolResult[],
+  analysis: AgentIntentAnalysis
+): string {
   const lines: string[] = [];
   const isKo = lang === "ko";
 
@@ -117,6 +165,18 @@ function formatFallbackAnswer(lang: Lang, question: string, toolResults: ToolRes
     );
   }
 
+  if (analysis.missingSlots.length > 0 && !analysis.safety) {
+    const labels = analysis.missingSlots
+      .slice(0, 4)
+      .map((slot) => MISSING_SLOT_LABELS[lang][slot])
+      .filter(Boolean);
+    if (labels.length > 0) {
+      lines.push("");
+      lines.push(isKo ? "더 정확한 추천을 위해 확인하면 좋은 정보:" : "Details that would improve the recommendation:");
+      for (const label of labels) lines.push(`- ${label}`);
+    }
+  }
+
   lines.push("");
   return lines.join("\n");
 }
@@ -167,7 +227,7 @@ export async function runFallbackAgent(
     await runTool(planned.tool, planned.args, toolCtx, steps, toolResults);
   }
 
-  const answer = formatFallbackAnswer(lang, question, toolResults);
+  const answer = formatFallbackAnswer(lang, question, toolResults, analysis);
   steps.push({ type: "final_answer", content: answer, timestamp: Date.now() });
 
   return {

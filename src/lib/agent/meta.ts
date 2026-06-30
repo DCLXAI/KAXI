@@ -1,5 +1,6 @@
 import type { Lang } from "@/lib/i18n/translations";
 import type { ToolResult } from "@/lib/agent/tools";
+import { analyzeAgentIntent, type AgentMissingSlot } from "@/lib/agent/planner";
 
 export interface AgentSource {
   id: string;
@@ -18,10 +19,17 @@ export interface AgentSuggestion {
   prompt: string;
 }
 
+export interface AgentClarifyingQuestion {
+  slot: AgentMissingSlot;
+  label: string;
+  prompt: string;
+}
+
 export interface AgentMeta {
   summary: string;
   plan: string[];
   sources: AgentSource[];
+  clarifyingQuestions: AgentClarifyingQuestion[];
   suggestions: AgentSuggestion[];
   safetyFlags: string[];
   quality: {
@@ -29,6 +37,8 @@ export interface AgentMeta {
     grounded: boolean;
     toolCount: number;
     officialSourceCount: number;
+    intentConfidence: "low" | "medium" | "high";
+    missingSlotCount: number;
     durationMs?: number;
   };
 }
@@ -125,6 +135,49 @@ const SUGGESTION_LIBRARY: Record<Lang, AgentSuggestion[]> = {
   ],
 };
 
+const CLARIFYING_LIBRARY: Record<Lang, Record<AgentMissingSlot, AgentClarifyingQuestion>> = {
+  ko: {
+    region: { slot: "region", label: "희망 지역", prompt: "희망 지역이 서울, 경기, 부산 중 어디인지 알려주세요." },
+    program: { slot: "program", label: "과정", prompt: "어학당, 전문대, 학부, 대학원 중 어떤 과정을 원하나요?" },
+    budget: { slot: "budget", label: "예산", prompt: "6개월 기준 예산을 원화로 알려주세요." },
+    visa_type: { slot: "visa_type", label: "비자 종류", prompt: "D-2 학위 과정인지 D-4 어학 과정인지 알려주세요." },
+    nationality: { slot: "nationality", label: "국적", prompt: "현재 국적을 알려주시면 서류와 결핵검진 여부를 더 정확히 볼 수 있습니다." },
+    education: { slot: "education", label: "최종 학력", prompt: "최종 학력이 고졸, 전문대, 대졸, 석사 중 어디에 해당하나요?" },
+    korean_level: { slot: "korean_level", label: "한국어 수준", prompt: "현재 TOPIK 급수나 한국어 수준을 알려주세요." },
+    goal: { slot: "goal", label: "목표", prompt: "목표가 어학, 학위, 편입, 취업 준비 중 무엇인지 알려주세요." },
+  },
+  vi: {
+    region: { slot: "region", label: "Khu vực", prompt: "Bạn muốn học ở Seoul, Gyeonggi, Busan hay khu vực khác?" },
+    program: { slot: "program", label: "Chương trình", prompt: "Bạn muốn học tiếng Hàn, cao đẳng, đại học hay sau đại học?" },
+    budget: { slot: "budget", label: "Ngân sách", prompt: "Cho biết ngân sách 6 tháng bằng KRW để tôi lọc chính xác hơn." },
+    visa_type: { slot: "visa_type", label: "Loại visa", prompt: "Bạn đang chuẩn bị D-2 hay D-4?" },
+    nationality: { slot: "nationality", label: "Quốc tịch", prompt: "Cho biết quốc tịch để kiểm tra hồ sơ và khám lao chính xác hơn." },
+    education: { slot: "education", label: "Học vấn", prompt: "Trình độ cao nhất của bạn là THPT, cao đẳng, đại học hay thạc sĩ?" },
+    korean_level: { slot: "korean_level", label: "Tiếng Hàn", prompt: "Bạn có TOPIK mấy hoặc trình độ tiếng Hàn hiện tại thế nào?" },
+    goal: { slot: "goal", label: "Mục tiêu", prompt: "Mục tiêu của bạn là học tiếng, lấy bằng, chuyển tiếp hay chuẩn bị việc làm?" },
+  },
+  mn: {
+    region: { slot: "region", label: "Бүс", prompt: "Сөүл, Кёнги, Пусан эсвэл өөр бүс хүсэж байна уу?" },
+    program: { slot: "program", label: "Хөтөлбөр", prompt: "Хэлний курс, коллеж, их сургууль эсвэл магистр аль нь вэ?" },
+    budget: { slot: "budget", label: "Төсөв", prompt: "6 сарын төсвөө воноор хэлбэл илүү зөв шүүнэ." },
+    visa_type: { slot: "visa_type", label: "Виз", prompt: "D-2 эсвэл D-4 визийн аль нь хэрэгтэй вэ?" },
+    nationality: { slot: "nationality", label: "Иргэншил", prompt: "Иргэншлээ хэлбэл баримт, сүрьеэгийн шинжилгээг зөв шалгана." },
+    education: { slot: "education", label: "Боловсрол", prompt: "Ахлах, коллеж, бакалавр, магистр аль түвшин вэ?" },
+    korean_level: { slot: "korean_level", label: "Солонгос хэл", prompt: "TOPIK түвшин эсвэл солонгос хэлний түвшнээ хэлнэ үү." },
+    goal: { slot: "goal", label: "Зорилго", prompt: "Зорилго тань хэл, зэрэг, шилжилт эсвэл ажилд бэлтгэх үү?" },
+  },
+  en: {
+    region: { slot: "region", label: "Region", prompt: "Which region do you prefer: Seoul, Gyeonggi, Busan, or another area?" },
+    program: { slot: "program", label: "Program", prompt: "Are you looking for language school, college, undergraduate, or graduate study?" },
+    budget: { slot: "budget", label: "Budget", prompt: "Share your 6-month budget in KRW so I can filter more accurately." },
+    visa_type: { slot: "visa_type", label: "Visa type", prompt: "Are you preparing for D-2 degree study or D-4 language study?" },
+    nationality: { slot: "nationality", label: "Nationality", prompt: "Share your nationality so I can check document and TB-test requirements." },
+    education: { slot: "education", label: "Education", prompt: "What is your highest education level: high school, college, university, or master's?" },
+    korean_level: { slot: "korean_level", label: "Korean level", prompt: "What is your current Korean or TOPIK level?" },
+    goal: { slot: "goal", label: "Goal", prompt: "Is your goal language study, a degree, transfer, or career preparation?" },
+  },
+};
+
 function normalizeLang(lang: Lang): Lang {
   return lang === "vi" || lang === "mn" || lang === "en" ? lang : "ko";
 }
@@ -199,6 +252,14 @@ function buildSuggestions(toolResults: ToolResult[], lang: Lang): AgentSuggestio
   return suggestions.slice(0, 3);
 }
 
+function buildClarifyingQuestions(question: string, lang: Lang): AgentClarifyingQuestion[] {
+  const analysis = analyzeAgentIntent(question, lang);
+  return analysis.missingSlots
+    .map((slot) => CLARIFYING_LIBRARY[lang][slot])
+    .filter((item): item is AgentClarifyingQuestion => Boolean(item))
+    .slice(0, 3);
+}
+
 function detectSafetyFlags(question: string, lang: Lang): string[] {
   const text = question.toLowerCase();
   const dangerous = /허위|fake|불법|illegal|비자\s*보장|visa\s*guarantee|취업\s*알선|job\s*placement/.test(text);
@@ -226,6 +287,7 @@ export function buildAgentMeta({
   durationMs?: number;
 }): AgentMeta {
   const safeLang = normalizeLang(lang);
+  const analysis = analyzeAgentIntent(question, safeLang);
   const sources = extractSources(toolResults);
   const officialSourceCount = sources.filter((source) => source.owner === "official" || source.kind === "school").length;
 
@@ -233,6 +295,7 @@ export function buildAgentMeta({
     summary: SUMMARIES[safeLang](toolResults.length, sources.length),
     plan: buildPlan(toolResults, safeLang),
     sources,
+    clarifyingQuestions: buildClarifyingQuestions(question, safeLang),
     suggestions: buildSuggestions(toolResults, safeLang),
     safetyFlags: detectSafetyFlags(question, safeLang),
     quality: {
@@ -240,6 +303,8 @@ export function buildAgentMeta({
       grounded,
       toolCount: toolResults.length,
       officialSourceCount,
+      intentConfidence: analysis.confidence,
+      missingSlotCount: analysis.missingSlots.length,
       durationMs,
     },
   };
