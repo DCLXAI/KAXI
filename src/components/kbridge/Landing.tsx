@@ -6,7 +6,7 @@ import { tr } from "@/lib/i18n/translations";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowRight, Calculator, FileCheck, School as SchoolIcon, ShieldCheck, Users, Globe2, AlertTriangle } from "lucide-react";
+import { ArrowRight, Calculator, FileCheck, School as SchoolIcon, ShieldCheck, Users, Globe2, AlertTriangle, Scale, Sparkles } from "lucide-react";
 import { SCHOOLS } from "@/lib/data/schools";
 
 export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
@@ -109,6 +109,53 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* 전문 상담 배너 */}
+      <section className="mx-auto max-w-5xl px-4">
+        <Card
+          className="cursor-pointer overflow-hidden border-2 hover:border-primary/50 transition-all"
+          onClick={() => onNavigate("consult")}
+        >
+          <CardContent className="p-0">
+            <div className="grid md:grid-cols-[1fr_auto] gap-6 p-6 md:p-8 items-center">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge className="gap-1.5">
+                    <Scale className="h-3 w-3" />
+                    {lang === "ko" ? "행정사 AI 에이전트" : lang === "vi" ? "AI luật sư" : lang === "mn" ? "Зөвлөгөөний AI" : "Admin Lawyer AI"}
+                  </Badge>
+                  <Badge variant="outline" className="gap-1">
+                    <Sparkles className="h-3 w-3" />
+                    RAG · Deep Think
+                  </Badge>
+                </div>
+                <h3 className="text-xl md:text-2xl font-bold tracking-tight">
+                  {lang === "ko"
+                    ? "유학 비자·체류, 전문가에게 직접 물어보세요"
+                    : lang === "vi"
+                    ? "Hỏi trực tiếp chuyên gia về visa du học"
+                    : lang === "mn"
+                    ? "Мэргэжилтнээс шууд асуугаарай"
+                    : "Ask an expert about study visa & stay"}
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {lang === "ko"
+                    ? "공식 문서 기반 RAG · 5가지 전문 모드 (종합/비자/서류/거절대응/유학원운영) · 위험 신호 자동 감지 · 법적 경계 명확화"
+                    : lang === "vi"
+                    ? "RAG chính thức · 5 chế độ chuyên gia · phát hiện rủi ro · ranh giới pháp lý rõ ràng"
+                    : lang === "mn"
+                    ? "Албан баримт RAG · 5 төрөл · эрсдэл илрүүлэлт · хуулийн хязгаар"
+                    : "Official RAG · 5 expert modes · risk detection · clear legal boundaries"}
+                </p>
+              </div>
+              <Button size="lg" className="gap-2 shrink-0">
+                {lang === "ko" ? "상담 시작" : lang === "vi" ? "Bắt đầu" : lang === "mn" ? "Эхлэх" : "Start"}
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </section>
 
       {/* Features */}

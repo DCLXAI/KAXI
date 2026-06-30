@@ -78,6 +78,7 @@ export function Header({
 
   const navItems = [
     { key: "home", label: tr("brand", lang) },
+    { key: "consult", label: lang === "ko" ? "전문 상담" : lang === "vi" ? "Tư vấn" : lang === "mn" ? "Зөвлөгөө" : "Consult" },
     { key: "diagnose", label: tr("nav_diagnose", lang) },
     { key: "schools", label: tr("nav_schools", lang) },
     { key: "cost", label: tr("nav_cost", lang) },
