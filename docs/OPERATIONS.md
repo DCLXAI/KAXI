@@ -96,10 +96,11 @@ Production admin login should use `ADMIN_PASSWORD_HASH` and optional `ADMIN_MFA_
 
 ## CI Quality Gates
 
-GitHub Actions restores runtime artifacts during `bun install --frozen-lockfile`, then runs typecheck, lint, `test:vector`, `test:quality`, `test:governance`, `test:privacy`, and production build.
+GitHub Actions restores runtime artifacts during `bun install --frozen-lockfile`, then runs typecheck, lint, `test:vector`, `test:quality`, `test:governance`, `test:privacy`, `test:agent`, and production build.
 `test:vector` verifies the restored model/vector cache can retrieve expected KAXI source documents.
 `test:quality` validates the multilingual evaluation set in `quality/multilingual-eval-cases.json`, including expected source document, refusal expectation, and cost-format labels.
 `test:privacy` verifies PII encryption/redaction behavior and hosted SQLite write guards.
+`test:agent` verifies Agent status diagnostics, dry-run preflight behavior, and partner-request PII masking.
 
 ## AI Cost Controls
 
@@ -155,10 +156,17 @@ Start the bridge:
 bun run codex:bridge
 ```
 
+On macOS, keep the bridge awake while the lid is open:
+
+```bash
+bun run codex:bridge:awake
+```
+
 The bridge listens on `http://127.0.0.1:8787` by default.
 The deployed Agent UI automatically probes `http://127.0.0.1:8787/health` when opened from a `vercel.app` host.
 If the bridge is reachable, chat requests go to the local Codex CLI and return `backend: "codex-cli-local-bridge"`.
 If it is not reachable, the UI falls back to `/api/ai/agent` on Vercel.
+`GET /api/ai/agent` returns safe diagnostics for backend readiness, bridge configuration, preflight, limits, and persistence without exposing secrets.
 
 Useful browser overrides:
 
@@ -172,6 +180,7 @@ Useful bridge environment variables:
 
 - `CODEX_BRIDGE_HOST`: Defaults to `127.0.0.1`. Keep localhost unless using a trusted tunnel.
 - `CODEX_BRIDGE_PORT`: Defaults to `8787`.
+- `CODEX_BRIDGE_PREVENT_SLEEP`: Set `true` to run macOS `caffeinate` while the bridge process is alive.
 - `CODEX_BRIDGE_ALLOWED_ORIGINS`: Comma-separated browser origins allowed by CORS.
 - `CODEX_BRIDGE_TOKEN`: Optional token required as `x-kaxi-codex-bridge-token`.
 - `CODEX_EXEC_TIMEOUT_MS`: Codex CLI timeout for each local bridge request.

@@ -1,6 +1,6 @@
 import type { Lang } from "@/lib/i18n/translations";
 import type { AgentResponse, AgentStep } from "@/lib/agent/agent";
-import { TOOL_MAP, type ToolContext, type ToolResult } from "@/lib/agent/tools";
+import { sanitizeToolArgsForDisplay, TOOL_MAP, type ToolContext, type ToolResult } from "@/lib/agent/tools";
 
 function includesAny(text: string, words: string[]): boolean {
   return words.some((word) => text.includes(word));
@@ -49,18 +49,19 @@ async function runTool(
 ) {
   const tool = TOOL_MAP[toolName];
   if (!tool) return null;
+  const displayArgs = sanitizeToolArgsForDisplay(args);
 
   steps.push({
     type: "tool_call",
     content: `${toolName} 호출`,
-    toolCall: { tool: toolName, args },
+    toolCall: { tool: toolName, args: displayArgs },
     timestamp: Date.now(),
   });
 
   const { result, summary } = await tool.execute(args, ctx);
   const toolResult: ToolResult = {
     tool: toolName,
-    args,
+    args: displayArgs,
     result,
     summary,
     success: true,

@@ -1,6 +1,7 @@
 import type { AgentStep } from "@/lib/agent/agent";
-import { TOOL_MAP, type ToolContext, type ToolResult } from "@/lib/agent/tools";
+import { sanitizeToolArgsForDisplay, TOOL_MAP, type ToolContext, type ToolResult } from "@/lib/agent/tools";
 import type { Lang } from "@/lib/i18n/translations";
+import { redactSensitiveText } from "@/lib/privacy/pii";
 
 export interface AgentPreflightResult {
   enabled: boolean;
@@ -87,11 +88,12 @@ async function runTool(
 ): Promise<ToolResult | null> {
   const tool = TOOL_MAP[toolName];
   if (!tool) return null;
+  const displayArgs = sanitizeToolArgsForDisplay(args);
 
   steps.push({
     type: "tool_call",
     content: `${toolName} preflight`,
-    toolCall: { tool: toolName, args },
+    toolCall: { tool: toolName, args: displayArgs },
     timestamp: Date.now(),
   });
 
@@ -99,7 +101,7 @@ async function runTool(
     const { result, summary } = await tool.execute(args, ctx);
     const toolResult: ToolResult = {
       tool: toolName,
-      args,
+      args: displayArgs,
       result,
       summary,
       success: true,
@@ -165,14 +167,14 @@ function buildGroundingContext(toolResults: ToolResult[], lang: Lang): string {
 }
 
 function buildGroundedQuestion(question: string, groundingContext: string): string {
-  if (!groundingContext) return question;
+  if (!groundingContext) return redactSensitiveText(question);
   const contextMaxChars = Number(process.env.AI_AGENT_CONTEXT_MAX_CHARS || DEFAULT_CONTEXT_MAX_CHARS);
   const totalMaxChars = Number(process.env.AI_AGENT_GROUNDED_QUESTION_MAX_CHARS || DEFAULT_GROUNDED_QUESTION_MAX_CHARS);
   const safeContextMax = Number.isFinite(contextMaxChars) && contextMaxChars > 500 ? contextMaxChars : DEFAULT_CONTEXT_MAX_CHARS;
   const safeTotalMax = Number.isFinite(totalMaxChars) && totalMaxChars > 1_000 ? totalMaxChars : DEFAULT_GROUNDED_QUESTION_MAX_CHARS;
 
   const prefix = `Original user question:
-${question}
+${redactSensitiveText(question)}
 
 KAXI server-side tool context:
 `;
@@ -198,6 +200,7 @@ export async function runAgentPreflight(
   const text = question.toLowerCase();
   const steps: AgentStep[] = [];
   const toolResults: ToolResult[] = [];
+  const preflightCtx: ToolContext = { ...ctx, dryRun: true };
 
   if (isSmallTalk(text)) {
     return { enabled: true, groundedQuestion: question, groundingContext: "", steps, toolResults };
@@ -221,7 +224,7 @@ export async function runAgentPreflight(
         max_tuition: parseKrwBudget(text),
         limit: asksCost ? 3 : 5,
       },
-      ctx,
+      preflightCtx,
       steps,
       toolResults
     );
@@ -237,7 +240,7 @@ export async function runAgentPreflight(
             include_dormitory: true,
             broker_quote: parseKrwBudget(text),
           },
-          ctx,
+          preflightCtx,
           steps,
           toolResults
         );
@@ -252,14 +255,14 @@ export async function runAgentPreflight(
         visa_type: detectVisaType(text),
         nationality: detectNationality(text),
       },
-      ctx,
+      preflightCtx,
       steps,
       toolResults
     );
   }
 
   if (asksKnowledge || toolResults.length === 0) {
-    await runTool("search_knowledge", { query: question, top_k: asksKnowledge ? 4 : 3 }, ctx, steps, toolResults);
+    await runTool("search_knowledge", { query: question, top_k: asksKnowledge ? 4 : 3 }, preflightCtx, steps, toolResults);
   }
 
   if (asksPartner) {
@@ -269,7 +272,7 @@ export async function runAgentPreflight(
         partner_type: includesAny(text, ["번역", "공증", "translation", "notary"]) ? "translation" : "admin",
         question,
       },
-      ctx,
+      preflightCtx,
       steps,
       toolResults
     );

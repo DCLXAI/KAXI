@@ -50,9 +50,41 @@ interface Msg {
   toolResults?: ToolResult[];
   iterations?: number;
   backend?: string;
+  codexMode?: string;
+  durationMs?: number;
+  grounded?: boolean;
 }
 
 const DEFAULT_LOCAL_CODEX_BRIDGE_URL = "http://127.0.0.1:8787/api/ai/agent";
+
+type BridgeState = "checking" | "reachable" | "unreachable" | "off";
+
+interface AgentStatus {
+  ok: boolean;
+  status: "ready" | "needs_configuration";
+  backend: string;
+  codex?: {
+    ready: boolean;
+    mode: string | null;
+    apiKeyConfigured: boolean;
+    localAuthAllowed: boolean;
+    issue: string | null;
+  };
+  remoteBridge?: {
+    enabled: boolean;
+    configured: boolean;
+  };
+  preflight?: {
+    enabled: boolean;
+    timeoutMs: number;
+  };
+  persistence?: {
+    writableDatabase: boolean;
+    chatLog: boolean;
+    ledger: boolean;
+    piiEncryption: boolean;
+  };
+}
 
 function getConfiguredBridgeUrl(): { url: string | null; explicit: boolean } {
   if (typeof window === "undefined") return { url: null, explicit: false };
@@ -130,6 +162,35 @@ const TOOL_LABELS: Record<string, Record<Lang, string>> = {
   request_partner: { ko: "파트너 요청", vi: "Đối tác", mn: "Түнш", en: "Partner" },
 };
 
+function backendLabel(backend?: string): string {
+  if (!backend) return "Agent";
+  if (backend === "codex-cli-local-bridge") return "Local Codex";
+  if (backend === "codex-cli-remote-bridge") return "Remote Codex";
+  if (backend === "codex-cli-local") return "Local Codex";
+  if (backend === "codex-cli") return "Codex";
+  if (backend === "tool-fallback") return "KAXI Tools";
+  if (backend === "zai") return "Z.ai";
+  return backend;
+}
+
+function statusText(lang: Lang, status: AgentStatus | null, bridgeState: BridgeState): string {
+  if (bridgeState === "reachable") return "Local Codex";
+  if (!status) return lang === "ko" ? "상태 확인 중" : "Checking";
+  if (status.backend === "codex" && status.codex && !status.codex.ready) {
+    return lang === "ko" ? "Codex 설정 필요" : "Codex setup needed";
+  }
+  if (status.backend === "remote-bridge" && !status.remoteBridge?.enabled) {
+    return lang === "ko" ? "브릿지 설정 필요" : "Bridge setup needed";
+  }
+  return backendLabel(status.backend === "codex" ? "codex-cli" : status.backend);
+}
+
+function statusDotClass(status: AgentStatus | null, bridgeState: BridgeState): string {
+  if (bridgeState === "reachable") return "bg-green-500";
+  if (!status) return "bg-muted-foreground";
+  return status.ok ? "bg-green-500" : "bg-amber-500";
+}
+
 const EXAMPLE_PROMPTS: Record<Lang, string[]> = {
   ko: [
     "서울에 있는 인증대학 어학당 3곳 찾아주고 비용도 계산해줘",
@@ -163,12 +224,45 @@ export function Agent() {
   const [loading, setLoading] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [started, setStarted] = useState(false);
+  const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
+  const [bridgeState, setBridgeState] = useState<BridgeState>("checking");
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [msgs, loading]);
+
+  useEffect(() => {
+    let alive = true;
+
+    fetch("/api/ai/agent")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (alive && data) setAgentStatus(data);
+      })
+      .catch(() => undefined);
+
+    const bridge = getConfiguredBridgeUrl();
+    if (!bridge.url) {
+      setBridgeState("off");
+      return () => {
+        alive = false;
+      };
+    }
+
+    hasLocalBridge(bridge.url)
+      .then((ok) => {
+        if (alive) setBridgeState(ok ? "reachable" : "unreachable");
+      })
+      .catch(() => {
+        if (alive) setBridgeState("unreachable");
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const send = async (text?: string) => {
     const userMsg = (text ?? input).trim();
@@ -208,6 +302,9 @@ export function Agent() {
           toolResults: data.toolResults,
           iterations: data.iterations,
           backend: data.backend,
+          codexMode: data.codexMode,
+          durationMs: data.durationMs,
+          grounded: Boolean(data.grounded),
         },
       ]);
     } catch (e) {
@@ -245,6 +342,8 @@ export function Agent() {
             <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
               <Sparkles className="h-3.5 w-3.5" />
               {lang === "ko" ? "AI 에이전트 · 도구 호출 가능" : "AI Agent · Tool-Use"}
+              <span className={`h-1.5 w-1.5 rounded-full ${statusDotClass(agentStatus, bridgeState)}`} />
+              {statusText(lang, agentStatus, bridgeState)}
             </div>
             <h1 className="text-4xl md:text-5xl font-bold tracking-tight italic mb-3" style={{ fontFamily: "Georgia, serif" }}>
               {lang === "ko" ? "유학 준비, 에이전트에게 맡기세요" : lang === "vi" ? "Giao việc cho AI agent" : lang === "mn" ? "Агентэд даатгаарай" : "Delegate to the AI agent"}
@@ -292,7 +391,9 @@ export function Agent() {
             <div className="flex items-center justify-between mt-2 pt-2 border-t">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Brain className="h-3 w-3" />
-                <span>ReAct Agent · 6 Tools · Max 5 steps</span>
+                <span>
+                  {backendLabel(agentStatus?.backend === "codex" ? "codex-cli" : agentStatus?.backend)} · 6 Tools · Max 5 steps
+                </span>
               </div>
               <Button size="sm" onClick={() => send()} disabled={!input.trim() || loading} className="gap-1.5">
                 {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUp className="h-3.5 w-3.5" />}
@@ -339,8 +440,8 @@ export function Agent() {
               <Badge variant="outline" className="text-[10px] py-0 h-4">ReAct</Badge>
             </div>
             <div className="text-xs text-muted-foreground flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-              {lang === "ko" ? "도구 호출 가능" : "Tool-use enabled"}
+              <span className={`h-1.5 w-1.5 rounded-full ${statusDotClass(agentStatus, bridgeState)}`} />
+              {statusText(lang, agentStatus, bridgeState)}
             </div>
           </div>
         </div>
@@ -416,10 +517,21 @@ export function Agent() {
                           {m.toolResults.length} {lang === "ko" ? "도구 사용" : "tools"}
                         </Badge>
                       )}
-                      {m.backend === "codex-cli-local-bridge" && (
+                      {m.backend && (
                         <Badge variant="outline" className="text-[10px] gap-0.5">
                           <Sparkles className="h-2.5 w-2.5" />
-                          Local Codex
+                          {backendLabel(m.backend)}
+                        </Badge>
+                      )}
+                      {m.grounded && (
+                        <Badge variant="outline" className="text-[10px] gap-0.5">
+                          <BookOpen className="h-2.5 w-2.5" />
+                          Grounded
+                        </Badge>
+                      )}
+                      {typeof m.durationMs === "number" && (
+                        <Badge variant="outline" className="text-[10px]">
+                          {Math.round(m.durationMs / 1000)}s
                         </Badge>
                       )}
                     </div>

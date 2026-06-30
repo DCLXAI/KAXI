@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { spawn, type ChildProcess } from "node:child_process";
 import { runCodexServerless } from "../src/lib/codex/serverless";
 
 type Lang = "ko" | "vi" | "mn" | "en";
@@ -10,6 +11,8 @@ const MAX_QUESTION_CHARS = Number(process.env.CODEX_BRIDGE_MAX_CHARS || 4_000);
 const RATE_LIMIT = parseLimit(process.env.CODEX_BRIDGE_RATE_LIMIT, 6);
 const RATE_WINDOW_MS = 60_000;
 const REQUIRED_TOKEN = process.env.CODEX_BRIDGE_TOKEN?.trim();
+const PREVENT_SLEEP = process.env.CODEX_BRIDGE_PREVENT_SLEEP === "true" ||
+  process.argv.includes("--prevent-sleep");
 
 process.env.CODEX_AUTH_MODE ||= "local";
 process.env.CODEX_USE_USER_CONFIG ||= "false";
@@ -28,6 +31,27 @@ const allowedOrigins = new Set(
 );
 
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+let caffeinateProcess: ChildProcess | null = null;
+
+function startSleepGuard() {
+  if (!PREVENT_SLEEP) return;
+  if (process.platform !== "darwin") {
+    console.warn("[codex-local-bridge] sleep guard is only supported on macOS");
+    return;
+  }
+
+  caffeinateProcess = spawn("caffeinate", ["-dimsu", "-w", String(process.pid)], {
+    stdio: "ignore",
+  });
+  caffeinateProcess.on("error", (error) => {
+    console.warn("[codex-local-bridge] caffeinate failed:", error.message);
+  });
+}
+
+function stopSleepGuard() {
+  caffeinateProcess?.kill("SIGTERM");
+  caffeinateProcess = null;
+}
 
 function parseLimit(value: string | undefined, fallback: number): number {
   const normalized = value?.trim().toLowerCase();
@@ -201,6 +225,18 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
+  startSleepGuard();
   console.log(`[codex-local-bridge] listening on http://${HOST}:${PORT}`);
+  if (PREVENT_SLEEP) console.log("[codex-local-bridge] macOS sleep guard enabled via caffeinate");
   console.log("[codex-local-bridge] open https://kaxi.vercel.app/agent on this Mac to use local Codex CLI");
+});
+
+process.on("SIGINT", () => {
+  stopSleepGuard();
+  process.exit(0);
+});
+
+process.on("SIGTERM", () => {
+  stopSleepGuard();
+  process.exit(0);
 });

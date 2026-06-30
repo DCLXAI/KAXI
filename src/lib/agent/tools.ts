@@ -7,6 +7,7 @@ import { hybridSearch } from "../embeddings/vector-store";
 import type { Lang } from "../i18n/translations";
 import { findSchoolById, listSchools } from "../schools/repository";
 import { createPartnerRequest } from "../partners/repository";
+import { redactSensitiveText } from "../privacy/pii";
 
 // 도구 호출 결과 (UI에서 시각화)
 export interface ToolResult {
@@ -32,6 +33,16 @@ export interface Tool {
 export interface ToolContext {
   lang: Lang;
   leadId?: string | null;
+  dryRun?: boolean;
+}
+
+export function sanitizeToolArgsForDisplay(args: Record<string, any>): Record<string, any> {
+  return Object.fromEntries(
+    Object.entries(args || {}).map(([key, value]) => {
+      if (typeof value === "string") return [key, redactSensitiveText(value).slice(0, 500)];
+      return [key, value];
+    })
+  );
 }
 
 // ============ 도구 1: 학교 검색 ============
@@ -289,7 +300,7 @@ const diagnosePathTool: Tool = {
 // ============ 도구 6: 파트너 상담 요청 ============
 const requestPartnerTool: Tool = {
   name: "request_partner",
-  description: "전문가 상담 요청 접수. 행정사/번역공증/어학원/입학처/정착 파트너 연결. 취업 매칭은 제외.",
+  description: "전문가 상담 요청 접수. 사용자가 명시적으로 상담 접수/연결을 요청한 경우에만 호출. 행정사/번역공증/어학원/입학처/정착 파트너 연결. 취업 매칭은 제외.",
   parameters: {
     type: "object",
     properties: {
@@ -303,22 +314,45 @@ const requestPartnerTool: Tool = {
     required: ["partner_type", "question"],
   },
   execute: async (args, ctx) => {
+    const partnerType = String(args.partner_type || "").trim();
+    const question = String(args.question || "").slice(0, 1000);
+    const safeQuestion = redactSensitiveText(question).slice(0, 500);
+
+    if (ctx.dryRun) {
+      return {
+        result: {
+          request_id: "draft",
+          partner_type: partnerType,
+          question: safeQuestion,
+          lead_id: ctx.leadId || "anonymous",
+          status: "draft",
+          persisted: false,
+          eta: "상담 접수 확인 후 24시간 내 담당자 연락",
+        },
+        summary: `${partnerType} 파트너 상담 요청 초안 준비 (사용자 확인 필요)`,
+      };
+    }
+
     const request = await createPartnerRequest({
       leadId: ctx.leadId || "anonymous",
-      partnerType: args.partner_type,
-      question: args.question,
+      partnerType,
+      question,
     });
+    const persisted = !("persisted" in request) || request.persisted !== false;
 
     return {
       result: {
         request_id: request.id,
-        partner_type: args.partner_type,
-        question: args.question,
+        partner_type: partnerType,
+        question: safeQuestion,
         lead_id: request.leadId,
-        status: "pending",
+        status: request.status,
+        persisted,
         eta: "24시간 내 담당자 연락",
       },
-      summary: `${args.partner_type} 파트너 상담 요청 접수 (24시간 내 연락)`,
+      summary: persisted
+        ? `${partnerType} 파트너 상담 요청 접수 (24시간 내 연락)`
+        : `${partnerType} 파트너 상담 요청이 임시 접수됨 (운영 DB 연결 필요)`,
     };
   },
 };

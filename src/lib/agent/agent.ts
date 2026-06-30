@@ -2,7 +2,7 @@
 // 사용자 질문 → LLM 추론 → 도구 호출 → 결과 → 다시 추론 → ... → 최종 답변
 // 최대 5회 반복 (무한 루프 방지)
 
-import { TOOLS, TOOL_MAP, getToolsDescription, parseToolCall, type ToolResult, type ToolContext } from "./tools";
+import { TOOL_MAP, getToolsDescription, parseToolCall, sanitizeToolArgsForDisplay, type ToolResult, type ToolContext } from "./tools";
 import type { Lang } from "../i18n/translations";
 import { createZaiClient } from "../ai/zai";
 
@@ -57,11 +57,12 @@ ${getToolsDescription()}
 3. 비용 질문 → search_schools → calculate_cost 순서
 4. 비자/서류 절차 → search_knowledge로 공식 문서 검색
 5. 개인 진단 → diagnose_path 호출
-6. 전문가 연결 → request_partner 호출
+6. 전문가 연결 → 사용자가 명시적으로 상담 접수/연결을 요청한 경우에만 request_partner 호출
 7. 위험 신호 (허위서류, 불법취업, 비자보장) 감지시 경고
 8. 최종 답변은 간결하고 실용적으로 (마크다운 사용)
 9. 출처 표기 (📚 출처: ...)
 10. 도구는 한 번에 하나씩만 호출
+11. 사용자가 상담 접수 의사를 밝히지 않았다면 request_partner를 호출하지 말고, 필요한 정보와 확인 질문만 안내
 
 ## 현재 컨텍스트
 - 언어: ${lang}
@@ -99,11 +100,12 @@ ${getToolsDescription()}
       const toolCall = parseToolCall(content);
 
       if (toolCall) {
+        const displayArgs = sanitizeToolArgsForDisplay(toolCall.args);
         // 도구 호출 기록
         steps.push({
           type: "tool_call",
           content: `${toolCall.tool} 호출`,
-          toolCall,
+          toolCall: { tool: toolCall.tool, args: displayArgs },
           timestamp: Date.now(),
         });
 
@@ -113,7 +115,7 @@ ${getToolsDescription()}
           const { result, summary } = await tool.execute(toolCall.args, ctx);
           const toolResult: ToolResult = {
             tool: toolCall.tool,
-            args: toolCall.args,
+            args: displayArgs,
             result,
             summary,
             success: true,

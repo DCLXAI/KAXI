@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Lang } from "@/lib/i18n/translations";
-import { db } from "@/lib/db";
+import { canWriteRuntimeDatabase, db } from "@/lib/db";
 import { runAgent } from "@/lib/agent/agent";
 import { runFallbackAgent } from "@/lib/agent/fallback";
 import type { ToolContext } from "@/lib/agent/tools";
 import { runAgentPreflight, type AgentPreflightResult } from "@/lib/agent/preflight";
 import {
   getAgentBackend,
+  getCodexRunMode,
   runCodexServerless,
   shouldRequireAdminForCodexAgent,
 } from "@/lib/codex/serverless";
@@ -22,6 +23,7 @@ import {
   withTimeout,
 } from "@/lib/api/security";
 import { protectChatQuestion } from "@/lib/privacy/chat-log";
+import { isPiiEncryptionConfigured } from "@/lib/privacy/pii";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -39,14 +41,6 @@ function emptyPreflight(question: string): AgentPreflightResult {
 function shouldPersistAgentLog(): boolean {
   if (process.env.AI_AGENT_LOGGING_ENABLED === "false") return false;
   return canWriteRuntimeDatabase();
-}
-
-function canWriteRuntimeDatabase(): boolean {
-  const databaseUrl = process.env.DATABASE_URL?.trim() || "";
-  const hostedRuntime = process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV);
-  if (hostedRuntime && databaseUrl.startsWith("file:")) return false;
-
-  return true;
 }
 
 function shouldPersistAgentLedger(): boolean {
@@ -161,6 +155,71 @@ async function persistAgentLedger({
   } catch (ledgerErr) {
     console.warn("[Agent ledger save skipped]", ledgerErr);
   }
+}
+
+export async function GET() {
+  const backend = getAgentBackend();
+  const hostedRuntime = process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV);
+  const codexApiKeyConfigured = Boolean(process.env.CODEX_API_KEY || process.env.OPENAI_API_KEY);
+  let codexMode: string | null = null;
+  let codexReady = true;
+  let codexIssue: string | null = null;
+
+  try {
+    codexMode = getCodexRunMode();
+    codexReady = codexMode === "local-auth" ? !hostedRuntime : codexApiKeyConfigured;
+    if (!codexReady && codexMode === "api-key") {
+      codexIssue = "CODEX_API_KEY or OPENAI_API_KEY is not configured";
+    }
+  } catch (error) {
+    codexReady = false;
+    codexIssue = error instanceof Error ? error.message : "Codex mode check failed";
+  }
+
+  const remoteBridgeEnabled = isRemoteCodexBridgeEnabled();
+  const backendReady =
+    backend === "tool-fallback" ||
+    backend === "zai" ||
+    (backend === "remote-bridge" ? remoteBridgeEnabled : codexReady);
+
+  return NextResponse.json({
+    ok: backendReady,
+    status: backendReady ? "ready" : "needs_configuration",
+    backend,
+    runtime: {
+      hosted: hostedRuntime,
+      vercelEnv: process.env.VERCEL_ENV || null,
+      maxDuration,
+    },
+    codex: {
+      mode: codexMode,
+      ready: codexReady,
+      apiKeyConfigured: codexApiKeyConfigured,
+      localAuthAllowed: !hostedRuntime,
+      issue: codexIssue,
+      requireAdmin: shouldRequireAdminForCodexAgent(),
+    },
+    remoteBridge: {
+      enabled: remoteBridgeEnabled,
+      configured: Boolean(process.env.CODEX_REMOTE_BRIDGE_URL?.trim()),
+    },
+    preflight: {
+      enabled: process.env.AI_AGENT_PREFLIGHT_ENABLED !== "false",
+      timeoutMs: parsePositiveInt(process.env.AI_AGENT_PREFLIGHT_TIMEOUT_MS, 12_000),
+    },
+    limits: {
+      rateLimit: parseLimit(process.env.AI_AGENT_RATE_LIMIT, 6),
+      dailyQuota: parseLimit(process.env.AI_AGENT_DAILY_QUOTA, 30),
+      maxQuestionChars: parsePositiveInt(process.env.AI_AGENT_MAX_CHARS, 2000),
+      timeoutMs: parsePositiveInt(process.env.AI_AGENT_TIMEOUT_MS, 45_000),
+    },
+    persistence: {
+      writableDatabase: canWriteRuntimeDatabase(),
+      chatLog: shouldPersistAgentLog(),
+      ledger: shouldPersistAgentLedger(),
+      piiEncryption: isPiiEncryptionConfigured(),
+    },
+  });
 }
 
 // POST /api/ai/agent - 에이전트 대화 (도구 호출 + 다중 단계 추론)
@@ -385,6 +444,8 @@ export async function POST(req: NextRequest) {
           steps: fallback.steps,
           toolResults: fallback.toolResults,
           iterations: fallback.iterations,
+          durationMs: Date.now() - requestStartedAt,
+          grounded: Boolean(preflight.groundingContext),
         });
       }
     }
@@ -418,6 +479,8 @@ export async function POST(req: NextRequest) {
         steps: fallback.steps,
         toolResults: fallback.toolResults,
         iterations: fallback.iterations,
+        durationMs: Date.now() - requestStartedAt,
+        grounded: Boolean(preflight.groundingContext),
       });
     }
 
@@ -488,6 +551,8 @@ export async function POST(req: NextRequest) {
       steps: result.steps,
       toolResults: result.toolResults,
       iterations: result.iterations,
+      durationMs: Date.now() - requestStartedAt,
+      grounded: Boolean(preflight.groundingContext),
     });
   } catch (e) {
     console.error("[POST /api/ai/agent]", e);
