@@ -53,3 +53,8 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# local runtime artifacts
+/data/model-cache/
+/data/vector-store/
+/db/*.db
