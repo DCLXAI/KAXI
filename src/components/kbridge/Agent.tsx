@@ -49,6 +49,67 @@ interface Msg {
   steps?: AgentStep[];
   toolResults?: ToolResult[];
   iterations?: number;
+  backend?: string;
+}
+
+const DEFAULT_LOCAL_CODEX_BRIDGE_URL = "http://127.0.0.1:8787/api/ai/agent";
+
+function getConfiguredBridgeUrl(): { url: string | null; explicit: boolean } {
+  if (typeof window === "undefined") return { url: null, explicit: false };
+
+  const stored = window.localStorage.getItem("kaxiCodexBridgeUrl")?.trim();
+  if (stored === "off") return { url: null, explicit: true };
+  if (stored) return { url: stored, explicit: true };
+
+  const envUrl = process.env.NEXT_PUBLIC_CODEX_BRIDGE_URL?.trim();
+  if (envUrl) return { url: envUrl, explicit: true };
+
+  const host = window.location.hostname;
+  if (host === "kaxi.vercel.app" || host.endsWith(".vercel.app")) {
+    return { url: DEFAULT_LOCAL_CODEX_BRIDGE_URL, explicit: false };
+  }
+
+  return { url: null, explicit: false };
+}
+
+async function hasLocalBridge(url: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 900);
+  try {
+    const healthUrl = new URL("/health", url).toString();
+    const res = await fetch(healthUrl, { method: "GET", mode: "cors", signal: controller.signal });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+async function fetchAgent(payload: unknown): Promise<Response> {
+  const bridge = getConfiguredBridgeUrl();
+  const token =
+    typeof window !== "undefined" ? window.localStorage.getItem("kaxiCodexBridgeToken")?.trim() : "";
+
+  if (bridge.url && (await hasLocalBridge(bridge.url))) {
+    const bridgeRes = await fetch(bridge.url, {
+      method: "POST",
+      mode: "cors",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { "x-kaxi-codex-bridge-token": token } : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (bridgeRes.ok || bridge.explicit) return bridgeRes;
+  }
+
+  return fetch("/api/ai/agent", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }
 
 const TOOL_ICONS: Record<string, typeof Search> = {
@@ -124,11 +185,7 @@ export function Agent() {
         content: m.text,
       }));
 
-      const res = await fetch("/api/ai/agent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: userMsg, lang, history }),
-      });
+      const res = await fetchAgent({ question: userMsg, lang, history });
 
       if (!res.ok) {
         const errorBody = await res.json().catch(() => ({}));
@@ -150,6 +207,7 @@ export function Agent() {
           steps: data.steps,
           toolResults: data.toolResults,
           iterations: data.iterations,
+          backend: data.backend,
         },
       ]);
     } catch (e) {
@@ -356,6 +414,12 @@ export function Agent() {
                         <Badge variant="outline" className="text-[10px] gap-0.5">
                           <Wrench className="h-2.5 w-2.5" />
                           {m.toolResults.length} {lang === "ko" ? "도구 사용" : "tools"}
+                        </Badge>
+                      )}
+                      {m.backend === "codex-cli-local-bridge" && (
+                        <Badge variant="outline" className="text-[10px] gap-0.5">
+                          <Sparkles className="h-2.5 w-2.5" />
+                          Local Codex
                         </Badge>
                       )}
                     </div>

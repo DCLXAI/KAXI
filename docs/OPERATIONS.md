@@ -103,6 +103,40 @@ CODEX_AUTH_MODE=api-key
 CODEX_API_KEY=...
 ```
 
+### Browser-to-Local Codex Bridge
+
+When the developer MacBook is on, the deployed site can use that Mac's current Codex CLI through a localhost bridge.
+This is intended for the owner opening `https://kaxi.vercel.app/#agent` on the same Mac, not for public multi-user production.
+
+Start the bridge:
+
+```bash
+bun run codex:bridge
+```
+
+The bridge listens on `http://127.0.0.1:8787` by default.
+The deployed Agent UI automatically probes `http://127.0.0.1:8787/health` when opened from a `vercel.app` host.
+If the bridge is reachable, chat requests go to the local Codex CLI and return `backend: "codex-cli-local-bridge"`.
+If it is not reachable, the UI falls back to `/api/ai/agent` on Vercel.
+
+Useful browser overrides:
+
+```js
+localStorage.setItem("kaxiCodexBridgeUrl", "http://127.0.0.1:8787/api/ai/agent")
+localStorage.setItem("kaxiCodexBridgeUrl", "off")
+localStorage.setItem("kaxiCodexBridgeToken", "...")
+```
+
+Useful bridge environment variables:
+
+- `CODEX_BRIDGE_HOST`: Defaults to `127.0.0.1`. Keep localhost unless using a trusted tunnel.
+- `CODEX_BRIDGE_PORT`: Defaults to `8787`.
+- `CODEX_BRIDGE_ALLOWED_ORIGINS`: Comma-separated browser origins allowed by CORS.
+- `CODEX_BRIDGE_TOKEN`: Optional token required as `x-kaxi-codex-bridge-token`.
+- `CODEX_EXEC_TIMEOUT_MS`: Codex CLI timeout for each local bridge request.
+
+Do not bind the bridge to `0.0.0.0` or expose it through a tunnel without `CODEX_BRIDGE_TOKEN`.
+
 `/api/codex/exec` remains guarded by `requireAdmin` for direct admin-only tests.
 For `/api/ai/agent`, set `CODEX_AGENT_REQUIRE_ADMIN=true` if Codex should be private/internal only.
 
