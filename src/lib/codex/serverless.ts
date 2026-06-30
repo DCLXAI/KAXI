@@ -114,13 +114,15 @@ function buildPrompt({ question, lang, history = [] }: Omit<CodexExecOptions, "t
     .map((item) => `${item.role === "user" ? "User" : "Assistant"}: ${item.content}`)
     .join("\n");
 
-  return `You are running as an experimental Codex CLI bridge for K-Bridge Gateway.
+  return `You are running as the fast public LLM bridge for K-Bridge Gateway.
 
 Hard constraints:
 - Treat this environment as read-only and ephemeral.
 - Do not modify files, install packages, commit, push, deploy, or run long-running servers.
-- Answer the user's K-Bridge Gateway question directly and concisely.
-- If codebase inspection is needed, only use read-only commands.
+- Do not use web search, browser tools, shell commands, or codebase inspection for public user questions.
+- Answer directly from your model knowledge and the conversation context.
+- If exact current facts are uncertain, say that briefly and still give the most useful practical answer.
+- Keep the final answer concise: usually 3-8 bullets or a short paragraph.
 - Reply in ${lang || "ko"} unless the user asks otherwise.
 
 Recent conversation:
@@ -197,6 +199,8 @@ export async function runCodexServerless({
     "read-only",
     "-c",
     'approval_policy="never"',
+    "-c",
+    'web_search="disabled"',
     "-c",
     "shell_environment_policy.inherit=none",
     "--cd",

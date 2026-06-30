@@ -80,15 +80,11 @@ export async function POST(req: NextRequest) {
           bridgeErr instanceof Error ? bridgeErr.message : bridgeErr
         );
         if (configuredBackend === "remote-bridge") {
-          const ctx: ToolContext = { lang, leadId };
-          const fallback = await runFallbackAgent(question, lang, ctx);
           return NextResponse.json({
-            answer: fallback.answer,
-            backend: "tool-fallback",
-            steps: fallback.steps,
-            toolResults: fallback.toolResults,
-            iterations: fallback.iterations,
-          });
+            error: "Remote Codex bridge is unavailable",
+            backend: "codex-cli-remote-bridge",
+            detail: bridgeErr instanceof Error ? bridgeErr.message : "Unknown bridge error",
+          }, { status: 502 });
         }
       }
     }
