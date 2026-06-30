@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Lang } from "@/lib/i18n/translations";
 import { db } from "@/lib/db";
 import { runAgent } from "@/lib/agent/agent";
+import { runFallbackAgent } from "@/lib/agent/fallback";
 import type { ToolContext } from "@/lib/agent/tools";
 import { isCodexServerlessEnabled, runCodexServerless } from "@/lib/codex/serverless";
 import {
@@ -73,12 +74,23 @@ export async function POST(req: NextRequest) {
 
     const ctx: ToolContext = { lang, leadId };
 
-    // 에이전트 실행
-    const result = await withTimeout(
-      runAgent(question, lang, history, ctx),
-      parsePositiveInt(process.env.AI_AGENT_TIMEOUT_MS, 45_000),
-      "Agent execution"
-    );
+    // 에이전트 실행. 배포 환경에 외부 AI 설정이 없으면 내장 도구 fallback으로 응답한다.
+    let result;
+    let backend = "zai";
+    try {
+      result = await withTimeout(
+        runAgent(question, lang, history, ctx),
+        parsePositiveInt(process.env.AI_AGENT_TIMEOUT_MS, 45_000),
+        "Agent execution"
+      );
+    } catch (agentErr) {
+      console.warn(
+        "[Agent backend fallback]",
+        agentErr instanceof Error ? agentErr.message : agentErr
+      );
+      backend = "tool-fallback";
+      result = await runFallbackAgent(question, lang, ctx);
+    }
 
     // ChatLog 저장 (도구 호출 이력 포함)
     try {
@@ -90,6 +102,7 @@ export async function POST(req: NextRequest) {
           source: "agent",
           retrievedDocs: JSON.stringify({
             iterations: result.iterations,
+            backend,
             toolResults: result.toolResults.map((r) => ({
               tool: r.tool,
               summary: r.summary,
@@ -105,6 +118,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       answer: result.answer,
+      backend,
       steps: result.steps,
       toolResults: result.toolResults,
       iterations: result.iterations,
