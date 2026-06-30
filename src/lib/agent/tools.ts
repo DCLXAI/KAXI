@@ -84,6 +84,7 @@ const searchSchoolsTool: Tool = {
         dormitory: s.dormitoryAvailable,
         accreditation: s.accreditation,
         topik: s.topikLevel,
+        officialUrl: s.officialUrl,
       })),
       summary: `${schools.length}개 학교 검색됨${args.region ? ` (지역: ${args.region})` : ""}${args.max_tuition ? ` (학비 ≤ ${args.max_tuition.toLocaleString()}₩)` : ""}`,
     };

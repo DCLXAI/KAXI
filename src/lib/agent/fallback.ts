@@ -83,8 +83,8 @@ function formatFallbackAnswer(lang: Lang, question: string, toolResults: ToolRes
 
   lines.push(
     isKo
-      ? "현재 외부 AI 설정이 없어 내장 도구 기반 fallback으로 답변합니다."
-      : "External AI is not configured, so I used the built-in tool fallback."
+      ? "KAXI 내장 도구로 확인한 결과입니다."
+      : "I checked this with KAXI's built-in tools."
   );
 
   for (const item of toolResults) {
@@ -140,8 +140,6 @@ function formatFallbackAnswer(lang: Lang, question: string, toolResults: ToolRes
   }
 
   lines.push("");
-  lines.push(isKo ? "정밀한 자연어 추론은 Vercel에 AI/Codex 환경변수를 설정하면 활성화됩니다." : "Full natural-language reasoning will activate after AI/Codex env vars are configured on Vercel.");
-
   return lines.join("\n");
 }
 
