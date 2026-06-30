@@ -1,44 +1,7 @@
 import type { Lang } from "@/lib/i18n/translations";
 import type { AgentResponse, AgentStep } from "@/lib/agent/agent";
+import { analyzeAgentIntent } from "@/lib/agent/planner";
 import { sanitizeToolArgsForDisplay, TOOL_MAP, type ToolContext, type ToolResult } from "@/lib/agent/tools";
-
-function includesAny(text: string, words: string[]): boolean {
-  return words.some((word) => text.includes(word));
-}
-
-function parseKrwBudget(text: string): number | undefined {
-  const manwon = text.match(/(\d+(?:\.\d+)?)\s*만\s*원/);
-  if (manwon) return Math.round(Number(manwon[1]) * 10_000);
-
-  const millionWon = text.match(/(\d+(?:\.\d+)?)\s*(?:m|million)\s*(?:krw|won|원)?/i);
-  if (millionWon) return Math.round(Number(millionWon[1]) * 1_000_000);
-
-  const rawWon = text.match(/(\d{6,})\s*(?:krw|won|원)?/i);
-  if (rawWon) return Number(rawWon[1]);
-
-  return undefined;
-}
-
-function detectRegion(text: string): string {
-  if (includesAny(text, ["서울", "seoul"])) return "seoul";
-  if (includesAny(text, ["경기", "gyeonggi"])) return "gyeonggi";
-  if (includesAny(text, ["부산", "busan"])) return "busan";
-  if (includesAny(text, ["대구", "daegu"])) return "daegu";
-  if (includesAny(text, ["광주", "gwangju"])) return "gwangju";
-  return "all";
-}
-
-function detectVisaType(text: string): "D-2" | "D-4" {
-  return /d-2|d2|학위|대학|degree/i.test(text) ? "D-2" : "D-4";
-}
-
-function detectNationality(text: string): string {
-  if (includesAny(text, ["베트남", "vietnam", "vietnamese", "việt"])) return "vn";
-  if (includesAny(text, ["몽골", "mongolia", "mongolian"])) return "mn";
-  if (includesAny(text, ["중국", "china", "chinese"])) return "cn";
-  if (includesAny(text, ["우즈벡", "uzbek"])) return "uz";
-  return "other";
-}
 
 async function runTool(
   toolName: string,
@@ -124,6 +87,20 @@ function formatFallbackAnswer(lang: Lang, question: string, toolResults: ToolRes
       }
     }
 
+    if (item.tool === "diagnose_path" && item.result) {
+      lines.push("");
+      lines.push(isKo ? "맞춤 경로 진단:" : "Personalized path:");
+      lines.push(`- ${isKo ? "추천 경로" : "Recommended path"}: ${item.result.path}`);
+      lines.push(`- ${isKo ? "준비 기간" : "Preparation time"}: ${item.result.prep_time}`);
+      lines.push(`- ${isKo ? "예상 비용" : "Estimated cost"}: ${Number(item.result.estimated_cost).toLocaleString()} KRW`);
+      for (const action of (item.result.next_actions || []).slice(0, 4)) {
+        lines.push(`- ${action}`);
+      }
+      for (const warning of (item.result.warnings || []).slice(0, 2)) {
+        lines.push(`- ${warning}`);
+      }
+    }
+
     if (item.tool === "request_partner") {
       lines.push("");
       lines.push(isKo ? "상담 연결:" : "Partner request:");
@@ -149,11 +126,11 @@ export async function runFallbackAgent(
   lang: Lang,
   ctx: ToolContext
 ): Promise<AgentResponse> {
-  const text = question.toLowerCase();
+  const analysis = analyzeAgentIntent(question, lang);
   const steps: AgentStep[] = [];
   const toolResults: ToolResult[] = [];
 
-  if (includesAny(text, ["허위", "fake", "불법", "illegal", "비자 보장", "visa guarantee"])) {
+  if (analysis.safety) {
     const answer =
       lang === "ko"
         ? "허위서류, 불법취업, 비자 보장 요청은 도와드릴 수 없습니다. 대신 합법적인 서류 준비, 비용 비교, 행정사 상담 연결은 안내할 수 있습니다."
@@ -162,69 +139,32 @@ export async function runFallbackAgent(
     return { answer, steps, toolResults, iterations: 1 };
   }
 
-  const asksSchool = includesAny(text, ["학교", "어학당", "대학", "school", "university", "language"]);
-  const asksCost = includesAny(text, ["비용", "견적", "예산", "cost", "budget", "tuition"]);
-  const asksDocs = includesAny(text, ["서류", "문서", "documents", "visa", "비자", "d-2", "d-4"]);
-  const asksPartner = includesAny(text, ["상담", "연결", "행정사", "partner", "consult"]);
+  for (const planned of analysis.plan) {
+    const toolCtx = planned.tool === "request_partner" ? { ...ctx, dryRun: true } : ctx;
 
-  if (asksSchool || asksCost) {
-    const schools = await runTool(
-      "search_schools",
-      {
-        region: detectRegion(text),
-        program: includesAny(text, ["어학", "language"]) ? "language" : "all",
-        accreditation: includesAny(text, ["인증", "accredited"]) ? "accredited" : "all",
-        max_tuition: parseKrwBudget(text),
-        limit: 5,
-      },
-      ctx,
-      steps,
-      toolResults
-    );
+    if (planned.tool === "search_schools") {
+      const schools = await runTool(planned.tool, planned.args, toolCtx, steps, toolResults);
 
-    if (asksCost && Array.isArray(schools?.result) && schools.result[0]?.id) {
-      await runTool(
-        "calculate_cost",
-        {
-          school_id: schools.result[0].id,
-          include_dormitory: true,
-        },
-        ctx,
-        steps,
-        toolResults
-      );
+      if (analysis.cost && Array.isArray(schools?.result)) {
+        for (const school of schools.result.slice(0, 3)) {
+          if (!school?.id) continue;
+          await runTool(
+            "calculate_cost",
+            {
+              school_id: school.id,
+              include_dormitory: true,
+              broker_quote: analysis.budget,
+            },
+            ctx,
+            steps,
+            toolResults
+          );
+        }
+      }
+      continue;
     }
-  }
 
-  if (asksDocs) {
-    await runTool(
-      "get_documents",
-      {
-        visa_type: detectVisaType(text),
-        nationality: detectNationality(text),
-      },
-      ctx,
-      steps,
-      toolResults
-    );
-    await runTool("search_knowledge", { query: question, top_k: 3 }, ctx, steps, toolResults);
-  }
-
-  if (asksPartner) {
-    await runTool(
-      "request_partner",
-      {
-        partner_type: includesAny(text, ["번역", "공증"]) ? "translation" : "admin",
-        question,
-      },
-      ctx,
-      steps,
-      toolResults
-    );
-  }
-
-  if (toolResults.length === 0) {
-    await runTool("search_knowledge", { query: question, top_k: 3 }, ctx, steps, toolResults);
+    await runTool(planned.tool, planned.args, toolCtx, steps, toolResults);
   }
 
   const answer = formatFallbackAnswer(lang, question, toolResults);

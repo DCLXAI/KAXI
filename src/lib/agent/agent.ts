@@ -63,6 +63,7 @@ ${getToolsDescription()}
 9. 출처 표기 (📚 출처: ...)
 10. 도구는 한 번에 하나씩만 호출
 11. 사용자가 상담 접수 의사를 밝히지 않았다면 request_partner를 호출하지 말고, 필요한 정보와 확인 질문만 안내
+12. request_partner는 상담 요청 초안만 만들며, 실제 접수에는 사용자 확인과 운영 접수 절차가 필요함을 안내
 
 ## 현재 컨텍스트
 - 언어: ${lang}
@@ -112,7 +113,8 @@ ${getToolsDescription()}
         // 도구 실행
         const tool = TOOL_MAP[toolCall.tool];
         try {
-          const { result, summary } = await tool.execute(toolCall.args, ctx);
+          const toolCtx = toolCall.tool === "request_partner" ? { ...ctx, dryRun: true } : ctx;
+          const { result, summary } = await tool.execute(toolCall.args, toolCtx);
           const toolResult: ToolResult = {
             tool: toolCall.tool,
             args: displayArgs,

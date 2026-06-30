@@ -135,8 +135,10 @@ Use `RATE_LIMIT_BACKEND=database` with a reachable managed production DB for Ver
 ## Agent Grounding
 
 `/api/ai/agent` runs a deterministic KAXI preflight before Codex bridge calls when `AI_AGENT_PREFLIGHT_ENABLED` is not `false`.
-The preflight may call school search, cost calculation, document checklist, partner request, and RAG search tools.
+The preflight uses the same intent planner as the built-in fallback agent, with Korean, English, Vietnamese, and Mongolian cues for school search, cost calculation, document checklist, path diagnosis, partner request drafts, and RAG search tools.
 The resulting compact context is prepended to the Codex bridge prompt so public answers are grounded in KAXI data even when the bridge is running in fast direct-answer mode.
+
+Partner requests created from the conversational agent stay in dry-run draft mode. Persist actual contact requests through the explicit lead/partner intake flow so consent, retention, and PII controls remain clear.
 
 Keep `AI_AGENT_PREFLIGHT_TIMEOUT_MS` below the total function budget. If preflight times out, the route skips grounding and continues with the original user question.
 Agent `ChatLog` and `AgentRequestLedger` persistence should use a writable production database. Hosted deployments using `DATABASE_URL=file:...` skip Agent log and ledger writes to avoid read-only SQLite failures.
