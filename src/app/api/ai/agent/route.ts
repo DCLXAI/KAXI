@@ -341,23 +341,47 @@ export async function POST(req: NextRequest) {
           bridgeErr instanceof Error ? bridgeErr.message : bridgeErr
         );
         if (configuredBackend === "remote-bridge") {
+          const fallback = await runFallbackAgent(question, lang, ctx);
+          await persistAgentLog({
+            lang,
+            question,
+            answer: fallback.answer,
+            backend: "tool-fallback",
+            preflight,
+            steps: fallback.steps,
+            toolResults: fallback.toolResults,
+            iterations: fallback.iterations,
+          });
           await persistAgentLedger({
             req,
             leadId,
             question,
-            backend: "codex-cli-remote-bridge",
+            answer: fallback.answer,
+            backend: "tool-fallback",
             durationMs: Date.now() - requestStartedAt,
-            success: false,
-            errorType: "remote_bridge_unavailable",
+            success: true,
+            errorType: "remote_bridge_fallback",
             errorMessage: bridgeErr instanceof Error ? bridgeErr.message : "Unknown bridge error",
             preflight,
-            toolCount: preflight.toolResults.length,
+            toolCount: fallback.toolResults.length,
           });
           return NextResponse.json({
-            error: "Remote Codex bridge is unavailable",
-            backend: "codex-cli-remote-bridge",
-            detail: bridgeErr instanceof Error ? bridgeErr.message : "Unknown bridge error",
-          }, { status: 502 });
+            answer: fallback.answer,
+            backend: "tool-fallback",
+            steps: fallback.steps,
+            toolResults: fallback.toolResults,
+            iterations: fallback.iterations,
+            durationMs: Date.now() - requestStartedAt,
+            grounded: Boolean(preflight.groundingContext),
+            meta: buildAgentMeta({
+              lang,
+              question,
+              backend: "tool-fallback",
+              grounded: Boolean(preflight.groundingContext),
+              toolResults: fallback.toolResults,
+              durationMs: Date.now() - requestStartedAt,
+            }),
+          });
         }
       }
     }

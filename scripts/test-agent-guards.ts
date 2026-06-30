@@ -4,10 +4,18 @@ import { buildAgentMeta } from "../src/lib/agent/meta";
 import { analyzeAgentIntent, type AgentMissingSlot } from "../src/lib/agent/planner";
 import { resolveModelCacheDir } from "../src/lib/embeddings/transformer-embedder";
 import { TOOL_MAP } from "../src/lib/agent/tools";
+import { NextRequest } from "next/server";
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
   process.exit(1);
+}
+
+function restoreEnv(snapshot: NodeJS.ProcessEnv) {
+  for (const key of Object.keys(process.env)) {
+    if (!(key in snapshot)) delete process.env[key];
+  }
+  Object.assign(process.env, snapshot);
 }
 
 async function testPartnerToolDryRun() {
@@ -159,6 +167,41 @@ async function testAgentStatusRoute() {
   }
 }
 
+async function testRemoteBridgeFailureFallsBackToTools() {
+  const snapshot = { ...process.env };
+  try {
+    Object.assign(process.env, {
+      AGENT_BACKEND: "remote-bridge",
+      CODEX_REMOTE_BRIDGE_URL: "http://127.0.0.1:9/api/ai/agent",
+      CODEX_REMOTE_BRIDGE_ENABLED: "true",
+      AI_AGENT_RATE_LIMIT: "0",
+      AI_AGENT_DAILY_QUOTA: "0",
+      AI_AGENT_PREFLIGHT_TIMEOUT_MS: "1000",
+      AI_AGENT_LOGGING_ENABLED: "false",
+      AI_AGENT_LEDGER_ENABLED: "false",
+    });
+
+    const route = await import("../src/app/api/ai/agent/route");
+    const req = new NextRequest("http://localhost/api/ai/agent", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        question: "행정사 AI 에이전트",
+        lang: "ko",
+        history: [],
+      }),
+    });
+    const res = await route.POST(req);
+    const body = await res.json();
+
+    if (res.status !== 200 || body.backend !== "tool-fallback" || !body.answer) {
+      fail(`remote bridge failure should fall back to tools: status=${res.status} body=${JSON.stringify(body)}`);
+    }
+  } finally {
+    restoreEnv(snapshot);
+  }
+}
+
 function testAgentMetaDoesNotEchoPii() {
   const meta = buildAgentMeta({
     lang: "ko",
@@ -247,6 +290,7 @@ await testPreflightUsesDiagnosisPlanner();
 await testPreflightCarriesPlannerContext();
 await testFallbackPartnerRequestStaysDraft();
 await testAgentStatusRoute();
+await testRemoteBridgeFailureFallsBackToTools();
 testAgentMetaDoesNotEchoPii();
 testAgentMetaClarifyingQuestions();
 testVercelModelCacheDefaultsToTmp();

@@ -168,17 +168,21 @@ async function fetchAgent(payload: unknown): Promise<Response> {
     typeof window !== "undefined" ? window.localStorage.getItem("kaxiCodexBridgeToken")?.trim() : "";
 
   if (bridge.url && (await hasLocalBridge(bridge.url))) {
-    const bridgeRes = await fetch(bridge.url, {
-      method: "POST",
-      mode: "cors",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { "x-kaxi-codex-bridge-token": token } : {}),
-      },
-      body: JSON.stringify(payload),
-    });
+    try {
+      const bridgeRes = await fetch(bridge.url, {
+        method: "POST",
+        mode: "cors",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "x-kaxi-codex-bridge-token": token } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
 
-    if (bridgeRes.ok || bridge.explicit) return bridgeRes;
+      if (bridgeRes.ok) return bridgeRes;
+    } catch {
+      // Fall back to the hosted API below. The local bridge is an acceleration path, not the only answer path.
+    }
   }
 
   return fetch("/api/ai/agent", {

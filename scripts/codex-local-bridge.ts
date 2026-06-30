@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { spawn, type ChildProcess } from "node:child_process";
 import { runCodexServerless } from "../src/lib/codex/serverless";
+import { runFallbackAgent } from "../src/lib/agent/fallback";
 
 type Lang = "ko" | "vi" | "mn" | "en";
 
@@ -182,10 +183,13 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  let question = "";
+  let lang: Lang = "ko";
+
   try {
     const rawBody = await readBody(req);
     const body = rawBody ? JSON.parse(rawBody) : {};
-    const question = typeof body.question === "string" ? body.question.trim() : "";
+    question = typeof body.question === "string" ? body.question.trim() : "";
     if (!question) {
       json(res, 400, { error: "Missing question" });
       return;
@@ -195,9 +199,10 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    lang = parseLang(body.lang);
     const result = await runCodexServerless({
       question,
-      lang: parseLang(body.lang),
+      lang,
       history: parseHistory(body.history),
       timeoutMs: Number(process.env.CODEX_EXEC_TIMEOUT_MS || 60_000),
     });
@@ -220,7 +225,27 @@ const server = createServer(async (req, res) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown local bridge error";
     console.error("[codex-local-bridge]", message);
-    json(res, 502, { error: message });
+    if (!question) {
+      json(res, 502, { error: message });
+      return;
+    }
+
+    try {
+      const fallback = await runFallbackAgent(question, lang, { lang, dryRun: true });
+      json(res, 200, {
+        answer: fallback.answer,
+        backend: "tool-fallback",
+        codexMode: "local-auth",
+        steps: fallback.steps,
+        toolResults: fallback.toolResults,
+        iterations: fallback.iterations,
+        durationMs: undefined,
+      });
+    } catch (fallbackError) {
+      const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : "Unknown fallback error";
+      console.error("[codex-local-bridge fallback]", fallbackMessage);
+      json(res, 502, { error: message });
+    }
   }
 });
 

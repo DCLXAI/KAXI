@@ -191,7 +191,7 @@ bun run codex:bridge:awake
 The bridge listens on `http://127.0.0.1:8787` by default.
 The deployed Agent UI automatically probes `http://127.0.0.1:8787/health` when opened from a `vercel.app` host.
 If the bridge is reachable, chat requests go to the local Codex CLI and return `backend: "codex-cli-local-bridge"`.
-If it is not reachable, the UI falls back to `/api/ai/agent` on Vercel.
+If it is not reachable or a bridge request fails, the UI falls back to `/api/ai/agent` on Vercel.
 `GET /api/ai/agent` returns safe diagnostics for backend readiness, bridge configuration, preflight, limits, and persistence without exposing secrets.
 
 Useful browser overrides:
@@ -235,6 +235,7 @@ bun run codex:bridge
 Then expose `http://127.0.0.1:8787` through a tunnel such as Cloudflare Tunnel, ngrok, or Tailscale Funnel.
 The tunnel URL goes only into Vercel server environment variables as `CODEX_REMOTE_BRIDGE_URL`.
 The public frontend continues calling `/api/ai/agent`, and Vercel forwards to the Mac bridge with the secret token.
+When the remote bridge is unavailable, `/api/ai/agent` returns a built-in `tool-fallback` answer instead of surfacing a 502 to public users.
 
 Minimum safety rules:
 
