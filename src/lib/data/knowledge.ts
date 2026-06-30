@@ -306,8 +306,9 @@ export const KNOWLEDGE_DOCS: KnowledgeDoc[] = [
   },
 ];
 
-// 간단한 키워드 매칭 기반 retrieval
+// 간단한 키워드 매칭 기반 retrieval (레거시 — vector-store.ts의 hybridSearch 사용 권장)
 // (운영시 Vector DB로 교체, 현재는 키워드 점수로 충분)
+// @deprecated Use hybridSearch from ../embeddings/vector-store instead
 export function retrieveDocs(query: string, topK = 3): KnowledgeDoc[] {
   const q = query.toLowerCase().trim();
   if (!q) return [];

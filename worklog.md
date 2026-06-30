@@ -118,3 +118,44 @@ Stage Summary:
 - RAG 파이프라인: 17개 공식 문서 → retrieval → LLM (z-ai-web-dev-sdk)
 - 멘토 데모 준비 완료: 7/22 3분 시나리오 대본 (download/demo-script.md)
 - 모든 API 엔드포인트 브라우저 검증 완료
+
+---
+Task ID: vector-search
+Agent: main (Super Z)
+Task: 임베딩 기반 Vector DB 도입 — 하이브리드 의미 검색으로 RAG 고도화
+
+Work Log:
+- z-ai-web-dev-sdk 임베딩 API 미지원 확인 → 순수 TypeScript 다국어 임베딩 구현
+- src/lib/embeddings/vectorizer.ts 구현:
+  - 다국어 텍스트 정규화 (Unicode property 기준)
+  - Word unigram (가중치 2.0) + Word bigram (1.5) + Character 2~4-gram (1.0) 결합
+  - TF-IDF 가중치 + L2 정규화 → 코사인 유사도
+- src/lib/embeddings/vector-store.ts 구현:
+  - 인메모리 Vector Store (lazy 초기화, 싱글톤)
+  - 하이브리드 검색 (vectorScore × 1.2 + keywordScore × 0.6)
+  - 순수 임베딩 검색 (semanticSearch)
+  - 한국어 동의어 확장 (일상어 → 공식 용어, 18개 매핑)
+- API /api/ai/chat 업데이트:
+  - retrieveDocs (레거시) → hybridSearch 사용
+  - 검색 메타데이터 (score, vectorScore, keywordScore, matchedKeywords) 응답에 포함
+  - source: "rule" | "rag" | "hybrid" 구분
+  - GET /api/ai/chat — Vector Store 상태 조회 (디버그용)
+- 검색 품질 비교 테스트 (scripts/test-vector-search.ts):
+  - 12개 테스트 쿼리 (4개 언어 + 의미적 질문)
+  - 결과: Hybrid 우세 6 / Keyword 우세 5 / 동점 1
+  - 핵심 개선: "한국에서 얼마나 돈이 필요해요?" (이전 검색 안 됨 → cost-breakdown 검색 성공)
+  - "어학당 끝나고 대학교 가려면" (D-4→D-2 전환 문서 추가 매칭)
+  - "비자 거절당했는데 어떡해요" (visa-guarantee-warning 매칭)
+
+브라우저 검증:
+- [✓] "한국에서 얼마나 돈이 필요해요?" → cost-breakdown 검색 → LLM 답변 (vectorScore 0.201)
+- [✓] "어학당 끝나고 대학교 가려면 뭐 해야해요" → D-2 비자 개요 매칭 → D-4→D-2 전환 절차 답변 (source: hybrid)
+- [✓] 베트남어 "Tôi muốn học tiếng Hàn thì xin visa gì?" → D-4 비자 개요 매칭 (vectorScore 0.166)
+- [✓] ESLint 통과, 런타임 에러 없음
+
+Stage Summary:
+- 다국어 임베딩 Vector Store 도입 완료 (17개 문서, vocabulary 약 4000+ 차원)
+- 하이브리드 검색 (임베딩 + 키워드) — 두 신호의 장점 결합
+- 동의어 확장으로 일상 한국어 질문 검색 품질 향상
+- API 응답에 검색 메타데이터 포함 → 투명성 확보
+- 운영시 Pinecone/Weaviate/Qdrant 등 외부 Vector DB로 교체 가능한 인터페이스
