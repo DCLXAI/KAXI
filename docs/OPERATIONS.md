@@ -8,7 +8,9 @@
 - `VECTOR_CACHE_FILE`: Optional embedding cache file path. Defaults to `data/vector-store/embeddings-cache.json`.
 - `AI_*_RATE_LIMIT`, `AI_*_DAILY_QUOTA`: Optional AI abuse and cost controls.
 - `NEXTAUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`: Required for session-based admin login.
-- `CODEX_SERVERLESS_ENABLED`, `CODEX_API_KEY`: Optional experimental Codex CLI bridge. Keep disabled unless admin-only usage is intended.
+- `AGENT_BACKEND`: Agent backend selector. Defaults to `codex`; set `zai` only when `.z-ai-config` is present.
+- `CODEX_API_KEY`: Required when `AGENT_BACKEND=codex`.
+- `CODEX_AGENT_REQUIRE_ADMIN`: Optional guard for `/api/ai/agent` Codex execution. Keep `false` for public demo, `true` for private/internal use.
 
 ## Runtime Artifacts
 
@@ -74,17 +76,21 @@ The app uses in-memory IP rate limits and daily quotas. This is enough for a sin
 
 For production, replace the in-memory limiter with Redis/Upstash or a database-backed limiter so quota is shared across instances.
 
-## Experimental Codex CLI Bridge
+## Codex CLI Agent Backend
 
-The app can route `/api/ai/agent` to Codex CLI when `CODEX_SERVERLESS_ENABLED=true` or `AGENT_BACKEND=codex`.
-It also exposes `/api/codex/exec` for direct admin-only tests.
+The app routes `/api/ai/agent` to Codex CLI by default (`AGENT_BACKEND=codex`).
+Set `AGENT_BACKEND=zai` only if the deployment includes a valid `.z-ai-config`.
+If Codex credentials are missing or a Codex run fails, `/api/ai/agent` falls back to the built-in tool engine instead of returning 500.
 
-This bridge is intentionally guarded by `requireAdmin`. Do not expose it to public users:
+`/api/codex/exec` remains guarded by `requireAdmin` for direct admin-only tests.
+For `/api/ai/agent`, set `CODEX_AGENT_REQUIRE_ADMIN=true` if Codex should be private/internal only.
+
+Codex CLI in serverless has important tradeoffs:
 
 1. Codex CLI can inspect the deployed bundle and may invoke shell commands.
 2. Vercel functions are ephemeral and time-limited; long agent runs may timeout.
 3. The native Codex binary is large, so Vercel function packaging may fail on plan or bundle limits.
-4. Set `CODEX_API_KEY` in Vercel Production only if this risk is accepted.
+4. Set `CODEX_API_KEY` in Vercel Production only if this cost and runtime risk is accepted.
 5. Keep `CODEX_EXEC_RATE_LIMIT`, `CODEX_EXEC_TIMEOUT_MS`, and `CODEX_EXEC_MAX_CHARS` conservative.
 
 Recommended production path remains a normal API-based agent using the OpenAI API or Vercel AI Gateway, not Codex CLI inside serverless.

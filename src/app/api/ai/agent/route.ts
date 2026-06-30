@@ -4,7 +4,11 @@ import { db } from "@/lib/db";
 import { runAgent } from "@/lib/agent/agent";
 import { runFallbackAgent } from "@/lib/agent/fallback";
 import type { ToolContext } from "@/lib/agent/tools";
-import { isCodexServerlessEnabled, runCodexServerless } from "@/lib/codex/serverless";
+import {
+  getAgentBackend,
+  runCodexServerless,
+  shouldRequireAdminForCodexAgent,
+} from "@/lib/codex/serverless";
 import {
   consumeDailyQuota,
   parsePositiveInt,
@@ -45,31 +49,67 @@ export async function POST(req: NextRequest) {
     const { question, history, leadId } = parsed.value;
     const lang = parsed.value.lang as Lang;
 
-    if (isCodexServerlessEnabled()) {
+    const configuredBackend = getAgentBackend();
+    if (configuredBackend === "codex") {
+      if (shouldRequireAdminForCodexAgent()) {
+        const unauthorized = await requireAdmin(req);
+        if (unauthorized) return unauthorized;
+      }
+
+      try {
+        const result = await runCodexServerless({
+          question,
+          lang,
+          history,
+          timeoutMs: parsePositiveInt(process.env.CODEX_EXEC_TIMEOUT_MS, 45_000),
+        });
+
+        return NextResponse.json({
+          answer: result.answer,
+          backend: "codex-cli",
+          steps: [
+            {
+              type: "final_answer",
+              content: result.answer,
+              timestamp: Date.now(),
+            },
+          ],
+          toolResults: [],
+          iterations: 1,
+          durationMs: result.durationMs,
+        });
+      } catch (codexErr) {
+        console.warn(
+          "[Codex backend fallback]",
+          codexErr instanceof Error ? codexErr.message : codexErr
+        );
+        const ctx: ToolContext = { lang, leadId };
+        const fallback = await runFallbackAgent(question, lang, ctx);
+        return NextResponse.json({
+          answer: fallback.answer,
+          backend: "tool-fallback",
+          steps: fallback.steps,
+          toolResults: fallback.toolResults,
+          iterations: fallback.iterations,
+        });
+      }
+    }
+
+    if (configuredBackend === "tool-fallback") {
+      const ctx: ToolContext = { lang, leadId };
+      const fallback = await runFallbackAgent(question, lang, ctx);
+      return NextResponse.json({
+        answer: fallback.answer,
+        backend: "tool-fallback",
+        steps: fallback.steps,
+        toolResults: fallback.toolResults,
+        iterations: fallback.iterations,
+      });
+    }
+
+    if (shouldRequireAdminForCodexAgent()) {
       const unauthorized = await requireAdmin(req);
       if (unauthorized) return unauthorized;
-
-      const result = await runCodexServerless({
-        question,
-        lang,
-        history,
-        timeoutMs: parsePositiveInt(process.env.CODEX_EXEC_TIMEOUT_MS, 45_000),
-      });
-
-      return NextResponse.json({
-        answer: result.answer,
-        backend: "codex-cli",
-        steps: [
-          {
-            type: "final_answer",
-            content: result.answer,
-            timestamp: Date.now(),
-          },
-        ],
-        toolResults: [],
-        iterations: 1,
-        durationMs: result.durationMs,
-      });
     }
 
     const ctx: ToolContext = { lang, leadId };

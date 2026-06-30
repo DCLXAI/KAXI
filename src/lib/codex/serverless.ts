@@ -50,7 +50,19 @@ ${question}`;
 }
 
 export function isCodexServerlessEnabled(): boolean {
-  return process.env.CODEX_SERVERLESS_ENABLED === "true" || process.env.AGENT_BACKEND === "codex";
+  if (process.env.CODEX_SERVERLESS_ENABLED === "false") return false;
+  return getAgentBackend() === "codex" || process.env.CODEX_SERVERLESS_ENABLED === "true";
+}
+
+export function getAgentBackend(): "codex" | "zai" | "tool-fallback" {
+  const configured = process.env.AGENT_BACKEND?.trim().toLowerCase();
+  if (configured === "zai") return "zai";
+  if (configured === "tool-fallback") return "tool-fallback";
+  return "codex";
+}
+
+export function shouldRequireAdminForCodexAgent(): boolean {
+  return process.env.CODEX_AGENT_REQUIRE_ADMIN === "true";
 }
 
 export async function runCodexServerless({
