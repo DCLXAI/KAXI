@@ -34,6 +34,16 @@ function emptyPreflight(question: string): AgentPreflightResult {
   };
 }
 
+function shouldPersistAgentLog(): boolean {
+  if (process.env.AI_AGENT_LOGGING_ENABLED === "false") return false;
+
+  const databaseUrl = process.env.DATABASE_URL?.trim() || "";
+  const hostedRuntime = process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV);
+  if (hostedRuntime && databaseUrl.startsWith("file:")) return false;
+
+  return true;
+}
+
 async function persistAgentLog({
   lang,
   question,
@@ -53,6 +63,8 @@ async function persistAgentLog({
   toolResults: Array<{ tool: string; summary: string; success: boolean }>;
   iterations: number;
 }) {
+  if (!shouldPersistAgentLog()) return;
+
   try {
     await db.chatLog.create({
       data: {
@@ -78,7 +90,7 @@ async function persistAgentLog({
       },
     });
   } catch (logErr) {
-    console.error("[ChatLog save error]", logErr);
+    console.warn("[ChatLog save skipped]", logErr);
   }
 }
 

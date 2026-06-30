@@ -9,6 +9,7 @@
 - `AI_*_RATE_LIMIT`, `AI_*_DAILY_QUOTA`: Optional AI abuse and cost controls. Use `0` to disable a specific limit.
 - `AI_AGENT_PREFLIGHT_ENABLED`: Enables deterministic server-side tool/RAG preflight before Codex bridge calls.
 - `AI_AGENT_PREFLIGHT_TIMEOUT_MS`, `AI_AGENT_CONTEXT_MAX_CHARS`, `AI_AGENT_GROUNDED_QUESTION_MAX_CHARS`: Bound preflight latency and context sent to the LLM bridge.
+- `AI_AGENT_LOGGING_ENABLED`: Enables Agent `ChatLog` persistence. It is automatically skipped on hosted SQLite deployments.
 - `NEXTAUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`: Required for session-based admin login.
 - `AGENT_BACKEND`: Agent backend selector. Defaults to `codex`; set `zai` only when `.z-ai-config` is present.
 - `CODEX_AUTH_MODE`: `auto`, `local`, or `api-key`. `auto` uses the current local Codex CLI login in local dev and API-key mode on Vercel.
@@ -86,6 +87,7 @@ The preflight may call school search, cost calculation, document checklist, part
 The resulting compact context is prepended to the Codex bridge prompt so public answers are grounded in KAXI data even when the bridge is running in fast direct-answer mode.
 
 Keep `AI_AGENT_PREFLIGHT_TIMEOUT_MS` below the total function budget. If preflight times out, the route skips grounding and continues with the original user question.
+Agent `ChatLog` persistence should use a writable production database. Hosted deployments using `DATABASE_URL=file:...` skip Agent log writes to avoid read-only SQLite failures.
 
 ## Codex CLI Agent Backend
 
