@@ -130,7 +130,16 @@ export function Agent() {
         body: JSON.stringify({ question: userMsg, lang, history }),
       });
 
-      if (!res.ok) throw new Error("API failed");
+      if (!res.ok) {
+        const errorBody = await res.json().catch(() => ({}));
+        const message =
+          res.status === 401
+            ? lang === "ko"
+              ? "Codex CLI 백엔드는 관리자 로그인 후 사용할 수 있습니다."
+              : "Codex CLI backend requires admin login."
+            : errorBody.error || "API failed";
+        throw new Error(message);
+      }
 
       const data = await res.json();
       setMsgs((m) => [
@@ -145,11 +154,12 @@ export function Agent() {
       ]);
     } catch (e) {
       console.error("[agent]", e);
+      const message = e instanceof Error ? e.message : "";
       setMsgs((m) => [
         ...m,
         {
           role: "agent",
-          text: lang === "ko" ? "일시적 오류가 발생했습니다." : "Temporary error.",
+          text: message || (lang === "ko" ? "일시적 오류가 발생했습니다." : "Temporary error."),
         },
       ]);
     } finally {

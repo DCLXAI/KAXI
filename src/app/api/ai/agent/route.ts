@@ -3,13 +3,18 @@ import type { Lang } from "@/lib/i18n/translations";
 import { db } from "@/lib/db";
 import { runAgent } from "@/lib/agent/agent";
 import type { ToolContext } from "@/lib/agent/tools";
+import { isCodexServerlessEnabled, runCodexServerless } from "@/lib/codex/serverless";
 import {
   consumeDailyQuota,
   parsePositiveInt,
   rateLimit,
+  requireAdmin,
   sanitizeAiBody,
   withTimeout,
 } from "@/lib/api/security";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 // POST /api/ai/agent - 에이전트 대화 (도구 호출 + 다중 단계 추론)
 export async function POST(req: NextRequest) {
@@ -38,6 +43,33 @@ export async function POST(req: NextRequest) {
 
     const { question, history, leadId } = parsed.value;
     const lang = parsed.value.lang as Lang;
+
+    if (isCodexServerlessEnabled()) {
+      const unauthorized = await requireAdmin(req);
+      if (unauthorized) return unauthorized;
+
+      const result = await runCodexServerless({
+        question,
+        lang,
+        history,
+        timeoutMs: parsePositiveInt(process.env.CODEX_EXEC_TIMEOUT_MS, 45_000),
+      });
+
+      return NextResponse.json({
+        answer: result.answer,
+        backend: "codex-cli",
+        steps: [
+          {
+            type: "final_answer",
+            content: result.answer,
+            timestamp: Date.now(),
+          },
+        ],
+        toolResults: [],
+        iterations: 1,
+        durationMs: result.durationMs,
+      });
+    }
 
     const ctx: ToolContext = { lang, leadId };
 
