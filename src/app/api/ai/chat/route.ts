@@ -5,6 +5,7 @@ import { findFAQ, AI_DEFAULT_REPLY } from "@/lib/data/faq";
 import { db } from "@/lib/db";
 import { createZaiClient, isZaiConfigurationError } from "@/lib/ai/zai";
 import { hybridSearch, initVectorStore, initTransformerStore, getStoreStats } from "@/lib/embeddings/vector-store";
+import { protectChatQuestion } from "@/lib/privacy/chat-log";
 import {
   consumeDailyQuota,
   parsePositiveInt,
@@ -17,14 +18,14 @@ import {
 // POST /api/ai/chat - RAG 기반 채팅 (Transformer Vector Search + LLM)
 export async function POST(req: NextRequest) {
   try {
-    const limited = rateLimit(req, {
+    const limited = await rateLimit(req, {
       key: "ai:chat",
       limit: parsePositiveInt(process.env.AI_CHAT_RATE_LIMIT, 20),
       windowMs: 60 * 1000,
     });
     if (limited) return limited;
 
-    const quotaExceeded = consumeDailyQuota(
+    const quotaExceeded = await consumeDailyQuota(
       req,
       "ai:chat",
       parsePositiveInt(process.env.AI_CHAT_DAILY_QUOTA, 100)
@@ -115,10 +116,11 @@ export async function POST(req: NextRequest) {
 
     // 5. 로그 저장 (비동기, 실패 무시)
     try {
+      const protectedQuestion = protectChatQuestion(question);
       await db.chatLog.create({
         data: {
           lang,
-          question,
+          ...protectedQuestion,
           answer,
           source,
           retrievedDocs: JSON.stringify({

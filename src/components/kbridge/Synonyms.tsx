@@ -60,7 +60,7 @@ interface ChatlogAnalysis {
 export function Synonyms() {
   const { lang } = useLangStore();
   const { data: session, status } = useSession();
-  const isSessionAdmin = session?.user?.role === "admin";
+  const isSessionAdmin = ["owner", "admin", "viewer"].includes(session?.user?.role || "");
   const [adminKey, setAdminKey] = useState("");
   const [keyInput, setKeyInput] = useState("");
   const [synonyms, setSynonyms] = useState<Synonym[]>([]);

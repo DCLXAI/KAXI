@@ -1,8 +1,10 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import { recordAuditLog } from "@/lib/audit";
+import { verifyAdminPassword, verifyTotp } from "@/lib/auth/password";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const ADMIN_ROLE = process.env.ADMIN_ROLE === "viewer" ? "viewer" : process.env.ADMIN_ROLE === "admin" ? "admin" : "owner";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -11,20 +13,44 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        otp: { label: "MFA code", type: "text" },
       },
       async authorize(credentials) {
-        if (!ADMIN_EMAIL || !ADMIN_PASSWORD) return null;
+        if (!ADMIN_EMAIL || (!process.env.ADMIN_PASSWORD_HASH && !process.env.ADMIN_PASSWORD)) return null;
         if (!credentials?.email || !credentials.password) return null;
 
-        if (credentials.email === ADMIN_EMAIL && credentials.password === ADMIN_PASSWORD) {
+        const emailMatches = credentials.email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
+        const passwordMatches = verifyAdminPassword(credentials.password);
+        const mfaMatches = verifyTotp(credentials.otp, process.env.ADMIN_MFA_TOTP_SECRET);
+
+        if (emailMatches && passwordMatches && mfaMatches) {
+          await recordAuditLog({
+            actor: ADMIN_EMAIL,
+            actorRole: ADMIN_ROLE,
+            action: "admin.login",
+            targetType: "auth",
+            success: true,
+            metadata: { authType: "credentials", mfaEnabled: Boolean(process.env.ADMIN_MFA_TOTP_SECRET) },
+          });
           return {
             id: "admin",
             email: ADMIN_EMAIL,
             name: "KAXI Admin",
-            role: "admin" as const,
+            role: ADMIN_ROLE,
           };
         }
 
+        await recordAuditLog({
+          actor: credentials.email || "unknown",
+          actorRole: "anonymous",
+          action: "admin.login",
+          targetType: "auth",
+          success: false,
+          metadata: {
+            reason: !emailMatches ? "email" : !passwordMatches ? "password" : "mfa",
+            mfaEnabled: Boolean(process.env.ADMIN_MFA_TOTP_SECRET),
+          },
+        });
         return null;
       },
     }),
@@ -51,7 +77,7 @@ export const authOptions: NextAuthOptions = {
 
 declare module "next-auth" {
   interface User {
-    role?: "admin" | "user";
+    role?: "owner" | "admin" | "viewer" | "user";
   }
 
   interface Session {
@@ -59,13 +85,13 @@ declare module "next-auth" {
       email?: string | null;
       name?: string | null;
       image?: string | null;
-      role?: "admin" | "user";
+      role?: "owner" | "admin" | "viewer" | "user";
     };
   }
 }
 
 declare module "next-auth/jwt" {
   interface JWT {
-    role?: "admin" | "user";
+    role?: "owner" | "admin" | "viewer" | "user";
   }
 }

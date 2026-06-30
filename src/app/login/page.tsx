@@ -16,6 +16,7 @@ function LoginForm() {
   const callbackUrl = searchParams.get("callbackUrl") || "/";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,6 +29,7 @@ function LoginForm() {
       const result = await signIn("credentials", {
         email,
         password,
+        otp,
         redirect: false,
       });
 
@@ -82,6 +84,18 @@ function LoginForm() {
                 autoComplete="current-password"
               />
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="otp">MFA code</Label>
+              <Input
+                id="otp"
+                inputMode="numeric"
+                value={otp}
+                onChange={(event) => setOtp(event.target.value)}
+                disabled={loading}
+                autoComplete="one-time-code"
+                placeholder="Optional unless MFA is enabled"
+              />
+            </div>
             {error && (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
@@ -93,7 +107,7 @@ function LoginForm() {
             </Button>
           </form>
           <div className="mt-4 pt-4 border-t text-xs text-muted-foreground text-center">
-            `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `NEXTAUTH_SECRET` 환경변수가 필요합니다.
+            `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH` 또는 `ADMIN_PASSWORD`, `NEXTAUTH_SECRET` 환경변수가 필요합니다.
           </div>
         </CardContent>
       </Card>

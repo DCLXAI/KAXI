@@ -1,5 +1,6 @@
 // ChatLog 데이터 분석 스크립트
 import { db } from "../src/lib/db";
+import { safeChatQuestionForAnalytics } from "../src/lib/privacy/chat-log";
 
 async function main() {
   const count = await db.chatLog.count();
@@ -11,7 +12,7 @@ async function main() {
   });
   console.log("\n=== 최근 10개 로그 ===");
   for (const log of recent) {
-    console.log(`\n[${log.lang}] Q: ${log.question}`);
+    console.log(`\n[${log.lang}] Q: ${safeChatQuestionForAnalytics(log)}`);
     console.log(`  Source: ${log.source}`);
     try {
       const parsed = JSON.parse(log.retrievedDocs || "{}");

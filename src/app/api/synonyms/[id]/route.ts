@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { invalidateSynonymCache } from "@/lib/embeddings/vector-store";
-import { requireAdmin } from "@/lib/api/security";
+import { getAdminContext, requireAdmin } from "@/lib/api/security";
+import { recordRequestAudit } from "@/lib/audit";
 
 // PATCH /api/synonyms/[id] - 동의어 수정 (활성화/비활성화, targets 변경)
 export async function PATCH(
@@ -30,6 +31,15 @@ export async function PATCH(
     });
 
     invalidateSynonymCache();
+    const actor = await getAdminContext(req);
+    await recordRequestAudit(req, {
+      actor: actor?.actor || "unknown",
+      actorRole: actor?.role || "admin",
+      action: "synonym.update",
+      targetType: "Synonym",
+      targetId: id,
+      metadata: { fields: Object.keys(data) },
+    });
 
     return NextResponse.json({
       synonym: { ...synonym, targets: JSON.parse(synonym.targets) },
@@ -52,6 +62,14 @@ export async function DELETE(
     const { id } = await params;
     await db.synonym.delete({ where: { id } });
     invalidateSynonymCache();
+    const actor = await getAdminContext(_req);
+    await recordRequestAudit(_req, {
+      actor: actor?.actor || "unknown",
+      actorRole: actor?.role || "admin",
+      action: "synonym.delete",
+      targetType: "Synonym",
+      targetId: id,
+    });
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("[DELETE /api/synonyms/[id]]", e);

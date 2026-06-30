@@ -78,7 +78,7 @@ export function Header({
 }) {
   const { lang } = useLangStore();
   const { data: session } = useSession();
-  const isAdmin = session?.user?.role === "admin";
+  const isAdmin = ["owner", "admin", "viewer"].includes(session?.user?.role || "");
 
   const navItems = [
     { key: "home", label: tr("brand", lang) },
@@ -131,7 +131,7 @@ export function Header({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem className="text-xs text-muted-foreground">
-                  {session.user?.email}
+                  {session?.user?.email}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem

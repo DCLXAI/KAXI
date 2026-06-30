@@ -1,11 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { jsonError, rateLimit, requireAdmin } from "@/lib/api/security";
+import { getAdminContext, jsonError, parsePositiveInt, rateLimit, requireAdmin } from "@/lib/api/security";
+import { preparePiiField, readPiiField, retentionUntil } from "@/lib/privacy/pii";
+
+function serializePartnerRequest(request: any) {
+  return {
+    ...request,
+    question: readPiiField(request.question, request.questionCiphertext),
+  };
+}
+
+function serializeLead(lead: any) {
+  return {
+    ...lead,
+    contact: readPiiField(lead.contact, lead.contactCiphertext),
+    partnerRequests: Array.isArray(lead.partnerRequests)
+      ? lead.partnerRequests.map(serializePartnerRequest)
+      : lead.partnerRequests,
+  };
+}
 
 // GET /api/leads - 리드 목록 조회
 export async function GET(req: NextRequest) {
   try {
-    const unauthorized = await requireAdmin(req);
+    const unauthorized = await requireAdmin(req, { roles: ["owner", "admin", "viewer"] });
     if (unauthorized) return unauthorized;
 
     const searchParams = req.nextUrl.searchParams;
@@ -28,7 +46,7 @@ export async function GET(req: NextRequest) {
       include: { partnerRequests: true },
     });
 
-    return NextResponse.json({ leads });
+    return NextResponse.json({ leads: leads.map(serializeLead), actor: await getAdminContext(req) });
   } catch (e) {
     console.error("[GET /api/leads]", e);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
@@ -38,7 +56,7 @@ export async function GET(req: NextRequest) {
 // POST /api/leads - 리드 생성
 export async function POST(req: NextRequest) {
   try {
-    const limited = rateLimit(req, { key: "lead:create", limit: 20, windowMs: 60 * 60 * 1000 });
+    const limited = await rateLimit(req, { key: "lead:create", limit: 20, windowMs: 60 * 60 * 1000 });
     if (limited) return limited;
 
     const body = await req.json();
@@ -68,6 +86,10 @@ export async function POST(req: NextRequest) {
     if (String(nickname).length > 80) return jsonError("Nickname is too long", 413);
     if (contact && String(contact).length > 160) return jsonError("Contact is too long", 413);
 
+    const protectedContact = preparePiiField(contact ? String(contact) : null, {
+      kind: "contact",
+      maxPlainLength: 160,
+    });
     const lead = await db.lead.create({
       data: {
         nickname: String(nickname),
@@ -87,12 +109,16 @@ export async function POST(req: NextRequest) {
         requiredDocs: JSON.stringify(requiredDocs || []),
         warningsJson: JSON.stringify(warnings || []),
         nextActionsJson: JSON.stringify(nextActions || []),
-        contact: contact || null,
+        contact: protectedContact.plaintext,
+        contactCiphertext: protectedContact.ciphertext,
+        contactHash: protectedContact.hash,
+        contactRedacted: protectedContact.redacted,
         contactType: contactType || null,
+        retentionUntil: retentionUntil(parsePositiveInt(process.env.PRIVACY_LEAD_RETENTION_DAYS, 365)),
       },
     });
 
-    return NextResponse.json({ lead }, { status: 201 });
+    return NextResponse.json({ lead: serializeLead(lead) }, { status: 201 });
   } catch (e) {
     console.error("[POST /api/leads]", e);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

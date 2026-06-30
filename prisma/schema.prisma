@@ -40,6 +40,12 @@ model Lead {
   // 연락처 (선택)
   contact     String?
   contactType String? // email, zalo, wechat, telegram
+  contactCiphertext String?
+  contactHash       String?
+  contactRedacted   Boolean  @default(false)
+  deleteRequestedAt DateTime?
+  deletedAt         DateTime?
+  retentionUntil    DateTime?
 
   // 상담 요청
   partnerRequests PartnerRequest[]
@@ -47,6 +53,9 @@ model Lead {
   @@index([createdAt])
   @@index([nationality])
   @@index([pathKey])
+  @@index([contactHash])
+  @@index([deleteRequestedAt])
+  @@index([retentionUntil])
 }
 
 // 파트너 상담 요청
@@ -59,11 +68,20 @@ model PartnerRequest {
 
   partnerType String   // admin, translation, academy, admission, settlement
   question    String?
+  questionCiphertext String?
+  questionHash       String?
+  questionRedacted   Boolean  @default(false)
+  deleteRequestedAt  DateTime?
+  deletedAt          DateTime?
+  retentionUntil     DateTime?
   status      String   @default("pending") // pending, contacted, closed
 
   @@index([leadId])
   @@index([partnerType])
   @@index([status])
+  @@index([questionHash])
+  @@index([deleteRequestedAt])
+  @@index([retentionUntil])
 }
 
 // 학교 데이터 (수동 시드 — 운영시 관리자 페이지에서 편집)
@@ -109,12 +127,21 @@ model ChatLog {
 
   lang      String
   question  String
+  questionCiphertext String?
+  questionHash       String?
+  questionRedacted   Boolean  @default(false)
+  deleteRequestedAt  DateTime?
+  deletedAt          DateTime?
+  retentionUntil     DateTime?
   answer    String
   source    String   // rule, rag, hybrid
   retrievedDocs String? // JSON
 
   @@index([createdAt])
   @@index([lang])
+  @@index([questionHash])
+  @@index([deleteRequestedAt])
+  @@index([retentionUntil])
 }
 
 // AI Agent 요청 비용/품질 원장
@@ -175,4 +202,35 @@ model Synonym {
   @@index([category])
   @@index([enabled])
   @@index([origin])
+}
+
+// 관리자 및 개인정보 운영 감사 로그
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+
+  actor      String
+  actorRole  String   @default("admin")
+  action     String
+  targetType String
+  targetId   String?
+  ip         String?
+  userAgent  String?
+  success    Boolean  @default(true)
+  metadata   String?
+
+  @@index([createdAt])
+  @@index([actor])
+  @@index([action])
+  @@index([targetType])
+}
+
+// 다중 인스턴스 공유 rate limit 버킷
+model RateLimitBucket {
+  key       String   @id
+  count     Int      @default(0)
+  resetAt   DateTime
+  updatedAt DateTime @updatedAt
+
+  @@index([resetAt])
 }

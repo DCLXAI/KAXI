@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { invalidateSynonymCache } from "@/lib/embeddings/vector-store";
-import { jsonError, requireAdmin } from "@/lib/api/security";
+import { getAdminContext, jsonError, requireAdmin } from "@/lib/api/security";
+import { recordRequestAudit } from "@/lib/audit";
 
 // GET /api/synonyms - 동의어 목록 조회
 export async function GET(req: NextRequest) {
   try {
-    const unauthorized = await requireAdmin(req);
+    const unauthorized = await requireAdmin(req, { roles: ["owner", "admin", "viewer"] });
     if (unauthorized) return unauthorized;
 
     const searchParams = req.nextUrl.searchParams;
@@ -73,6 +74,15 @@ export async function POST(req: NextRequest) {
 
     // 동의어 캐시 무효화
     invalidateSynonymCache();
+    const actor = await getAdminContext(req);
+    await recordRequestAudit(req, {
+      actor: actor?.actor || "unknown",
+      actorRole: actor?.role || "admin",
+      action: "synonym.create",
+      targetType: "Synonym",
+      targetId: synonym.id,
+      metadata: { source: synonym.source, category: synonym.category, origin: synonym.origin },
+    });
 
     return NextResponse.json(
       { synonym: { ...synonym, targets: JSON.parse(synonym.targets) } },

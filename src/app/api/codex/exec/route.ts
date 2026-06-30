@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     return jsonError("Codex serverless bridge is disabled", 503);
   }
 
-  const limited = rateLimit(req, {
+  const limited = await rateLimit(req, {
     key: "codex:exec",
     limit: parsePositiveInt(process.env.CODEX_EXEC_RATE_LIMIT, 3),
     windowMs: 60 * 1000,

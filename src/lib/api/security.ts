@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
-import { timingSafeEqual } from "crypto";
+import { createHash, timingSafeEqual } from "crypto";
+import { db } from "@/lib/db";
 
 type JsonBody = Record<string, unknown>;
 
@@ -8,6 +9,14 @@ interface RateLimitRule {
   key: string;
   limit: number;
   windowMs: number;
+}
+
+type AdminRole = "owner" | "admin" | "viewer";
+
+export interface AdminContext {
+  actor: string;
+  role: AdminRole;
+  authType: "session" | "api-key";
 }
 
 interface Bucket {
@@ -43,15 +52,26 @@ export function getClientIp(req: NextRequest): string {
   return req.headers.get("x-real-ip") || "unknown";
 }
 
-export async function requireAdmin(req: NextRequest): Promise<NextResponse | null> {
+function roleAllowed(role: AdminRole, allowed: AdminRole[]): boolean {
+  if (role === "owner") return true;
+  return allowed.includes(role);
+}
+
+export async function getAdminContext(req: NextRequest): Promise<AdminContext | null> {
   if (process.env.NEXTAUTH_SECRET) {
     const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
-    if (token?.role === "admin") return null;
+    if (token?.role === "owner" || token?.role === "admin" || token?.role === "viewer") {
+      return {
+        actor: token.email || token.sub || "session-admin",
+        role: token.role,
+        authType: "session",
+      };
+    }
   }
 
   const expected = process.env.ADMIN_API_KEY;
   if (!expected) {
-    return jsonError("Admin credentials are not configured", 503);
+    return null;
   }
 
   const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
@@ -59,20 +79,59 @@ export async function requireAdmin(req: NextRequest): Promise<NextResponse | nul
   const provided = bearer || headerKey || "";
 
   if (!provided || !safeEqual(provided, expected)) {
+    return null;
+  }
+
+  return {
+    actor: "admin-api-key",
+    role: "owner",
+    authType: "api-key",
+  };
+}
+
+export async function requireAdmin(
+  req: NextRequest,
+  options: { roles?: AdminRole[] } = {}
+): Promise<NextResponse | null> {
+  const context = await getAdminContext(req);
+  if (!context) {
+    if (!process.env.ADMIN_API_KEY && !process.env.NEXTAUTH_SECRET) {
+      return jsonError("Admin credentials are not configured", 503);
+    }
     return jsonError("Unauthorized", 401);
   }
+
+  const allowed = options.roles || ["owner", "admin"];
+  if (!roleAllowed(context.role, allowed)) return jsonError("Forbidden", 403);
 
   return null;
 }
 
-export function rateLimit(
+function rateBucketKey(key: string, ip: string): string {
+  const digest = createHash("sha256").update(ip).digest("hex").slice(0, 32);
+  return `rl:${key}:${digest}`;
+}
+
+function canUseDatabaseRateLimit(): boolean {
+  const backend = (process.env.RATE_LIMIT_BACKEND || "auto").toLowerCase();
+  if (backend === "memory") return false;
+  if (backend === "database") return true;
+
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  if (!databaseUrl) return false;
+
+  const hostedRuntime = process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV);
+  return !(hostedRuntime && databaseUrl.startsWith("file:"));
+}
+
+function memoryRateLimit(
   req: NextRequest,
   { key, limit, windowMs }: RateLimitRule
 ): NextResponse | null {
   if (!Number.isFinite(limit) || limit <= 0) return null;
 
   const now = Date.now();
-  const bucketKey = `${key}:${getClientIp(req)}`;
+  const bucketKey = rateBucketKey(key, getClientIp(req));
   const bucket = buckets.get(bucketKey);
 
   if (!bucket || bucket.resetAt <= now) {
@@ -94,11 +153,65 @@ export function rateLimit(
   return null;
 }
 
-export function consumeDailyQuota(
+async function databaseRateLimit(
+  req: NextRequest,
+  { key, limit, windowMs }: RateLimitRule
+): Promise<NextResponse | null> {
+  if (!Number.isFinite(limit) || limit <= 0) return null;
+
+  const nowMs = Date.now();
+  const now = new Date(nowMs);
+  const resetAt = new Date(nowMs + windowMs);
+  const bucketKey = rateBucketKey(key, getClientIp(req));
+
+  try {
+    const bucket = await db.$transaction(async (tx) => {
+      const existing = await tx.rateLimitBucket.findUnique({ where: { key: bucketKey } });
+      if (!existing || existing.resetAt.getTime() <= nowMs) {
+        return tx.rateLimitBucket.upsert({
+          where: { key: bucketKey },
+          create: { key: bucketKey, count: 1, resetAt },
+          update: { count: 1, resetAt },
+        });
+      }
+
+      return tx.rateLimitBucket.update({
+        where: { key: bucketKey },
+        data: { count: { increment: 1 } },
+      });
+    });
+
+    if (bucket.count > limit) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded", resetAt: bucket.resetAt.toISOString() },
+        {
+          status: 429,
+          headers: { "Retry-After": String(Math.ceil((bucket.resetAt.getTime() - nowMs) / 1000)) },
+        }
+      );
+    }
+
+    return null;
+  } catch (err) {
+    console.warn("[rateLimit database fallback]", err instanceof Error ? err.message : err);
+    return memoryRateLimit(req, { key, limit, windowMs });
+  }
+}
+
+export async function rateLimit(
+  req: NextRequest,
+  rule: RateLimitRule
+): Promise<NextResponse | null> {
+  return canUseDatabaseRateLimit()
+    ? databaseRateLimit(req, rule)
+    : memoryRateLimit(req, rule);
+}
+
+export async function consumeDailyQuota(
   req: NextRequest,
   key: string,
   limit: number
-): NextResponse | null {
+): Promise<NextResponse | null> {
   const now = new Date();
   const nextMidnight = new Date(now);
   nextMidnight.setUTCHours(24, 0, 0, 0);

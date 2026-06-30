@@ -36,6 +36,20 @@ export function withSchoolSourceMetadata(school: School): School {
   };
 }
 
+function dateAtStartOfDay(value: Date | string): number {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return 0;
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+export function isSchoolReviewCurrent(
+  school: School,
+  referenceDate: Date = new Date()
+): boolean {
+  const withMetadata = withSchoolSourceMetadata(school);
+  return dateAtStartOfDay(withMetadata.reviewAfter || "") >= dateAtStartOfDay(referenceDate);
+}
+
 export const SCHOOLS: School[] = [
   // 어학당 (D-4) — 8곳
   {
@@ -681,7 +695,8 @@ export const SCHOOLS: School[] = [
     accreditation: "caution",
     topikLevel: null,
     intake: ["봄", "가을"],
-    officialUrl: "#",
+    officialUrl: "https://www.studyinkorea.go.kr",
+    sourceUrl: "https://www.moe.go.kr",
     notes: { ko: "⚠️ 2026년 2학기부터 1년간 비자발급 제한 대상.", vi: "⚠️ Visa bị hạn chế từ 2026/2.", mn: "⚠️ 2026/2-өөс виз хязгаарлагдана.", en: "⚠️ Visa restricted from 2026/2." },
   },
   {
@@ -696,7 +711,8 @@ export const SCHOOLS: School[] = [
     accreditation: "caution",
     topikLevel: null,
     intake: ["봄", "가을"],
-    officialUrl: "#",
+    officialUrl: "https://www.studyinkorea.go.kr",
+    sourceUrl: "https://www.moe.go.kr",
     notes: { ko: "⚠️ 비자 정밀심사 대학. 신중 검토 필요.", vi: "⚠️ Visa kiểm tra kỹ.", mn: "⚠️ Виз нарийн шалгалт.", en: "⚠️ Strict visa review." },
   },
   {
@@ -711,7 +727,8 @@ export const SCHOOLS: School[] = [
     accreditation: "caution",
     topikLevel: null,
     intake: ["봄", "가을", "수시"],
-    officialUrl: "#",
+    officialUrl: "https://www.studyinkorea.go.kr",
+    sourceUrl: "https://www.moe.go.kr",
     notes: { ko: "⚠️ 비자 심사 강화 대상. 허위 서류 적발 이력. 신중 검토 필요.", vi: "⚠️ Visa kiểm tra kỹ. Cẩn thận.", mn: "⚠️ Виз нарийн шалгалт.", en: "⚠️ Strict visa review. Use caution." },
   },
 

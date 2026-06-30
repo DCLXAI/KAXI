@@ -21,6 +21,7 @@ import {
   sanitizeAiBody,
   withTimeout,
 } from "@/lib/api/security";
+import { protectChatQuestion } from "@/lib/privacy/chat-log";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -80,10 +81,11 @@ async function persistAgentLog({
   if (!shouldPersistAgentLog()) return;
 
   try {
+    const protectedQuestion = protectChatQuestion(question);
     await db.chatLog.create({
       data: {
         lang,
-        question,
+        ...protectedQuestion,
         answer,
         source: "agent",
         retrievedDocs: JSON.stringify({
@@ -171,14 +173,14 @@ export async function POST(req: NextRequest) {
   } | null = null;
 
   try {
-    const limited = rateLimit(req, {
+    const limited = await rateLimit(req, {
       key: "ai:agent",
       limit: parseLimit(process.env.AI_AGENT_RATE_LIMIT, 6),
       windowMs: 60 * 1000,
     });
     if (limited) return limited;
 
-    const quotaExceeded = consumeDailyQuota(
+    const quotaExceeded = await consumeDailyQuota(
       req,
       "ai:agent",
       parseLimit(process.env.AI_AGENT_DAILY_QUOTA, 30)

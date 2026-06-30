@@ -4,6 +4,7 @@ import {
   DEFAULT_SCHOOL_VERIFIED_AT,
   SCHOOLS,
   filterSchools,
+  isSchoolReviewCurrent,
   withSchoolSourceMetadata,
   type Accreditation,
   type Program,
@@ -17,6 +18,7 @@ export interface SchoolFilters {
   program?: string;
   accreditation?: string;
   maxTuition?: number;
+  includeExpired?: boolean;
 }
 
 export interface SchoolMutationInput {
@@ -50,6 +52,15 @@ function parseDate(value: unknown, fallback: string): Date {
   const parsed = new Date(typeof value === "string" && value ? value : fallback);
   if (Number.isNaN(parsed.getTime())) return new Date(fallback);
   return parsed;
+}
+
+function isPublicHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 function parseIntake(value: string): string[] {
@@ -116,7 +127,9 @@ function mapDbSchool(school: {
 }
 
 function staticSchools(filters: SchoolFilters = {}): School[] {
-  return filterSchools(filters).map(withSchoolSourceMetadata);
+  return filterSchools(filters)
+    .map(withSchoolSourceMetadata)
+    .filter((school) => filters.includeExpired || isSchoolReviewCurrent(school));
 }
 
 function buildWhere(filters: SchoolFilters) {
@@ -128,6 +141,9 @@ function buildWhere(filters: SchoolFilters) {
   }
   if (Number.isFinite(filters.maxTuition) && filters.maxTuition && filters.maxTuition > 0) {
     where.tuitionPerSemester = { lte: filters.maxTuition };
+  }
+  if (!filters.includeExpired) {
+    where.reviewAfter = { gte: new Date() };
   }
   return where;
 }
@@ -146,14 +162,20 @@ export async function listSchools(filters: SchoolFilters = {}): Promise<School[]
   return staticSchools(filters);
 }
 
-export async function findSchoolById(id: string): Promise<School | null> {
+export async function findSchoolById(
+  id: string,
+  options: { includeExpired?: boolean } = {}
+): Promise<School | null> {
   try {
     const row = await db.school.findUnique({ where: { id } });
-    if (row) return mapDbSchool(row);
+    if (row) {
+      const school = mapDbSchool(row);
+      return options.includeExpired || isSchoolReviewCurrent(school) ? school : null;
+    }
   } catch (err) {
     console.warn("[schools:find fallback]", err instanceof Error ? err.message : err);
   }
-  return staticSchools().find((school) => school.id === id) || null;
+  return staticSchools(options).find((school) => school.id === id) || null;
 }
 
 export function normalizeSchoolPayload(
@@ -239,19 +261,65 @@ export function normalizeSchoolPayload(
     data.intake = JSON.stringify(Array.isArray(input.intake) ? input.intake.map(String) : []);
   }
   if (mode === "create" || input.officialUrl !== undefined) {
-    data.officialUrl = String(
+    const officialUrl = String(
       mode === "create" ? requireValue(input.officialUrl, "officialUrl") : input.officialUrl
     ).trim();
+    if (officialUrl && !isPublicHttpUrl(officialUrl)) throw new Error("officialUrl must be a public http(s) URL");
+    data.officialUrl = officialUrl;
   }
   if (mode === "create" || input.sourceUrl !== undefined) {
-    data.sourceUrl = String(input.sourceUrl || input.officialUrl || "").trim();
+    const sourceUrl = String(input.sourceUrl || input.officialUrl || "").trim();
+    if (!sourceUrl) throw new Error("Missing required field: sourceUrl");
+    if (!isPublicHttpUrl(sourceUrl)) throw new Error("sourceUrl must be a public http(s) URL");
+    data.sourceUrl = sourceUrl;
+  }
+  const verifiedAt = parseDate(input.verifiedAt, DEFAULT_SCHOOL_VERIFIED_AT);
+  const reviewAfter = parseDate(input.reviewAfter, DEFAULT_SCHOOL_REVIEW_AFTER);
+  if (verifiedAt.getTime() > reviewAfter.getTime()) {
+    throw new Error("reviewAfter must be later than or equal to verifiedAt");
   }
   if (mode === "create" || input.verifiedAt !== undefined) {
-    data.verifiedAt = parseDate(input.verifiedAt, DEFAULT_SCHOOL_VERIFIED_AT);
+    data.verifiedAt = verifiedAt;
   }
   if (mode === "create" || input.reviewAfter !== undefined) {
-    data.reviewAfter = parseDate(input.reviewAfter, DEFAULT_SCHOOL_REVIEW_AFTER);
+    data.reviewAfter = reviewAfter;
   }
 
   return data;
+}
+
+export async function getSchoolSourceAudit(referenceDate: Date = new Date()) {
+  try {
+    const [total, expired, missingSource] = await Promise.all([
+      db.school.count(),
+      db.school.count({ where: { reviewAfter: { lt: referenceDate } } }),
+      db.school.count({
+        where: {
+          OR: [
+            { sourceUrl: "" },
+            { verifiedAt: { gt: referenceDate } },
+          ],
+        },
+      }),
+    ]);
+
+    return {
+      source: "db" as const,
+      total,
+      active: Math.max(0, total - expired),
+      expired,
+      missingSource,
+    };
+  } catch (err) {
+    const schools = SCHOOLS.map(withSchoolSourceMetadata);
+    const expired = schools.filter((school) => !isSchoolReviewCurrent(school, referenceDate)).length;
+    return {
+      source: "seed" as const,
+      total: schools.length,
+      active: schools.length - expired,
+      expired,
+      missingSource: schools.filter((school) => !school.sourceUrl || !school.verifiedAt || !school.reviewAfter).length,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 }

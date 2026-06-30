@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin, withTimeout } from "@/lib/api/security";
 import { createZaiClient, isZaiConfigurationError } from "@/lib/ai/zai";
+import { safeChatQuestionForAnalytics } from "@/lib/privacy/chat-log";
 
 // POST /api/synonyms/suggest - LLM 기반 동의어 후보 자동 추천
 // ChatLog에서 빈도 높은 단어 + 기존 동의어와 매칭 안 된 것들을 LLM이 분석
@@ -32,7 +33,8 @@ export async function POST(req: NextRequest) {
     // 빈도 높은 단어 추출
     const wordFreq = new Map<string, { count: number; langs: Set<string>; examples: string[] }>();
     for (const log of logs) {
-      const words = log.question
+      const safeQuestion = safeChatQuestionForAnalytics(log);
+      const words = safeQuestion
         .toLowerCase()
         .replace(/[^\p{L}\p{N}\s]/gu, " ")
         .split(/\s+/)
@@ -45,7 +47,7 @@ export async function POST(req: NextRequest) {
         entry.count++;
         entry.langs.add(log.lang);
         if (entry.examples.length < 3) {
-          entry.examples.push(log.question);
+          entry.examples.push(safeQuestion);
         }
       }
     }

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/api/security";
+import { safeChatQuestionForAnalytics } from "@/lib/privacy/chat-log";
 
 // GET /api/chatlog/analyze - ChatLog 분석 (언어/패턴/빈도)
 export async function GET(req: NextRequest) {
   try {
-    const unauthorized = await requireAdmin(req);
+    const unauthorized = await requireAdmin(req, { roles: ["owner", "admin", "viewer"] });
     if (unauthorized) return unauthorized;
 
     const searchParams = req.nextUrl.searchParams;
@@ -43,6 +44,7 @@ export async function GET(req: NextRequest) {
     }[] = [];
 
     for (const log of logs) {
+      const safeQuestion = safeChatQuestionForAnalytics(log);
       let topDocId: string | undefined;
       let topScore: number | undefined;
       let topVecScore: number | undefined;
@@ -66,7 +68,7 @@ export async function GET(req: NextRequest) {
 
       questionPatterns.push({
         id: log.id,
-        question: log.question,
+        question: safeQuestion,
         lang: log.lang,
         topDocId,
         topScore,
@@ -78,7 +80,7 @@ export async function GET(req: NextRequest) {
       });
 
       // 단어 빈도 (한국어 + 영어 + 다국어)
-      const words = log.question
+      const words = safeQuestion
         .toLowerCase()
         .replace(/[^\p{L}\p{N}\s]/gu, " ")
         .split(/\s+/)

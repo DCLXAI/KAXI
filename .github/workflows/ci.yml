@@ -35,5 +35,7 @@ jobs:
         run: bun run test:vector
       - name: Verify multilingual quality dataset
         run: bun run test:quality
+      - name: Verify data governance policy
+        run: bun run test:governance
       - name: Build
         run: bun run build

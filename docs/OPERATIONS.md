@@ -3,16 +3,23 @@
 ## Required Environment Variables
 
 - `DATABASE_URL`: Prisma database URL. SQLite is acceptable for local demos only.
-- `ADMIN_API_KEY`: Required for admin APIs, lead exports, chat-log analysis, and synonym management.
+- `ADMIN_API_KEY`: Break-glass admin API key for admin APIs. Prefer session login for day-to-day operations.
 - `MODEL_CACHE_DIR`: Optional local cache path for Transformer models. Defaults to `data/model-cache`.
 - `VECTOR_CACHE_FILE`: Optional embedding cache file path. Defaults to `data/vector-store/embeddings-cache.json`.
 - `RESTORE_MODEL_CACHE_ON_INSTALL`: Set `true` to decompress the local Transformer model during install. Vercel builds skip this by default to keep function bundles under file-size limits.
 - `AI_*_RATE_LIMIT`, `AI_*_DAILY_QUOTA`: Optional AI abuse and cost controls. Use `0` to disable a specific limit.
+- `RATE_LIMIT_BACKEND`: `auto`, `database`, or `memory`. Use `database` with a writable shared production DB so Vercel instances share quota.
 - `AI_AGENT_PREFLIGHT_ENABLED`: Enables deterministic server-side tool/RAG preflight before Codex bridge calls.
 - `AI_AGENT_PREFLIGHT_TIMEOUT_MS`, `AI_AGENT_CONTEXT_MAX_CHARS`, `AI_AGENT_GROUNDED_QUESTION_MAX_CHARS`: Bound preflight latency and context sent to the LLM bridge.
 - `AI_AGENT_LOGGING_ENABLED`: Enables Agent `ChatLog` persistence. It is automatically skipped on hosted SQLite deployments.
 - `AI_AGENT_LEDGER_ENABLED`: Enables per-request Agent cost/quality ledger persistence. It is automatically skipped on hosted SQLite deployments.
-- `NEXTAUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`: Required for session-based admin login.
+- `NEXTAUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`: Required for session-based admin login. Generate the hash with `bun run admin:hash-password -- <password>`.
+- `ADMIN_PASSWORD`: Local/demo fallback only. Do not use plaintext admin passwords in production.
+- `ADMIN_ROLE`: `owner`, `admin`, or `viewer`. `viewer` can read admin dashboards but cannot mutate data.
+- `ADMIN_MFA_TOTP_SECRET`: Optional base32 TOTP secret for admin MFA.
+- `DATA_ENCRYPTION_KEY`, `PII_HASH_SECRET`: Required before production writes. Encrypts contact/free-form question payloads and hashes them for deletion lookup.
+- `PRIVACY_CHATLOG_RETENTION_DAYS`, `PRIVACY_PARTNER_REQUEST_RETENTION_DAYS`, `PRIVACY_LEAD_RETENTION_DAYS`: Retention windows enforced by `/api/privacy/retention`.
+- `CRON_SECRET`: Required for Vercel Cron to call `/api/privacy/retention`.
 - `AGENT_BACKEND`: Agent backend selector. Defaults to `codex`; set `zai` only when explicit Z.ai settings are present.
 - `CODEX_AUTH_MODE`: `auto`, `local`, or `api-key`. `auto` uses the current local Codex CLI login in local dev and API-key mode on Vercel.
 - `CODEX_API_KEY`: Required on Vercel when `AGENT_BACKEND=codex`.
@@ -41,12 +48,10 @@ The checked-in schema is still MVP-oriented. Production must use a managed relat
 2. Do not use `prisma db push` against production.
 3. Keep personal/local demo user data out of deployment artifacts.
 4. Treat `Lead`, `PartnerRequest`, `ChatLog.question`, and `AgentRequestLedger.ip/userId` as user data.
-5. Define retention before production launch:
-   - `ChatLog`: 30-90 days unless explicit analytics consent exists.
-   - `AgentRequestLedger`: 30-90 days for cost/debug analytics, with IP truncation or hashing before broader reporting.
-   - `Lead`: delete on user/admin request, or after the business retention window.
-   - `PartnerRequest`: retain only while fulfillment/accounting requires it.
-6. Before analytics export, redact contact details and free-form questions that may contain personal data.
+5. `Lead.contact`, `PartnerRequest.question`, and `ChatLog.question` are stored with ciphertext/hash columns when `DATA_ENCRYPTION_KEY` is set. Existing plaintext columns keep only a masked display value.
+6. Deletion requests are accepted through `POST /api/privacy/delete-request` with `leadId`, `contact`, or an exact `question`. The request does not reveal whether a record exists.
+7. Retention is enforced by `POST /api/privacy/retention` for admins and daily Vercel Cron `GET /api/privacy/retention`.
+8. Before analytics export, use the redacted ChatLog analysis route or scripts; free-form questions are masked for emails, phone numbers, and private messenger handles.
 
 Hosted Vercel deployments must not rely on bundled SQLite for writes. The bundled DB is a demo seed/read model. Use a writable production database for admin CRUD, lead capture, partner requests, chat logs, and Agent ledger persistence.
 
@@ -76,25 +81,29 @@ Visa, immigration, school-accreditation, and cost guidance are time-sensitive.
 3. Internal analysis sources must be marked `owner: "internal"` and reviewed at least quarterly.
 4. Any document past `reviewAfter` must be excluded from production answers or reverified before release.
 5. School data is served from the `School` table. `src/lib/data/schools.ts` remains the deterministic seed/fallback source.
-6. Each `School` row must include `sourceUrl`, `verifiedAt`, and `reviewAfter`; rows past `reviewAfter` should be reverified or hidden before production use.
+6. RAG search and legacy retrieval automatically exclude documents whose source metadata is past `reviewAfter`.
+7. Each `School` row must include `sourceUrl`, `verifiedAt`, and `reviewAfter`; public school APIs hide rows past `reviewAfter`.
+8. Admins can inspect expired schools with `includeExpired=true` and reverify a school through `POST /api/schools/:id/review`.
+9. `bun run test:governance` verifies source metadata, school seed metadata, and automatic expiry filtering.
 
 ## Admin Access
 
-Admin APIs require `x-admin-key: $ADMIN_API_KEY` or `Authorization: Bearer $ADMIN_API_KEY`.
+Admin APIs require a session login or break-glass `x-admin-key: $ADMIN_API_KEY` / `Authorization: Bearer $ADMIN_API_KEY`.
 Do not expose admin navigation in public product surfaces. Admin UI routes such as `/admin` and `/synonyms` are real Next.js routes, but server-side API guards remain mandatory.
 Prefer session login through `/login`; the browser API-key fallback is intentionally memory-only and should be used only for temporary operations.
+Production admin login should use `ADMIN_PASSWORD_HASH` and optional `ADMIN_MFA_TOTP_SECRET`. Admin actions and privacy operations are written to `AdminAuditLog`; inspect with `GET /api/audit-logs`.
 
 ## CI Quality Gates
 
-GitHub Actions restores runtime artifacts during `bun install --frozen-lockfile`, then runs typecheck, lint, `test:vector`, `test:quality`, and production build.
+GitHub Actions restores runtime artifacts during `bun install --frozen-lockfile`, then runs typecheck, lint, `test:vector`, `test:quality`, `test:governance`, and production build.
 `test:vector` verifies the restored model/vector cache can retrieve expected KAXI source documents.
 `test:quality` validates the multilingual evaluation set in `quality/multilingual-eval-cases.json`, including expected source document, refusal expectation, and cost-format labels.
 
 ## AI Cost Controls
 
-The app uses in-memory IP rate limits and daily quotas. This is enough for a single-node demo, not multi-instance production.
+The app supports shared IP rate limits and daily quotas through `RateLimitBucket`.
 
-For production, replace the in-memory limiter with Redis/Upstash or a database-backed limiter so quota is shared across instances.
+Use `RATE_LIMIT_BACKEND=database` with a writable production DB for Vercel multi-instance deployments. `auto` uses database when it is writable and falls back to memory for local/read-only demo SQLite.
 
 ## Agent Grounding
 

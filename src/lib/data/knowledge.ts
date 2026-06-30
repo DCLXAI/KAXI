@@ -23,6 +23,10 @@ export interface SourceMetadata {
   owner: "official" | "internal";
 }
 
+export interface KnowledgeDocWithMetadata extends KnowledgeDoc {
+  sourceMeta: SourceMetadata;
+}
+
 const DEFAULT_VERIFIED_AT = "2026-06-30";
 const DEFAULT_REVIEW_AFTER = "2026-09-30";
 
@@ -134,6 +138,53 @@ export function getSourceMetadata(source: string): SourceMetadata {
     verifiedAt: DEFAULT_VERIFIED_AT,
     reviewAfter: DEFAULT_REVIEW_AFTER,
     owner: "internal",
+  };
+}
+
+function dateAtStartOfDay(value: Date | string): number {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return 0;
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+export function isSourceReviewCurrent(
+  source: string,
+  referenceDate: Date = new Date()
+): boolean {
+  const meta = getSourceMetadata(source);
+  return dateAtStartOfDay(meta.reviewAfter) >= dateAtStartOfDay(referenceDate);
+}
+
+export function getKnowledgeDocsWithMetadata(
+  options: { includeExpired?: boolean; referenceDate?: Date } = {}
+): KnowledgeDocWithMetadata[] {
+  const referenceDate = options.referenceDate || new Date();
+  return KNOWLEDGE_DOCS.map((doc) => ({
+    ...doc,
+    sourceMeta: getSourceMetadata(doc.source),
+  })).filter((doc) => options.includeExpired || isSourceReviewCurrent(doc.source, referenceDate));
+}
+
+export function getKnowledgeSourceAudit(referenceDate: Date = new Date()) {
+  const registeredSources = new Set(Object.keys(SOURCE_METADATA));
+  const usedSources = new Set(KNOWLEDGE_DOCS.map((doc) => doc.source));
+  const missingMetadata = Array.from(usedSources).filter((source) => !registeredSources.has(source));
+  const unusedMetadata = Array.from(registeredSources).filter((source) => !usedSources.has(source));
+  const expiredDocs = KNOWLEDGE_DOCS
+    .map((doc) => ({ doc, sourceMeta: getSourceMetadata(doc.source) }))
+    .filter(({ doc }) => !isSourceReviewCurrent(doc.source, referenceDate))
+    .map(({ doc, sourceMeta }) => ({
+      id: doc.id,
+      source: doc.source,
+      reviewAfter: sourceMeta.reviewAfter,
+    }));
+
+  return {
+    totalDocs: KNOWLEDGE_DOCS.length,
+    activeDocs: getKnowledgeDocsWithMetadata({ referenceDate }).length,
+    expiredDocs,
+    missingMetadata,
+    unusedMetadata,
   };
 }
 
@@ -435,7 +486,8 @@ export function retrieveDocs(query: string, topK = 3): KnowledgeDoc[] {
   const q = query.toLowerCase().trim();
   if (!q) return [];
 
-  const scored = KNOWLEDGE_DOCS.map((doc) => {
+  const searchableDocs = getKnowledgeDocsWithMetadata();
+  const scored = searchableDocs.map((doc) => {
     let score = 0;
     const words = q.split(/\s+/);
     for (const keyword of doc.keywords) {

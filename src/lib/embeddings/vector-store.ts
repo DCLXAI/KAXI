@@ -3,7 +3,11 @@
 // - 폴백: TF-IDF vectorizer.ts (vocabulary 기반 희소 벡터)
 // 하이브리드 검색 (transformer + keyword) 지원
 
-import { KNOWLEDGE_DOCS, type KnowledgeDoc } from "../data/knowledge";
+import {
+  getKnowledgeDocsWithMetadata,
+  getKnowledgeSourceAudit,
+  type KnowledgeDoc,
+} from "../data/knowledge";
 import type { Lang } from "../i18n/translations";
 import {
   fitVectorizer,
@@ -32,19 +36,23 @@ export interface ScoredDoc {
 }
 
 interface VectorStore {
+  docs: KnowledgeDoc[];
   tfidfVectorizer: TFIDFVectorizer | null;
   tfidfDocVectors: number[][];
   transformerDocVectors: EmbeddingVector[]; // 384-dim normalized
   docIds: string[];
+  reviewDateKey: string;
   ready: boolean;
   method: "transformer" | "tfidf" | "mixed";
 }
 
 let store: VectorStore = {
+  docs: [],
   tfidfVectorizer: null,
   tfidfDocVectors: [],
   transformerDocVectors: [],
   docIds: [],
+  reviewDateKey: "",
   ready: false,
   method: "tfidf",
 };
@@ -52,6 +60,14 @@ let store: VectorStore = {
 const CACHE_FILE =
   process.env.VECTOR_CACHE_FILE ||
   path.join(process.cwd(), "data", "vector-store", "embeddings-cache.json");
+
+function reviewDateKey(date = new Date()): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function searchableDocs(): KnowledgeDoc[] {
+  return getKnowledgeDocsWithMetadata().map(({ sourceMeta: _sourceMeta, ...doc }) => doc);
+}
 
 // 다국어 결합 텍스트에서 각 언어별로 분리 (transformer용)
 // transformer는 다국어를 이해하므로 한 언어당 임베딩 → 평균
@@ -110,10 +126,13 @@ function saveCache(cache: Record<string, number[]>): void {
 
 // 동기 초기화 (TF-IDF만 — transformer는 async init 필요)
 export function initVectorStore(): void {
-  if (store.ready) return;
+  const currentReviewDateKey = reviewDateKey();
+  if (store.ready && store.reviewDateKey === currentReviewDateKey) return;
+
+  const docs = searchableDocs();
 
   // TF-IDF vectorizer 학습 (폴백용)
-  const docTexts = KNOWLEDGE_DOCS.map((d) =>
+  const docTexts = docs.map((d) =>
     multilingualText({
       title: d.title,
       content: d.content,
@@ -125,9 +144,12 @@ export function initVectorStore(): void {
 
   store = {
     ...store,
+    docs,
     tfidfVectorizer,
     tfidfDocVectors,
-    docIds: KNOWLEDGE_DOCS.map((d) => d.id),
+    transformerDocVectors: [],
+    docIds: docs.map((d) => d.id),
+    reviewDateKey: currentReviewDateKey,
     ready: true,
     method: "tfidf",
   };
@@ -153,19 +175,19 @@ export async function initTransformerStore(): Promise<void> {
   const cachedVectors: Record<string, EmbeddingVector> = {};
 
   if (cache) {
-    for (const doc of KNOWLEDGE_DOCS) {
+    for (const doc of store.docs) {
       if (cache[doc.id]) {
         cachedVectors[doc.id] = new Float32Array(cache[doc.id]);
       }
     }
-    console.log(`[VectorStore] Cache hit: ${Object.keys(cachedVectors).length}/${KNOWLEDGE_DOCS.length}`);
+    console.log(`[VectorStore] Cache hit: ${Object.keys(cachedVectors).length}/${store.docs.length}`);
   }
 
   // 캐시 안된 문서 임베딩
   const newCache: Record<string, number[]> = { ...(cache || {}) };
   let allSuccess = true;
 
-  for (const doc of KNOWLEDGE_DOCS) {
+  for (const doc of store.docs) {
     if (cachedVectors[doc.id]) continue;
 
     try {
@@ -184,10 +206,10 @@ export async function initTransformerStore(): Promise<void> {
     saveCache(newCache);
   }
 
-  // transformerDocVectors 구성 (KNOWLEDGE_DOCS 순서대로)
+  // transformerDocVectors 구성 (검색 대상 문서 순서대로)
   const transformerDocVectors: EmbeddingVector[] = [];
   let transformerCoverage = 0;
-  for (const doc of KNOWLEDGE_DOCS) {
+  for (const doc of store.docs) {
     if (cachedVectors[doc.id]) {
       transformerDocVectors.push(cachedVectors[doc.id]);
       transformerCoverage++;
@@ -200,11 +222,11 @@ export async function initTransformerStore(): Promise<void> {
   store = {
     ...store,
     transformerDocVectors,
-    method: transformerCoverage === KNOWLEDGE_DOCS.length ? "transformer" : "mixed",
+    method: transformerCoverage === store.docs.length ? "transformer" : "mixed",
   };
 
   console.log(
-    `[VectorStore] Transformer ready: ${transformerCoverage}/${KNOWLEDGE_DOCS.length} docs embedded, method=${store.method}`
+    `[VectorStore] Transformer ready: ${transformerCoverage}/${store.docs.length} docs embedded, method=${store.method}`
   );
 }
 
@@ -354,7 +376,7 @@ export async function hybridSearch(
   }
 
   // 각 문서에 대해 점수 계산
-  const scored: ScoredDoc[] = KNOWLEDGE_DOCS.map((doc, i) => {
+  const scored: ScoredDoc[] = store.docs.map((doc, i) => {
     // 벡터 점수
     let vScore: number;
     if (method === "transformer" && store.transformerDocVectors[i]) {
@@ -391,9 +413,12 @@ export async function hybridSearch(
 
 // 디버그용
 export function getStoreStats() {
+  const sourceAudit = getKnowledgeSourceAudit();
   return {
     ready: store.ready,
     docCount: store.docIds.length,
+    totalKnowledgeDocs: sourceAudit.totalDocs,
+    expiredDocCount: sourceAudit.expiredDocs.length,
     method: store.method,
     transformerAvailable: isTransformerAvailable(),
     tfidfDim: store.tfidfVectorizer?.dim ?? 0,

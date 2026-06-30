@@ -4,6 +4,7 @@ import type { Lang } from "@/lib/i18n/translations";
 import { db } from "@/lib/db";
 import { createZaiClient, isZaiConfigurationError } from "@/lib/ai/zai";
 import { hybridSearch, initVectorStore, initTransformerStore } from "@/lib/embeddings/vector-store";
+import { protectChatQuestion } from "@/lib/privacy/chat-log";
 import {
   consumeDailyQuota,
   parsePositiveInt,
@@ -18,14 +19,14 @@ import {
 
 export async function POST(req: NextRequest) {
   try {
-    const limited = rateLimit(req, {
+    const limited = await rateLimit(req, {
       key: "ai:consult",
       limit: parsePositiveInt(process.env.AI_CONSULT_RATE_LIMIT, 10),
       windowMs: 60 * 1000,
     });
     if (limited) return limited;
 
-    const quotaExceeded = consumeDailyQuota(
+    const quotaExceeded = await consumeDailyQuota(
       req,
       "ai:consult",
       parsePositiveInt(process.env.AI_CONSULT_DAILY_QUOTA, 50)
@@ -70,10 +71,11 @@ export async function POST(req: NextRequest) {
 
     // 4. ChatLog 저장
     try {
+      const protectedQuestion = protectChatQuestion(question);
       await db.chatLog.create({
         data: {
           lang,
-          question,
+          ...protectedQuestion,
           answer: result.answer,
           source: "expert",
           retrievedDocs: JSON.stringify({

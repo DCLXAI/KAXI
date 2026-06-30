@@ -24,7 +24,7 @@ interface Stats {
 export function Admin() {
   const { lang } = useLangStore();
   const { data: session, status } = useSession();
-  const isSessionAdmin = session?.user?.role === "admin";
+  const isSessionAdmin = ["owner", "admin", "viewer"].includes(session?.user?.role || "");
   const { leads, fetchLeads, loading } = useLeadStore();
   const [adminKey, setAdminKey] = useState("");
   const [keyInput, setKeyInput] = useState("");

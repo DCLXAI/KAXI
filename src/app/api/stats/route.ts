@@ -5,7 +5,7 @@ import { requireAdmin } from "@/lib/api/security";
 // GET /api/stats - 관리자 대시보드 통계
 export async function GET(req: NextRequest) {
   try {
-    const unauthorized = await requireAdmin(req);
+    const unauthorized = await requireAdmin(req, { roles: ["owner", "admin", "viewer"] });
     if (unauthorized) return unauthorized;
 
     const [totalLeads, totalRequests, pendingRequests, brokerUsers] = await Promise.all([

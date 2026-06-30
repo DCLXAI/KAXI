@@ -1,6 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/api/security";
+import { getAdminContext, requireAdmin } from "@/lib/api/security";
+import { recordRequestAudit } from "@/lib/audit";
+import { readPiiField } from "@/lib/privacy/pii";
+
+function serializePartnerRequest(request: any) {
+  return {
+    ...request,
+    question: readPiiField(request.question, request.questionCiphertext),
+  };
+}
+
+function serializeLead(lead: any) {
+  return {
+    ...lead,
+    contact: readPiiField(lead.contact, lead.contactCiphertext),
+    partnerRequests: Array.isArray(lead.partnerRequests)
+      ? lead.partnerRequests.map(serializePartnerRequest)
+      : lead.partnerRequests,
+  };
+}
 
 // GET /api/leads/[id] - 리드 상세
 export async function GET(
@@ -8,7 +27,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const unauthorized = await requireAdmin(_req);
+    const unauthorized = await requireAdmin(_req, { roles: ["owner", "admin", "viewer"] });
     if (unauthorized) return unauthorized;
 
     const { id } = await params;
@@ -19,7 +38,7 @@ export async function GET(
     if (!lead) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    return NextResponse.json({ lead });
+    return NextResponse.json({ lead: serializeLead(lead) });
   } catch (e) {
     console.error("[GET /api/leads/[id]]", e);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
@@ -34,9 +53,17 @@ export async function DELETE(
   try {
     const unauthorized = await requireAdmin(_req);
     if (unauthorized) return unauthorized;
+    const actor = await getAdminContext(_req);
 
     const { id } = await params;
     await db.lead.delete({ where: { id } });
+    await recordRequestAudit(_req, {
+      actor: actor?.actor || "unknown",
+      actorRole: actor?.role || "admin",
+      action: "lead.delete",
+      targetType: "Lead",
+      targetId: id,
+    });
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("[DELETE /api/leads/[id]]", e);
