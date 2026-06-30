@@ -101,6 +101,21 @@ GitHub Actions restores runtime artifacts during `bun install --frozen-lockfile`
 `test:quality` validates the multilingual evaluation set in `quality/multilingual-eval-cases.json`, including expected source document, refusal expectation, and cost-format labels.
 `test:privacy` verifies PII encryption/redaction behavior and hosted SQLite write guards.
 `test:agent` verifies Agent status diagnostics, dry-run preflight behavior, and partner-request PII masking.
+`test:readiness` verifies that production readiness fails closed when managed DB, PII secrets, MFA, retention, or shared limiter settings are missing.
+
+## Production Readiness
+
+`GET /api/readiness` is the operational go/no-go check for the governance items in this document.
+It returns `200` only when required production checks pass and `503` when the deployment is still a demo/read-only configuration.
+
+The readiness response intentionally exposes only booleans and reason strings, not secret values.
+Before treating KAXI as production-ready, `/api/readiness` must report `status: "ready"` for:
+
+- current RAG `reviewAfter` metadata and non-expired school source metadata,
+- managed writable database instead of bundled SQLite,
+- `DATA_ENCRYPTION_KEY`, `PII_HASH_SECRET`, retention `CRON_SECRET`,
+- shared database-backed rate limit,
+- hashed admin login, MFA, valid role, and audit-log persistence.
 
 ## AI Cost Controls
 

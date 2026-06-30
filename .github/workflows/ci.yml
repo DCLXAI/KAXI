@@ -39,5 +39,9 @@ jobs:
         run: bun run test:governance
       - name: Verify privacy guards
         run: bun run test:privacy
+      - name: Verify agent guards
+        run: bun run test:agent
+      - name: Verify production readiness guards
+        run: bun run test:readiness
       - name: Build
         run: bun run build
