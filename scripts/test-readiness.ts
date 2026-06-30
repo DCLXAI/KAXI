@@ -2,6 +2,7 @@ import { getReadinessPayload } from "../src/lib/ops/readiness";
 import { getRuntimeDatabaseInfo } from "../src/lib/db";
 import { NextRequest } from "next/server";
 import { rateLimit } from "../src/lib/api/security";
+import { KNOWLEDGE_DOCS } from "../src/lib/data/knowledge";
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -125,7 +126,34 @@ async function testProductionRateLimitFailsClosedWithoutSharedBackend() {
   }
 }
 
+async function testReadinessFailsMissingRagMetadata() {
+  const missingSourceDoc = {
+    id: "__readiness_missing_source__",
+    category: "warning" as const,
+    title: { ko: "누락 출처", vi: "Missing source", mn: "Missing source", en: "Missing source" },
+    keywords: ["missing-source"],
+    content: {
+      ko: "출처 메타데이터가 없는 문서는 readiness를 통과하면 안 됩니다.",
+      vi: "Documents without source metadata must not pass readiness.",
+      mn: "Documents without source metadata must not pass readiness.",
+      en: "Documents without source metadata must not pass readiness.",
+    },
+    source: "__unregistered_readiness_source__",
+  };
+  KNOWLEDGE_DOCS.push(missingSourceDoc);
+  try {
+    const payload = await getReadinessPayload();
+    const rag = payload.checks.find((item) => item.key === "rag.review_after");
+    if (!rag || rag.ok || rag.metadata?.missingMetadata !== 1) {
+      fail(`missing RAG source metadata should fail readiness: ${JSON.stringify(rag)}`);
+    }
+  } finally {
+    KNOWLEDGE_DOCS.pop();
+  }
+}
+
 await testProductionReadinessFlagsMissingOpsConfig();
 testDatabaseRuntimeInfo();
 await testProductionRateLimitFailsClosedWithoutSharedBackend();
+await testReadinessFailsMissingRagMetadata();
 console.log("PASS readiness guards");

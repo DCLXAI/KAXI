@@ -1,9 +1,9 @@
 // 사전 임베딩 캐싱 스크립트
-// 모든 KnowledgeDoc에 대해 Transformer 임베딩을 미리 생성하여 캐시 파일에 저장
+// 현재 운영 검색 대상 KnowledgeDoc에 대해 Transformer 임베딩을 미리 생성하여 캐시 파일에 저장
 // 이후 런타임에서는 캐시에서 즉시 로드 (수 초 절약)
 // 실행: bun run /home/z/my-project/scripts/precompute-embeddings.ts
 
-import { KNOWLEDGE_DOCS } from "../src/lib/data/knowledge";
+import { getKnowledgeDocsWithMetadata } from "../src/lib/data/knowledge";
 import { initTransformerStore, getStoreStats } from "../src/lib/embeddings/vector-store";
 
 async function main() {
@@ -11,8 +11,9 @@ async function main() {
   console.log("사전 임베딩 캐싱 스크립트");
   console.log("=".repeat(60));
 
-  console.log(`\n📚 Knowledge docs: ${KNOWLEDGE_DOCS.length}개`);
-  console.log(KNOWLEDGE_DOCS.map((d) => `   - ${d.id}: ${d.title.ko}`).join("\n"));
+  const docs = getKnowledgeDocsWithMetadata();
+  console.log(`\n📚 Active knowledge docs: ${docs.length}개`);
+  console.log(docs.map((d) => `   - ${d.id}: ${d.title.ko}`).join("\n"));
 
   console.log("\n🔧 Transformer 모델 로드 + 문서 임베딩 시작...");
   console.log("(첫 실행시 모델 다운로드 + 모든 문서 임베딩 — 1~3분 소요)\n");

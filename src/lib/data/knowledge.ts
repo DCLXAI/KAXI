@@ -135,10 +135,14 @@ export function getSourceMetadata(source: string): SourceMetadata {
   return SOURCE_METADATA[source] ?? {
     label: source,
     url: "internal://kaxi/unregistered-source",
-    verifiedAt: DEFAULT_VERIFIED_AT,
-    reviewAfter: DEFAULT_REVIEW_AFTER,
+    verifiedAt: "1970-01-01",
+    reviewAfter: "1970-01-01",
     owner: "internal",
   };
+}
+
+export function hasRegisteredSourceMetadata(source: string): boolean {
+  return Object.prototype.hasOwnProperty.call(SOURCE_METADATA, source);
 }
 
 function dateAtStartOfDay(value: Date | string): number {
@@ -151,6 +155,7 @@ export function isSourceReviewCurrent(
   source: string,
   referenceDate: Date = new Date()
 ): boolean {
+  if (!hasRegisteredSourceMetadata(source)) return false;
   const meta = getSourceMetadata(source);
   return dateAtStartOfDay(meta.reviewAfter) >= dateAtStartOfDay(referenceDate);
 }

@@ -2,7 +2,7 @@
 // Run: bun run scripts/test-vector-search.ts
 
 import { join } from "path";
-import { KNOWLEDGE_DOCS } from "../src/lib/data/knowledge";
+import { getKnowledgeDocsWithMetadata } from "../src/lib/data/knowledge";
 import { getStoreStats, hybridSearch, initVectorStore } from "../src/lib/embeddings/vector-store";
 
 if (!process.env.DATABASE_URL || process.env.DATABASE_URL.includes("/home/z/")) {
@@ -24,7 +24,7 @@ async function main() {
 
   initVectorStore();
   const stats = getStoreStats();
-  console.log(`Docs: ${stats.docCount}/${KNOWLEDGE_DOCS.length}`);
+  console.log(`Docs: ${stats.docCount}/${getKnowledgeDocsWithMetadata().length}`);
   console.log(`Method: ${stats.method}`);
   console.log(`TF-IDF dim: ${stats.tfidfDim}`);
   console.log(`Transformer coverage: ${stats.transformerCoverage}/${stats.docCount}`);

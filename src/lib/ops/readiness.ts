@@ -57,6 +57,10 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
   const managedDatabase = databaseInfo.sharedWritable && databaseConnectivity.ok;
   const sharedRateLimit =
     managedDatabase && (rateLimitBackend === "auto" || rateLimitBackend === "database");
+  const ragReviewReady =
+    sourceAudit.missingMetadata.length === 0 &&
+    sourceAudit.expiredDocs.length === 0 &&
+    sourceAudit.activeDocs > 0;
   const schoolMetadataReady =
     schoolAudit.active > 0 &&
     schoolAudit.expired === 0 &&
@@ -67,14 +71,17 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
     check(
       "rag.review_after",
       "RAG review freshness",
-      sourceAudit.expiredDocs.length === 0 && sourceAudit.activeDocs > 0,
-      sourceAudit.expiredDocs.length === 0
+      ragReviewReady,
+      sourceAudit.missingMetadata.length > 0
+        ? `RAG sources missing metadata: ${sourceAudit.missingMetadata.join(", ")}`
+        : sourceAudit.expiredDocs.length === 0
         ? "All active RAG sources are within reviewAfter."
         : `Expired RAG docs: ${sourceAudit.expiredDocs.map((doc) => doc.id).join(", ")}`,
       {
         activeDocs: sourceAudit.activeDocs,
         totalDocs: sourceAudit.totalDocs,
         expiredDocs: sourceAudit.expiredDocs.length,
+        missingMetadata: sourceAudit.missingMetadata.length,
       }
     ),
     check(

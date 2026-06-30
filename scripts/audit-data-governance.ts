@@ -1,4 +1,5 @@
 import {
+  KNOWLEDGE_DOCS,
   SOURCE_METADATA,
   getKnowledgeDocsWithMetadata,
   getKnowledgeSourceAudit,
@@ -51,6 +52,33 @@ const afterAllReviews = maxReviewAfterDate();
 const futureDocs = getKnowledgeDocsWithMetadata({ referenceDate: afterAllReviews });
 if (futureDocs.length !== 0) {
   fail("RAG reviewAfter filtering did not exclude expired documents");
+}
+
+const missingSourceDoc = {
+  id: "__governance_missing_source__",
+  category: "warning" as const,
+  title: { ko: "누락 출처", vi: "Missing source", mn: "Missing source", en: "Missing source" },
+  keywords: ["missing-source"],
+  content: {
+    ko: "출처 메타데이터가 없는 문서는 운영 검색에서 제외되어야 합니다.",
+    vi: "Documents without source metadata must be excluded.",
+    mn: "Documents without source metadata must be excluded.",
+    en: "Documents without source metadata must be excluded.",
+  },
+  source: "__unregistered_governance_source__",
+};
+KNOWLEDGE_DOCS.push(missingSourceDoc);
+try {
+  const missingSourceAudit = getKnowledgeSourceAudit();
+  if (!missingSourceAudit.missingMetadata.includes(missingSourceDoc.source)) {
+    fail("RAG source audit did not report missing metadata");
+  }
+  const docsWithMissingSource = getKnowledgeDocsWithMetadata();
+  if (docsWithMissingSource.some((doc) => doc.id === missingSourceDoc.id)) {
+    fail("RAG runtime filtering did not exclude a document with missing source metadata");
+  }
+} finally {
+  KNOWLEDGE_DOCS.pop();
 }
 
 const schools = SCHOOLS.map(withSchoolSourceMetadata);
