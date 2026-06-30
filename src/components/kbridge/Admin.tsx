@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Search, Eye, RefreshCw, Users, AlertTriangle, Clock, TrendingUp } from "lucide-react";
+import { AdminSchools } from "./AdminSchools";
 
 interface Stats {
   totalLeads: number;
@@ -214,6 +215,8 @@ export function Admin() {
           </CardContent>
         </Card>
       )}
+
+      <AdminSchools adminKey={adminKey} />
 
       <Card>
         <CardHeader>

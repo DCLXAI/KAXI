@@ -88,6 +88,9 @@ model School {
   topikLevel          Int?
   intake              String   // JSON array
   officialUrl         String
+  sourceUrl           String   @default("")
+  verifiedAt          DateTime @default(now())
+  reviewAfter         DateTime @default(now())
   notesKo             String
   notesVi             String
   notesMn             String
@@ -96,6 +99,7 @@ model School {
   @@index([region])
   @@index([program])
   @@index([accreditation])
+  @@index([reviewAfter])
 }
 
 // AI 대화 로그 (RAG 검증/개선용)
@@ -111,6 +115,33 @@ model ChatLog {
 
   @@index([createdAt])
   @@index([lang])
+}
+
+// AI Agent 요청 비용/품질 원장
+model AgentRequestLedger {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+
+  ip            String?
+  userId        String?
+  questionChars Int
+  answerChars   Int      @default(0)
+
+  backend       String
+  codexMode     String?
+  durationMs    Int?
+  tokenEstimate Int
+
+  success       Boolean
+  errorType     String?
+  errorMessage  String?
+  grounded      Boolean  @default(false)
+  toolCount     Int      @default(0)
+
+  @@index([createdAt])
+  @@index([ip])
+  @@index([backend])
+  @@index([success])
 }
 
 // 동의어 사전 (검색 품질 향상용)

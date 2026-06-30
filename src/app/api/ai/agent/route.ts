@@ -13,6 +13,7 @@ import {
 import { isRemoteCodexBridgeEnabled, runRemoteCodexBridge } from "@/lib/codex/remote-bridge";
 import {
   consumeDailyQuota,
+  getClientIp,
   parseLimit,
   parsePositiveInt,
   rateLimit,
@@ -36,12 +37,25 @@ function emptyPreflight(question: string): AgentPreflightResult {
 
 function shouldPersistAgentLog(): boolean {
   if (process.env.AI_AGENT_LOGGING_ENABLED === "false") return false;
+  return canWriteRuntimeDatabase();
+}
 
+function canWriteRuntimeDatabase(): boolean {
   const databaseUrl = process.env.DATABASE_URL?.trim() || "";
   const hostedRuntime = process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV);
   if (hostedRuntime && databaseUrl.startsWith("file:")) return false;
 
   return true;
+}
+
+function shouldPersistAgentLedger(): boolean {
+  if (process.env.AI_AGENT_LEDGER_ENABLED === "false") return false;
+  return canWriteRuntimeDatabase();
+}
+
+function estimateTokens(question: string, answer: string, preflight: AgentPreflightResult): number {
+  const groundedContextChars = preflight.groundingContext.length;
+  return Math.max(1, Math.ceil((question.length + answer.length + groundedContextChars) / 4));
 }
 
 async function persistAgentLog({
@@ -94,8 +108,68 @@ async function persistAgentLog({
   }
 }
 
+async function persistAgentLedger({
+  req,
+  leadId,
+  question,
+  answer,
+  backend,
+  codexMode,
+  durationMs,
+  success,
+  errorType,
+  errorMessage,
+  preflight,
+  toolCount,
+}: {
+  req: NextRequest;
+  leadId?: string | null;
+  question: string;
+  answer?: string;
+  backend: string;
+  codexMode?: string;
+  durationMs?: number;
+  success: boolean;
+  errorType?: string;
+  errorMessage?: string;
+  preflight: AgentPreflightResult;
+  toolCount: number;
+}) {
+  if (!shouldPersistAgentLedger()) return;
+
+  try {
+    const finalAnswer = answer || "";
+    await db.agentRequestLedger.create({
+      data: {
+        ip: getClientIp(req),
+        userId: leadId || null,
+        questionChars: question.length,
+        answerChars: finalAnswer.length,
+        backend,
+        codexMode: codexMode || null,
+        durationMs: durationMs ? Math.round(durationMs) : null,
+        tokenEstimate: estimateTokens(question, finalAnswer, preflight),
+        success,
+        errorType: errorType || null,
+        errorMessage: errorMessage ? errorMessage.slice(0, 500) : null,
+        grounded: Boolean(preflight.groundingContext),
+        toolCount,
+      },
+    });
+  } catch (ledgerErr) {
+    console.warn("[Agent ledger save skipped]", ledgerErr);
+  }
+}
+
 // POST /api/ai/agent - 에이전트 대화 (도구 호출 + 다중 단계 추론)
 export async function POST(req: NextRequest) {
+  const requestStartedAt = Date.now();
+  let ledgerContext: {
+    question: string;
+    leadId: string | null;
+    preflight: AgentPreflightResult;
+  } | null = null;
+
   try {
     const limited = rateLimit(req, {
       key: "ai:agent",
@@ -122,6 +196,7 @@ export async function POST(req: NextRequest) {
     const { question, history, leadId } = parsed.value;
     const lang = parsed.value.lang as Lang;
     const ctx: ToolContext = { lang, leadId };
+    ledgerContext = { question, leadId, preflight: emptyPreflight(question) };
 
     const configuredBackend = getAgentBackend();
     const shouldPreflight =
@@ -144,6 +219,7 @@ export async function POST(req: NextRequest) {
         );
       }
     }
+    ledgerContext.preflight = preflight;
 
     if (configuredBackend === "remote-bridge" || isRemoteCodexBridgeEnabled()) {
       try {
@@ -151,10 +227,7 @@ export async function POST(req: NextRequest) {
           question: preflight.groundedQuestion,
           lang,
           history,
-          requestIp:
-            req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-            req.headers.get("x-real-ip") ||
-            undefined,
+          requestIp: getClientIp(req),
           timeoutMs: parsePositiveInt(process.env.CODEX_REMOTE_BRIDGE_TIMEOUT_MS, 55_000),
         });
         const steps = [...preflight.steps, ...result.steps];
@@ -168,6 +241,18 @@ export async function POST(req: NextRequest) {
           steps,
           toolResults,
           iterations: result.iterations,
+        });
+        await persistAgentLedger({
+          req,
+          leadId,
+          question,
+          answer: result.answer,
+          backend: result.backend,
+          codexMode: result.codexMode,
+          durationMs: result.durationMs || Date.now() - requestStartedAt,
+          success: true,
+          preflight,
+          toolCount: toolResults.length,
         });
 
         return NextResponse.json({
@@ -186,6 +271,18 @@ export async function POST(req: NextRequest) {
           bridgeErr instanceof Error ? bridgeErr.message : bridgeErr
         );
         if (configuredBackend === "remote-bridge") {
+          await persistAgentLedger({
+            req,
+            leadId,
+            question,
+            backend: "codex-cli-remote-bridge",
+            durationMs: Date.now() - requestStartedAt,
+            success: false,
+            errorType: "remote_bridge_unavailable",
+            errorMessage: bridgeErr instanceof Error ? bridgeErr.message : "Unknown bridge error",
+            preflight,
+            toolCount: preflight.toolResults.length,
+          });
           return NextResponse.json({
             error: "Remote Codex bridge is unavailable",
             backend: "codex-cli-remote-bridge",
@@ -217,20 +314,33 @@ export async function POST(req: NextRequest) {
           },
         ];
         const toolResults = preflight.toolResults;
+        const backend = result.mode === "local-auth" ? "codex-cli-local" : "codex-cli";
         await persistAgentLog({
           lang,
           question,
           answer: result.answer,
-          backend: result.mode === "local-auth" ? "codex-cli-local" : "codex-cli",
+          backend,
           preflight,
           steps,
           toolResults,
           iterations: 1,
         });
+        await persistAgentLedger({
+          req,
+          leadId,
+          question,
+          answer: result.answer,
+          backend,
+          codexMode: result.mode,
+          durationMs: result.durationMs || Date.now() - requestStartedAt,
+          success: true,
+          preflight,
+          toolCount: toolResults.length,
+        });
 
         return NextResponse.json({
           answer: result.answer,
-          backend: result.mode === "local-auth" ? "codex-cli-local" : "codex-cli",
+          backend,
           codexMode: result.mode,
           steps,
           toolResults,
@@ -254,6 +364,19 @@ export async function POST(req: NextRequest) {
           toolResults: fallback.toolResults,
           iterations: fallback.iterations,
         });
+        await persistAgentLedger({
+          req,
+          leadId,
+          question,
+          answer: fallback.answer,
+          backend: "tool-fallback",
+          durationMs: Date.now() - requestStartedAt,
+          success: true,
+          errorType: "codex_backend_fallback",
+          errorMessage: codexErr instanceof Error ? codexErr.message : "Unknown Codex error",
+          preflight,
+          toolCount: fallback.toolResults.length,
+        });
         return NextResponse.json({
           answer: fallback.answer,
           backend: "tool-fallback",
@@ -275,6 +398,17 @@ export async function POST(req: NextRequest) {
         steps: fallback.steps,
         toolResults: fallback.toolResults,
         iterations: fallback.iterations,
+      });
+      await persistAgentLedger({
+        req,
+        leadId,
+        question,
+        answer: fallback.answer,
+        backend: "tool-fallback",
+        durationMs: Date.now() - requestStartedAt,
+        success: true,
+        preflight,
+        toolCount: fallback.toolResults.length,
       });
       return NextResponse.json({
         answer: fallback.answer,
@@ -306,30 +440,44 @@ export async function POST(req: NextRequest) {
       );
       backend = "tool-fallback";
       result = await runFallbackAgent(question, lang, ctx);
+      await persistAgentLedger({
+        req,
+        leadId,
+        question,
+        answer: result.answer,
+        backend,
+        durationMs: Date.now() - requestStartedAt,
+        success: true,
+        errorType: "zai_backend_fallback",
+        errorMessage: agentErr instanceof Error ? agentErr.message : "Unknown Agent backend error",
+        preflight,
+        toolCount: result.toolResults.length,
+      });
     }
 
     // ChatLog 저장 (도구 호출 이력 포함)
-    try {
-      await db.chatLog.create({
-        data: {
-          lang,
-          question,
-          answer: result.answer,
-          source: "agent",
-          retrievedDocs: JSON.stringify({
-            iterations: result.iterations,
-            backend,
-            toolResults: result.toolResults.map((r) => ({
-              tool: r.tool,
-              summary: r.summary,
-              success: r.success,
-            })),
-            steps: result.steps.map((s) => ({ type: s.type, content: s.content.substring(0, 200) })),
-          }),
-        },
+    await persistAgentLog({
+      lang,
+      question,
+      answer: result.answer,
+      backend,
+      preflight,
+      steps: result.steps,
+      toolResults: result.toolResults,
+      iterations: result.iterations,
+    });
+    if (backend !== "tool-fallback") {
+      await persistAgentLedger({
+        req,
+        leadId,
+        question,
+        answer: result.answer,
+        backend,
+        durationMs: Date.now() - requestStartedAt,
+        success: true,
+        preflight,
+        toolCount: result.toolResults.length,
       });
-    } catch (logErr) {
-      console.error("[ChatLog save error]", logErr);
     }
 
     return NextResponse.json({
@@ -341,6 +489,20 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     console.error("[POST /api/ai/agent]", e);
+    if (ledgerContext) {
+      await persistAgentLedger({
+        req,
+        leadId: ledgerContext.leadId,
+        question: ledgerContext.question,
+        backend: "unknown",
+        durationMs: Date.now() - requestStartedAt,
+        success: false,
+        errorType: "internal_error",
+        errorMessage: e instanceof Error ? e.message : "Unknown internal error",
+        preflight: ledgerContext.preflight,
+        toolCount: ledgerContext.preflight.toolResults.length,
+      });
+    }
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

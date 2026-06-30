@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSourceMetadata, pickLangText, type KnowledgeDoc } from "@/lib/data/knowledge";
 import type { Lang } from "@/lib/i18n/translations";
 import { db } from "@/lib/db";
+import { createZaiClient, isZaiConfigurationError } from "@/lib/ai/zai";
 import { hybridSearch, initVectorStore, initTransformerStore } from "@/lib/embeddings/vector-store";
 import {
   consumeDailyQuota,
@@ -202,9 +203,7 @@ ${context}
   ];
 
   try {
-    const ZAIModule = await import("z-ai-web-dev-sdk");
-    const ZAI = ZAIModule.default;
-    const zai = await ZAI.create();
+    const zai = await createZaiClient("expert consult");
 
     const completion = await zai.chat.completions.create({
       messages: messages as any,
@@ -228,7 +227,12 @@ ${context}
 
     return { answer, disclaimer, suggestedFollowups, needsHumanExpert };
   } catch (e) {
-    console.error("[Expert LLM error]", e);
+    const message = e instanceof Error ? e.message : String(e);
+    if (isZaiConfigurationError(e)) {
+      console.warn("[Expert LLM skipped]", message);
+    } else {
+      console.error("[Expert LLM error]", e);
+    }
     // 폴백: 검색된 문서를 직접 조합
     const fallback = docs.length > 0
       ? `## ${pickLangText(docs[0].title, lang)}\n\n${pickLangText(docs[0].content, lang)}\n\n📚 출처: ${docs[0].source}`

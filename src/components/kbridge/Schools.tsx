@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { useLangStore } from "@/store/kbridge";
 import { tr, type Lang } from "@/lib/i18n/translations";
-import { SCHOOLS, filterSchools, type School, type Accreditation } from "@/lib/data/schools";
+import type { School } from "@/lib/data/schools";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,11 +35,39 @@ export function Schools() {
   const [program, setProgram] = useState("all");
   const [accred, setAccred] = useState("all");
   const [maxTuition, setMaxTuition] = useState(6000000);
+  const [schools, setSchools] = useState<School[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filtered = useMemo(
-    () => filterSchools({ region, program, accreditation: accred, maxTuition }),
-    [region, program, accred, maxTuition]
-  );
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      region,
+      program,
+      accreditation: accred,
+      maxTuition: String(maxTuition),
+    });
+
+    fetch(`/api/schools?${params.toString()}`, { signal: controller.signal })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Failed to load schools");
+        return res.json();
+      })
+      .then((data) => {
+        setSchools(data.schools || []);
+        setTotal(Number(data.total || 0));
+        setError(null);
+      })
+      .catch((err) => {
+        if (err.name === "AbortError") return;
+        console.error("[schools]", err);
+        setError(lang === "ko" ? "학교 데이터를 불러오지 못했습니다." : "Could not load school data.");
+      })
+      .finally(() => setLoading(false));
+
+    return () => controller.abort();
+  }, [region, program, accred, maxTuition, lang]);
 
   const reset = () => {
     setRegion("all");
@@ -117,20 +145,31 @@ export function Schools() {
             </div>
           </div>
           <div className="mt-3 text-sm text-muted-foreground">
-            {filtered.length} / {SCHOOLS.length} {lang === "ko" ? "결과" : lang === "vi" ? "kết quả" : lang === "mn" ? "үр дүн" : "results"}
+            {schools.length} / {total} {lang === "ko" ? "결과" : lang === "vi" ? "kết quả" : lang === "mn" ? "үр дүн" : "results"}
           </div>
         </CardContent>
       </Card>
 
+      {error && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
       {/* 학교 카드 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.map((s) => (
+        {schools.map((s) => (
           <SchoolCard key={s.id} school={s} lang={lang} />
         ))}
       </div>
-      {filtered.length === 0 && (
+      {!loading && schools.length === 0 && (
         <div className="text-center py-16 text-muted-foreground">
           {lang === "ko" ? "조건에 맞는 학교가 없습니다. 필터를 조정해보세요." : "No matching schools. Adjust filters."}
+        </div>
+      )}
+      {loading && schools.length === 0 && (
+        <div className="text-center py-16 text-muted-foreground">
+          {lang === "ko" ? "학교 데이터를 불러오는 중..." : "Loading schools..."}
         </div>
       )}
     </div>
@@ -188,6 +227,12 @@ function SchoolCard({ school, lang }: { school: School; lang: Lang }) {
           <span className="text-muted-foreground">{lang === "ko" ? "입학시기" : lang === "vi" ? "Kỳ nhập học" : lang === "mn" ? "Элсэлт" : "Intake"}</span>
           <span className="text-right">{school.intake.join(", ")}</span>
         </div>
+        <div className="flex justify-between gap-3 text-xs">
+          <span className="text-muted-foreground">{lang === "ko" ? "검증" : "Verified"}</span>
+          <span className="text-right">
+            {school.verifiedAt || "—"} · {lang === "ko" ? "재검토" : "Review"} {school.reviewAfter || "—"}
+          </span>
+        </div>
         {school.accreditation === "caution" && (
           <div className="mt-2 rounded-md bg-destructive/10 border border-destructive/20 p-2 text-xs text-destructive">
             {school.notes[lang]}
@@ -200,6 +245,13 @@ function SchoolCard({ school, lang }: { school: School; lang: Lang }) {
               {tr("school_official_link", lang)}
             </a>
           </Button>
+          {school.sourceUrl && school.sourceUrl !== school.officialUrl && (
+            <Button size="sm" variant="ghost" className="shrink-0" asChild>
+              <a href={school.sourceUrl} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </Button>
+          )}
           <Button size="sm" className="flex-1">
             {tr("school_apply", lang)}
           </Button>

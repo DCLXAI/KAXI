@@ -5,6 +5,9 @@
 export type Accreditation = "accredited" | "standard" | "caution";
 export type Program = "language" | "college" | "university" | "graduate" | "vocational";
 
+export const DEFAULT_SCHOOL_VERIFIED_AT = "2026-06-30";
+export const DEFAULT_SCHOOL_REVIEW_AFTER = "2026-09-30";
+
 export interface School {
   id: string;
   name: { ko: string; vi: string; mn: string; en: string };
@@ -18,7 +21,19 @@ export interface School {
   topikLevel: number | null; // 학위과정 필요 TOPIK
   intake: string[]; // 봄/가을/수시
   officialUrl: string;
+  sourceUrl?: string;
+  verifiedAt?: string;
+  reviewAfter?: string;
   notes: { ko: string; vi: string; mn: string; en: string };
+}
+
+export function withSchoolSourceMetadata(school: School): School {
+  return {
+    ...school,
+    sourceUrl: school.sourceUrl || school.officialUrl,
+    verifiedAt: school.verifiedAt || DEFAULT_SCHOOL_VERIFIED_AT,
+    reviewAfter: school.reviewAfter || DEFAULT_SCHOOL_REVIEW_AFTER,
+  };
 }
 
 export const SCHOOLS: School[] = [

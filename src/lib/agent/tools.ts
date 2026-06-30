@@ -1,11 +1,12 @@
 // 에이전트 도구 정의 — AI가 호출할 수 있는 함수들
 // 각 도구는 name, description, parameters, execute 함수로 구성
 
-import { SCHOOLS, filterSchools, type School } from "../data/schools";
-import { KNOWLEDGE_DOCS, getSourceMetadata, pickLangText, type KnowledgeDoc } from "../data/knowledge";
+import { getSourceMetadata, pickLangText } from "../data/knowledge";
 import { recommendPath, type DiagnosisInput } from "../data/diagnosis";
 import { hybridSearch } from "../embeddings/vector-store";
 import type { Lang } from "../i18n/translations";
+import { findSchoolById, listSchools } from "../schools/repository";
+import { createPartnerRequest } from "../partners/repository";
 
 // 도구 호출 결과 (UI에서 시각화)
 export interface ToolResult {
@@ -67,12 +68,12 @@ const searchSchoolsTool: Tool = {
     required: [],
   },
   execute: async (args) => {
-    const schools = filterSchools({
+    const schools = (await listSchools({
       region: args.region || "all",
       program: args.program || "all",
       accreditation: args.accreditation || "all",
       maxTuition: args.max_tuition,
-    }).slice(0, args.limit || 5);
+    })).slice(0, args.limit || 5);
 
     return {
       result: schools.map((s) => ({
@@ -85,6 +86,9 @@ const searchSchoolsTool: Tool = {
         accreditation: s.accreditation,
         topik: s.topikLevel,
         officialUrl: s.officialUrl,
+        sourceUrl: s.sourceUrl,
+        verifiedAt: s.verifiedAt,
+        reviewAfter: s.reviewAfter,
       })),
       summary: `${schools.length}개 학교 검색됨${args.region ? ` (지역: ${args.region})` : ""}${args.max_tuition ? ` (학비 ≤ ${args.max_tuition.toLocaleString()}₩)` : ""}`,
     };
@@ -114,7 +118,7 @@ const calculateCostTool: Tool = {
     required: ["school_id"],
   },
   execute: async (args) => {
-    const school = SCHOOLS.find((s) => s.id === args.school_id);
+    const school = await findSchoolById(args.school_id);
     if (!school) {
       return { result: null, summary: `학교 ID '${args.school_id}'를 찾을 수 없음` };
     }
@@ -299,12 +303,18 @@ const requestPartnerTool: Tool = {
     required: ["partner_type", "question"],
   },
   execute: async (args, ctx) => {
-    // 실제 DB 저장은 API 라우트에서 처리 (여기서는 시뮬레이션)
+    const request = await createPartnerRequest({
+      leadId: ctx.leadId || "anonymous",
+      partnerType: args.partner_type,
+      question: args.question,
+    });
+
     return {
       result: {
+        request_id: request.id,
         partner_type: args.partner_type,
         question: args.question,
-        lead_id: ctx.leadId || "anonymous",
+        lead_id: request.leadId,
         status: "pending",
         eta: "24시간 내 담당자 연락",
       },

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin, withTimeout } from "@/lib/api/security";
+import { createZaiClient, isZaiConfigurationError } from "@/lib/ai/zai";
 
 // POST /api/synonyms/suggest - LLM 기반 동의어 후보 자동 추천
 // ChatLog에서 빈도 높은 단어 + 기존 동의어와 매칭 안 된 것들을 LLM이 분석
@@ -122,9 +123,7 @@ async function generateSynonymSuggestions(
   reason: string;
 }>> {
   try {
-    const ZAIModule = await import("z-ai-web-dev-sdk");
-    const ZAI = ZAIModule.default;
-    const zai = await ZAI.create();
+    const zai = await createZaiClient("synonym suggestions");
 
     const candidatesText = candidates
       .map((c) => `- "${c.word}" (빈도: ${c.count}, 언어: ${c.langs.join("/")})\n  예시: "${c.examples[0]}"`)
@@ -198,7 +197,12 @@ JSON 배열로 응답:`;
       return [];
     }
   } catch (e) {
-    console.error("[LLM synonym suggestion error]", e);
+    const message = e instanceof Error ? e.message : String(e);
+    if (isZaiConfigurationError(e)) {
+      console.warn("[LLM synonym suggestion skipped]", message);
+    } else {
+      console.error("[LLM synonym suggestion error]", e);
+    }
     return [];
   }
 }

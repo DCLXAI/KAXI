@@ -3,6 +3,7 @@ import { getSourceMetadata, pickLangText, type KnowledgeDoc } from "@/lib/data/k
 import type { Lang } from "@/lib/i18n/translations";
 import { findFAQ, AI_DEFAULT_REPLY } from "@/lib/data/faq";
 import { db } from "@/lib/db";
+import { createZaiClient, isZaiConfigurationError } from "@/lib/ai/zai";
 import { hybridSearch, initVectorStore, initTransformerStore, getStoreStats } from "@/lib/embeddings/vector-store";
 import {
   consumeDailyQuota,
@@ -167,9 +168,7 @@ async function generateWithLLM(
   history: { role: string; content: string }[]
 ): Promise<string | null> {
   try {
-    const ZAIModule = await import("z-ai-web-dev-sdk");
-    const ZAI = ZAIModule.default;
-    const zai = await ZAI.create();
+    const zai = await createZaiClient("chat");
 
     const langName = { ko: "Korean", vi: "Vietnamese", mn: "Mongolian", en: "English" }[lang];
 
@@ -210,7 +209,12 @@ ${context}`;
     const content = completion.choices?.[0]?.message?.content;
     return content || null;
   } catch (e) {
-    console.error("[LLM generation error]", e);
+    const message = e instanceof Error ? e.message : String(e);
+    if (isZaiConfigurationError(e)) {
+      console.warn("[LLM generation skipped]", message);
+    } else {
+      console.error("[LLM generation error]", e);
+    }
     return null;
   }
 }

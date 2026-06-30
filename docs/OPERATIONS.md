@@ -10,11 +10,13 @@
 - `AI_AGENT_PREFLIGHT_ENABLED`: Enables deterministic server-side tool/RAG preflight before Codex bridge calls.
 - `AI_AGENT_PREFLIGHT_TIMEOUT_MS`, `AI_AGENT_CONTEXT_MAX_CHARS`, `AI_AGENT_GROUNDED_QUESTION_MAX_CHARS`: Bound preflight latency and context sent to the LLM bridge.
 - `AI_AGENT_LOGGING_ENABLED`: Enables Agent `ChatLog` persistence. It is automatically skipped on hosted SQLite deployments.
+- `AI_AGENT_LEDGER_ENABLED`: Enables per-request Agent cost/quality ledger persistence. It is automatically skipped on hosted SQLite deployments.
 - `NEXTAUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`: Required for session-based admin login.
-- `AGENT_BACKEND`: Agent backend selector. Defaults to `codex`; set `zai` only when `.z-ai-config` is present.
+- `AGENT_BACKEND`: Agent backend selector. Defaults to `codex`; set `zai` only when explicit Z.ai settings are present.
 - `CODEX_AUTH_MODE`: `auto`, `local`, or `api-key`. `auto` uses the current local Codex CLI login in local dev and API-key mode on Vercel.
 - `CODEX_API_KEY`: Required on Vercel when `AGENT_BACKEND=codex`.
 - `CODEX_AGENT_REQUIRE_ADMIN`: Optional guard for `/api/ai/agent` Codex execution. Keep `false` for public demo, `true` for private/internal use.
+- `ZAI_ENABLED`, `ZAI_API_KEY`, `ZAI_CONFIG_PATH`: Optional legacy Z.ai SDK configuration. Leave disabled for Codex CLI/bridge operation.
 
 ## Runtime Artifacts
 
@@ -25,7 +27,7 @@ Included artifacts:
 
 - `multilingual-e5-small` model cache, stored as gzip files so no single GitHub file exceeds 100 MB.
 - Vector embedding cache for the bundled knowledge base.
-- Sanitized SQLite MVP database with `Synonym` seed data and empty `Lead`, `PartnerRequest`, and `ChatLog` tables.
+- Sanitized SQLite MVP database with `Synonym` seed data, 50 `School` rows including source metadata, and empty user-generated tables.
 
 The restore script only creates missing files. It does not overwrite local runtime data.
 
@@ -35,13 +37,16 @@ The checked-in schema is still MVP-oriented. Production must use a managed relat
 
 1. Use Prisma migrations for every schema change.
 2. Do not use `prisma db push` against production.
-3. Keep local demo SQLite data out of deployment artifacts.
-4. Treat `Lead`, `PartnerRequest`, and `ChatLog.question` as user data.
+3. Keep personal/local demo user data out of deployment artifacts.
+4. Treat `Lead`, `PartnerRequest`, `ChatLog.question`, and `AgentRequestLedger.ip/userId` as user data.
 5. Define retention before production launch:
    - `ChatLog`: 30-90 days unless explicit analytics consent exists.
+   - `AgentRequestLedger`: 30-90 days for cost/debug analytics, with IP truncation or hashing before broader reporting.
    - `Lead`: delete on user/admin request, or after the business retention window.
    - `PartnerRequest`: retain only while fulfillment/accounting requires it.
 6. Before analytics export, redact contact details and free-form questions that may contain personal data.
+
+Hosted Vercel deployments must not rely on bundled SQLite for writes. The bundled DB is a demo seed/read model. Use a writable production database for admin CRUD, lead capture, partner requests, chat logs, and Agent ledger persistence.
 
 ## Migration Workflow
 
@@ -50,6 +55,7 @@ Local development:
 ```bash
 bunx prisma migrate dev --name <change-name>
 bunx prisma generate
+bun run db:seed:schools
 ```
 
 CI / production:
@@ -67,7 +73,8 @@ Visa, immigration, school-accreditation, and cost guidance are time-sensitive.
 2. Official sources must include a public official-domain URL, `verifiedAt`, and `reviewAfter`.
 3. Internal analysis sources must be marked `owner: "internal"` and reviewed at least quarterly.
 4. Any document past `reviewAfter` must be excluded from production answers or reverified before release.
-5. School data in `src/lib/data/schools.ts` is demo seed data until migrated into the `School` table with source URLs and verification dates.
+5. School data is served from the `School` table. `src/lib/data/schools.ts` remains the deterministic seed/fallback source.
+6. Each `School` row must include `sourceUrl`, `verifiedAt`, and `reviewAfter`; rows past `reviewAfter` should be reverified or hidden before production use.
 
 ## Admin Access
 
@@ -83,16 +90,18 @@ For production, replace the in-memory limiter with Redis/Upstash or a database-b
 ## Agent Grounding
 
 `/api/ai/agent` runs a deterministic KAXI preflight before Codex bridge calls when `AI_AGENT_PREFLIGHT_ENABLED` is not `false`.
-The preflight may call school search, cost calculation, document checklist, partner simulation, and RAG search tools.
+The preflight may call school search, cost calculation, document checklist, partner request, and RAG search tools.
 The resulting compact context is prepended to the Codex bridge prompt so public answers are grounded in KAXI data even when the bridge is running in fast direct-answer mode.
 
 Keep `AI_AGENT_PREFLIGHT_TIMEOUT_MS` below the total function budget. If preflight times out, the route skips grounding and continues with the original user question.
-Agent `ChatLog` persistence should use a writable production database. Hosted deployments using `DATABASE_URL=file:...` skip Agent log writes to avoid read-only SQLite failures.
+Agent `ChatLog` and `AgentRequestLedger` persistence should use a writable production database. Hosted deployments using `DATABASE_URL=file:...` skip Agent log and ledger writes to avoid read-only SQLite failures.
+
+The ledger records IP/user id, backend, Codex mode, duration, estimated tokens, grounded/tool count, success/failure, and compact error type/message. It is for cost/debug accounting, not a permanent user profile.
 
 ## Codex CLI Agent Backend
 
 The app routes `/api/ai/agent` to Codex CLI by default (`AGENT_BACKEND=codex`).
-Set `AGENT_BACKEND=zai` only if the deployment includes a valid `.z-ai-config`.
+Set `AGENT_BACKEND=zai` only if the deployment explicitly configures `ZAI_ENABLED=true` with `ZAI_CONFIG_PATH` or another SDK-supported credential path.
 If Codex credentials are missing or a Codex run fails, `/api/ai/agent` falls back to the built-in tool engine instead of returning 500.
 
 Local development can reuse the Codex CLI login already present on the developer machine:

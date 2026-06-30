@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { jsonError, rateLimit, requireAdmin } from "@/lib/api/security";
+import { createPartnerRequest } from "@/lib/partners/repository";
 
 // POST /api/partner-requests - 파트너 상담 요청
 export async function POST(req: NextRequest) {
@@ -14,36 +15,10 @@ export async function POST(req: NextRequest) {
     if (!leadId || !partnerType) return jsonError("Missing required fields: leadId, partnerType", 400);
     if (question && String(question).length > 1000) return jsonError("Question is too long", 413);
 
-    // leadId가 없는 익명 요청도 허용 (임시 lead 생성)
-    let finalLeadId = leadId;
-    if (leadId === "anonymous" || !leadId) {
-      const lead = await db.lead.create({
-        data: {
-          nickname: "익명",
-          nationality: "unknown",
-          age: 0,
-          education: "unknown",
-          koreanLevel: "unknown",
-          goal: "unknown",
-          budget: 0,
-          region: "unknown",
-          pathKey: "unknown",
-          estimatedCost: 0,
-          prepTime: "",
-          requiredDocs: "[]",
-          warningsJson: "[]",
-          nextActionsJson: "[]",
-        },
-      });
-      finalLeadId = lead.id;
-    }
-
-    const request = await db.partnerRequest.create({
-      data: {
-        leadId: finalLeadId,
-        partnerType: String(partnerType),
-        question: question || null,
-      },
+    const request = await createPartnerRequest({
+      leadId,
+      partnerType: String(partnerType),
+      question: question || null,
     });
 
     return NextResponse.json({ request }, { status: 201 });

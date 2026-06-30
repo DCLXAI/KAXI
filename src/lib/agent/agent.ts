@@ -4,6 +4,7 @@
 
 import { TOOLS, TOOL_MAP, getToolsDescription, parseToolCall, type ToolResult, type ToolContext } from "./tools";
 import type { Lang } from "../i18n/translations";
+import { createZaiClient } from "../ai/zai";
 
 export interface AgentStep {
   type: "thinking" | "tool_call" | "tool_result" | "final_answer" | "error";
@@ -76,10 +77,7 @@ ${getToolsDescription()}
     { role: "user", content: question },
   ];
 
-  // ZAI SDK 로드
-  const ZAIModule = await import("z-ai-web-dev-sdk");
-  const ZAI = ZAIModule.default;
-  const zai = await ZAI.create();
+  const zai = await createZaiClient("agent");
 
   let iteration = 0;
   let finalAnswer = "";

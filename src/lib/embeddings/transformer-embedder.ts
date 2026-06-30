@@ -134,6 +134,9 @@ export function getEmbedDim(): number {
 }
 
 export function isTransformerAvailable(): boolean {
+  if (process.env.TRANSFORMERS_ALLOW_REMOTE === "false" && process.env.TRANSFORMERS_ALLOW_LOCAL !== "true") {
+    return false;
+  }
   return !loadFailed;
 }
 

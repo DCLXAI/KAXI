@@ -19,7 +19,7 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: ["@xenova/transformers", "onnxruntime-web"],
   reactStrictMode: true,
-  allowedDevOrigins: ["*.space-z.ai", "*.chatglm.cn", "*.z.ai"],
+  allowedDevOrigins: ["*.space-z.ai", "*.chatglm.cn", "*.z.ai", "127.0.0.1", "localhost"],
 };
 
 export default nextConfig;
