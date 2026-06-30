@@ -7,7 +7,7 @@ import { requireAdmin, withTimeout } from "@/lib/api/security";
 
 export async function POST(req: NextRequest) {
   try {
-    const unauthorized = requireAdmin(req);
+    const unauthorized = await requireAdmin(req);
     if (unauthorized) return unauthorized;
 
     const body = await req.json();

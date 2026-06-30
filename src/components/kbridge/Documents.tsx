@@ -2,18 +2,11 @@
 
 import { useRef } from "react";
 import { useLangStore, useDocsStore, type DocStatus } from "@/store/kbridge";
-import { tr, type Lang } from "@/lib/i18n/translations";
+import { tr } from "@/lib/i18n/translations";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -102,6 +95,18 @@ export function Documents() {
         <h1 className="text-3xl font-bold">{tr("docs_title", lang)}</h1>
         <p className="text-muted-foreground mt-2">{tr("docs_subtitle", lang)}</p>
       </div>
+
+      <Card className="border-amber-200 bg-amber-50">
+        <CardContent className="pt-4 pb-4 flex items-start gap-3">
+          <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+          <div className="text-xs text-amber-900">
+            {lang === "ko" && "이 워크스페이스는 데모입니다. 파일명만 브라우저에 저장되며 실제 파일은 업로드되지 않습니다. 운영 환경에서는 암호화된 스토리지와 보존/삭제 정책이 필요합니다."}
+            {lang === "vi" && "Bản demo — chỉ lưu tên tệp. Môi trường thực cần lưu trữ mã hóa và chính sách lưu/xóa."}
+            {lang === "mn" && "Демо — зөвхөн файлын нэр хадгална. Үйлдвэрлэлийн орчинд шифрлэсэн хадгалалт болон устгах бодлого шаардлагатай."}
+            {lang === "en" && "Demo only: filenames are stored locally, no actual files are uploaded. Production needs encrypted storage and a retention/deletion policy."}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* 진행률 */}
       <Card>

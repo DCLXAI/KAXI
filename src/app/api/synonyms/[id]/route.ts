@@ -9,7 +9,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const unauthorized = requireAdmin(req);
+    const unauthorized = await requireAdmin(req);
     if (unauthorized) return unauthorized;
 
     const { id } = await params;
@@ -46,7 +46,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const unauthorized = requireAdmin(_req);
+    const unauthorized = await requireAdmin(_req);
     if (unauthorized) return unauthorized;
 
     const { id } = await params;

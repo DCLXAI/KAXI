@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
 
 // GET /api/ai/chat - Vector Store 상태 조회 (디버그용)
 export async function GET(req: NextRequest) {
-  const unauthorized = requireAdmin(req);
+  const unauthorized = await requireAdmin(req);
   if (unauthorized) return unauthorized;
 
   initVectorStore();

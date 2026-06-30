@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useSession } from "next-auth/react";
 import { useLangStore } from "@/store/kbridge";
-import { tr } from "@/lib/i18n/translations";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +59,8 @@ interface ChatlogAnalysis {
 
 export function Synonyms() {
   const { lang } = useLangStore();
+  const { data: session, status } = useSession();
+  const isSessionAdmin = session?.user?.role === "admin";
   const [adminKey, setAdminKey] = useState("");
   const [keyInput, setKeyInput] = useState("");
   const [synonyms, setSynonyms] = useState<Synonym[]>([]);
@@ -79,9 +81,10 @@ export function Synonyms() {
     () => (adminKey ? { "x-admin-key": adminKey } : undefined),
     [adminKey]
   );
+  const hasAdminAccess = isSessionAdmin || Boolean(adminKey);
 
   const fetchSynonyms = useCallback(async () => {
-    if (!adminKey) return;
+    if (!hasAdminAccess) return;
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -99,10 +102,10 @@ export function Synonyms() {
     } finally {
       setLoading(false);
     }
-  }, [adminKey, authHeaders, category, origin, q]);
+  }, [authHeaders, category, hasAdminAccess, origin, q]);
 
   const fetchAnalysis = useCallback(async () => {
-    if (!adminKey) return;
+    if (!hasAdminAccess) return;
     try {
       const res = await fetch("/api/chatlog/analyze?days=30", { headers: authHeaders });
       if (!res.ok) return;
@@ -111,7 +114,7 @@ export function Synonyms() {
     } catch (e) {
       console.error(e);
     }
-  }, [adminKey, authHeaders]);
+  }, [authHeaders, hasAdminAccess]);
 
   useEffect(() => {
     const saved = sessionStorage.getItem("kb-admin-key") || "";
@@ -238,16 +241,21 @@ export function Synonyms() {
   };
 
   return (
-    !adminKey ? (
+    !hasAdminAccess ? (
       <div className="mx-auto max-w-md px-4 py-16">
         <Card>
           <CardHeader>
             <CardTitle>{lang === "ko" ? "관리자 인증" : "Admin Access"}</CardTitle>
             <CardDescription>
-              {lang === "ko" ? "동의어 사전 관리를 위해 관리자 API 키를 입력하세요." : "Enter the admin API key."}
+              {status === "loading"
+                ? lang === "ko" ? "세션 확인 중..." : "Checking session..."
+                : lang === "ko" ? "로그인하거나 관리자 API 키를 입력하세요." : "Sign in or enter the admin API key."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            <Button variant="outline" className="w-full" asChild>
+              <a href="/login">{lang === "ko" ? "관리자 로그인" : "Admin Login"}</a>
+            </Button>
             <Input
               type="password"
               value={keyInput}

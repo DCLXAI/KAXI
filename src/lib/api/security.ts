@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getToken } from "next-auth/jwt";
 import { timingSafeEqual } from "crypto";
 
 type JsonBody = Record<string, unknown>;
@@ -17,6 +18,13 @@ interface Bucket {
 const buckets = new Map<string, Bucket>();
 
 const LANGS = new Set(["ko", "vi", "mn", "en"]);
+const SUSPICIOUS_INPUT_PATTERNS = [
+  /<script\b/i,
+  /javascript:/i,
+  /\bon\w+\s*=/i,
+  /\.\.\//,
+  /(?:union\s+select|drop\s+table|insert\s+into|delete\s+from)/i,
+];
 
 function safeEqual(a: string, b: string): boolean {
   const left = Buffer.from(a);
@@ -35,10 +43,15 @@ export function getClientIp(req: NextRequest): string {
   return req.headers.get("x-real-ip") || "unknown";
 }
 
-export function requireAdmin(req: NextRequest): NextResponse | null {
+export async function requireAdmin(req: NextRequest): Promise<NextResponse | null> {
+  if (process.env.NEXTAUTH_SECRET) {
+    const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+    if (token?.role === "admin") return null;
+  }
+
   const expected = process.env.ADMIN_API_KEY;
   if (!expected) {
-    return jsonError("Admin API key is not configured", 503);
+    return jsonError("Admin credentials are not configured", 503);
   }
 
   const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
@@ -114,6 +127,9 @@ export function sanitizeAiBody(
   }
   if (question.length > options.maxQuestionLength) {
     return { error: jsonError(`Question is too long (${options.maxQuestionLength} chars max)`, 413) };
+  }
+  if (SUSPICIOUS_INPUT_PATTERNS.some((pattern) => pattern.test(question))) {
+    return { error: jsonError("Suspicious input rejected", 400) };
   }
 
   const lang = typeof body.lang === "string" && LANGS.has(body.lang) ? body.lang : "ko";

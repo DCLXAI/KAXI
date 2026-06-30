@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
 // GET /api/partner-requests - 파트너 요청 목록 (관리자용)
 export async function GET(req: NextRequest) {
   try {
-    const unauthorized = requireAdmin(req);
+    const unauthorized = await requireAdmin(req);
     if (unauthorized) return unauthorized;
 
     const status = req.nextUrl.searchParams.get("status");

@@ -5,7 +5,7 @@ import { jsonError, rateLimit, requireAdmin } from "@/lib/api/security";
 // GET /api/leads - 리드 목록 조회
 export async function GET(req: NextRequest) {
   try {
-    const unauthorized = requireAdmin(req);
+    const unauthorized = await requireAdmin(req);
     if (unauthorized) return unauthorized;
 
     const searchParams = req.nextUrl.searchParams;

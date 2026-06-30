@@ -6,7 +6,7 @@ import { jsonError, requireAdmin } from "@/lib/api/security";
 // GET /api/synonyms - 동의어 목록 조회
 export async function GET(req: NextRequest) {
   try {
-    const unauthorized = requireAdmin(req);
+    const unauthorized = await requireAdmin(req);
     if (unauthorized) return unauthorized;
 
     const searchParams = req.nextUrl.searchParams;
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
 // POST /api/synonyms - 동의어 추가
 export async function POST(req: NextRequest) {
   try {
-    const unauthorized = requireAdmin(req);
+    const unauthorized = await requireAdmin(req);
     if (unauthorized) return unauthorized;
 
     const body = await req.json();

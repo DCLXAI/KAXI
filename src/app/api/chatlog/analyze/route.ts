@@ -5,7 +5,7 @@ import { requireAdmin } from "@/lib/api/security";
 // GET /api/chatlog/analyze - ChatLog 분석 (언어/패턴/빈도)
 export async function GET(req: NextRequest) {
   try {
-    const unauthorized = requireAdmin(req);
+    const unauthorized = await requireAdmin(req);
     if (unauthorized) return unauthorized;
 
     const searchParams = req.nextUrl.searchParams;

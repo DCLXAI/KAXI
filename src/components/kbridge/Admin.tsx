@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSession } from "next-auth/react";
 import { useLangStore, useLeadStore } from "@/store/kbridge";
-import { tr, type Lang } from "@/lib/i18n/translations";
+import { tr } from "@/lib/i18n/translations";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,8 @@ interface Stats {
 
 export function Admin() {
   const { lang } = useLangStore();
+  const { data: session, status } = useSession();
+  const isSessionAdmin = session?.user?.role === "admin";
   const { leads, fetchLeads, loading } = useLeadStore();
   const [adminKey, setAdminKey] = useState("");
   const [keyInput, setKeyInput] = useState("");
@@ -29,18 +32,18 @@ export function Admin() {
   const [selected, setSelected] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
+  const hasAdminAccess = isSessionAdmin || Boolean(adminKey);
 
   const loadAll = useCallback(async () => {
-    if (!adminKey) return;
+    if (!hasAdminAccess) return;
     setAuthError(null);
+    const headers = adminKey ? { "x-admin-key": adminKey } : undefined;
     await Promise.all([
-      fetchLeads(adminKey),
+      fetchLeads(adminKey || undefined),
       (async () => {
         setStatsLoading(true);
         try {
-          const res = await fetch("/api/stats", {
-            headers: { "x-admin-key": adminKey },
-          });
+          const res = await fetch("/api/stats", { headers });
           if (res.status === 401 || res.status === 503) {
             setAuthError(lang === "ko" ? "관리자 키를 확인하세요." : "Check the admin key.");
             setStats(null);
@@ -57,7 +60,7 @@ export function Admin() {
         }
       })(),
     ]);
-  }, [adminKey, fetchLeads, lang]);
+  }, [adminKey, fetchLeads, hasAdminAccess, lang]);
 
   useEffect(() => {
     const saved = sessionStorage.getItem("kb-admin-key") || "";
@@ -68,7 +71,7 @@ export function Admin() {
   }, []);
 
   useEffect(() => {
-    if (adminKey) loadAll();
+    if (hasAdminAccess) loadAll();
   }, [loadAll]);
 
   const unlock = () => {
@@ -78,17 +81,22 @@ export function Admin() {
     setAdminKey(trimmed);
   };
 
-  if (!adminKey) {
+  if (!hasAdminAccess) {
     return (
       <div className="mx-auto max-w-md px-4 py-16">
         <Card>
           <CardHeader>
             <CardTitle>{lang === "ko" ? "관리자 인증" : "Admin Access"}</CardTitle>
             <CardDescription>
-              {lang === "ko" ? "관리자 API 키를 입력하세요." : "Enter the admin API key."}
+              {status === "loading"
+                ? lang === "ko" ? "세션 확인 중..." : "Checking session..."
+                : lang === "ko" ? "로그인하거나 관리자 API 키를 입력하세요." : "Sign in or enter the admin API key."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            <Button variant="outline" className="w-full" asChild>
+              <a href="/login">{lang === "ko" ? "관리자 로그인" : "Admin Login"}</a>
+            </Button>
             <Input
               type="password"
               value={keyInput}

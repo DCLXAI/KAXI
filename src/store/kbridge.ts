@@ -239,3 +239,42 @@ export const useDocsStore = create<DocsState>()(
     { name: "kb-docs" }
   )
 );
+
+// --- 비용 계산 결과 (클라이언트 persist) ---
+export interface SavedCost {
+  id: string;
+  savedAt: number;
+  schoolId: string;
+  schoolName: string;
+  total: number;
+  items: Record<string, number>;
+  brokerTotal?: number;
+}
+
+interface CostState {
+  savedCosts: SavedCost[];
+  saveCost: (cost: Omit<SavedCost, "id" | "savedAt">) => void;
+  removeCost: (id: string) => void;
+  clearAll: () => void;
+}
+
+export const useCostStore = create<CostState>()(
+  persist(
+    (set) => ({
+      savedCosts: [],
+      saveCost: (cost) =>
+        set((state) => ({
+          savedCosts: [
+            { ...cost, id: `cost-${Date.now()}`, savedAt: Date.now() },
+            ...state.savedCosts,
+          ].slice(0, 20),
+        })),
+      removeCost: (id) =>
+        set((state) => ({
+          savedCosts: state.savedCosts.filter((cost) => cost.id !== id),
+        })),
+      clearAll: () => set({ savedCosts: [] }),
+    }),
+    { name: "kb-costs" }
+  )
+);

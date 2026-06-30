@@ -1,16 +1,16 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useLangStore } from "@/store/kbridge";
-import { tr, type Lang } from "@/lib/i18n/translations";
+import { useCostStore, useLangStore } from "@/store/kbridge";
+import { tr } from "@/lib/i18n/translations";
 import { SCHOOLS } from "@/lib/data/schools";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, CheckCircle2, Save } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Save, Trash2 } from "lucide-react";
 
 const COST_ITEMS = [
   "cost_item_application",
@@ -43,10 +43,12 @@ const PLATFORM_FEE_ITEMS = new Set(["cost_item_application", "cost_item_visa", "
 
 export function CostCalculator() {
   const { lang } = useLangStore();
+  const { savedCosts, saveCost, removeCost } = useCostStore();
   const [selectedSchool, setSelectedSchool] = useState<string>("snu-klc");
   const [platformValues, setPlatformValues] = useState<Record<string, number>>(PLATFORM_DEFAULTS);
   const [brokerValues, setBrokerValues] = useState<Record<string, number>>({});
   const [brokerTotalInput, setBrokerTotalInput] = useState<number>(0);
+  const [savedAlert, setSavedAlert] = useState(false);
 
   const school = useMemo(() => SCHOOLS.find((s) => s.id === selectedSchool)!, [selectedSchool]);
 
@@ -77,6 +79,18 @@ export function CostCalculator() {
   const diffPct = platformTotal > 0 ? Math.round((diff / platformTotal) * 100) : 0;
 
   const isOver = brokerTotal > 0 && diffPct > 30;
+
+  const handleSave = () => {
+    saveCost({
+      schoolId: school.id,
+      schoolName: school.name[lang],
+      total: platformTotal,
+      items: { ...platformValues },
+      brokerTotal: brokerTotal > 0 ? brokerTotal : undefined,
+    });
+    setSavedAlert(true);
+    setTimeout(() => setSavedAlert(false), 2500);
+  };
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 space-y-6">
@@ -227,18 +241,55 @@ export function CostCalculator() {
           <div>
             <div className="font-medium">{tr("cost_add_to_workspace", lang)}</div>
             <div className="text-sm text-muted-foreground">
-              {lang === "ko" && "플랫폼 예상 비용이 서류 워크스페이스에 기준 예산으로 저장됩니다."}
-              {lang === "vi" && "Lưu vào hồ sơ."}
-              {lang === "mn" && "Workspace-д хадгалах."}
-              {lang === "en" && "Saves platform estimate as reference budget."}
+              {lang === "ko" && "플랫폼 예상 비용이 브라우저에 저장됩니다 (최대 20개)."}
+              {lang === "vi" && "Lưu vào trình duyệt (tối đa 20)."}
+              {lang === "mn" && "Хөтөчөөр хадгалах (20 хүртэл)."}
+              {lang === "en" && "Saves to browser (max 20)."}
             </div>
+            {savedAlert && (
+              <div className="text-sm text-green-600 flex items-center gap-1 mt-1">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                {lang === "ko" ? "저장되었습니다!" : "Saved!"}
+              </div>
+            )}
           </div>
-          <Button className="gap-2">
+          <Button className="gap-2" onClick={handleSave}>
             <Save className="h-4 w-4" />
             {tr("cost_add_to_workspace", lang)}
           </Button>
         </CardContent>
       </Card>
+
+      {savedCosts.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">
+              {lang === "ko" ? "저장된 비용 견적" : "Saved estimates"} ({savedCosts.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {savedCosts.map((cost) => (
+              <div key={cost.id} className="flex items-center justify-between gap-2 p-2 rounded-md border text-sm">
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium truncate">{cost.schoolName}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {new Date(cost.savedAt).toLocaleDateString()} · {cost.total.toLocaleString()}₩
+                    {cost.brokerTotal ? ` (브로커: ${cost.brokerTotal.toLocaleString()}₩)` : ""}
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 text-destructive"
+                  onClick={() => removeCost(cost.id)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { signOut, useSession } from "next-auth/react";
 import { useLangStore } from "@/store/kbridge";
 import { LANGS, tr, type Lang } from "@/lib/i18n/translations";
 import { Button } from "@/components/ui/button";
@@ -8,9 +9,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Globe } from "lucide-react";
+import { Globe, LogOut, User } from "lucide-react";
 
 export function LangSwitcher() {
   const { lang, setLang } = useLangStore();
@@ -75,6 +77,8 @@ export function Header({
   onNavigate: (v: string) => void;
 }) {
   const { lang } = useLangStore();
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "admin";
 
   const navItems = [
     { key: "home", label: tr("brand", lang) },
@@ -85,6 +89,12 @@ export function Header({
     { key: "cost", label: tr("nav_cost", lang) },
     { key: "docs", label: tr("nav_docs", lang) },
     { key: "partners", label: tr("nav_partners", lang) },
+    ...(isAdmin
+      ? [
+          { key: "admin", label: tr("nav_admin", lang) },
+          { key: "synonyms", label: lang === "ko" ? "동의어" : "Synonyms" },
+        ]
+      : []),
   ];
 
   return (
@@ -111,6 +121,36 @@ export function Header({
         </nav>
         <div className="ml-auto flex items-center gap-2">
           <LangSwitcher />
+          {isAdmin ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5">
+                  <User className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Admin</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem className="text-xs text-muted-foreground">
+                  {session.user?.email}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => signOut({ callbackUrl: "/" })}
+                  className="text-destructive gap-1.5"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  로그아웃
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Button variant="ghost" size="sm" asChild className="gap-1.5">
+              <a href="/login">
+                <User className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">로그인</span>
+              </a>
+            </Button>
+          )}
         </div>
       </div>
       {/* 모바일 네비 */}
