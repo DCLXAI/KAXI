@@ -250,6 +250,36 @@ function testLocalAdminPasswordFallbackStillWorks() {
   }
 }
 
+async function testAuthSessionFailsClosedWhenAdminConfigMissing() {
+  const snapshot = { ...process.env };
+  try {
+    Object.assign(process.env, {
+      NODE_ENV: "production",
+      VERCEL_ENV: "production",
+      VERCEL: "1",
+      ADMIN_EMAIL: "",
+      ADMIN_PASSWORD: "",
+      ADMIN_PASSWORD_HASH: "",
+      ADMIN_ROLE: "",
+      ADMIN_MFA_TOTP_SECRET: "",
+    });
+    delete process.env.NEXTAUTH_SECRET;
+
+    const route = await import("../src/app/api/auth/[...nextauth]/route");
+    const res = await route.GET(
+      new NextRequest("https://kaxi.local/api/auth/session"),
+      {} as never
+    );
+    const body = await res.json();
+
+    if (res.status !== 200 || Object.keys(body).length !== 0) {
+      fail(`auth session should fail closed with empty session when admin config is missing: ${res.status} ${JSON.stringify(body)}`);
+    }
+  } finally {
+    restoreEnv(snapshot);
+  }
+}
+
 await testProductionReadinessFlagsMissingOpsConfig();
 testDatabaseRuntimeInfo();
 await testProductionRateLimitFailsClosedWithoutSharedBackend();
@@ -257,4 +287,5 @@ await testReadinessFailsMissingRagMetadata();
 testSchoolSeedFallbackIsLocalOnly();
 testProductionAdminAuthFailsClosed();
 testLocalAdminPasswordFallbackStillWorks();
+await testAuthSessionFailsClosedWhenAdminConfigMissing();
 console.log("PASS readiness guards");

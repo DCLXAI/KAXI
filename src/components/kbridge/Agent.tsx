@@ -58,8 +58,6 @@ interface Msg {
   meta?: AgentMeta;
 }
 
-const DEFAULT_LOCAL_CODEX_BRIDGE_URL = "http://127.0.0.1:8787/api/ai/agent";
-
 type BridgeState = "checking" | "reachable" | "unreachable" | "off";
 
 interface AgentStatus {
@@ -139,11 +137,6 @@ function getConfiguredBridgeUrl(): { url: string | null; explicit: boolean } {
 
   const envUrl = process.env.NEXT_PUBLIC_CODEX_BRIDGE_URL?.trim();
   if (envUrl) return { url: envUrl, explicit: true };
-
-  const host = window.location.hostname;
-  if (host === "kaxi.vercel.app" || host.endsWith(".vercel.app")) {
-    return { url: DEFAULT_LOCAL_CODEX_BRIDGE_URL, explicit: false };
-  }
 
   return { url: null, explicit: false };
 }
