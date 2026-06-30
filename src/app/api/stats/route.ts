@@ -1,9 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { requireAdmin } from "@/lib/api/security";
 
 // GET /api/stats - 관리자 대시보드 통계
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const unauthorized = requireAdmin(req);
+    if (unauthorized) return unauthorized;
+
     const [totalLeads, totalRequests, pendingRequests, brokerUsers] = await Promise.all([
       db.lead.count(),
       db.partnerRequest.count(),

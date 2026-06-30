@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { pickLangText, type KnowledgeDoc } from "@/lib/data/knowledge";
+import { getSourceMetadata, pickLangText, type KnowledgeDoc } from "@/lib/data/knowledge";
 import type { Lang } from "@/lib/i18n/translations";
 import { db } from "@/lib/db";
 import { hybridSearch, initVectorStore, initTransformerStore } from "@/lib/embeddings/vector-store";
+import {
+  consumeDailyQuota,
+  parsePositiveInt,
+  rateLimit,
+  sanitizeAiBody,
+  withTimeout,
+} from "@/lib/api/security";
 
 // POST /api/ai/consult - 행정사 전문 AI 에이전트 상담 채팅
 // 일반 AI 도우미보다 더 깊이 있는 법적/행정적 답변 제공
@@ -10,31 +17,55 @@ import { hybridSearch, initVectorStore, initTransformerStore } from "@/lib/embed
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const {
-      question,
-      lang = "ko" as Lang,
-      history = [],
-      mode = "general", // general | visa | documents | appeal | business
-    } = body || {};
+    const limited = rateLimit(req, {
+      key: "ai:consult",
+      limit: parsePositiveInt(process.env.AI_CONSULT_RATE_LIMIT, 10),
+      windowMs: 60 * 1000,
+    });
+    if (limited) return limited;
 
-    if (!question || typeof question !== "string") {
-      return NextResponse.json(
-        { error: "Missing question" },
-        { status: 400 }
-      );
-    }
+    const quotaExceeded = consumeDailyQuota(
+      req,
+      "ai:consult",
+      parsePositiveInt(process.env.AI_CONSULT_DAILY_QUOTA, 50)
+    );
+    if (quotaExceeded) return quotaExceeded;
+
+    const body = await req.json();
+    const parsed = sanitizeAiBody(body || {}, {
+      maxQuestionLength: parsePositiveInt(process.env.AI_CONSULT_MAX_CHARS, 2500),
+      maxHistoryItems: 8,
+      maxHistoryItemLength: 1500,
+      allowedModes: ["general", "visa", "documents", "appeal", "business"],
+    });
+    if (parsed.error) return parsed.error;
+
+    const { question, history } = parsed.value;
+    const lang = parsed.value.lang as Lang;
+    const mode = parsed.value.mode || "general"; // general | visa | documents | appeal | business
 
     // 1. Vector Store 초기화
     initVectorStore();
-    await initTransformerStore();
+    try {
+      await withTimeout(
+        initTransformerStore(),
+        parsePositiveInt(process.env.AI_EMBEDDING_INIT_TIMEOUT_MS, 15_000),
+        "Transformer initialization"
+      );
+    } catch (initErr) {
+      console.error("[Transformer init timeout/failure]", initErr);
+    }
 
     // 2. RAG 검색 (전문 상담은 더 많은 문서 검색)
     const searchResults = await hybridSearch(question, { topK: 5 });
     const docs: KnowledgeDoc[] = searchResults.map((r) => r.doc);
 
     // 3. 행정사 전문 LLM 답변 생성
-    const result = await generateExpertAnswer(question, lang, docs, history, mode);
+    const result = await withTimeout(
+      generateExpertAnswer(question, lang, docs, history, mode),
+      parsePositiveInt(process.env.AI_LLM_TIMEOUT_MS, 25_000),
+      "Expert LLM generation"
+    );
 
     // 4. ChatLog 저장
     try {
@@ -68,6 +99,7 @@ export async function POST(req: NextRequest) {
         title: pickLangText(d.title, lang),
         category: d.category,
         source: d.source,
+        sourceMeta: getSourceMetadata(d.source),
       })),
       suggestedFollowups: result.suggestedFollowups,
       needsHumanExpert: result.needsHumanExpert,

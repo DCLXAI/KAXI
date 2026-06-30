@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { requireAdmin, withTimeout } from "@/lib/api/security";
 
 // POST /api/synonyms/suggest - LLM 기반 동의어 후보 자동 추천
 // ChatLog에서 빈도 높은 단어 + 기존 동의어와 매칭 안 된 것들을 LLM이 분석
 
 export async function POST(req: NextRequest) {
   try {
+    const unauthorized = requireAdmin(req);
+    if (unauthorized) return unauthorized;
+
     const body = await req.json();
     const { days = 30, topN = 20 } = body || {};
+    const safeDays = Math.min(Math.max(Number(days) || 30, 1), 90);
+    const safeTopN = Math.min(Math.max(Number(topN) || 20, 1), 50);
 
-    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const since = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000);
     const logs = await db.chatLog.findMany({
       where: { createdAt: { gte: since } },
       take: 500,
@@ -66,7 +72,7 @@ export async function POST(req: NextRequest) {
         return true;
       })
       .sort((a, b) => b[1].count - a[1].count)
-      .slice(0, topN)
+      .slice(0, safeTopN)
       .map(([word, info]) => ({
         word,
         count: info.count,
@@ -85,7 +91,11 @@ export async function POST(req: NextRequest) {
 
     if (candidates.length > 0) {
       try {
-        llmSuggestions = await generateSynonymSuggestions(candidates);
+        llmSuggestions = await withTimeout(
+          generateSynonymSuggestions(candidates),
+          20_000,
+          "Synonym suggestion"
+        );
       } catch (e) {
         console.error("[LLM suggest error]", e);
       }

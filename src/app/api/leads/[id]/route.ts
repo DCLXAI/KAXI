@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { requireAdmin } from "@/lib/api/security";
 
 // GET /api/leads/[id] - 리드 상세
 export async function GET(
@@ -7,6 +8,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const unauthorized = requireAdmin(_req);
+    if (unauthorized) return unauthorized;
+
     const { id } = await params;
     const lead = await db.lead.findUnique({
       where: { id },
@@ -28,6 +32,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const unauthorized = requireAdmin(_req);
+    if (unauthorized) return unauthorized;
+
     const { id } = await params;
     await db.lead.delete({ where: { id } });
     return NextResponse.json({ ok: true });

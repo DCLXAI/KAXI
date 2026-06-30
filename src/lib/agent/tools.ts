@@ -2,7 +2,7 @@
 // 각 도구는 name, description, parameters, execute 함수로 구성
 
 import { SCHOOLS, filterSchools, type School } from "../data/schools";
-import { KNOWLEDGE_DOCS, pickLangText, type KnowledgeDoc } from "../data/knowledge";
+import { KNOWLEDGE_DOCS, getSourceMetadata, pickLangText, type KnowledgeDoc } from "../data/knowledge";
 import { recommendPath, type DiagnosisInput } from "../data/diagnosis";
 import { hybridSearch } from "../embeddings/vector-store";
 import type { Lang } from "../i18n/translations";
@@ -226,6 +226,7 @@ const searchKnowledgeTool: Tool = {
         content: pickLangText(r.doc.content, ctx.lang),
         category: r.doc.category,
         source: r.doc.source,
+        sourceMeta: getSourceMetadata(r.doc.source),
         score: Number(r.score.toFixed(3)),
       })),
       summary: `${results.length}개 관련 문서 검색: ${results.map((r) => r.doc.id).join(", ")}`,
@@ -242,9 +243,9 @@ const diagnosePathTool: Tool = {
     properties: {
       nationality: { type: "string", description: "국적 코드" },
       age: { type: "number", description: "나이" },
-      education: { type: "string", enum: ["highschool", "college", "university", "master"] },
-      korean_level: { type: "string", enum: ["none", "topik1", "topik2", "topik3"] },
-      goal: { type: "string", enum: ["language", "degree", "transfer", "career", "unsure"] },
+      education: { type: "string", description: "최종 학력", enum: ["highschool", "college", "university", "master"] },
+      korean_level: { type: "string", description: "한국어 수준", enum: ["none", "topik1", "topik2", "topik3"] },
+      goal: { type: "string", description: "유학 목표", enum: ["language", "degree", "transfer", "career", "unsure"] },
       budget: { type: "number", description: "예산 (KRW, 6개월)" },
       using_broker: { type: "boolean", description: "브로커 이용 여부" },
       broker_cost: { type: "number", description: "브로커 요구 금액" },

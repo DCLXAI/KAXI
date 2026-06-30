@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { jsonError, rateLimit, requireAdmin } from "@/lib/api/security";
 
 // GET /api/leads - 리드 목록 조회
 export async function GET(req: NextRequest) {
   try {
+    const unauthorized = requireAdmin(req);
+    if (unauthorized) return unauthorized;
+
     const searchParams = req.nextUrl.searchParams;
     const q = searchParams.get("q") || "";
     const limit = Math.min(Number(searchParams.get("limit") || "100"), 500);
@@ -34,6 +38,9 @@ export async function GET(req: NextRequest) {
 // POST /api/leads - 리드 생성
 export async function POST(req: NextRequest) {
   try {
+    const limited = rateLimit(req, { key: "lead:create", limit: 20, windowMs: 60 * 60 * 1000 });
+    if (limited) return limited;
+
     const body = await req.json();
     const {
       nickname,
@@ -57,12 +64,9 @@ export async function POST(req: NextRequest) {
       contactType,
     } = body || {};
 
-    if (!nickname || !nationality || !pathKey) {
-      return NextResponse.json(
-        { error: "Missing required fields: nickname, nationality, pathKey" },
-        { status: 400 }
-      );
-    }
+    if (!nickname || !nationality || !pathKey) return jsonError("Missing required fields: nickname, nationality, pathKey", 400);
+    if (String(nickname).length > 80) return jsonError("Nickname is too long", 413);
+    if (contact && String(contact).length > 160) return jsonError("Contact is too long", 413);
 
     const lead = await db.lead.create({
       data: {

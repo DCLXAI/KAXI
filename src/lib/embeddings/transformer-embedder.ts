@@ -3,13 +3,13 @@
 // TF-IDF 방식보다 의미적 유사도 파악에 훨씬 우수
 // 폴백: 모델 로드 실패시 기존 vectorizer.ts 사용
 
-import { pipeline, env, type FeatureExtractionPipeline } from "@xenova/transformers";
+import type { FeatureExtractionPipeline } from "@xenova/transformers";
 import { vectorize as tfidfVectorize, type Vectorizer as TFIDFVectorizer } from "./vectorizer";
+import * as path from "path";
 
 // 로컬 캐시 (재다운로드 방지)
-env.cacheDir = "/home/z/my-project/data/model-cache";
-env.allowRemoteModels = true;
-env.allowLocalModels = false;
+const MODEL_CACHE_DIR =
+  process.env.MODEL_CACHE_DIR || path.join(process.cwd(), "data", "model-cache");
 
 const MODEL_NAME = "Xenova/multilingual-e5-small";
 const EMBED_DIM = 384;
@@ -25,6 +25,11 @@ export async function getEmbedder(): Promise<FeatureExtractionPipeline | null> {
   if (!extractorPromise) {
     extractorPromise = (async () => {
       try {
+        const { pipeline, env } = await import("@xenova/transformers");
+        env.cacheDir = MODEL_CACHE_DIR;
+        env.allowRemoteModels = process.env.TRANSFORMERS_ALLOW_REMOTE !== "false";
+        env.allowLocalModels = process.env.TRANSFORMERS_ALLOW_LOCAL === "true";
+
         console.log(`[TransformerEmbedder] Loading model: ${MODEL_NAME}`);
         const t0 = Date.now();
         const extractor = await pipeline("feature-extraction", MODEL_NAME, {
@@ -137,8 +142,9 @@ export async function disposeEmbedder(): Promise<void> {
   if (extractorPromise) {
     try {
       const extractor = await extractorPromise;
-      // @ts-expect-error dispose method exists at runtime
-      if (extractor?.dispose) await extractor.dispose();
+      if ("dispose" in Object(extractor)) {
+        await (extractor as FeatureExtractionPipeline & { dispose: () => Promise<void> }).dispose();
+      }
     } catch (e) {
       console.error("[TransformerEmbedder] dispose error:", e);
     }

@@ -15,6 +15,128 @@ export interface KnowledgeDoc {
   source: string;
 }
 
+export interface SourceMetadata {
+  label: string;
+  url: string;
+  verifiedAt: string;
+  reviewAfter: string;
+  owner: "official" | "internal";
+}
+
+const DEFAULT_VERIFIED_AT = "2026-06-30";
+const DEFAULT_REVIEW_AFTER = "2026-09-30";
+
+export const SOURCE_METADATA: Record<string, SourceMetadata> = {
+  "Study in Korea · 한국유학종합시스템": {
+    label: "Study in Korea · 한국유학종합시스템",
+    url: "https://www.studyinkorea.go.kr",
+    verifiedAt: DEFAULT_VERIFIED_AT,
+    reviewAfter: DEFAULT_REVIEW_AFTER,
+    owner: "official",
+  },
+  "Study in Korea · 교육부": {
+    label: "Study in Korea · 교육부",
+    url: "https://www.studyinkorea.go.kr",
+    verifiedAt: DEFAULT_VERIFIED_AT,
+    reviewAfter: DEFAULT_REVIEW_AFTER,
+    owner: "official",
+  },
+  "Study in Korea (studyinkorea.go.kr)": {
+    label: "Study in Korea",
+    url: "https://www.studyinkorea.go.kr",
+    verifiedAt: DEFAULT_VERIFIED_AT,
+    reviewAfter: DEFAULT_REVIEW_AFTER,
+    owner: "official",
+  },
+  "법무부 출입국외국인정책본부": {
+    label: "법무부 출입국외국인정책본부",
+    url: "https://www.immigration.go.kr",
+    verifiedAt: DEFAULT_VERIFIED_AT,
+    reviewAfter: DEFAULT_REVIEW_AFTER,
+    owner: "official",
+  },
+  "교육부 보도자료 (2026.02)": {
+    label: "교육부 보도자료",
+    url: "https://www.moe.go.kr",
+    verifiedAt: DEFAULT_VERIFIED_AT,
+    reviewAfter: DEFAULT_REVIEW_AFTER,
+    owner: "official",
+  },
+  "NIIED 한국교육과정평가원": {
+    label: "국립국제교육원/TOPIK",
+    url: "https://www.topik.go.kr",
+    verifiedAt: DEFAULT_VERIFIED_AT,
+    reviewAfter: DEFAULT_REVIEW_AFTER,
+    owner: "official",
+  },
+  "법무부 비자 발급 안내": {
+    label: "법무부 비자 발급 안내",
+    url: "https://www.visa.go.kr",
+    verifiedAt: DEFAULT_VERIFIED_AT,
+    reviewAfter: DEFAULT_REVIEW_AFTER,
+    owner: "official",
+  },
+  "출입국관리법 제89조·형법 제231조": {
+    label: "국가법령정보센터",
+    url: "https://www.law.go.kr",
+    verifiedAt: DEFAULT_VERIFIED_AT,
+    reviewAfter: DEFAULT_REVIEW_AFTER,
+    owner: "official",
+  },
+  "직업안정법 제47조·출입국관리법 제18조": {
+    label: "국가법령정보센터",
+    url: "https://www.law.go.kr",
+    verifiedAt: DEFAULT_VERIFIED_AT,
+    reviewAfter: DEFAULT_REVIEW_AFTER,
+    owner: "official",
+  },
+  "행정사법 제2조 (법제처 해석례)": {
+    label: "국가법령정보센터",
+    url: "https://www.law.go.kr",
+    verifiedAt: DEFAULT_VERIFIED_AT,
+    reviewAfter: DEFAULT_REVIEW_AFTER,
+    owner: "official",
+  },
+  "출입국관리사무소 안내": {
+    label: "법무부 출입국외국인정책본부",
+    url: "https://www.immigration.go.kr",
+    verifiedAt: DEFAULT_VERIFIED_AT,
+    reviewAfter: DEFAULT_REVIEW_AFTER,
+    owner: "official",
+  },
+  "출입국관리사무소 체류자격 변경 안내": {
+    label: "법무부 출입국외국인정책본부",
+    url: "https://www.immigration.go.kr",
+    verifiedAt: DEFAULT_VERIFIED_AT,
+    reviewAfter: DEFAULT_REVIEW_AFTER,
+    owner: "official",
+  },
+  "K-Bridge 분석 (공식 학사운영 지침 기반)": {
+    label: "K-Bridge internal analysis",
+    url: "internal://k-bridge/cost-analysis",
+    verifiedAt: DEFAULT_VERIFIED_AT,
+    reviewAfter: DEFAULT_REVIEW_AFTER,
+    owner: "internal",
+  },
+  "K-Bridge 안전 가이드라인": {
+    label: "K-Bridge safety guideline",
+    url: "internal://k-bridge/safety-guideline",
+    verifiedAt: DEFAULT_VERIFIED_AT,
+    reviewAfter: DEFAULT_REVIEW_AFTER,
+    owner: "internal",
+  },
+};
+
+export function getSourceMetadata(source: string): SourceMetadata {
+  return SOURCE_METADATA[source] ?? {
+    label: source,
+    url: "internal://k-bridge/unregistered-source",
+    verifiedAt: DEFAULT_VERIFIED_AT,
+    reviewAfter: DEFAULT_REVIEW_AFTER,
+    owner: "internal",
+  };
+}
+
 export const KNOWLEDGE_DOCS: KnowledgeDoc[] = [
   {
     id: "d2-overview",
