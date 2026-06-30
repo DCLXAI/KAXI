@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createPartnerRequest } from "../src/lib/partners/repository";
 import { canPersistPiiValue, preparePiiField, readPiiField } from "../src/lib/privacy/pii";
+import { serializeLeadForResponse, serializePartnerRequestForResponse } from "../src/lib/privacy/serializers";
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -63,6 +64,81 @@ async function testProductionPiiPersistenceRequiresEncryption() {
   }
 }
 
+async function testPiiResponseSerializersDoNotExposeSecrets() {
+  const snapshot = { ...process.env };
+  try {
+    Object.assign(process.env, {
+      NODE_ENV: "test",
+      DATA_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      PII_HASH_SECRET: "privacy-serializer-test-secret",
+    });
+
+    const protectedContact = preparePiiField("user@example.com", { kind: "contact" });
+    const protectedQuestion = preparePiiField("Please email user@example.com about D-4.", { kind: "text" });
+    const leadBody = {
+      lead: serializeLeadForResponse({
+        id: "lead-serializer-test",
+        nickname: "serializer-test",
+        contact: protectedContact.plaintext,
+        contactCiphertext: protectedContact.ciphertext,
+        contactHash: protectedContact.hash,
+        contactRedacted: protectedContact.redacted,
+        partnerRequests: [
+          {
+            id: "partner-serializer-test",
+            question: protectedQuestion.plaintext,
+            questionCiphertext: protectedQuestion.ciphertext,
+            questionHash: protectedQuestion.hash,
+            questionRedacted: protectedQuestion.redacted,
+          },
+        ],
+      }),
+    };
+    const serializedLead = JSON.stringify(leadBody);
+    if (serializedLead.includes("contactCiphertext") || serializedLead.includes("contactHash")) {
+      fail(`lead response exposed contact secret fields: ${serializedLead}`);
+    }
+    if (serializedLead.includes("questionCiphertext") || serializedLead.includes("questionHash")) {
+      fail(`nested partner response exposed question secret fields: ${serializedLead}`);
+    }
+    if (serializedLead.includes("user@example.com")) {
+      fail("lead response leaked raw contact");
+    }
+
+    const partnerBody = {
+      request: serializePartnerRequestForResponse({
+        id: "partner-serializer-test",
+        question: protectedQuestion.plaintext,
+        questionCiphertext: protectedQuestion.ciphertext,
+        questionHash: protectedQuestion.hash,
+        questionRedacted: protectedQuestion.redacted,
+        lead: {
+          id: "lead-serializer-test",
+          contact: protectedContact.plaintext,
+          contactCiphertext: protectedContact.ciphertext,
+          contactHash: protectedContact.hash,
+          contactRedacted: protectedContact.redacted,
+        },
+      }),
+    };
+    const serializedPartner = JSON.stringify(partnerBody);
+    if (serializedPartner.includes("questionCiphertext") || serializedPartner.includes("questionHash")) {
+      fail(`partner response exposed question secret fields: ${serializedPartner}`);
+    }
+    if (serializedPartner.includes("contactCiphertext") || serializedPartner.includes("contactHash")) {
+      fail(`partner lead response exposed contact secret fields: ${serializedPartner}`);
+    }
+    if (serializedPartner.includes("user@example.com")) {
+      fail("partner response leaked raw question PII");
+    }
+  } finally {
+    for (const key of Object.keys(process.env)) {
+      if (!(key in snapshot)) delete process.env[key];
+    }
+    Object.assign(process.env, snapshot);
+  }
+}
+
 async function testHostedSqliteGuards() {
   process.env.VERCEL = "1";
   process.env.DATABASE_URL = "file:/tmp/kaxi-no-write.db";
@@ -109,5 +185,6 @@ async function testHostedSqliteGuards() {
 await testPiiRedactionWithoutKey();
 await testPiiRoundTripWithKey();
 await testProductionPiiPersistenceRequiresEncryption();
+await testPiiResponseSerializersDoNotExposeSecrets();
 await testHostedSqliteGuards();
 console.log("PASS privacy guards");

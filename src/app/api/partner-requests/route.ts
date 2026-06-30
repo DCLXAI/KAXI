@@ -2,20 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { jsonError, rateLimit, requireAdmin } from "@/lib/api/security";
 import { createPartnerRequest } from "@/lib/partners/repository";
-import { readPiiField } from "@/lib/privacy/pii";
-
-function serializePartnerRequest(request: any) {
-  return {
-    ...request,
-    question: readPiiField(request.question, request.questionCiphertext),
-    lead: request.lead
-      ? {
-          ...request.lead,
-          contact: readPiiField(request.lead.contact, request.lead.contactCiphertext),
-        }
-      : request.lead,
-  };
-}
+import { serializePartnerRequestForResponse } from "@/lib/privacy/serializers";
 
 // POST /api/partner-requests - 파트너 상담 요청
 export async function POST(req: NextRequest) {
@@ -36,7 +23,7 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json(
-      { request: serializePartnerRequest(request), persisted: (request as any).persisted !== false },
+      { request: serializePartnerRequestForResponse(request), persisted: (request as any).persisted !== false },
       { status: (request as any).persisted === false ? 202 : 201 }
     );
   } catch (e) {
@@ -59,7 +46,9 @@ export async function GET(req: NextRequest) {
       take: 200,
       include: { lead: true },
     });
-    return NextResponse.json({ requests: requests.map(serializePartnerRequest) });
+    return NextResponse.json({
+      requests: requests.map((request) => serializePartnerRequestForResponse(request, { revealPii: true })),
+    });
   } catch (e) {
     console.error("[GET /api/partner-requests]", e);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

@@ -1,24 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { canWriteRuntimeDatabase, db } from "@/lib/db";
 import { getAdminContext, jsonError, parsePositiveInt, rateLimit, requireAdmin } from "@/lib/api/security";
-import { canPersistPiiValue, preparePiiField, readPiiField, retentionUntil } from "@/lib/privacy/pii";
-
-function serializePartnerRequest(request: any) {
-  return {
-    ...request,
-    question: readPiiField(request.question, request.questionCiphertext),
-  };
-}
-
-function serializeLead(lead: any) {
-  return {
-    ...lead,
-    contact: readPiiField(lead.contact, lead.contactCiphertext),
-    partnerRequests: Array.isArray(lead.partnerRequests)
-      ? lead.partnerRequests.map(serializePartnerRequest)
-      : lead.partnerRequests,
-  };
-}
+import { canPersistPiiValue, preparePiiField, retentionUntil } from "@/lib/privacy/pii";
+import { serializeLeadForResponse } from "@/lib/privacy/serializers";
 
 // GET /api/leads - 리드 목록 조회
 export async function GET(req: NextRequest) {
@@ -46,7 +30,10 @@ export async function GET(req: NextRequest) {
       include: { partnerRequests: true },
     });
 
-    return NextResponse.json({ leads: leads.map(serializeLead), actor: await getAdminContext(req) });
+    return NextResponse.json({
+      leads: leads.map((lead) => serializeLeadForResponse(lead, { revealPii: true })),
+      actor: await getAdminContext(req),
+    });
   } catch (e) {
     console.error("[GET /api/leads]", e);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
@@ -130,7 +117,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({ lead: serializeLead(lead) }, { status: 201 });
+    return NextResponse.json({ lead: serializeLeadForResponse(lead) }, { status: 201 });
   } catch (e) {
     console.error("[POST /api/leads]", e);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

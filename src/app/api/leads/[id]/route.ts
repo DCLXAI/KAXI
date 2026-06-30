@@ -2,24 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getAdminContext, requireAdmin } from "@/lib/api/security";
 import { recordRequestAudit } from "@/lib/audit";
-import { readPiiField } from "@/lib/privacy/pii";
-
-function serializePartnerRequest(request: any) {
-  return {
-    ...request,
-    question: readPiiField(request.question, request.questionCiphertext),
-  };
-}
-
-function serializeLead(lead: any) {
-  return {
-    ...lead,
-    contact: readPiiField(lead.contact, lead.contactCiphertext),
-    partnerRequests: Array.isArray(lead.partnerRequests)
-      ? lead.partnerRequests.map(serializePartnerRequest)
-      : lead.partnerRequests,
-  };
-}
+import { serializeLeadForResponse } from "@/lib/privacy/serializers";
 
 // GET /api/leads/[id] - 리드 상세
 export async function GET(
@@ -38,7 +21,7 @@ export async function GET(
     if (!lead) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    return NextResponse.json({ lead: serializeLead(lead) });
+    return NextResponse.json({ lead: serializeLeadForResponse(lead, { revealPii: true }) });
   } catch (e) {
     console.error("[GET /api/leads/[id]]", e);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
