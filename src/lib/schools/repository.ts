@@ -44,6 +44,21 @@ const REGIONS = new Set(["seoul", "gyeonggi", "busan", "daegu", "gwangju", "othe
 const PROGRAMS = new Set<Program>(["language", "college", "university", "graduate", "vocational"]);
 const ACCREDITATIONS = new Set<Accreditation>(["accredited", "standard", "caution"]);
 
+export class SchoolOperationalDatabaseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SchoolOperationalDatabaseError";
+  }
+}
+
+export function isSchoolOperationalDatabaseError(error: unknown): error is SchoolOperationalDatabaseError {
+  return error instanceof SchoolOperationalDatabaseError;
+}
+
+export function canUseSchoolSeedFallback(env: NodeJS.ProcessEnv = process.env): boolean {
+  return !(env.NODE_ENV === "production" || env.VERCEL === "1" || Boolean(env.VERCEL_ENV));
+}
+
 function dateOnly(value: Date | string): string {
   return new Date(value).toISOString().slice(0, 10);
 }
@@ -156,7 +171,16 @@ export async function listSchools(filters: SchoolFilters = {}): Promise<School[]
     });
     if (rows.length > 0) return rows.map(mapDbSchool);
   } catch (err) {
+    if (!canUseSchoolSeedFallback()) {
+      throw new SchoolOperationalDatabaseError(
+        `Operational School table is unavailable: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
     console.warn("[schools:list fallback]", err instanceof Error ? err.message : err);
+  }
+
+  if (!canUseSchoolSeedFallback()) {
+    throw new SchoolOperationalDatabaseError("Operational School table has no current rows.");
   }
 
   return staticSchools(filters);
@@ -173,8 +197,15 @@ export async function findSchoolById(
       return options.includeExpired || isSchoolReviewCurrent(school) ? school : null;
     }
   } catch (err) {
+    if (!canUseSchoolSeedFallback()) {
+      throw new SchoolOperationalDatabaseError(
+        `Operational School table is unavailable: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
     console.warn("[schools:find fallback]", err instanceof Error ? err.message : err);
   }
+
+  if (!canUseSchoolSeedFallback()) return null;
   return staticSchools(options).find((school) => school.id === id) || null;
 }
 
@@ -311,6 +342,17 @@ export async function getSchoolSourceAudit(referenceDate: Date = new Date()) {
       missingSource,
     };
   } catch (err) {
+    if (!canUseSchoolSeedFallback()) {
+      return {
+        source: "unavailable" as const,
+        total: 0,
+        active: 0,
+        expired: 0,
+        missingSource: 0,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+
     const schools = SCHOOLS.map(withSchoolSourceMetadata);
     const expired = schools.filter((school) => !isSchoolReviewCurrent(school, referenceDate)).length;
     return {

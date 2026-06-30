@@ -90,7 +90,7 @@ Visa, immigration, school-accreditation, and cost guidance are time-sensitive.
 2. Official sources must include a public official-domain URL, `verifiedAt`, and `reviewAfter`.
 3. Internal analysis sources must be marked `owner: "internal"` and reviewed at least quarterly.
 4. Any document past `reviewAfter` must be excluded from production answers or reverified before release.
-5. School data is served from the `School` table. `src/lib/data/schools.ts` remains the deterministic seed/fallback source.
+5. School data is served from the `School` table. `src/lib/data/schools.ts` remains a local development seed/fallback only; hosted and production runtimes fail closed instead of silently serving seed data when the table is unavailable or empty.
 6. RAG search and legacy retrieval automatically exclude documents whose source metadata is past `reviewAfter`.
 7. Each `School` row must include `sourceUrl`, `verifiedAt`, and `reviewAfter`; public school APIs hide rows past `reviewAfter`.
 8. Admins can inspect expired schools with `includeExpired=true` and reverify a school through `POST /api/schools/:id/review`.

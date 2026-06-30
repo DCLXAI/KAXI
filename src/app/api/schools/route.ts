@@ -2,24 +2,37 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getAdminContext, jsonError, requireAdmin } from "@/lib/api/security";
 import { recordRequestAudit } from "@/lib/audit";
-import { listSchools, normalizeSchoolPayload, type SchoolMutationInput } from "@/lib/schools/repository";
+import {
+  isSchoolOperationalDatabaseError,
+  listSchools,
+  normalizeSchoolPayload,
+  type SchoolMutationInput,
+} from "@/lib/schools/repository";
 
 export async function GET(req: NextRequest) {
-  const searchParams = req.nextUrl.searchParams;
-  const includeExpired = searchParams.get("includeExpired") === "true";
-  if (includeExpired) {
-    const unauthorized = await requireAdmin(req, { roles: ["owner", "admin", "viewer"] });
-    if (unauthorized) return unauthorized;
-  }
-  const schools = await listSchools({
-    region: searchParams.get("region") || "all",
-    program: searchParams.get("program") || "all",
-    accreditation: searchParams.get("accreditation") || "all",
-    maxTuition: Number(searchParams.get("maxTuition") || 0) || undefined,
-    includeExpired,
-  });
+  try {
+    const searchParams = req.nextUrl.searchParams;
+    const includeExpired = searchParams.get("includeExpired") === "true";
+    if (includeExpired) {
+      const unauthorized = await requireAdmin(req, { roles: ["owner", "admin", "viewer"] });
+      if (unauthorized) return unauthorized;
+    }
+    const schools = await listSchools({
+      region: searchParams.get("region") || "all",
+      program: searchParams.get("program") || "all",
+      accreditation: searchParams.get("accreditation") || "all",
+      maxTuition: Number(searchParams.get("maxTuition") || 0) || undefined,
+      includeExpired,
+    });
 
-  return NextResponse.json({ schools, total: schools.length });
+    return NextResponse.json({ schools, total: schools.length });
+  } catch (err) {
+    if (isSchoolOperationalDatabaseError(err)) {
+      return jsonError(err.message, 503);
+    }
+    console.error("[GET /api/schools]", err);
+    return jsonError("Unable to list schools", 500);
+  }
 }
 
 export async function POST(req: NextRequest) {

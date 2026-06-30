@@ -3,6 +3,7 @@ import { getRuntimeDatabaseInfo } from "../src/lib/db";
 import { NextRequest } from "next/server";
 import { rateLimit } from "../src/lib/api/security";
 import { KNOWLEDGE_DOCS } from "../src/lib/data/knowledge";
+import { canUseSchoolSeedFallback } from "../src/lib/schools/repository";
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -152,8 +153,25 @@ async function testReadinessFailsMissingRagMetadata() {
   }
 }
 
+function testSchoolSeedFallbackIsLocalOnly() {
+  if (!canUseSchoolSeedFallback({ NODE_ENV: "development" } as NodeJS.ProcessEnv)) {
+    fail("school seed fallback should be available in local development");
+  }
+
+  for (const env of [
+    { NODE_ENV: "production" },
+    { VERCEL: "1" },
+    { VERCEL_ENV: "preview" },
+  ]) {
+    if (canUseSchoolSeedFallback(env as NodeJS.ProcessEnv)) {
+      fail(`school seed fallback must be disabled for hosted/production env: ${JSON.stringify(env)}`);
+    }
+  }
+}
+
 await testProductionReadinessFlagsMissingOpsConfig();
 testDatabaseRuntimeInfo();
 await testProductionRateLimitFailsClosedWithoutSharedBackend();
 await testReadinessFailsMissingRagMetadata();
+testSchoolSeedFallbackIsLocalOnly();
 console.log("PASS readiness guards");

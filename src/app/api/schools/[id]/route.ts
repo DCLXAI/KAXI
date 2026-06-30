@@ -2,22 +2,35 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getAdminContext, jsonError, requireAdmin } from "@/lib/api/security";
 import { recordRequestAudit } from "@/lib/audit";
-import { findSchoolById, normalizeSchoolPayload, type SchoolMutationInput } from "@/lib/schools/repository";
+import {
+  findSchoolById,
+  isSchoolOperationalDatabaseError,
+  normalizeSchoolPayload,
+  type SchoolMutationInput,
+} from "@/lib/schools/repository";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
 export async function GET(_req: NextRequest, context: RouteContext) {
-  const { id } = await context.params;
-  const includeExpired = _req.nextUrl.searchParams.get("includeExpired") === "true";
-  if (includeExpired) {
-    const unauthorized = await requireAdmin(_req, { roles: ["owner", "admin", "viewer"] });
-    if (unauthorized) return unauthorized;
+  try {
+    const { id } = await context.params;
+    const includeExpired = _req.nextUrl.searchParams.get("includeExpired") === "true";
+    if (includeExpired) {
+      const unauthorized = await requireAdmin(_req, { roles: ["owner", "admin", "viewer"] });
+      if (unauthorized) return unauthorized;
+    }
+    const school = await findSchoolById(id, { includeExpired });
+    if (!school) return jsonError("School not found", 404);
+    return NextResponse.json({ school });
+  } catch (err) {
+    if (isSchoolOperationalDatabaseError(err)) {
+      return jsonError(err.message, 503);
+    }
+    console.error("[GET /api/schools/:id]", err);
+    return jsonError("Unable to read school", 500);
   }
-  const school = await findSchoolById(id, { includeExpired });
-  if (!school) return jsonError("School not found", 404);
-  return NextResponse.json({ school });
 }
 
 export async function PATCH(req: NextRequest, context: RouteContext) {
