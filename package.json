@@ -10,6 +10,7 @@
     "codex:bridge": "bun run scripts/codex-local-bridge.ts",
     "lint": "eslint .",
     "test:e2e": "playwright test",
+    "test:e2e:types": "tsc --noEmit -p tsconfig.e2e.json",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
