@@ -1,4 +1,5 @@
 import { getReadinessPayload } from "../src/lib/ops/readiness";
+import { getRuntimeDatabaseInfo } from "../src/lib/db";
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -26,6 +27,9 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
     delete process.env.PII_HASH_SECRET;
     delete process.env.CRON_SECRET;
     delete process.env.ADMIN_MFA_TOTP_SECRET;
+    delete process.env.TURSO_DATABASE_URL;
+    delete process.env.TURSO_AUTH_TOKEN;
+    delete process.env.DATABASE_AUTH_TOKEN;
     process.env.ADMIN_EMAIL = "admin@example.com";
     process.env.ADMIN_PASSWORD_HASH = "scrypt:salt:hash";
     process.env.ADMIN_PASSWORD = "";
@@ -60,5 +64,34 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
   }
 }
 
+function testDatabaseRuntimeInfo() {
+  const snapshot = { ...process.env };
+  try {
+    Object.assign(process.env, {
+      NODE_ENV: "production",
+      VERCEL_ENV: "production",
+      VERCEL: "1",
+      DATABASE_URL: "postgresql://example.invalid/kaxi",
+    });
+    delete process.env.TURSO_DATABASE_URL;
+    delete process.env.TURSO_AUTH_TOKEN;
+
+    const unsupported = getRuntimeDatabaseInfo();
+    if (unsupported.kind !== "unsupported-managed" || unsupported.writable) {
+      fail(`postgres URL should not pass sqlite-provider runtime check: ${JSON.stringify(unsupported)}`);
+    }
+
+    process.env.TURSO_DATABASE_URL = "libsql://kaxi-example.turso.io";
+    process.env.TURSO_AUTH_TOKEN = "test-token";
+    const libsql = getRuntimeDatabaseInfo();
+    if (libsql.kind !== "libsql" || !libsql.sharedWritable || !libsql.libSqlAuthConfigured) {
+      fail(`libSQL config should be recognized as shared writable: ${JSON.stringify(libsql)}`);
+    }
+  } finally {
+    restoreEnv(snapshot);
+  }
+}
+
 await testProductionReadinessFlagsMissingOpsConfig();
+testDatabaseRuntimeInfo();
 console.log("PASS readiness guards");

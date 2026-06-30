@@ -2,7 +2,8 @@
 
 ## Required Environment Variables
 
-- `DATABASE_URL`: Prisma database URL. SQLite is acceptable for local demos only.
+- `DATABASE_URL`: Local Prisma SQLite URL. `file:./db/custom.db` is acceptable for local demos only.
+- `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`: Managed libSQL/Turso database for production writes. The current Prisma schema uses the `sqlite` provider, so do not point production at Postgres unless the Prisma provider/migrations are intentionally migrated too.
 - `ADMIN_API_KEY`: Break-glass admin API key for admin APIs. Prefer session login for day-to-day operations.
 - `MODEL_CACHE_DIR`: Optional local cache path for Transformer models. Defaults to `data/model-cache`.
 - `VECTOR_CACHE_FILE`: Optional embedding cache file path. Defaults to `data/vector-store/embeddings-cache.json`.
@@ -43,7 +44,7 @@ On Vercel builds it restores vector/DB artifacts but does not decompress the lar
 
 ## Database Policy
 
-The checked-in schema is still MVP-oriented. Production must use a managed relational database, preferably Postgres.
+The checked-in schema is SQLite-oriented for the public MVP artifact. Production writes must use a managed SQLite-compatible libSQL/Turso database through the Prisma libSQL adapter, or a deliberate provider migration to Postgres with new migrations.
 
 1. Use Prisma migrations for every schema change.
 2. Do not use `prisma db push` against production.
@@ -54,7 +55,7 @@ The checked-in schema is still MVP-oriented. Production must use a managed relat
 7. Retention is enforced by `POST /api/privacy/retention` for admins and daily Vercel Cron `GET /api/privacy/retention`.
 8. Before analytics export, use the redacted ChatLog analysis route or scripts; free-form questions are masked for emails, phone numbers, and private messenger handles.
 
-Hosted Vercel deployments must not rely on bundled SQLite for writes. The bundled DB is a demo seed/read model. Use a writable production database for admin CRUD, lead capture, partner requests, chat logs, and Agent ledger persistence.
+Hosted Vercel deployments must not rely on bundled SQLite for writes. The bundled DB is a demo seed/read model. Use a reachable managed libSQL/Turso database for admin CRUD, lead capture, partner requests, chat logs, Agent ledger persistence, audit logs, retention, and the shared rate-limit buckets.
 
 ## Migration Workflow
 
@@ -66,11 +67,19 @@ bunx prisma generate
 bun run db:seed:schools
 ```
 
-CI / production:
+CI / production sanity check:
 
 ```bash
 bunx prisma migrate deploy
 bunx prisma generate
+```
+
+For Turso/libSQL production, set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in Vercel, then apply the checked-in SQLite migration SQL to the managed database from a trusted operator machine or CI job. After migration, run `bun run db:seed:schools` with the production database env loaded so the `School` table becomes the operational source of truth. `GET /api/readiness` will not pass merely because the env vars exist; it also checks database reachability.
+
+After loading production DB env locally, verify the managed DB before deploying or promoting:
+
+```bash
+bun run db:check-production
 ```
 
 ## Data Source Policy
@@ -112,7 +121,7 @@ The readiness response intentionally exposes only booleans and reason strings, n
 Before treating KAXI as production-ready, `/api/readiness` must report `status: "ready"` for:
 
 - current RAG `reviewAfter` metadata and non-expired school source metadata,
-- managed writable database instead of bundled SQLite,
+- reachable managed libSQL/Turso database instead of bundled SQLite,
 - `DATA_ENCRYPTION_KEY`, `PII_HASH_SECRET`, retention `CRON_SECRET`,
 - shared database-backed rate limit,
 - hashed admin login, MFA, valid role, and audit-log persistence.
@@ -121,7 +130,7 @@ Before treating KAXI as production-ready, `/api/readiness` must report `status: 
 
 The app supports shared IP rate limits and daily quotas through `RateLimitBucket`.
 
-Use `RATE_LIMIT_BACKEND=database` with a writable production DB for Vercel multi-instance deployments. `auto` uses database when it is writable and falls back to memory for local/read-only demo SQLite.
+Use `RATE_LIMIT_BACKEND=database` with a reachable managed production DB for Vercel multi-instance deployments. `auto` uses the shared database when it is configured and falls back to memory for local/read-only demo SQLite.
 
 ## Agent Grounding
 

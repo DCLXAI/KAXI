@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { createHash, timingSafeEqual } from "crypto";
-import { db } from "@/lib/db";
+import { canUseSharedRuntimeDatabase, db } from "@/lib/db";
 
 type JsonBody = Record<string, unknown>;
 
@@ -115,13 +115,7 @@ function rateBucketKey(key: string, ip: string): string {
 function canUseDatabaseRateLimit(): boolean {
   const backend = (process.env.RATE_LIMIT_BACKEND || "auto").toLowerCase();
   if (backend === "memory") return false;
-  if (backend === "database") return true;
-
-  const databaseUrl = process.env.DATABASE_URL?.trim();
-  if (!databaseUrl) return false;
-
-  const hostedRuntime = process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV);
-  return !(hostedRuntime && databaseUrl.startsWith("file:"));
+  return canUseSharedRuntimeDatabase();
 }
 
 function memoryRateLimit(

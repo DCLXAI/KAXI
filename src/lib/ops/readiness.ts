@@ -1,4 +1,4 @@
-import { canWriteRuntimeDatabase } from "@/lib/db";
+import { checkRuntimeDatabaseConnectivity, getRuntimeDatabaseInfo } from "@/lib/db";
 import { getKnowledgeSourceAudit } from "@/lib/data/knowledge";
 import { getSchoolSourceAudit } from "@/lib/schools/repository";
 
@@ -25,12 +25,6 @@ function isProductionEnv(env: NodeJS.ProcessEnv): boolean {
   return env.VERCEL_ENV === "production" || env.NODE_ENV === "production";
 }
 
-function databaseUrlKind(env: NodeJS.ProcessEnv): "missing" | "file" | "managed" {
-  const databaseUrl = env.DATABASE_URL?.trim();
-  if (!databaseUrl) return "missing";
-  return databaseUrl.startsWith("file:") ? "file" : "managed";
-}
-
 function configured(value: string | undefined): boolean {
   const trimmed = value?.trim() || "";
   return Boolean(trimmed) && !/^replace-with-/i.test(trimmed);
@@ -54,15 +48,20 @@ function check(
 export async function getReadinessPayload(): Promise<ReadinessPayload> {
   const env = process.env;
   const production = isProductionEnv(env);
-  const dbKind = databaseUrlKind(env);
-  const writableDatabase = canWriteRuntimeDatabase();
+  const databaseInfo = getRuntimeDatabaseInfo(env);
+  const databaseConnectivity = await checkRuntimeDatabaseConnectivity();
   const rateLimitBackend = (env.RATE_LIMIT_BACKEND || "auto").trim().toLowerCase();
   const sourceAudit = getKnowledgeSourceAudit();
   const schoolAudit = await getSchoolSourceAudit();
 
-  const managedDatabase = dbKind === "managed" && writableDatabase;
+  const managedDatabase = databaseInfo.sharedWritable && databaseConnectivity.ok;
   const sharedRateLimit =
     managedDatabase && (rateLimitBackend === "auto" || rateLimitBackend === "database");
+  const schoolMetadataReady =
+    schoolAudit.active > 0 &&
+    schoolAudit.expired === 0 &&
+    schoolAudit.missingSource === 0 &&
+    (!production || schoolAudit.source === "db");
 
   const checks: ReadinessCheck[] = [
     check(
@@ -81,22 +80,31 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
     check(
       "schools.source_metadata",
       "School source metadata",
-      schoolAudit.active > 0 && schoolAudit.expired === 0 && schoolAudit.missingSource === 0,
-      schoolAudit.expired === 0 && schoolAudit.missingSource === 0
+      schoolMetadataReady,
+      schoolMetadataReady
         ? "School rows include sourceUrl, verifiedAt, and current reviewAfter."
-        : "Some school rows are expired or missing source metadata.",
+        : production && schoolAudit.source !== "db"
+          ? "Production must serve school metadata from the operational School table, not seed fallback."
+          : "Some school rows are expired or missing source metadata.",
       schoolAudit
     ),
     check(
       "database.managed_writable",
       "Managed writable database",
-      production ? managedDatabase : writableDatabase,
+      production ? managedDatabase : databaseInfo.writable,
       managedDatabase
-        ? "DATABASE_URL points to a writable managed database."
+        ? "A managed libSQL/Turso database is writable and reachable."
         : production
-          ? "Production must not rely on bundled file SQLite for writes."
-          : "Local database is writable for development.",
-      { databaseUrlKind: dbKind, writableDatabase }
+          ? "Production must use a reachable managed libSQL/Turso database, not bundled file SQLite."
+          : databaseInfo.reason,
+      {
+        databaseUrlKind: databaseInfo.kind,
+        databaseUrlSource: databaseInfo.source,
+        writableDatabase: databaseInfo.writable,
+        sharedWritableDatabase: databaseInfo.sharedWritable,
+        libSqlAuthConfigured: databaseInfo.libSqlAuthConfigured,
+        connectivity: databaseConnectivity.ok,
+      }
     ),
     check(
       "privacy.encryption",
@@ -121,7 +129,7 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
       production ? sharedRateLimit : rateLimitBackend !== "memory",
       sharedRateLimit
         ? "Rate limits can use the shared RateLimitBucket table."
-        : "Production rate limits require RATE_LIMIT_BACKEND=database or auto with a managed writable DB.",
+        : "Production rate limits require RATE_LIMIT_BACKEND=database or auto with a reachable managed DB.",
       { rateLimitBackend, managedDatabase }
     ),
     check(
@@ -152,9 +160,9 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
     check(
       "admin.audit_log",
       "Admin audit persistence",
-      production ? managedDatabase : writableDatabase,
+      production ? managedDatabase : databaseInfo.writable,
       "Admin and privacy audit logs require writable database persistence.",
-      { writableDatabase, managedDatabase }
+      { writableDatabase: databaseInfo.writable, managedDatabase }
     ),
   ];
 
