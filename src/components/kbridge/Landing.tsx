@@ -83,13 +83,14 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
             {tr("hero_subtitle", lang)}
           </p>
           <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
-            <Button size="lg" className="gap-2" onClick={() => onNavigate("diagnose")}>
-              {tr("cta_start", lang)}
+            <Button size="lg" className="gap-2" onClick={() => onNavigate("agent")}>
+              <Sparkles className="h-4 w-4" />
+              {lang === "ko" ? "AI 에이전트 시작" : lang === "vi" ? "Bắt đầu Agent" : lang === "mn" ? "Агент эхлэх" : "Start AI Agent"}
               <ArrowRight className="h-4 w-4" />
             </Button>
-            <Button size="lg" variant="outline" onClick={() => onNavigate("cost")}>
-              <Calculator className="h-4 w-4 mr-2" />
-              {tr("cta_compare_cost", lang)}
+            <Button size="lg" variant="outline" onClick={() => onNavigate("diagnose")}>
+              {tr("cta_start", lang)}
+              <ArrowRight className="h-4 w-4" />
             </Button>
           </div>
 
@@ -109,6 +110,56 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* AI 에이전트 배너 (메인 CTA) */}
+      <section className="mx-auto max-w-5xl px-4">
+        <Card
+          className="cursor-pointer overflow-hidden border-2 border-primary/30 hover:border-primary/60 transition-all bg-gradient-to-br from-primary/5 to-transparent"
+          onClick={() => onNavigate("agent")}
+        >
+          <CardContent className="p-0">
+            <div className="grid md:grid-cols-[auto_1fr_auto] gap-6 p-6 md:p-8 items-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground shrink-0">
+                <Sparkles className="h-8 w-8" />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge className="gap-1.5">
+                    <Sparkles className="h-3 w-3" />
+                    {lang === "ko" ? "네이티브 AI 에이전트" : "Native AI Agent"}
+                  </Badge>
+                  <Badge variant="outline" className="gap-1">
+                    <Scale className="h-3 w-3" />
+                    ReAct · 6 Tools
+                  </Badge>
+                </div>
+                <h3 className="text-2xl md:text-3xl font-bold tracking-tight">
+                  {lang === "ko"
+                    ? "한 번에 끝내는 유학 준비"
+                    : lang === "vi"
+                    ? "Hoàn tất trong một bước"
+                    : lang === "mn"
+                    ? "Нэг удаад дуусгах"
+                    : "Everything in one go"}
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {lang === "ko"
+                    ? "학교 검색 → 비용 계산 → 서류 생성 → 비자 정보 → 전문가 연결. 자연어로 요청하면 에이전트가 도구를 호출해 직접 실행합니다."
+                    : lang === "vi"
+                    ? "Tìm trường → Chi phí → Hồ sơ → Visa → Chuyên gia. Nói tự nhiên, agent tự gọi công cụ."
+                    : lang === "mn"
+                    ? "Сургууль → Зардал → Баримт → Виз → Мэргэжилтэн. Хэлж байгаа л агент гүйцэтгэнэ."
+                    : "Search → Cost → Documents → Visa → Experts. Just ask, agent calls tools for you."}
+                </p>
+              </div>
+              <Button size="lg" className="gap-2 shrink-0">
+                {lang === "ko" ? "에이전트 실행" : "Launch"}
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </section>
 
       {/* 전문 상담 배너 */}

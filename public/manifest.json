@@ -1,0 +1,46 @@
+{
+  "name": "K-Bridge Gateway",
+  "short_name": "K-Bridge",
+  "description": "브로커 없이 준비하는 한국 유학 원스톱 플랫폼 — AI 에이전트, 학교 검색, 비용 계산, 서류 관리",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "orientation": "portrait-primary",
+  "lang": "ko",
+  "categories": ["education", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "AI 에이전트",
+      "short_name": "Agent",
+      "url": "/#agent",
+      "description": "도구 호출 가능한 AI 에이전트"
+    },
+    {
+      "name": "전문 상담",
+      "short_name": "Consult",
+      "url": "/#consult",
+      "description": "행정사 AI 에이전트 상담"
+    },
+    {
+      "name": "학교 비교",
+      "short_name": "Schools",
+      "url": "/#schools",
+      "description": "50개 검증 학교 DB 비교"
+    },
+    {
+      "name": "비용 계산기",
+      "short_name": "Cost",
+      "url": "/#cost",
+      "description": "항목별 비용 계산 + 브로커 비교"
+    }
+  ]
+}

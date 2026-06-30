@@ -1,0 +1,408 @@
+"use client";
+
+import { useState, useRef, useEffect } from "react";
+import { useLangStore } from "@/store/kbridge";
+import { tr, type Lang } from "@/lib/i18n/translations";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  ArrowUp,
+  Loader2,
+  Bot,
+  Sparkles,
+  Wrench,
+  Search,
+  Calculator,
+  FileCheck,
+  BookOpen,
+  Compass,
+  Users,
+  ArrowRight,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle,
+  Brain,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+
+interface ToolResult {
+  tool: string;
+  args: Record<string, any>;
+  result: any;
+  summary: string;
+  success: boolean;
+}
+
+interface AgentStep {
+  type: "thinking" | "tool_call" | "tool_result" | "final_answer" | "error";
+  content: string;
+  toolCall?: { tool: string; args: Record<string, any> };
+  toolResult?: ToolResult;
+  timestamp: number;
+}
+
+interface Msg {
+  role: "user" | "agent";
+  text: string;
+  steps?: AgentStep[];
+  toolResults?: ToolResult[];
+  iterations?: number;
+}
+
+const TOOL_ICONS: Record<string, typeof Search> = {
+  search_schools: Search,
+  calculate_cost: Calculator,
+  get_documents: FileCheck,
+  search_knowledge: BookOpen,
+  diagnose_path: Compass,
+  request_partner: Users,
+};
+
+const TOOL_LABELS: Record<string, Record<Lang, string>> = {
+  search_schools: { ko: "학교 검색", vi: "Tìm trường", mn: "Сургууль хайх", en: "Search Schools" },
+  calculate_cost: { ko: "비용 계산", vi: "Tính chi phí", mn: "Зардал", en: "Calculate Cost" },
+  get_documents: { ko: "서류 생성", vi: "Hồ sơ", mn: "Баримт", en: "Documents" },
+  search_knowledge: { ko: "지식 검색", vi: "Tìm kiến thức", mn: "Мэдлэг", en: "Knowledge" },
+  diagnose_path: { ko: "경로 진단", vi: "Đánh giá", mn: "Маршрут", en: "Diagnose" },
+  request_partner: { ko: "파트너 요청", vi: "Đối tác", mn: "Түнш", en: "Partner" },
+};
+
+const EXAMPLE_PROMPTS: Record<Lang, string[]> = {
+  ko: [
+    "서울에 있는 인증대학 어학당 3곳 찾아주고 비용도 계산해줘",
+    "베트남 학생인데 D-4 비자로 가려면 필요한 서류 뭐야?",
+    "D-2 비자 거절당했는데 어떻게 해야 해? 행정사 상담도 연결해줘",
+    "예산 500만원으로 갈 수 있는 학교 찾아줘",
+  ],
+  vi: [
+    "Tìm 3 trường tiếng Hàn ở Seoul có认证 và tính chi phí",
+    "Tôi là người Việt, hồ sơ visa D-4 cần gì?",
+    "Bị từ chối D-2, phải làm sao? Kết nối luật sư",
+    "Tìm trường với ngân sách 5 triệu won",
+  ],
+  mn: [
+    "Сеул дахь итгэмжлэгдсэн 3 хэлний курс олж зардал тооцоол",
+    "Би монгол, D-4 визанд ямар баримт хэрэгтэй вэ?",
+    "D-2 татгалзсан, яах вэ? Зөвлөгөө холбох",
+    "5 сая вон төсөвтэй сургууль хай",
+  ],
+  en: [
+    "Find 3 accredited language schools in Seoul and calculate costs",
+    "I'm Vietnamese, what documents do I need for D-4 visa?",
+    "My D-2 was refused, what should I do? Connect me to a lawyer",
+    "Find schools within 5M KRW budget",
+  ],
+};
+
+export function Agent() {
+  const { lang } = useLangStore();
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [msgs, setMsgs] = useState<Msg[]>([]);
+  const [started, setStarted] = useState(false);
+  const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [msgs, loading]);
+
+  const send = async (text?: string) => {
+    const userMsg = (text ?? input).trim();
+    if (!userMsg || loading) return;
+
+    setStarted(true);
+    setInput("");
+    setMsgs((m) => [...m, { role: "user", text: userMsg }]);
+    setLoading(true);
+
+    try {
+      const history = msgs.slice(-6).map((m) => ({
+        role: m.role === "user" ? "user" : "assistant",
+        content: m.text,
+      }));
+
+      const res = await fetch("/api/ai/agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: userMsg, lang, history }),
+      });
+
+      if (!res.ok) throw new Error("API failed");
+
+      const data = await res.json();
+      setMsgs((m) => [
+        ...m,
+        {
+          role: "agent",
+          text: data.answer,
+          steps: data.steps,
+          toolResults: data.toolResults,
+          iterations: data.iterations,
+        },
+      ]);
+    } catch (e) {
+      console.error("[agent]", e);
+      setMsgs((m) => [
+        ...m,
+        {
+          role: "agent",
+          text: lang === "ko" ? "일시적 오류가 발생했습니다." : "Temporary error.",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const reset = () => {
+    setMsgs([]);
+    setStarted(false);
+    setInput("");
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  // 시작 화면 (Z.ai 스타일 + 에이전트 강조)
+  if (!started) {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center px-4 py-12">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-3xl"
+        >
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
+              <Sparkles className="h-3.5 w-3.5" />
+              {lang === "ko" ? "AI 에이전트 · 도구 호출 가능" : "AI Agent · Tool-Use"}
+            </div>
+            <h1 className="text-4xl md:text-5xl font-bold tracking-tight italic mb-3" style={{ fontFamily: "Georgia, serif" }}>
+              {lang === "ko" ? "유학 준비, 에이전트에게 맡기세요" : lang === "vi" ? "Giao việc cho AI agent" : lang === "mn" ? "Агентэд даатгаарай" : "Delegate to the AI agent"}
+            </h1>
+            <p className="text-muted-foreground text-base md:text-lg">
+              {lang === "ko"
+                ? "학교 검색 · 비용 계산 · 서류 생성 · 비자 정보 · 전문가 연결 — 모든 것을 한 번에"
+                : lang === "vi"
+                ? "Tìm trường · Tính chi phí · Hồ sơ · Visa · Chuyên gia — tất cả trong một"
+                : lang === "mn"
+                ? "Сургууль · Зардал · Баримт · Виз · Мэргэжилтэн — бүгд нэг дор"
+                : "Search · Calculate · Documents · Visa · Experts — all in one"}
+            </p>
+          </div>
+
+          {/* 도구 카드 미리보기 */}
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-8">
+            {Object.entries(TOOL_LABELS).map(([key, labels]) => {
+              const Icon = TOOL_ICONS[key] || Wrench;
+              return (
+                <div key={key} className="flex flex-col items-center gap-1 p-2 rounded-lg border bg-card">
+                  <Icon className="h-4 w-4 text-primary" />
+                  <span className="text-[10px] text-center text-muted-foreground">{labels[lang]}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* 입력 박스 */}
+          <Card className="p-4 shadow-lg border-2 focus-within:border-primary/50 transition-colors">
+            <Textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+              placeholder={lang === "ko" ? "원하는 것을 자연스럽게 적어보세요... (예: 서울 인증대학 어학당 찾아주고 비용 계산해줘)" : "Type what you need..."}
+              className="border-0 resize-none focus-visible:ring-0 text-base min-h-[80px]"
+              rows={3}
+            />
+            <div className="flex items-center justify-between mt-2 pt-2 border-t">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Brain className="h-3 w-3" />
+                <span>ReAct Agent · 6 Tools · Max 5 steps</span>
+              </div>
+              <Button size="sm" onClick={() => send()} disabled={!input.trim() || loading} className="gap-1.5">
+                {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUp className="h-3.5 w-3.5" />}
+                {lang === "ko" ? "실행" : "Run"}
+              </Button>
+            </div>
+          </Card>
+
+          {/* 예시 프롬프트 */}
+          <div className="mt-8">
+            <div className="text-xs text-muted-foreground text-center mb-3">
+              {lang === "ko" ? "💡 에이전트에게 시켜보세요" : "💡 Try these"}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {EXAMPLE_PROMPTS[lang].map((p, i) => (
+                <button
+                  key={i}
+                  onClick={() => send(p)}
+                  className="text-left text-sm p-3 rounded-lg border bg-card hover:bg-muted/50 hover:border-primary/30 transition-all flex items-start gap-2"
+                >
+                  <ArrowRight className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                  <span className="flex-1">{p}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // 채팅 진행 중
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-6">
+      {/* 헤더 */}
+      <div className="flex items-center justify-between mb-6 pb-4 border-b">
+        <div className="flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <Bot className="h-4 w-4" />
+          </div>
+          <div>
+            <div className="font-semibold text-sm flex items-center gap-1.5">
+              {lang === "ko" ? "AI 에이전트" : "AI Agent"}
+              <Badge variant="outline" className="text-[10px] py-0 h-4">ReAct</Badge>
+            </div>
+            <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+              {lang === "ko" ? "도구 호출 가능" : "Tool-use enabled"}
+            </div>
+          </div>
+        </div>
+        <Button variant="ghost" size="sm" onClick={reset} className="gap-1.5">
+          <RefreshCw className="h-3.5 w-3.5" />
+          {lang === "ko" ? "새 대화" : "New"}
+        </Button>
+      </div>
+
+      {/* 메시지 영역 */}
+      <div className="space-y-6 mb-32">
+        {msgs.map((m, i) => (
+          <motion.div
+            key={i}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={m.role === "user" ? "flex justify-end" : "flex justify-start"}
+          >
+            <div className={`max-w-[95%] ${m.role === "user" ? "" : "w-full"}`}>
+              {m.role === "user" ? (
+                <div className="bg-primary text-primary-foreground rounded-2xl rounded-br-md px-4 py-2.5 text-sm">
+                  {m.text}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* 도구 호출 단계 시각화 */}
+                  {m.steps && m.steps.filter((s) => s.type === "tool_call" || s.type === "tool_result").length > 0 && (
+                    <Card className="p-3 bg-muted/30 border-dashed">
+                      <div className="text-[10px] text-muted-foreground mb-2 flex items-center gap-1">
+                        <Wrench className="h-2.5 w-2.5" />
+                        {lang === "ko" ? `에이전트 도구 호출 (${m.iterations}단계)` : `Agent steps (${m.iterations})`}
+                      </div>
+                      <div className="space-y-1.5">
+                        {m.steps.map((step, j) => {
+                          if (step.type === "tool_call" && step.toolCall) {
+                            const Icon = TOOL_ICONS[step.toolCall.tool] || Wrench;
+                            return (
+                              <div key={j} className="flex items-center gap-2 text-xs">
+                                <Icon className="h-3 w-3 text-primary" />
+                                <span className="font-medium">{TOOL_LABELS[step.toolCall.tool]?.[lang] || step.toolCall.tool}</span>
+                                <span className="text-muted-foreground truncate">
+                                  {Object.entries(step.toolCall.args).slice(0, 2).map(([k, v]) => `${k}: ${String(v).substring(0, 30)}`).join(", ")}
+                                </span>
+                              </div>
+                            );
+                          }
+                          if (step.type === "tool_result" && step.toolResult) {
+                            return (
+                              <div key={j} className="flex items-center gap-2 text-xs pl-5">
+                                <CheckCircle2 className={`h-3 w-3 ${step.toolResult.success ? "text-green-500" : "text-red-500"}`} />
+                                <span className="text-muted-foreground">{step.toolResult.summary}</span>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })}
+                      </div>
+                    </Card>
+                  )}
+
+                  {/* 최종 답변 */}
+                  <div className="bg-card border rounded-2xl rounded-bl-md p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="flex h-6 w-6 items-center justify-center rounded bg-primary/10">
+                        <Bot className="h-3 w-3 text-primary" />
+                      </div>
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {lang === "ko" ? "AI 에이전트" : "Agent"}
+                      </span>
+                      {m.toolResults && m.toolResults.length > 0 && (
+                        <Badge variant="outline" className="text-[10px] gap-0.5">
+                          <Wrench className="h-2.5 w-2.5" />
+                          {m.toolResults.length} {lang === "ko" ? "도구 사용" : "tools"}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="prose prose-sm max-w-none text-sm leading-relaxed whitespace-pre-wrap">
+                      {m.text}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        ))}
+
+        {/* 로딩 */}
+        {loading && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
+            <div className="bg-card border rounded-2xl rounded-bl-md p-4 max-w-[95%] w-full">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>{lang === "ko" ? "에이전트 추론 중..." : "Agent thinking..."}</span>
+              </div>
+              <div className="text-xs text-muted-foreground pl-6">
+                {lang === "ko" ? "도구가 필요한지 판단하고 있습니다" : "Deciding which tools to use"}
+              </div>
+            </div>
+          </motion.div>
+        )}
+        <div ref={endRef} />
+      </div>
+
+      {/* 입력 영역 */}
+      <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-background via-background to-transparent pt-6 pb-4">
+        <div className="mx-auto max-w-3xl px-4">
+          <Card className="p-3 shadow-lg border-2 focus-within:border-primary/50 transition-colors">
+            <Textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+              placeholder={lang === "ko" ? "추가 질문 또는 다음 작업..." : "Follow-up..."}
+              className="border-0 resize-none focus-visible:ring-0 text-sm min-h-[40px] max-h-[120px]"
+              rows={1}
+              disabled={loading}
+            />
+            <div className="flex items-center justify-end mt-1.5 pt-1.5 border-t">
+              <Button size="sm" onClick={() => send()} disabled={!input.trim() || loading} className="gap-1.5 h-7">
+                {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowUp className="h-3 w-3" />}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}

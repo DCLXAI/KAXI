@@ -312,3 +312,53 @@ Stage Summary:
 - 위험 신호 자동 감지로 법적 리스크 방어
 - RAG + Deep Think (temperature 0.2)로 정확성 극대화
 - 법적 경계 명확화 (행정사 상담 권유 자동화)
+
+---
+Task ID: native-agent
+Agent: main (Super Z)
+Task: 네이티브 AI 에이전트 웹앱으로 업그레이드 — ReAct 도구 호출 에이전트
+
+Work Log:
+- z-ai-web-dev-sdk function calling 확인 → web_search/page_reader만 지원
+- ReAct 패턴으로 커스텀 도구 호출 에이전트 구현 (LLM이 JSON 도구 호출 출력 → 파싱 → 실행 → 결과 → 재추론)
+- src/lib/agent/tools.ts — 6개 도구 정의:
+  1. search_schools — 학교 검색 (필터: 지역/과정/인증/학비)
+  2. calculate_cost — 비용 계산 (항목별 분해 + 브로커 비교)
+  3. get_documents — 서류 체크리스트 생성 (비자/국적 맞춤)
+  4. search_knowledge — RAG 지식 베이스 검색
+  5. diagnose_path — 유학 경로 진단 추천
+  6. request_partner — 파트너 상담 요청
+- src/lib/agent/agent.ts — ReAct 루프:
+  - 최대 5회 반복 (무한 루프 방지)
+  - 도구 호출 파싱 (코드블록 + 직접 JSON 2패턴)
+  - 도구 결과를 컨텍스트에 추가하며 추론
+  - temperature 0.2로 정확성 극대화
+- API /api/ai/agent — 에이전트 실행 + ChatLog 저장 (source="agent")
+- src/components/kbridge/Agent.tsx — 에이전트 채팅 UI:
+  - 시작 화면: Z.ai 스타일 + 6개 도구 카드 미리보기
+  - 채팅: 도구 호출 단계 시각화 (툴카드 + 체크마크)
+  - 최종 답변에 "도구 사용 N개" 배지
+  - 4개 예시 프롬프트 (복합 작업)
+- 네비게이션: "AI 에이전트" 메뉴 추가 (1번째)
+- 랜딩 페이지: 에이전트 배너 추가 (메인 CTA, hero 다음)
+- PWA 매니페스트 (public/manifest.json):
+  - 설치 가능 standalone 웹앱
+  - 4개 shortcut (Agent/Consult/Schools/Cost)
+  - appleWebApp 설정
+- layout.tsx: 매니페스트 + themeColor + viewport 설정
+
+브라우저 검증:
+- [✓] "서울에 있는 인증대학 어학당 3곳 찾아주고 비용도 계산해줘"
+  → 5단계 도구 호출 시각화
+  → search_schools (3개 검색) → calculate_cost × 3 (서울대/연세대/고려대)
+  → 최종 답변: 3개 학교 비교 + 항목별 비용 + 가장 저렴 추천
+- [✓] "베트남 학생인데 D-4 비자로 가려면 필요한 서류 뭐야?"
+  → 상세 서류 체크리스트 답변 (여권/사진/입학허가서/재정증명/학력/건강진단)
+- [✓] ESLint 통과, 런타임 에러 해결 (iterations 변수 버그 수정)
+
+Stage Summary:
+- 네이티브 AI 에이전트 웹앱 완성
+- 6개 도구 호출 가능한 ReAct 에이전트
+- 도구 호출 과정 UI 시각화 (투명성)
+- PWA 설치 가능 (매니페스트 + shortcuts)
+- 복합 작업 한 번에 처리 (학교 검색 + 비용 계산 + 비교 분석)

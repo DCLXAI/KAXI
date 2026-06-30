@@ -11,11 +11,12 @@ import { Partners } from "@/components/kbridge/Partners";
 import { Admin } from "@/components/kbridge/Admin";
 import { Synonyms } from "@/components/kbridge/Synonyms";
 import { Consult } from "@/components/kbridge/Consult";
+import { Agent } from "@/components/kbridge/Agent";
 import { AIAssistant } from "@/components/kbridge/AIAssistant";
 import { useLangStore } from "@/store/kbridge";
 import { tr } from "@/lib/i18n/translations";
 
-type View = "home" | "diagnose" | "schools" | "cost" | "docs" | "partners" | "admin" | "synonyms" | "consult";
+type View = "home" | "agent" | "diagnose" | "schools" | "cost" | "docs" | "partners" | "admin" | "synonyms" | "consult";
 
 export default function Home() {
   const { lang } = useLangStore();
@@ -24,7 +25,7 @@ export default function Home() {
   // URL 해시 동기화 (초기 1회만)
   useEffect(() => {
     const hash = window.location.hash.replace("#", "");
-    const valid = ["home", "diagnose", "schools", "cost", "docs", "partners", "admin", "synonyms", "consult"];
+    const valid = ["home", "agent", "diagnose", "schools", "cost", "docs", "partners", "admin", "synonyms", "consult"];
     if (hash && valid.includes(hash)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setView(hash as View);
@@ -43,6 +44,7 @@ export default function Home() {
 
       <main className="flex-1">
         {view === "home" && <Landing onNavigate={navigate} />}
+        {view === "agent" && <Agent />}
         {view === "consult" && <Consult />}
         {view === "diagnose" && <Diagnosis onNavigate={navigate} />}
         {view === "schools" && <Schools />}
@@ -53,7 +55,7 @@ export default function Home() {
         {view === "synonyms" && <Synonyms />}
       </main>
 
-      {view !== "consult" && (
+      {view !== "consult" && view !== "agent" && (
         <footer className="mt-auto border-t bg-muted/30">
           <div className="mx-auto max-w-7xl px-4 py-6 space-y-3">
             <div className="text-xs text-muted-foreground leading-relaxed">
@@ -74,8 +76,8 @@ export default function Home() {
         </footer>
       )}
 
-      {/* 전문 상담 페이지에서는 작은 AI 도우미 숨김 */}
-      {view !== "consult" && <AIAssistant />}
+      {/* 에이전트/상담 페이지에서는 작은 AI 도우미 숨김 */}
+      {view !== "consult" && view !== "agent" && <AIAssistant />}
     </div>
   );
 }
