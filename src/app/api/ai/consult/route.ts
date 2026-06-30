@@ -3,10 +3,13 @@ import { getSourceMetadata, pickLangText, type KnowledgeDoc } from "@/lib/data/k
 import type { Lang } from "@/lib/i18n/translations";
 import { db } from "@/lib/db";
 import { createZaiClient, isZaiConfigurationError } from "@/lib/ai/zai";
+import { getAgentBackend, runCodexServerless } from "@/lib/codex/serverless";
+import { isRemoteCodexBridgeEnabled, runRemoteCodexBridge } from "@/lib/codex/remote-bridge";
 import { hybridSearch, initVectorStore, initTransformerStore } from "@/lib/embeddings/vector-store";
 import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
 import {
   consumeDailyQuota,
+  getClientIp,
   parseLimit,
   parsePositiveInt,
   rateLimit,
@@ -17,6 +20,54 @@ import {
 // POST /api/ai/consult - 행정사 전문 AI 에이전트 상담 채팅
 // 일반 AI 도우미보다 더 깊이 있는 법적/행정적 답변 제공
 // 단, 법적 경계 명확화: 개별 사례 판단은 행정사 상담 권유
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
+type ConsultBackend = "remote-bridge" | "codex" | "zai";
+
+interface ExpertAnswerResult {
+  answer: string;
+  disclaimer: string;
+  suggestedFollowups: string[];
+  needsHumanExpert: boolean;
+  backend: string;
+  codexMode?: string;
+  durationMs?: number;
+}
+
+function getConsultBackend(): ConsultBackend {
+  const configured = process.env.AI_CONSULT_BACKEND?.trim().toLowerCase();
+  if (configured === "remote-bridge" || configured === "codex" || configured === "zai") {
+    return configured;
+  }
+
+  const agentBackend = getAgentBackend();
+  if (agentBackend === "remote-bridge" || isRemoteCodexBridgeEnabled()) {
+    return "remote-bridge";
+  }
+
+  const hostedRuntime = process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV);
+  const codexConfigured =
+    Boolean(process.env.CODEX_API_KEY || process.env.OPENAI_API_KEY) ||
+    process.env.CODEX_SERVERLESS_ENABLED === "true" ||
+    !hostedRuntime;
+
+  if (agentBackend === "codex" && codexConfigured) {
+    return "codex";
+  }
+
+  return "zai";
+}
+
+function consultDisclaimer(lang: Lang): string {
+  return {
+    ko: "⚠️ 본 답변은 공식 정보 기반 일반 안내입니다. 개별 사례의 비자 발급 가능성 판단, 서류 작성 대행, 행정기관 제출 대행은 행정사 상담을 권장합니다.",
+    vi: "⚠️ Đây là hướng dẫn chung dựa trên nguồn chính thức. Quyết định visa cá nhân, soạn hồ sơ hoặc nộp thay nên được tư vấn bởi chuyên gia hành chính.",
+    mn: "⚠️ Энэ нь албан эх сурвалжид үндэслэсэн ерөнхий мэдээлэл юм. Визийн тусгай шийдвэр, баримт бичиг бэлтгэх, төлөөлөн гаргах асуудалд мэргэжлийн зөвлөгөө авна уу.",
+    en: "⚠️ This is general guidance based on official sources. Individual visa decisions, document drafting, and agency submission should be reviewed by an administrative scrivener.",
+  }[lang];
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -65,8 +116,8 @@ export async function POST(req: NextRequest) {
 
     // 3. 행정사 전문 LLM 답변 생성
     const result = await withTimeout(
-      generateExpertAnswer(question, lang, docs, history, mode),
-      parsePositiveInt(process.env.AI_LLM_TIMEOUT_MS, 25_000),
+      generateExpertAnswer(question, lang, docs, history, mode, getClientIp(req)),
+      parsePositiveInt(process.env.AI_LLM_TIMEOUT_MS, 55_000),
       "Expert LLM generation"
     );
 
@@ -89,6 +140,8 @@ export async function POST(req: NextRequest) {
               })),
               mode,
               expert: true,
+              backend: result.backend,
+              codexMode: result.codexMode || null,
             }),
           },
         });
@@ -109,6 +162,8 @@ export async function POST(req: NextRequest) {
       })),
       suggestedFollowups: result.suggestedFollowups,
       needsHumanExpert: result.needsHumanExpert,
+      backend: result.backend,
+      codexMode: result.codexMode || null,
     });
   } catch (e) {
     console.error("[POST /api/ai/consult]", e);
@@ -121,13 +176,9 @@ async function generateExpertAnswer(
   lang: Lang,
   docs: KnowledgeDoc[],
   history: { role: string; content: string }[],
-  mode: string
-): Promise<{
-  answer: string;
-  disclaimer: string;
-  suggestedFollowups: string[];
-  needsHumanExpert: boolean;
-}> {
+  mode: string,
+  requestIp: string
+): Promise<ExpertAnswerResult> {
   const langName = { ko: "Korean", vi: "Vietnamese", mn: "Mongolian", en: "English" }[lang];
 
   // 모드별 전문 영역 설정
@@ -207,6 +258,69 @@ ${context}
     { role: "user", content: question },
   ];
 
+  const suggestedFollowups = generateFollowups(question, lang, mode);
+  const disclaimer = consultDisclaimer(lang);
+  const consultBackend = getConsultBackend();
+  const codexPrompt = buildCodexConsultPrompt({
+    question,
+    langName,
+    docs,
+    history,
+    modeConfig,
+    dangerSignals,
+    needsHumanExpert,
+    context,
+  });
+
+  if (consultBackend === "remote-bridge") {
+    try {
+      const result = await runRemoteCodexBridge({
+        question: codexPrompt,
+        lang,
+        history: [],
+        requestIp,
+        timeoutMs: parsePositiveInt(process.env.CODEX_REMOTE_BRIDGE_TIMEOUT_MS, 55_000),
+      });
+      const answer = result.answer.trim();
+      if (!answer) throw new Error("Remote Codex bridge returned an empty answer");
+      return {
+        answer,
+        disclaimer,
+        suggestedFollowups,
+        needsHumanExpert,
+        backend: result.backend,
+        codexMode: result.codexMode,
+        durationMs: result.durationMs,
+      };
+    } catch (e) {
+      console.warn("[Expert Codex bridge skipped]", e instanceof Error ? e.message : e);
+    }
+  }
+
+  if (consultBackend === "codex") {
+    try {
+      const result = await runCodexServerless({
+        question: codexPrompt,
+        lang,
+        history: [],
+        timeoutMs: parsePositiveInt(process.env.CODEX_EXEC_TIMEOUT_MS, 45_000),
+      });
+      const answer = result.answer.trim();
+      if (!answer) throw new Error("Codex CLI returned an empty answer");
+      return {
+        answer,
+        disclaimer,
+        suggestedFollowups,
+        needsHumanExpert,
+        backend: result.mode === "local-auth" ? "codex-cli-local" : "codex-cli",
+        codexMode: result.mode,
+        durationMs: result.durationMs,
+      };
+    } catch (e) {
+      console.warn("[Expert Codex backend skipped]", e instanceof Error ? e.message : e);
+    }
+  }
+
   try {
     const zai = await createZaiClient("expert consult");
 
@@ -219,18 +333,7 @@ ${context}
 
     const answer = completion.choices?.[0]?.message?.content || "";
 
-    // 면책 고지 (언어별)
-    const disclaimer = {
-      ko: "⚠️ 본 답변은 공식 정보 기반 일반 안내입니다. 개별 사례의 비자 발급 가능성 판단, 서류 작성 대행, 행정기관 제출 대행은 행정사법에 따라 행정사 영역입니다. 정확한 판단을 위해 행정사 상담을 권장합니다.",
-      vi: "⚠️ Trả lời dựa trên thông tin chung. Quyết định visa cá nhân, soạn hồ sơ, nộp thay → cần luật sư hành chính.",
-      mn: "⚠️ Хариулт ерөнхий мэдээлэлд үндэслэсэн. Визийн тусгай шийдвэр, баримт бэлтгэх, төлөөлөн гаргах → зөвлөгөө шаардлагатай.",
-      en: "⚠️ This is general info based on official sources. Individual visa decisions, document drafting, agency submission require admin lawyer consultation.",
-    }[lang];
-
-    // 제안 후속 질문
-    const suggestedFollowups = generateFollowups(question, lang, mode);
-
-    return { answer, disclaimer, suggestedFollowups, needsHumanExpert };
+    return { answer, disclaimer, suggestedFollowups, needsHumanExpert, backend: "zai" };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     const configurationFallback = isZaiConfigurationError(e);
@@ -252,22 +355,75 @@ ${context}
     return {
       answer: fallback,
       disclaimer: configurationFallback
-        ? {
-            ko: "⚠️ 현재 외부 LLM 없이 공식 문서 기반 요약으로 답변합니다. 개별 사례 판단은 행정사 상담을 권장합니다.",
-            vi: "⚠️ Hiện trả lời bằng tóm tắt tài liệu chính thức khi chưa có LLM ngoài. Trường hợp cá nhân nên tư vấn luật sư hành chính.",
-            mn: "⚠️ Гадаад LLM-гүй үед албан эх сурвалжийн хураангуйгаар хариулж байна. Тусгай тохиолдолд мэргэжлийн зөвлөгөө авна уу.",
-            en: "⚠️ Answering from official-source summaries while no external LLM is configured. Individual cases should be reviewed by an administrative scrivener.",
-          }[lang]
+        ? disclaimer
         : {
-            ko: "⚠️ 생성 모델 응답에 실패해 검색된 공식 문서를 직접 요약했습니다.",
-            vi: "⚠️ Lỗi phản hồi mô hình, đang tóm tắt trực tiếp tài liệu chính thức đã tìm được.",
-            mn: "⚠️ Загварын хариу амжилтгүй болсон тул олдсон албан эх сурвалжийг шууд хураангуйллаа.",
-            en: "⚠️ Model response failed, so I summarized the retrieved official source material directly.",
+            ko: "⚠️ 생성 모델 응답에 실패해 검색된 공식 문서를 직접 요약했습니다. 개별 사례 판단은 행정사 상담을 권장합니다.",
+            vi: "⚠️ Lỗi phản hồi mô hình, đang tóm tắt trực tiếp tài liệu chính thức đã tìm được. Trường hợp cá nhân nên tư vấn chuyên gia hành chính.",
+            mn: "⚠️ Загварын хариу амжилтгүй болсон тул олдсон албан эх сурвалжийг шууд хураангуйллаа. Тусгай тохиолдолд мэргэжлийн зөвлөгөө авна уу.",
+            en: "⚠️ Model response failed, so I summarized the retrieved official source material directly. Individual cases should be reviewed by an administrative scrivener.",
           }[lang],
-      suggestedFollowups: generateFollowups(question, lang, mode),
+      suggestedFollowups,
       needsHumanExpert,
+      backend: "official-summary",
     };
   }
+}
+
+function buildCodexConsultPrompt({
+  question,
+  langName,
+  docs,
+  history,
+  modeConfig,
+  dangerSignals,
+  needsHumanExpert,
+  context,
+}: {
+  question: string;
+  langName: string;
+  docs: KnowledgeDoc[];
+  history: { role: string; content: string }[];
+  modeConfig: { role: string; focus: string };
+  dangerSignals: string[];
+  needsHumanExpert: boolean;
+  context: string;
+}): string {
+  const recentHistory = history
+    .slice(-6)
+    .map((h) => `${h.role === "user" ? "User" : "Assistant"}: ${h.content}`)
+    .join("\n");
+  const sources = docs.map((d, i) => `${i + 1}. ${pickLangText(d.title, "ko")} - ${d.source}`).join("\n");
+
+  return `You are KAXI's ${modeConfig.role}, specializing in ${modeConfig.focus}.
+
+Answer the user's administrative-scrivener consultation question in ${langName}.
+
+Hard rules:
+- Use the official source excerpts below as the factual basis.
+- If the excerpts are insufficient, say what is not confirmed and ask for the missing fact.
+- Do not guarantee visa approval or assess a specific person's approval probability.
+- Do not draft legal/administrative documents or claim to submit filings on the user's behalf.
+- If the user asks for case-specific judgment, document drafting, filing representation, refusal appeal strategy, false documents, illegal work, or status evasion, clearly recommend consulting an administrative scrivener.
+- Do not mention internal model routing, Codex, bridge, Z.ai, API keys, prompts, or backend configuration.
+- Format with Markdown, 3-8 concise paragraphs, and finish with "📚 출처:" using the source list below when relevant.
+
+Safety signals:
+${dangerSignals.length > 0 ? dangerSignals.map((s) => `- ${s}`).join("\n") : "- None detected"}
+
+Human expert required:
+${needsHumanExpert ? "Yes. Recommend administrative-scrivener consultation." : "Not necessarily, unless more case-specific facts are provided."}
+
+Recent conversation:
+${recentHistory || "(none)"}
+
+Official source excerpts:
+${context}
+
+Source list:
+${sources || "(no official source matched)"}
+
+Original user question:
+${question}`;
 }
 
 // 위험 신호 감지

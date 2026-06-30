@@ -1,3 +1,5 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { runAgentPreflight } from "../src/lib/agent/preflight";
 import { runFallbackAgent } from "../src/lib/agent/fallback";
 import { buildAgentMeta } from "../src/lib/agent/meta";
@@ -250,6 +252,88 @@ async function testConsultRouteDoesNotRequireSharedLimiterWhenDisabled() {
   }
 }
 
+async function testConsultRouteUsesRemoteCodexBridge() {
+  const snapshot = { ...process.env };
+  let seenBody = "";
+  const server = createServer((req, res) => {
+    let raw = "";
+    req.on("data", (chunk) => {
+      raw += chunk.toString("utf8");
+    });
+    req.on("end", () => {
+      seenBody = raw;
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          answer: "mocked consult bridge answer",
+          backend: "codex-cli-local-bridge",
+          codexMode: "local-auth",
+          steps: [],
+          toolResults: [],
+          iterations: 1,
+          durationMs: 12,
+        })
+      );
+    });
+  });
+
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address() as AddressInfo;
+
+  try {
+    Object.assign(process.env, {
+      NODE_ENV: "test",
+      VERCEL_ENV: "",
+      VERCEL: "",
+      DATABASE_URL: "file:./db/custom.db",
+      AI_CONSULT_RATE_LIMIT: "0",
+      AI_CONSULT_DAILY_QUOTA: "0",
+      AI_CONSULT_BACKEND: "remote-bridge",
+      AI_EMBEDDING_INIT_TIMEOUT_MS: "1",
+      AI_LLM_TIMEOUT_MS: "5000",
+      CODEX_REMOTE_BRIDGE_URL: `http://127.0.0.1:${address.port}/api/ai/agent`,
+      CODEX_REMOTE_BRIDGE_TIMEOUT_MS: "3000",
+      ZAI_ENABLED: "false",
+    });
+    delete process.env.CODEX_REMOTE_BRIDGE_TOKEN;
+
+    const route = await import("../src/app/api/ai/consult/route");
+    const req = new NextRequest("https://kaxi.local/api/ai/consult", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-forwarded-for": "203.0.113.88",
+      },
+      body: JSON.stringify({
+        question: "행정사 AI",
+        lang: "ko",
+        history: [],
+        mode: "general",
+      }),
+    });
+    const res = await route.POST(req);
+    const body = await res.json();
+
+    if (res.status !== 200 || body.answer !== "mocked consult bridge answer") {
+      fail(`consult route should use remote bridge: status=${res.status} body=${JSON.stringify(body)}`);
+    }
+    if (body.backend !== "codex-cli-local-bridge" || body.codexMode !== "local-auth") {
+      fail(`consult route should expose bridge backend metadata: ${JSON.stringify(body)}`);
+    }
+    if (String(body.disclaimer).includes("외부 LLM 없이")) {
+      fail(`consult route should not expose external LLM configuration fallback: ${JSON.stringify(body)}`);
+    }
+    if (!seenBody.includes("administrative-scrivener consultation")) {
+      fail(`consult bridge payload should include consult guardrails, got ${seenBody}`);
+    }
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+    restoreEnv(snapshot);
+  }
+}
+
 function testAgentMetaDoesNotEchoPii() {
   const meta = buildAgentMeta({
     lang: "ko",
@@ -340,6 +424,7 @@ await testFallbackPartnerRequestStaysDraft();
 await testAgentStatusRoute();
 await testRemoteBridgeFailureFallsBackToTools();
 await testConsultRouteDoesNotRequireSharedLimiterWhenDisabled();
+await testConsultRouteUsesRemoteCodexBridge();
 testAgentMetaDoesNotEchoPii();
 testAgentMetaClarifyingQuestions();
 testVercelModelCacheDefaultsToTmp();

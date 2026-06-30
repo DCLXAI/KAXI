@@ -10,6 +10,7 @@
 - `RESTORE_MODEL_CACHE_ON_INSTALL`: Set `true` to decompress the local Transformer model during install. Vercel builds skip this by default to keep function bundles under file-size limits.
 - `AI_*_RATE_LIMIT`, `AI_*_DAILY_QUOTA`: Optional AI abuse and cost controls. Use `0` to disable a specific limit. Public Agent and Consult demos default to disabled limits until a managed shared limiter is configured.
 - `RATE_LIMIT_BACKEND`: `auto`, `database`, or `memory`. Use `database` with a writable shared production DB so Vercel instances share quota.
+- `AI_CONSULT_BACKEND`: Optional Consult backend override: `remote-bridge`, `codex`, or `zai`. When unset, Consult follows the remote Codex bridge if the Agent backend is configured that way.
 - `AI_AGENT_PREFLIGHT_ENABLED`: Enables deterministic server-side tool/RAG preflight before Codex bridge calls.
 - `AI_AGENT_PREFLIGHT_TIMEOUT_MS`, `AI_AGENT_CONTEXT_MAX_CHARS`, `AI_AGENT_GROUNDED_QUESTION_MAX_CHARS`: Bound preflight latency and context sent to the LLM bridge.
 - `AI_AGENT_LOGGING_ENABLED`: Enables Agent `ChatLog` persistence. It is automatically skipped on hosted SQLite deployments.
@@ -223,6 +224,8 @@ AGENT_BACKEND=remote-bridge
 CODEX_REMOTE_BRIDGE_URL=https://<tunnel-host>/api/ai/agent
 CODEX_REMOTE_BRIDGE_TOKEN=<same-secret-as-CODEX_BRIDGE_TOKEN-on-the-Mac>
 CODEX_REMOTE_BRIDGE_TIMEOUT_MS=55000
+# Optional. If unset, /consult follows AGENT_BACKEND=remote-bridge automatically.
+AI_CONSULT_BACKEND=remote-bridge
 ```
 
 On the Mac:
@@ -234,8 +237,9 @@ bun run codex:bridge
 
 Then expose `http://127.0.0.1:8787` through a tunnel such as Cloudflare Tunnel, ngrok, or Tailscale Funnel.
 The tunnel URL goes only into Vercel server environment variables as `CODEX_REMOTE_BRIDGE_URL`.
-The public frontend continues calling `/api/ai/agent`, and Vercel forwards to the Mac bridge with the secret token.
+The public frontend continues calling `/api/ai/agent` and `/api/ai/consult`, and Vercel forwards LLM-bound requests to the Mac bridge with the secret token.
 When the remote bridge is unavailable, `/api/ai/agent` returns a built-in `tool-fallback` answer instead of surfacing a 502 to public users.
+When the Consult bridge is unavailable, `/api/ai/consult` falls back to a direct official-source summary with the normal administrative-scrivener disclaimer.
 
 Minimum safety rules:
 
