@@ -22,7 +22,7 @@ import {
   sanitizeAiBody,
   withTimeout,
 } from "@/lib/api/security";
-import { protectChatQuestion } from "@/lib/privacy/chat-log";
+import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
 import { isPiiEncryptionConfigured } from "@/lib/privacy/pii";
 
 export const runtime = "nodejs";
@@ -72,7 +72,7 @@ async function persistAgentLog({
   toolResults: Array<{ tool: string; summary: string; success: boolean }>;
   iterations: number;
 }) {
-  if (!shouldPersistAgentLog()) return;
+  if (!shouldPersistAgentLog() || !canPersistChatQuestion(question)) return;
 
   try {
     const protectedQuestion = protectChatQuestion(question);

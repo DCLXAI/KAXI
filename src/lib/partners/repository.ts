@@ -1,6 +1,6 @@
 import { canWriteRuntimeDatabase, db } from "@/lib/db";
 import { parsePositiveInt } from "@/lib/api/security";
-import { preparePiiField, retentionUntil } from "@/lib/privacy/pii";
+import { canPersistPiiValue, preparePiiField, retentionUntil } from "@/lib/privacy/pii";
 
 export interface CreatePartnerRequestInput {
   leadId?: string | null;
@@ -40,7 +40,7 @@ export async function createPartnerRequest(input: CreatePartnerRequestInput) {
   const protectedQuestion = preparePiiField(question, { kind: "text", maxPlainLength: 240 });
   let finalLeadId = input.leadId || "anonymous";
 
-  if (!canWriteRuntimeDatabase()) {
+  if (!canWriteRuntimeDatabase() || !canPersistPiiValue(question)) {
     return {
       id: `unpersisted-${Date.now()}`,
       createdAt: new Date(),
@@ -55,6 +55,9 @@ export async function createPartnerRequest(input: CreatePartnerRequestInput) {
       deletedAt: null,
       status: "unpersisted",
       persisted: false,
+      reason: !canWriteRuntimeDatabase()
+        ? "Writable production database is not configured"
+        : "PII encryption is required before storing partner questions in production",
     };
   }
 

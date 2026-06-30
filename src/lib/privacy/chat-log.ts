@@ -1,5 +1,15 @@
 import { parsePositiveInt } from "@/lib/api/security";
-import { preparePiiField, readPiiField, redactSensitiveText, retentionUntil } from "@/lib/privacy/pii";
+import {
+  canPersistPiiValue,
+  preparePiiField,
+  readPiiField,
+  redactSensitiveText,
+  retentionUntil,
+} from "@/lib/privacy/pii";
+
+export function canPersistChatQuestion(question: string): boolean {
+  return canPersistPiiValue(question);
+}
 
 export function protectChatQuestion(question: string) {
   const protectedQuestion = preparePiiField(question, { kind: "text", maxPlainLength: 400 });

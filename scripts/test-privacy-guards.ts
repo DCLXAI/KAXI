@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
-import { preparePiiField, readPiiField } from "../src/lib/privacy/pii";
+import { createPartnerRequest } from "../src/lib/partners/repository";
+import { canPersistPiiValue, preparePiiField, readPiiField } from "../src/lib/privacy/pii";
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -24,6 +25,42 @@ async function testPiiRoundTripWithKey() {
   if (protectedField.plaintext?.includes("user@example.com")) fail("display plaintext leaked email");
   const roundTrip = readPiiField(protectedField.plaintext, protectedField.ciphertext);
   if (roundTrip !== "call me at user@example.com") fail("encrypted PII round-trip failed");
+}
+
+async function testProductionPiiPersistenceRequiresEncryption() {
+  const snapshot = { ...process.env };
+  try {
+    Object.assign(process.env, {
+      NODE_ENV: "production",
+      DATABASE_URL: "file:./db/custom.db",
+    });
+    delete process.env.VERCEL;
+    delete process.env.VERCEL_ENV;
+    delete process.env.DATA_ENCRYPTION_KEY;
+    delete process.env.PII_ALLOW_UNENCRYPTED_PLAINTEXT;
+
+    if (canPersistPiiValue("call me at user@example.com")) {
+      fail("production PII persistence should require encryption");
+    }
+    if (!canPersistPiiValue("")) fail("empty PII value should be persistable");
+
+    const request = await createPartnerRequest({
+      leadId: "local-privacy-test",
+      partnerType: "admin",
+      question: "call me at user@example.com",
+    });
+    if ((request as any).persisted !== false) {
+      fail("partner request should not persist production PII without encryption");
+    }
+    if (JSON.stringify(request).includes("user@example.com")) {
+      fail("unpersisted partner request leaked PII");
+    }
+  } finally {
+    for (const key of Object.keys(process.env)) {
+      if (!(key in snapshot)) delete process.env[key];
+    }
+    Object.assign(process.env, snapshot);
+  }
 }
 
 async function testHostedSqliteGuards() {
@@ -71,5 +108,6 @@ async function testHostedSqliteGuards() {
 
 await testPiiRedactionWithoutKey();
 await testPiiRoundTripWithKey();
+await testProductionPiiPersistenceRequiresEncryption();
 await testHostedSqliteGuards();
 console.log("PASS privacy guards");

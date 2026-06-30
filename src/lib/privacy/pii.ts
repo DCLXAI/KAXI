@@ -31,6 +31,17 @@ export function isPiiEncryptionConfigured(): boolean {
   return Boolean(encryptionKey());
 }
 
+export function requiresPiiEncryption(): boolean {
+  return process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
+}
+
+export function canPersistPiiValue(value: string | null | undefined): boolean {
+  const text = value?.trim();
+  if (!text) return true;
+  if (isPiiEncryptionConfigured()) return true;
+  return !requiresPiiEncryption();
+}
+
 function canStoreUnencryptedPlaintext(): boolean {
   return process.env.PII_ALLOW_UNENCRYPTED_PLAINTEXT === "true" && process.env.NODE_ENV !== "production";
 }

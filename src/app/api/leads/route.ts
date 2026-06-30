@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { canWriteRuntimeDatabase, db } from "@/lib/db";
 import { getAdminContext, jsonError, parsePositiveInt, rateLimit, requireAdmin } from "@/lib/api/security";
-import { preparePiiField, readPiiField, retentionUntil } from "@/lib/privacy/pii";
+import { canPersistPiiValue, preparePiiField, readPiiField, retentionUntil } from "@/lib/privacy/pii";
 
 function serializePartnerRequest(request: any) {
   return {
@@ -88,6 +88,12 @@ export async function POST(req: NextRequest) {
     if (!canWriteRuntimeDatabase()) {
       return NextResponse.json(
         { error: "Writable production database is not configured", persisted: false },
+        { status: 503 }
+      );
+    }
+    if (!canPersistPiiValue(contact ? String(contact) : null)) {
+      return NextResponse.json(
+        { error: "PII encryption is required before storing contact in production", persisted: false },
         { status: 503 }
       );
     }

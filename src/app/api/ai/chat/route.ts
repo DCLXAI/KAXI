@@ -5,7 +5,7 @@ import { findFAQ, AI_DEFAULT_REPLY } from "@/lib/data/faq";
 import { db } from "@/lib/db";
 import { createZaiClient, isZaiConfigurationError } from "@/lib/ai/zai";
 import { hybridSearch, initVectorStore, initTransformerStore, getStoreStats } from "@/lib/embeddings/vector-store";
-import { protectChatQuestion } from "@/lib/privacy/chat-log";
+import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
 import {
   consumeDailyQuota,
   parsePositiveInt,
@@ -116,20 +116,22 @@ export async function POST(req: NextRequest) {
 
     // 5. 로그 저장 (비동기, 실패 무시)
     try {
-      const protectedQuestion = protectChatQuestion(question);
-      await db.chatLog.create({
-        data: {
-          lang,
-          ...protectedQuestion,
-          answer,
-          source,
-          retrievedDocs: JSON.stringify({
-            docIds: retrievedDocIds,
-            searchMeta,
-            storeMethod: storeStats.method,
-          }),
-        },
-      });
+      if (canPersistChatQuestion(question)) {
+        const protectedQuestion = protectChatQuestion(question);
+        await db.chatLog.create({
+          data: {
+            lang,
+            ...protectedQuestion,
+            answer,
+            source,
+            retrievedDocs: JSON.stringify({
+              docIds: retrievedDocIds,
+              searchMeta,
+              storeMethod: storeStats.method,
+            }),
+          },
+        });
+      }
     } catch (logErr) {
       console.error("[ChatLog save error]", logErr);
     }

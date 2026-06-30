@@ -4,7 +4,7 @@ import type { Lang } from "@/lib/i18n/translations";
 import { db } from "@/lib/db";
 import { createZaiClient, isZaiConfigurationError } from "@/lib/ai/zai";
 import { hybridSearch, initVectorStore, initTransformerStore } from "@/lib/embeddings/vector-store";
-import { protectChatQuestion } from "@/lib/privacy/chat-log";
+import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
 import {
   consumeDailyQuota,
   parsePositiveInt,
@@ -71,25 +71,27 @@ export async function POST(req: NextRequest) {
 
     // 4. ChatLog 저장
     try {
-      const protectedQuestion = protectChatQuestion(question);
-      await db.chatLog.create({
-        data: {
-          lang,
-          ...protectedQuestion,
-          answer: result.answer,
-          source: "expert",
-          retrievedDocs: JSON.stringify({
-            docIds: docs.map((d) => d.id),
-            searchMeta: searchResults.map((r) => ({
-              id: r.doc.id,
-              score: Number(r.score.toFixed(3)),
-              vectorScore: Number(r.vectorScore.toFixed(3)),
-            })),
-            mode,
-            expert: true,
-          }),
-        },
-      });
+      if (canPersistChatQuestion(question)) {
+        const protectedQuestion = protectChatQuestion(question);
+        await db.chatLog.create({
+          data: {
+            lang,
+            ...protectedQuestion,
+            answer: result.answer,
+            source: "expert",
+            retrievedDocs: JSON.stringify({
+              docIds: docs.map((d) => d.id),
+              searchMeta: searchResults.map((r) => ({
+                id: r.doc.id,
+                score: Number(r.score.toFixed(3)),
+                vectorScore: Number(r.vectorScore.toFixed(3)),
+              })),
+              mode,
+              expert: true,
+            }),
+          },
+        });
+      }
     } catch (logErr) {
       console.error("[ChatLog save error]", logErr);
     }
