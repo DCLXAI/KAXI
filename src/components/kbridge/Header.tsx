@@ -84,6 +84,7 @@ export function Header({
     { key: "docs", label: tr("nav_docs", lang) },
     { key: "partners", label: tr("nav_partners", lang) },
     { key: "admin", label: tr("nav_admin", lang) },
+    { key: "synonyms", label: lang === "ko" ? "동의어" : "Synonyms" },
   ];
 
   return (

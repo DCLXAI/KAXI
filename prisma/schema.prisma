@@ -106,9 +106,42 @@ model ChatLog {
   lang      String
   question  String
   answer    String
-  source    String   // rule, rag
+  source    String   // rule, rag, hybrid
   retrievedDocs String? // JSON
 
   @@index([createdAt])
   @@index([lang])
+}
+
+// 동의어 사전 (검색 품질 향상용)
+// 일상어/방언/약어 → 공식 용어 매핑
+// vector-store에서 쿼리 확장시 사용
+model Synonym {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 원본 표현 (사용자가 실제로 입력하는 단어/구)
+  // 예: "돈", "얼마", "비싸", "거절"
+  source    String   @unique
+
+  // 동의어/확장어 (공식 용어 리스트, JSON 배열)
+  // 예: ["비용", "cost", "chi phí", "зардал"]
+  targets   String   // JSON array
+
+  // 카테고리 (관리 편의)
+  category  String   @default("general") // cost, visa, documents, school, warning, general
+
+  // 출처 — 자동 추출 or 관리자 수동 등록
+  origin    String   @default("manual") // manual, auto, chatlog
+
+  // 활성화 여부 (비활성시 검색에 사용 안 함)
+  enabled   Boolean  @default(true)
+
+  // 자동 추출 메타데이터
+  autoMeta  String?  // JSON: { frequency, confidence, suggestedAt, chatLogIds }
+
+  @@index([category])
+  @@index([enabled])
+  @@index([origin])
 }

@@ -241,31 +241,66 @@ function keywordScore(query: string, doc: KnowledgeDoc): { score: number; matche
   return { score, matched };
 }
 
-// 동의어 확장 (한국어 일상어 → 공식 용어)
-const SYNONYMS: Record<string, string[]> = {
-  "돈": ["비용", "cost", "chi phí", "зардал"],
-  "얼마": ["비용", "가격", "cost", "price"],
-  "비싸": ["비용", "cost", "높은"],
-  "폭리": ["비용", "브로커", "redflag"],
-  "거절": ["거절", "refusal", "보장", "보증"],
-  "어떡해": ["대응", "해결", "방법"],
-  "학교": ["대학", "어학당", "school", "university"],
-  "대학교": ["대학", "university", "학위"],
-  "어학당": ["언어", "language", "한국어"],
-  "한국어": ["언어", "korean", "language", "topik"],
-  "서류": ["documents", "hồ sơ", "barimt", "증명서"],
-  "끝나고": ["수료", "전환", "transfer"],
-  "가려면": ["진학", "전환", "입학"],
-  "허위": ["fake", "가짜", "거짓", "위조"],
-  "잔고증명": ["재정", "financial", "잔고"],
-  "필요해요": ["필요", "required", "요구"],
-  "받아요": ["검사", "진단", "test"],
-  "어디서": ["장소", "병원", "지정"],
+// 동의어 사전 (DB에서 동적 로드 + 캐싱)
+// fallback: DB 사용 불가시 하드코딩된 최소 동의어 사용
+const FALLBACK_SYNONYMS: Record<string, string[]> = {
+  "돈": ["비용", "cost"],
+  "얼마": ["비용", "cost"],
+  "거절": ["refusal", "보장"],
+  "학교": ["대학", "school"],
+  "어학당": ["언어", "language"],
+  "서류": ["documents", "hồ sơ"],
+  "허위": ["fake", "거짓"],
 };
 
-function expandSynonyms(query: string): string {
+// 캐시된 동의어 (DB에서 로드, 5분 캐싱)
+let cachedSynonyms: Record<string, string[]> | null = null;
+let synonymCacheTime = 0;
+const SYNONYM_CACHE_TTL = 5 * 60 * 1000; // 5분
+
+// DB에서 활성화된 동의어 로드
+async function loadSynonymsFromDB(): Promise<Record<string, string[]>> {
+  try {
+    // 동적 import — server-side only
+    const { db } = await import("../db");
+    const synonyms = await db.synonym.findMany({
+      where: { enabled: true },
+      select: { source: true, targets: true },
+    });
+    const map: Record<string, string[]> = {};
+    for (const s of synonyms) {
+      try {
+        map[s.source] = JSON.parse(s.targets);
+      } catch {}
+    }
+    console.log(`[VectorStore] Loaded ${Object.keys(map).length} synonyms from DB`);
+    return map;
+  } catch (e) {
+    console.error("[VectorStore] Synonym DB load failed, using fallback:", e);
+    return FALLBACK_SYNONYMS;
+  }
+}
+
+async function getSynonyms(): Promise<Record<string, string[]>> {
+  const now = Date.now();
+  if (cachedSynonyms && now - synonymCacheTime < SYNONYM_CACHE_TTL) {
+    return cachedSynonyms;
+  }
+  cachedSynonyms = await loadSynonymsFromDB();
+  synonymCacheTime = now;
+  return cachedSynonyms;
+}
+
+// 동의어 캐시 무효화 (관리자가 동의어 변경시 호출 가능)
+export function invalidateSynonymCache(): void {
+  cachedSynonyms = null;
+  synonymCacheTime = 0;
+}
+
+async function expandSynonyms(query: string): Promise<string> {
+  const synonyms = await getSynonyms();
   let expanded = query;
-  for (const [key, syns] of Object.entries(SYNONYMS)) {
+  for (const [key, syns] of Object.entries(synonyms)) {
     if (query.includes(key)) {
       expanded += " " + syns.join(" ");
     }
@@ -294,8 +329,8 @@ export async function hybridSearch(
     await initTransformerStore();
   }
 
-  // 동의어 확장
-  const expandedQuery = expandSynonyms(query);
+  // 동의어 확장 (DB에서 동적 로드)
+  const expandedQuery = await expandSynonyms(query);
 
   // 쿼리 임베딩 (transformer 또는 TF-IDF)
   let queryVec: EmbeddingVector;

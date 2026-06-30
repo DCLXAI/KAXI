@@ -9,11 +9,12 @@ import { CostCalculator } from "@/components/kbridge/CostCalculator";
 import { Documents } from "@/components/kbridge/Documents";
 import { Partners } from "@/components/kbridge/Partners";
 import { Admin } from "@/components/kbridge/Admin";
+import { Synonyms } from "@/components/kbridge/Synonyms";
 import { AIAssistant } from "@/components/kbridge/AIAssistant";
 import { useLangStore } from "@/store/kbridge";
 import { tr } from "@/lib/i18n/translations";
 
-type View = "home" | "diagnose" | "schools" | "cost" | "docs" | "partners" | "admin";
+type View = "home" | "diagnose" | "schools" | "cost" | "docs" | "partners" | "admin" | "synonyms";
 
 export default function Home() {
   const { lang } = useLangStore();
@@ -22,7 +23,8 @@ export default function Home() {
   // URL 해시 동기화 (초기 1회만)
   useEffect(() => {
     const hash = window.location.hash.replace("#", "");
-    if (hash && ["home", "diagnose", "schools", "cost", "docs", "partners", "admin"].includes(hash)) {
+    const valid = ["home", "diagnose", "schools", "cost", "docs", "partners", "admin", "synonyms"];
+    if (hash && valid.includes(hash)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setView(hash as View);
     }
@@ -46,6 +48,7 @@ export default function Home() {
         {view === "docs" && <Documents />}
         {view === "partners" && <Partners />}
         {view === "admin" && <Admin />}
+        {view === "synonyms" && <Synonyms />}
       </main>
 
       <footer className="mt-auto border-t bg-muted/30">

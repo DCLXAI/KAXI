@@ -208,3 +208,49 @@ Stage Summary:
 - 캐시 파일로 런타임 빠른 로드 (1.5s 응답)
 - TF-IDF 폴백으로 안정성 확보 (모델 로드 실패시에도 동작)
 - 16개 문서 384차원 임베딩, 캐시 영속화
+
+---
+Task ID: synonym-dictionary
+Agent: main (Super Z)
+Task: ChatLog 기반 동의어 사전 학습 시스템
+
+Work Log:
+- Prisma Synonym 모델 추가 (source, targets, category, origin, enabled, autoMeta)
+- 77개 동의어 시드 (src/lib/data/synonym-seed.ts):
+  - cost: 9, documents: 19, general: 13, process: 12, school: 10, visa: 8, warning: 6
+  - origin: manual 70, chatlog 7
+- API 4개 구현:
+  - GET/POST /api/synonyms (목록/추가)
+  - PATCH/DELETE /api/synonyms/[id] (수정/삭제)
+  - GET /api/chatlog/analyze (ChatLog 분석: 언어/패턴/빈도/실패 케이스)
+  - POST /api/synonyms/suggest (LLM 기반 동의어 자동 추천)
+- vector-store.ts DB 동의어 동적 로드:
+  - 5분 캐싱 + invalidateSynonymCache()
+  - 폴백: DB 사용 불가시 하드코딩 최소 동의어 사용
+  - 동의어 API 변경시 자동 캐시 무효화
+- 관리자 UI (src/components/kbridge/Synonyms.tsx):
+  - ChatLog 분석 대시보드 (총 대화/실패 케이스/빈도 단어)
+  - LLM 동의어 자동 추천 (Sparkles 버튼)
+  - 수동 추가 폼 (source/targets/category)
+  - 동의어 목록 (활성화 토글/삭제)
+  - 필터: 카테고리/출처/검색
+- LLM 동의어 추천 파이프라인:
+  1. ChatLog에서 빈도 높은 단어 추출
+  2. 기존 동의어와 불용어 필터링
+  3. LLM이 각 단어에 대해 source/targets/category/confidence/reason JSON 응답
+  4. 사용자가 "추가" 버튼으로 승인 → DB 저장
+
+브라우저 검증:
+- [✓] 동의어 페이지 정상 렌더링 (Header 메뉴 추가)
+- [✓] ChatLog 분석 대시보드: 총 19개 대화, 2개 실패 케이스, 빈도 단어 20개 표시
+- [✓] LLM 동의어 추천: 15개 candidates → 15개 suggestions (한국에서/얼마나/돈이/해야해요/비자 등)
+- [✓] 추천 승인 → DB 저장 → vector-store 캐시 무효화
+- [✓] AI 도우미 "한국에서 얼마나 돈이 필요해요?" → DB 동의어 로드 → cost-breakdown 검색 성공
+- [✓] ESLint 통과, 런타임 에러 없음
+
+Stage Summary:
+- 동의어 사전 DB화 완료 (77개 시드 + LLM 자동 추천)
+- ChatLog 분석으로 검색 품질 낮은 케이스 식별 가능
+- LLM이 ChatLog 빈도 단어 분석 → 동의어 후보 자동 생성
+- 관리자가 클릭 한번으로 동의어 승인/거부
+- 캐싱 + 무효화로 실시간 반영
