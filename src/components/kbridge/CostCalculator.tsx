@@ -1,0 +1,244 @@
+"use client";
+
+import { useState, useMemo } from "react";
+import { useLangStore } from "@/store/kbridge";
+import { tr, type Lang } from "@/lib/i18n/translations";
+import { SCHOOLS } from "@/lib/data/schools";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { AlertTriangle, CheckCircle2, Save } from "lucide-react";
+
+const COST_ITEMS = [
+  "cost_item_application",
+  "cost_item_tuition",
+  "cost_item_dorm",
+  "cost_item_insurance",
+  "cost_item_translation",
+  "cost_item_visa",
+  "cost_item_flight",
+  "cost_item_settle",
+  "cost_item_platform",
+  "cost_item_partner",
+] as const;
+
+// 항목별 기본값 (플랫폼 예상)
+const PLATFORM_DEFAULTS: Record<string, number> = {
+  cost_item_application: 80000,
+  cost_item_tuition: 1700000,
+  cost_item_dorm: 2400000,
+  cost_item_insurance: 240000,
+  cost_item_translation: 150000,
+  cost_item_visa: 60000,
+  cost_item_flight: 400000,
+  cost_item_settle: 1200000,
+  cost_item_platform: 49000,
+  cost_item_partner: 99000,
+};
+
+const PLATFORM_FEE_ITEMS = new Set(["cost_item_application", "cost_item_visa", "cost_item_platform", "cost_item_partner"]);
+
+export function CostCalculator() {
+  const { lang } = useLangStore();
+  const [selectedSchool, setSelectedSchool] = useState<string>("snu-klc");
+  const [platformValues, setPlatformValues] = useState<Record<string, number>>(PLATFORM_DEFAULTS);
+  const [brokerValues, setBrokerValues] = useState<Record<string, number>>({});
+  const [brokerTotalInput, setBrokerTotalInput] = useState<number>(0);
+
+  const school = useMemo(() => SCHOOLS.find((s) => s.id === selectedSchool)!, [selectedSchool]);
+
+  const applySchool = () => {
+    setPlatformValues((prev) => ({
+      ...prev,
+      cost_item_tuition: school.tuitionPerSemester,
+      cost_item_dorm: school.dormitoryAvailable ? (school.dormitoryCost ?? 0) : 0,
+    }));
+  };
+
+  // 학교 선택 변경시 자동으로 비용 반영
+  const onSchoolChange = (id: string) => {
+    setSelectedSchool(id);
+    const s = SCHOOLS.find((x) => x.id === id);
+    if (s) {
+      setPlatformValues((prev) => ({
+        ...prev,
+        cost_item_tuition: s.tuitionPerSemester,
+        cost_item_dorm: s.dormitoryAvailable ? (s.dormitoryCost ?? 0) : 0,
+      }));
+    }
+  };
+
+  const platformTotal = Object.values(platformValues).reduce((a, b) => a + b, 0);
+  const brokerTotal = brokerTotalInput || Object.values(brokerValues).reduce((a, b) => a + b, 0);
+  const diff = brokerTotal - platformTotal;
+  const diffPct = platformTotal > 0 ? Math.round((diff / platformTotal) * 100) : 0;
+
+  const isOver = brokerTotal > 0 && diffPct > 30;
+
+  return (
+    <div className="mx-auto max-w-5xl px-4 py-10 space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold">{tr("cost_title", lang)}</h1>
+        <p className="text-muted-foreground mt-2">{tr("cost_subtitle", lang)}</p>
+      </div>
+
+      {/* 학교 선택 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">{tr("nav_schools", lang)}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Select value={selectedSchool} onValueChange={onSchoolChange}>
+              <SelectTrigger className="flex-1"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {SCHOOLS.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name[lang]} ({s.tuitionPerSemester.toLocaleString()}₩)
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" onClick={applySchool}>
+              {lang === "ko" ? "학교 비용 반영" : lang === "vi" ? "Áp dụng" : lang === "mn" ? "Хэрэглэх" : "Apply school costs"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 비교 테이블 */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg">{tr("cost_subtitle", lang)}</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <div className="grid grid-cols-12 gap-2 text-xs font-medium text-muted-foreground pb-2 border-b">
+              <div className="col-span-6">{lang === "ko" ? "항목" : lang === "vi" ? "Hạng mục" : lang === "mn" ? "Бичлэг" : "Item"}</div>
+              <div className="col-span-3 text-right text-primary">{tr("cost_platform", lang)}</div>
+              <div className="col-span-3 text-right text-destructive">{tr("cost_broker", lang)}</div>
+            </div>
+            {COST_ITEMS.map((item) => (
+              <div key={item} className="grid grid-cols-12 gap-2 items-center py-1">
+                <div className="col-span-6 flex items-center gap-1.5 text-sm">
+                  {tr(item as any, lang)}
+                  {PLATFORM_FEE_ITEMS.has(item) && (
+                    <Badge variant="outline" className="text-[10px] px-1 py-0">
+                      {lang === "ko" ? "명확" : "clear"}
+                    </Badge>
+                  )}
+                </div>
+                <Input
+                  type="number"
+                  className="col-span-3 text-right font-mono text-sm h-8"
+                  value={platformValues[item] ?? 0}
+                  onChange={(e) =>
+                    setPlatformValues((p) => ({ ...p, [item]: Number(e.target.value) }))
+                  }
+                />
+                <Input
+                  type="number"
+                  placeholder="0"
+                  className="col-span-3 text-right font-mono text-sm h-8"
+                  value={brokerValues[item] ?? ""}
+                  onChange={(e) =>
+                    setBrokerValues((p) => ({ ...p, [item]: Number(e.target.value) }))
+                  }
+                />
+              </div>
+            ))}
+
+            {/* 총액 */}
+            <div className="grid grid-cols-12 gap-2 pt-3 mt-2 border-t-2 items-center">
+              <div className="col-span-6 font-bold">{tr("cost_total", lang)}</div>
+              <div className="col-span-3 text-right font-mono font-bold text-primary">
+                {platformTotal.toLocaleString()}₩
+              </div>
+              <div className="col-span-3 text-right font-mono font-bold text-destructive">
+                {brokerTotal > 0 ? `${brokerTotal.toLocaleString()}₩` : "—"}
+              </div>
+            </div>
+          </div>
+
+          {/* 총액 직접 입력 옵션 */}
+          <div className="mt-4 pt-3 border-t flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+            <Label className="text-xs text-muted-foreground">
+              {lang === "ko" ? "브로커가 총액만 말한 경우 (선택)" : lang === "vi" ? "Nếu môi giới chỉ báo tổng" : lang === "mn" ? "Зуучлагч зөвхөн нийт дүнг хэлсэн бол" : "If broker only quotes total"}
+            </Label>
+            <Input
+              type="number"
+              placeholder="0"
+              value={brokerTotalInput || ""}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setBrokerTotalInput(v);
+                if (v > 0) setBrokerValues({});
+              }}
+              className="text-right font-mono h-8 sm:max-w-xs"
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setBrokerTotalInput(0);
+                setBrokerValues({});
+              }}
+            >
+              {tr("filter_reset", lang)}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 경고 */}
+      {brokerTotal > 0 && (
+        <Card className={isOver ? "border-destructive" : "border-green-500"}>
+          <CardContent className="pt-6 flex items-start gap-3">
+            {isOver ? (
+              <AlertTriangle className="h-6 w-6 text-destructive shrink-0" />
+            ) : (
+              <CheckCircle2 className="h-6 w-6 text-green-500 shrink-0" />
+            )}
+            <div className="flex-1">
+              <div className="font-medium">
+                {isOver ? tr("cost_warning_broker", lang) : tr("cost_warning_normal", lang)}
+              </div>
+              {isOver && (
+                <div className="text-sm text-muted-foreground mt-1">
+                  {lang === "ko" && `플랫폼 예상 ${platformTotal.toLocaleString()}₩ 대비 ${diff.toLocaleString()}₩ (${diffPct}%) 더 비쌉니다. 항목별로 어느 부분이 부풀려졌는지 비교하세요.`}
+                  {lang === "vi" && `Cao hơn ${diff.toLocaleString()}₩ (${diffPct}%) so với nền tảng.`}
+                  {lang === "mn" && `Платформын ${platformTotal.toLocaleString()}₩-ээс ${diff.toLocaleString()}₩ (${diffPct}%) өндөр.`}
+                  {lang === "en" && `${diff.toLocaleString()}₩ (${diffPct}%) higher than platform estimate.`}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 저장 */}
+      <Card>
+        <CardContent className="pt-6 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+          <div>
+            <div className="font-medium">{tr("cost_add_to_workspace", lang)}</div>
+            <div className="text-sm text-muted-foreground">
+              {lang === "ko" && "플랫폼 예상 비용이 서류 워크스페이스에 기준 예산으로 저장됩니다."}
+              {lang === "vi" && "Lưu vào hồ sơ."}
+              {lang === "mn" && "Workspace-д хадгалах."}
+              {lang === "en" && "Saves platform estimate as reference budget."}
+            </div>
+          </div>
+          <Button className="gap-2">
+            <Save className="h-4 w-4" />
+            {tr("cost_add_to_workspace", lang)}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
