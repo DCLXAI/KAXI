@@ -1,4 +1,5 @@
 import { runAgentPreflight } from "../src/lib/agent/preflight";
+import { buildAgentMeta } from "../src/lib/agent/meta";
 import { TOOL_MAP } from "../src/lib/agent/tools";
 
 function fail(message: string): never {
@@ -62,7 +63,52 @@ async function testAgentStatusRoute() {
   }
 }
 
+function testAgentMetaDoesNotEchoPii() {
+  const meta = buildAgentMeta({
+    lang: "ko",
+    question: "D-4 비자 서류 알려줘. user@example.com 으로 연락줘.",
+    backend: "tool-fallback",
+    grounded: true,
+    durationMs: 1234,
+    toolResults: [
+      {
+        tool: "search_knowledge",
+        args: { query: "D-4 서류" },
+        result: [
+          {
+            id: "visa-documents",
+            title: "비자 신청 필수 서류",
+            category: "documents",
+            source: "Study in Korea",
+            sourceMeta: {
+              label: "Study in Korea",
+              url: "https://www.studyinkorea.go.kr",
+              owner: "official",
+              verifiedAt: "2026-06-30",
+              reviewAfter: "2026-09-30",
+            },
+          },
+        ],
+        summary: "1개 관련 문서 검색",
+        success: true,
+      },
+    ],
+  });
+  const serialized = JSON.stringify(meta);
+
+  if (meta.sources.length !== 1 || meta.sources[0].url !== "https://www.studyinkorea.go.kr") {
+    fail(`agent meta source extraction failed: ${serialized}`);
+  }
+  if (meta.quality.officialSourceCount !== 1 || !meta.plan.includes("공식 정보 검색")) {
+    fail(`agent meta quality/plan incomplete: ${serialized}`);
+  }
+  if (serialized.includes("user@example.com")) {
+    fail("agent meta leaked raw email from question");
+  }
+}
+
 await testPartnerToolDryRun();
 await testPreflightDoesNotPersistPartnerRequest();
 await testAgentStatusRoute();
+testAgentMetaDoesNotEchoPii();
 console.log("PASS agent guards");

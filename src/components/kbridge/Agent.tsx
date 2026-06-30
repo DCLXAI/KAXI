@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { MessageResponse } from "@/components/ai-elements/message";
 import {
   ArrowUp,
   Loader2,
@@ -24,6 +25,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Brain,
+  ExternalLink,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -53,6 +55,7 @@ interface Msg {
   codexMode?: string;
   durationMs?: number;
   grounded?: boolean;
+  meta?: AgentMeta;
 }
 
 const DEFAULT_LOCAL_CODEX_BRIDGE_URL = "http://127.0.0.1:8787/api/ai/agent";
@@ -83,6 +86,38 @@ interface AgentStatus {
     chatLog: boolean;
     ledger: boolean;
     piiEncryption: boolean;
+  };
+}
+
+interface AgentSource {
+  id: string;
+  title: string;
+  label: string;
+  url: string | null;
+  kind: "knowledge" | "school" | "internal";
+  owner?: string;
+  verifiedAt?: string;
+  reviewAfter?: string;
+}
+
+interface AgentSuggestion {
+  kind: "school" | "cost" | "documents" | "partner";
+  label: string;
+  prompt: string;
+}
+
+interface AgentMeta {
+  summary: string;
+  plan: string[];
+  sources: AgentSource[];
+  suggestions: AgentSuggestion[];
+  safetyFlags: string[];
+  quality: {
+    backend: string;
+    grounded: boolean;
+    toolCount: number;
+    officialSourceCount: number;
+    durationMs?: number;
   };
 }
 
@@ -191,6 +226,22 @@ function statusDotClass(status: AgentStatus | null, bridgeState: BridgeState): s
   return status.ok ? "bg-green-500" : "bg-amber-500";
 }
 
+function sourceHost(url: string | null): string {
+  if (!url) return "KAXI";
+  if (url.startsWith("internal://")) return "KAXI";
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "source";
+  }
+}
+
+function sourceKindLabel(source: AgentSource, lang: Lang): string {
+  if (source.kind === "school") return lang === "ko" ? "학교" : "School";
+  if (source.kind === "internal") return "KAXI";
+  return lang === "ko" ? "공식" : "Official";
+}
+
 const EXAMPLE_PROMPTS: Record<Lang, string[]> = {
   ko: [
     "서울에 있는 인증대학 어학당 3곳 찾아주고 비용도 계산해줘",
@@ -231,6 +282,10 @@ export function Agent() {
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const timer = window.setTimeout(() => {
+      endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, 120);
+    return () => window.clearTimeout(timer);
   }, [msgs, loading]);
 
   useEffect(() => {
@@ -305,6 +360,7 @@ export function Agent() {
           codexMode: data.codexMode,
           durationMs: data.durationMs,
           grounded: Boolean(data.grounded),
+          meta: data.meta,
         },
       ]);
     } catch (e) {
@@ -535,9 +591,85 @@ export function Agent() {
                         </Badge>
                       )}
                     </div>
-                    <div className="prose prose-sm max-w-none text-sm leading-relaxed whitespace-pre-wrap">
-                      {m.text}
+                    {m.meta && (
+                      <div className="mb-3 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
+                        <span className="rounded-md bg-muted px-2 py-1">{m.meta.summary}</span>
+                        {m.meta.plan.slice(0, 3).map((step) => (
+                          <span key={step} className="rounded-md border px-2 py-1">
+                            {step}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="text-sm leading-relaxed">
+                      <MessageResponse>{m.text}</MessageResponse>
                     </div>
+                    {m.meta?.safetyFlags && m.meta.safetyFlags.length > 0 && (
+                      <div className="mt-3 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                        {m.meta.safetyFlags[0]}
+                      </div>
+                    )}
+                    {m.meta?.sources && m.meta.sources.length > 0 && (
+                      <div className="mt-4 border-t pt-3">
+                        <div className="mb-2 text-[11px] font-medium uppercase tracking-normal text-muted-foreground">
+                          {lang === "ko" ? "참조 출처" : "Sources"}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {m.meta.sources.slice(0, 6).map((source) => {
+                            const content = (
+                              <>
+                                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                  {sourceKindLabel(source, lang)}
+                                </span>
+                                <span className="max-w-[220px] truncate">{source.title}</span>
+                                <span className="text-muted-foreground">{sourceHost(source.url)}</span>
+                                {source.url && !source.url.startsWith("internal://") && <ExternalLink className="h-3 w-3" />}
+                              </>
+                            );
+
+                            return source.url && !source.url.startsWith("internal://") ? (
+                              <a
+                                key={`${source.kind}-${source.id}-${source.url}`}
+                                href={source.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-xs hover:bg-muted"
+                              >
+                                {content}
+                              </a>
+                            ) : (
+                              <span
+                                key={`${source.kind}-${source.id}-${source.label}`}
+                                className="inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-xs"
+                              >
+                                {content}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    {m.meta?.suggestions && m.meta.suggestions.length > 0 && (
+                      <div className="mt-4 border-t pt-3">
+                        <div className="mb-2 text-[11px] font-medium uppercase tracking-normal text-muted-foreground">
+                          {lang === "ko" ? "다음 작업" : "Next"}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {m.meta.suggestions.map((suggestion) => (
+                            <button
+                              key={`${suggestion.kind}-${suggestion.label}`}
+                              type="button"
+                              disabled={loading}
+                              onClick={() => send(suggestion.prompt)}
+                              className="inline-flex max-w-full items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-left text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <ArrowRight className="h-3 w-3 text-primary" />
+                              <span className="font-medium">{suggestion.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -554,12 +686,12 @@ export function Agent() {
                 <span>{lang === "ko" ? "에이전트 추론 중..." : "Agent thinking..."}</span>
               </div>
               <div className="text-xs text-muted-foreground pl-6">
-                {lang === "ko" ? "도구가 필요한지 판단하고 있습니다" : "Deciding which tools to use"}
+                {lang === "ko" ? "자료 검색, 비용/서류 계산, 출처 정리까지 순서대로 처리합니다" : "Checking tools, sources, and next actions"}
               </div>
             </div>
           </motion.div>
         )}
-        <div ref={endRef} />
+        <div ref={endRef} className="h-44" />
       </div>
 
       {/* 입력 영역 */}

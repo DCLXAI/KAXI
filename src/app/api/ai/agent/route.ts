@@ -4,6 +4,7 @@ import { canWriteRuntimeDatabase, db } from "@/lib/db";
 import { runAgent } from "@/lib/agent/agent";
 import { runFallbackAgent } from "@/lib/agent/fallback";
 import type { ToolContext } from "@/lib/agent/tools";
+import { buildAgentMeta } from "@/lib/agent/meta";
 import { runAgentPreflight, type AgentPreflightResult } from "@/lib/agent/preflight";
 import {
   getAgentBackend,
@@ -325,6 +326,14 @@ export async function POST(req: NextRequest) {
           iterations: result.iterations,
           durationMs: result.durationMs,
           grounded: Boolean(preflight.groundingContext),
+          meta: buildAgentMeta({
+            lang,
+            question,
+            backend: result.backend,
+            grounded: Boolean(preflight.groundingContext),
+            toolResults,
+            durationMs: result.durationMs,
+          }),
         });
       } catch (bridgeErr) {
         console.warn(
@@ -408,6 +417,14 @@ export async function POST(req: NextRequest) {
           iterations: 1,
           durationMs: result.durationMs,
           grounded: Boolean(preflight.groundingContext),
+          meta: buildAgentMeta({
+            lang,
+            question,
+            backend,
+            grounded: Boolean(preflight.groundingContext),
+            toolResults,
+            durationMs: result.durationMs,
+          }),
         });
       } catch (codexErr) {
         console.warn(
@@ -446,6 +463,14 @@ export async function POST(req: NextRequest) {
           iterations: fallback.iterations,
           durationMs: Date.now() - requestStartedAt,
           grounded: Boolean(preflight.groundingContext),
+          meta: buildAgentMeta({
+            lang,
+            question,
+            backend: "tool-fallback",
+            grounded: Boolean(preflight.groundingContext),
+            toolResults: fallback.toolResults,
+            durationMs: Date.now() - requestStartedAt,
+          }),
         });
       }
     }
@@ -481,6 +506,14 @@ export async function POST(req: NextRequest) {
         iterations: fallback.iterations,
         durationMs: Date.now() - requestStartedAt,
         grounded: Boolean(preflight.groundingContext),
+        meta: buildAgentMeta({
+          lang,
+          question,
+          backend: "tool-fallback",
+          grounded: Boolean(preflight.groundingContext),
+          toolResults: fallback.toolResults,
+          durationMs: Date.now() - requestStartedAt,
+        }),
       });
     }
 
@@ -553,6 +586,14 @@ export async function POST(req: NextRequest) {
       iterations: result.iterations,
       durationMs: Date.now() - requestStartedAt,
       grounded: Boolean(preflight.groundingContext),
+      meta: buildAgentMeta({
+        lang,
+        question,
+        backend,
+        grounded: Boolean(preflight.groundingContext),
+        toolResults: result.toolResults,
+        durationMs: Date.now() - requestStartedAt,
+      }),
     });
   } catch (e) {
     console.error("[POST /api/ai/agent]", e);
