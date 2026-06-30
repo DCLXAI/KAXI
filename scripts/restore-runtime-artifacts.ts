@@ -4,41 +4,51 @@ import { gunzipSync } from "zlib";
 
 const root = process.cwd();
 const artifactRoot = join(root, "runtime-artifacts");
+const isVercelBuild = process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV);
+const restoreModelCache = process.env.RESTORE_MODEL_CACHE_ON_INSTALL === "true" || !isVercelBuild;
 
 const files = [
   {
     artifact: "model-cache/Xenova/multilingual-e5-small/config.json",
     target: "data/model-cache/Xenova/multilingual-e5-small/config.json",
     compressed: false,
+    kind: "model",
   },
   {
     artifact: "model-cache/Xenova/multilingual-e5-small/tokenizer_config.json",
     target: "data/model-cache/Xenova/multilingual-e5-small/tokenizer_config.json",
     compressed: false,
+    kind: "model",
   },
   {
     artifact: "model-cache/Xenova/multilingual-e5-small/tokenizer.json.gz",
     target: "data/model-cache/Xenova/multilingual-e5-small/tokenizer.json",
     compressed: true,
+    kind: "model",
   },
   {
     artifact: "model-cache/Xenova/multilingual-e5-small/onnx/model_quantized.onnx.gz",
     target: "data/model-cache/Xenova/multilingual-e5-small/onnx/model_quantized.onnx",
     compressed: true,
+    kind: "model",
   },
   {
     artifact: "vector-store/embeddings-cache.json",
     target: "data/vector-store/embeddings-cache.json",
     compressed: false,
+    kind: "runtime",
   },
   {
     artifact: "db/custom.db",
     target: "db/custom.db",
     compressed: false,
+    kind: "runtime",
   },
 ] as const;
 
 function restoreFile(entry: (typeof files)[number]) {
+  if (entry.kind === "model" && !restoreModelCache) return false;
+
   const source = join(artifactRoot, entry.artifact);
   const target = join(root, entry.target);
 

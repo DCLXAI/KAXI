@@ -1,0 +1,10 @@
+.git
+.next
+node_modules
+test-results
+playwright-report
+tests
+playwright.config.ts
+tsconfig.e2e.json
+data/model-cache
+db/*.db

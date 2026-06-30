@@ -6,6 +6,7 @@
 - `ADMIN_API_KEY`: Required for admin APIs, lead exports, chat-log analysis, and synonym management.
 - `MODEL_CACHE_DIR`: Optional local cache path for Transformer models. Defaults to `data/model-cache`.
 - `VECTOR_CACHE_FILE`: Optional embedding cache file path. Defaults to `data/vector-store/embeddings-cache.json`.
+- `RESTORE_MODEL_CACHE_ON_INSTALL`: Set `true` to decompress the local Transformer model during install. Vercel builds skip this by default to keep function bundles under file-size limits.
 - `AI_*_RATE_LIMIT`, `AI_*_DAILY_QUOTA`: Optional AI abuse and cost controls. Use `0` to disable a specific limit.
 - `AI_AGENT_PREFLIGHT_ENABLED`: Enables deterministic server-side tool/RAG preflight before Codex bridge calls.
 - `AI_AGENT_PREFLIGHT_TIMEOUT_MS`, `AI_AGENT_CONTEXT_MAX_CHARS`, `AI_AGENT_GROUNDED_QUESTION_MAX_CHARS`: Bound preflight latency and context sent to the LLM bridge.
@@ -30,6 +31,7 @@ Included artifacts:
 - Sanitized SQLite MVP database with `Synonym` seed data, 50 `School` rows including source metadata, and empty user-generated tables.
 
 The restore script only creates missing files. It does not overwrite local runtime data.
+On Vercel builds it restores vector/DB artifacts but does not decompress the large ONNX model unless `RESTORE_MODEL_CACHE_ON_INSTALL=true`.
 
 ## Database Policy
 
