@@ -20,7 +20,7 @@ export const authOptions: NextAuthOptions = {
           return {
             id: "admin",
             email: ADMIN_EMAIL,
-            name: "K-Bridge Admin",
+            name: "KAXI Admin",
             role: "admin" as const,
           };
         }

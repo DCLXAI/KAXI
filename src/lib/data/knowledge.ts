@@ -1,4 +1,4 @@
-// K-Bridge Gateway RAG 지식 베이스
+// KAXI RAG 지식 베이스
 // 공식 출처: 한국유학종합시스템(Study in Korea)·교육부·법무부·법제처
 // 각 문서는 {ko, vi, mn, en} 다국어 텍스트를 가짐
 // 간단한 키워드 기반 retrieval + LLM 답변 생성
@@ -111,16 +111,16 @@ export const SOURCE_METADATA: Record<string, SourceMetadata> = {
     reviewAfter: DEFAULT_REVIEW_AFTER,
     owner: "official",
   },
-  "K-Bridge 분석 (공식 학사운영 지침 기반)": {
-    label: "K-Bridge internal analysis",
-    url: "internal://k-bridge/cost-analysis",
+  "KAXI 분석 (공식 학사운영 지침 기반)": {
+    label: "KAXI internal analysis",
+    url: "internal://kaxi/cost-analysis",
     verifiedAt: DEFAULT_VERIFIED_AT,
     reviewAfter: DEFAULT_REVIEW_AFTER,
     owner: "internal",
   },
-  "K-Bridge 안전 가이드라인": {
-    label: "K-Bridge safety guideline",
-    url: "internal://k-bridge/safety-guideline",
+  "KAXI 안전 가이드라인": {
+    label: "KAXI safety guideline",
+    url: "internal://kaxi/safety-guideline",
     verifiedAt: DEFAULT_VERIFIED_AT,
     reviewAfter: DEFAULT_REVIEW_AFTER,
     owner: "internal",
@@ -130,7 +130,7 @@ export const SOURCE_METADATA: Record<string, SourceMetadata> = {
 export function getSourceMetadata(source: string): SourceMetadata {
   return SOURCE_METADATA[source] ?? {
     label: source,
-    url: "internal://k-bridge/unregistered-source",
+    url: "internal://kaxi/unregistered-source",
     verifiedAt: DEFAULT_VERIFIED_AT,
     reviewAfter: DEFAULT_REVIEW_AFTER,
     owner: "internal",
@@ -244,7 +244,7 @@ export const KNOWLEDGE_DOCS: KnowledgeDoc[] = [
       mn: "Солонгос улсад сурах нийт зардал: төлбөр, дотуур байр, баримт, орчуулга гэрчилгээ, виз хураамж, нисэх тийз, анхны зардал. Хэлний курс 1.3-1.9 сая/семестр. Их сургууль 3.5-5.2 сая. Дотуур байр 1.5-3 сая/6 сар. Орчуулга 15-50 мянга/баримт. Виз 60,000. Зуучлагч 30%+ өндөр бол харьцуул.",
       en: "Korea study total cost: tuition, dorm, docs, translation, visa, flight, settlement. Language: 1.3-1.9M KRW/semester. University: 3.5-5.2M/semester. Dorm: 1.5-3M/6mo. Translation: 15-50K/doc. Visa: 60K. Flight: 300-600K. Settlement: 1-2M. If broker total is 30%+ higher, compare items.",
     },
-    source: "K-Bridge 분석 (공식 학사운영 지침 기반)",
+    source: "KAXI 분석 (공식 학사운영 지침 기반)",
   },
   {
     id: "topik-requirement",
@@ -311,12 +311,12 @@ export const KNOWLEDGE_DOCS: KnowledgeDoc[] = [
     },
     keywords: ["비자 보장", "visa guarantee", "bảo đảm", "баталгаа", "100% 비자", "guaranteed", "보장"],
     content: {
-      ko: "비자 발급 여부는 영사의 재량이며, 어떤 브로커나 유학원도 '비자 100% 보장'을 약속할 수 없습니다. 비자 보장을 약속하는 것은 허위 광고에 해당하며, 계약 후 비자 거절시 책임을 회피하는 경우가 많습니다. K-Bridge는 비자 발급을 보장하지 않으며, 비자 가능성을 판단하지 않습니다. 개별 비자 판단은 행정사 상담으로 연결됩니다.",
+      ko: "비자 발급 여부는 영사의 재량이며, 어떤 브로커나 유학원도 '비자 100% 보장'을 약속할 수 없습니다. 비자 보장을 약속하는 것은 허위 광고에 해당하며, 계약 후 비자 거절시 책임을 회피하는 경우가 많습니다. KAXI는 비자 발급을 보장하지 않으며, 비자 가능성을 판단하지 않습니다. 개별 비자 판단은 행정사 상담으로 연결됩니다.",
       vi: "Visa do lãnh sự quyết định. Không ai bảo đảm 100% visa. Hứa 'bảo đảm visa' là quảng cáo giả. Nền tảng không bảo đảm visa, chuyển sang luật sư cho từng trường hợp.",
       mn: "Визийг консул шийдвэрлэнэ. 'Виз 100% баталгаа' гэдэг хуурамч зар. Платформ виз баталгаажуулдаггүй, тусгай зөвлөгөөнд шилжүүлнэ.",
       en: "Visa is at consul's discretion. No one can guarantee 100% visa. 'Visa guarantee' is false advertising. Platform does not guarantee visa, refers to admin lawyer for individual cases.",
     },
-    source: "K-Bridge 안전 가이드라인",
+    source: "KAXI 안전 가이드라인",
   },
   {
     id: "fake-documents-warning",
@@ -329,7 +329,7 @@ export const KNOWLEDGE_DOCS: KnowledgeDoc[] = [
     },
     keywords: ["허위", "fake", "giả", "хуурамч", "거짓", "잔고증명", "거짓 서류", "false document", "위조"],
     content: {
-      ko: "허위 잔고증명·허위 학력증명서·허위 재직증명서 제출은 출입국관리법 위반으로 강제퇴거·입국금지(최장 10년) 대상입니다. 또한 사문서위조죄(형법 제231조)로 형사처벌 대상입니다. K-Bridge는 허위서류 작성·제공을 요청하는 사용자에게 서비스를 제공하지 않으며, 합법적 준비 경로를 안내합니다.",
+      ko: "허위 잔고증명·허위 학력증명서·허위 재직증명서 제출은 출입국관리법 위반으로 강제퇴거·입국금지(최장 10년) 대상입니다. 또한 사문서위조죄(형법 제231조)로 형사처벌 대상입니다. KAXI는 허위서류 작성·제공을 요청하는 사용자에게 서비스를 제공하지 않으며, 합법적 준비 경로를 안내합니다.",
       vi: "Sổ tiết kiệm giả, bằng giả, giấy chứng nhận giả = trục xuất + cấm nhập cảnh tới 10 năm. Hình phạt hình sự theo luật. Nền tảng từ chối hồ sơ giả, hướng dẫn chuẩn bị hợp pháp.",
       mn: "Хуурамч банкны баримт, боловсролын гэрчилгээ = албадан гаргах + 10 жил хүртэл хориг. Эрүүгийн хариуцлага. Платформ татгалзаж, хууль ёсны замаар зааварлана.",
       en: "Fake bank statements, fake diplomas = deportation + entry ban up to 10 years. Criminal liability under criminal code. Platform refuses, guides to legal preparation.",
@@ -347,7 +347,7 @@ export const KNOWLEDGE_DOCS: KnowledgeDoc[] = [
     },
     keywords: ["취업", "알바", "공장", "job", "work", "việc làm", "ажил", "직업소개", "employment", "취업 매칭"],
     content: {
-      ko: "미등록 유료직업소개사업은 직업안정법 제47조 위반으로 5년 이하 징역 또는 5천만원 이하 벌금 대상입니다. D-2/D-4 비자 소지자의 아르바이트는 별도 시간제취업허가(S-3)를 받아야 하며, 허가 없는 취업은 불법취업으로 강제퇴거 대상입니다. K-Bridge는 취업 매칭을 제공하지 않으며, 합법 취업은 고용노동부 고용허가제를 통해야 함을 안내합니다.",
+      ko: "미등록 유료직업소개사업은 직업안정법 제47조 위반으로 5년 이하 징역 또는 5천만원 이하 벌금 대상입니다. D-2/D-4 비자 소지자의 아르바이트는 별도 시간제취업허가(S-3)를 받아야 하며, 허가 없는 취업은 불법취업으로 강제퇴거 대상입니다. KAXI는 취업 매칭을 제공하지 않으며, 합법 취업은 고용노동부 고용허가제를 통해야 함을 안내합니다.",
       vi: "Giới thiệu việc làm không đăng ký = phạt 5 năm tù hoặc 50 triệu KRW. D-2/D-4 muốn làm thêm cần giấy phép (S-3). Không phép = trục xuất. Nền tảng không ghép việc làm.",
       mn: "Бүртгэлгүй ажлын байрны зуучлал = 5 жил хүртэл хорих эсвэл 50 сая KRW торгууль. D-2/D-4 ажиллахын тулд тусгай зөвшөөрөл (S-3) хэрэгтэй. Платформ ажил холбохгүй.",
       en: "Unregistered job matching = up to 5yr prison or 50M KRW fine. D-2/D-4 part-time work needs S-3 permit. Without = illegal work → deportation. Platform provides no job matching.",
@@ -365,7 +365,7 @@ export const KNOWLEDGE_DOCS: KnowledgeDoc[] = [
     },
     keywords: ["행정사", "administrative", "luật sư hành chính", "зөвлөгөө", "비자대행", "visa agent", "출입국", "immigration"],
     content: {
-      ko: "행정사법 제2조에 따라 행정사는 행정기관 제출 서류 작성, 권리·의무나 사실증명 서류 작성, 작성된 서류의 제출 대행 등을 업무로 합니다. 비자 신청서 작성, 출입국 제출서류 작성, 체류자격 변경 신청 대행은 행정사 영역입니다. K-Bridge는 일반 안내만 제공하며, 개별 비자 판단·서류 작성·제출 대행은 행정사 파트너에게 위탁합니다.",
+      ko: "행정사법 제2조에 따라 행정사는 행정기관 제출 서류 작성, 권리·의무나 사실증명 서류 작성, 작성된 서류의 제출 대행 등을 업무로 합니다. 비자 신청서 작성, 출입국 제출서류 작성, 체류자격 변경 신청 대행은 행정사 영역입니다. KAXI는 일반 안내만 제공하며, 개별 비자 판단·서류 작성·제출 대행은 행정사 파트너에게 위탁합니다.",
       vi: "Theo luật hành chính, luật sư hành chính được phép soạn hồ sơ nộp cơ quan, đại diện nộp. Visa, thay đổi tư cách lưu trú → cần luật sư. Nền tảng chỉ hướng dẫn chung.",
       mn: "Зөвлөгөөний хуулиар албан баримт бэлтгэх, төлөөлөн гаргах эрхтэй. Виз, байршил өөрчлөх → зөвлөгөө шаардлагатай. Платформ ерөнхий заавар өгнө.",
       en: "Per Admin Scrivener Act Art. 2, admin lawyers prepare administrative documents and submit on behalf. Visa applications, stay status changes need admin lawyer. Platform provides general guidance only.",
@@ -419,12 +419,12 @@ export const KNOWLEDGE_DOCS: KnowledgeDoc[] = [
     },
     keywords: ["브로커", "broker", "môi giới", "зуучлагч", "위험", "red flag", "신호", "warning", "체크리스트", "checklist"],
     content: {
-      ko: "브로커 위험 신호: 1) 비용을 항목별로 설명하지 않고 총액만 말함. 2) 비자 100% 보장 약속. 3) 허위 잔고증명·허위 서류 제공 제안. 4) 불법취업 알선. 5) 계약서 없이 현금만 요구. 6) 학교 직원인 척 하며 특정 학교 강요. 7) 비용이 공식 예상보다 30% 이상 높음. 8) SNS·지인 통한 사적 연락만. 이런 신호가 있으면 K-Bridge 비용 계산기로 항목별 비교 후 행정사 상담을 권장합니다.",
+      ko: "브로커 위험 신호: 1) 비용을 항목별로 설명하지 않고 총액만 말함. 2) 비자 100% 보장 약속. 3) 허위 잔고증명·허위 서류 제공 제안. 4) 불법취업 알선. 5) 계약서 없이 현금만 요구. 6) 학교 직원인 척 하며 특정 학교 강요. 7) 비용이 공식 예상보다 30% 이상 높음. 8) SNS·지인 통한 사적 연락만. 이런 신호가 있으면 KAXI 비용 계산기로 항목별 비교 후 행정사 상담을 권장합니다.",
       vi: "Dấu hiệu môi giới rủi ro: 1) Chỉ báo tổng, không rõ từng mục. 2) Bảo đảm 100% visa. 3) Đề nghị sổ giả. 4) Giới thiệu việc bất hợp pháp. 5) Tiền mặt, không hợp đồng. 6) Ép chọn trường. 7) Cao hơn 30% thực tế. 8) Liên lạc qua SNS. Nếu thấy → so sánh phí + gặp luật sư.",
       mn: "Зуучлагчийн эрсдэлийн дохио: 1) Зөвхөн нийт дүн, задлахгүй. 2) Виз 100% баталгаа. 3) Хуурамч баримт санал. 4) Хууль бус ажил. 5) Бэлэн мөнгө, гэрээгүй. 6) Сургуулийн ажилтан дүр эсвэл албадах. 7) Бодит зардал 30%+ өндөр. 8) Зөвхөн SNS-ээр холбоо. → Харьцуулж, зөвлөгөө авна.",
       en: "Broker red flags: 1) Total only, no itemization. 2) 100% visa guarantee. 3) Offers fake docs. 4) Illegal job matching. 5) Cash only, no contract. 6) Forces specific school, pretends school staff. 7) 30%+ over official estimate. 8) Private SNS contact only. → Compare items, consult lawyer.",
     },
-    source: "K-Bridge 안전 가이드라인",
+    source: "KAXI 안전 가이드라인",
   },
 ];
 

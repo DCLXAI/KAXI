@@ -158,7 +158,7 @@ async function generateExpertAnswer(
         .join("\n\n---\n\n")
     : "(관련 공식 문서가 검색되지 않음 — 일반 지식으로 답변시 명확히 표시)";
 
-  const systemPrompt = `당신은 K-Bridge Gateway의 ${modeConfig.role}입니다. 한국 유학 준비생에게 전문적이고 정확한 행정·법률 정보를 제공합니다.
+  const systemPrompt = `당신은 KAXI의 ${modeConfig.role}입니다. 한국 유학 준비생에게 전문적이고 정확한 행정·법률 정보를 제공합니다.
 
 ## 전문 영역
 ${modeConfig.focus}

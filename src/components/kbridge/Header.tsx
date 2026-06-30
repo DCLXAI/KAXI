@@ -107,7 +107,7 @@ export function Header({
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-black">
             K
           </div>
-          <span className="hidden sm:inline text-base">K-Bridge Gateway</span>
+          <span className="hidden sm:inline text-base">KAXI</span>
         </button>
         <nav className="ml-4 hidden md:flex items-center gap-4 overflow-x-auto">
           {navItems.slice(1).map((item) => (

@@ -1,4 +1,4 @@
-# K-Bridge Operations Policy
+# KAXI Operations Policy
 
 ## Required Environment Variables
 

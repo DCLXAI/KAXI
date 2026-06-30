@@ -54,7 +54,7 @@ function LoginForm() {
             <Scale className="h-6 w-6" />
           </div>
           <CardTitle className="text-2xl">관리자 로그인</CardTitle>
-          <CardDescription>K-Bridge Gateway 관리자 기능 접근</CardDescription>
+          <CardDescription>KAXI 관리자 기능 접근</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={submit} className="space-y-3">

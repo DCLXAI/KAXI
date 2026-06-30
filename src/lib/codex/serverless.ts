@@ -114,7 +114,7 @@ function buildPrompt({ question, lang, history = [] }: Omit<CodexExecOptions, "t
     .map((item) => `${item.role === "user" ? "User" : "Assistant"}: ${item.content}`)
     .join("\n");
 
-  return `You are running as the fast public LLM bridge for K-Bridge Gateway.
+  return `You are running as the fast public LLM bridge for KAXI.
 
 Hard constraints:
 - Treat this environment as read-only and ephemeral.

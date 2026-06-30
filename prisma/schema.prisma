@@ -1,4 +1,4 @@
-// K-Bridge Gateway Prisma Schema
+// KAXI Prisma Schema
 // SQLite for MVP (7/22 데모). 운영환경 전환시 Postgres 등으로 변경.
 
 generator client {

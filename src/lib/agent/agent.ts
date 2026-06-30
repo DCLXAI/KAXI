@@ -33,7 +33,7 @@ export async function runAgent(
 
   const langName = { ko: "Korean", vi: "Vietnamese", mn: "Mongolian", en: "English" }[lang];
 
-  const systemPrompt = `당신은 K-Bridge Gateway의 AI 에이전트입니다. 한국 유학 준비생을 도와 학교 검색, 비용 계산, 서류 확인, 비자 정보 등을 제공합니다.
+  const systemPrompt = `당신은 KAXI의 AI 에이전트입니다. 한국 유학 준비생을 도와 학교 검색, 비용 계산, 서류 확인, 비자 정보 등을 제공합니다.
 
 ## 작동 방식 (ReAct 패턴)
 1. 사용자 질문을 분석하여 필요한 도구가 있는지 판단

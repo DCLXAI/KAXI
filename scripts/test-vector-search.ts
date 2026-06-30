@@ -14,7 +14,7 @@ const TEST_QUERIES = [
 
 async function main() {
   console.log("=".repeat(80));
-  console.log("K-Bridge Gateway - Vector Search smoke test");
+  console.log("KAXI - Vector Search smoke test");
   console.log("=".repeat(80));
 
   initVectorStore();

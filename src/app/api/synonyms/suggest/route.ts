@@ -130,7 +130,7 @@ async function generateSynonymSuggestions(
       .map((c) => `- "${c.word}" (빈도: ${c.count}, 언어: ${c.langs.join("/")})\n  예시: "${c.examples[0]}"`)
       .join("\n");
 
-    const systemPrompt = `당신은 K-Bridge Gateway의 다국어 동의어 사전 큐레이터입니다.
+    const systemPrompt = `당신은 KAXI의 다국어 동의어 사전 큐레이터입니다.
 한국 유학 준비 플랫폼에서 사용자 질문 로그를 분석하여, 검색 품질 향상을 위한 동의어 매핑을 추천합니다.
 
 각 단어에 대해:

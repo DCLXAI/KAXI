@@ -1,9 +1,9 @@
-# K-Bridge Gateway Worklog
+# KAXI Worklog
 
 ---
 Task ID: 1
 Agent: main (Super Z)
-Task: K-Bridge Gateway MVP 프로토타입 구현 — "브로커 없이 준비하는 한국 유학" 원스톱 플랫폼
+Task: KAXI MVP 프로토타입 구현 — "브로커 없이 준비하는 한국 유학" 원스톱 플랫폼
 
 Work Log:
 - fullstack-dev 스킬 로드 후 Next.js 16 프로젝트 초기화
@@ -26,7 +26,7 @@ Work Log:
 - 스크린샷 7장 캡처: /home/z/my-project/download/kbridge-*.png
 
 Stage Summary:
-- 완성물: K-Bridge Gateway 프로토타입 (브로커 대체 한국 유학 준비 플랫폼)
+- 완성물: KAXI 프로토타입 (브로커 대체 한국 유학 준비 플랫폼)
 - 6개 핵심 화면 + 다국어 4개 (KO/VI/MN/EN) + 학교 DB 20곳 + AI 도우미
 - 7/22 데모 우선순위 8개 항목 중 8/8 구현 (랜딩, 진단폼, 학교DB, 비용계산기, 서류체크리스트, 행정사연결, 관리자 리드리스트, 샘플 플랜 리포트는 진단 결과로 통합)
 - 기술 스택: Next.js 16 + TypeScript + Tailwind 4 + shadcn/ui + Zustand(persist) + Lucide icons

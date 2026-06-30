@@ -66,7 +66,7 @@ export default function Home() {
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t">
               <div className="text-xs text-muted-foreground">
-                © 2026 K-Bridge Gateway · Broker-free Korea Study Preparation
+                © 2026 KAXI · Broker-free Korea Study Preparation
               </div>
               <div className="text-xs text-muted-foreground">
                 MVP Demo · 7/22 deadline

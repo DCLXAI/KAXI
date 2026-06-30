@@ -1,4 +1,4 @@
-// K-Bridge Gateway 다국어 사전 (KO / VI / MN / EN)
+// KAXI 다국어 사전 (KO / VI / MN / EN)
 
 export type Lang = "ko" | "vi" | "mn" | "en";
 
@@ -11,7 +11,7 @@ export const LANGS: { code: Lang; label: string; flag: string }[] = [
 
 export const t = {
   // 네비게이션
-  brand: { ko: "K-Bridge Gateway", vi: "K-Bridge Gateway", mn: "K-Bridge Gateway", en: "K-Bridge Gateway" },
+  brand: { ko: "KAXI", vi: "KAXI", mn: "KAXI", en: "KAXI" },
   nav_diagnose: { ko: "유학 경로 진단", vi: "Đánh giá lộ trình", mn: "Маршрутын үнэлгээ", en: "Path Diagnosis" },
   nav_schools: { ko: "학교 비교", vi: "So sánh trường", mn: "Сургуулийн харьцуулалт", en: "Compare Schools" },
   nav_cost: { ko: "비용 계산기", vi: "Tính chi phí", mn: "Зардал тооцоолуур", en: "Cost Calculator" },
