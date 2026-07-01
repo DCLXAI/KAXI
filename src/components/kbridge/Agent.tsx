@@ -104,6 +104,9 @@ interface AgentSource {
   owner?: string;
   verifiedAt?: string;
   reviewAfter?: string;
+  sourceType?: string;
+  reviewStatus?: string;
+  checkedBy?: string;
 }
 
 interface AgentSuggestion {
@@ -125,6 +128,7 @@ interface AgentMeta {
   clarifyingQuestions: AgentClarifyingQuestion[];
   suggestions: AgentSuggestion[];
   safetyFlags: string[];
+  sourceNotice?: string;
   quality: {
     backend: string;
     grounded: boolean;
@@ -938,6 +942,11 @@ export function Agent() {
                     {m.meta?.safetyFlags && m.meta.safetyFlags.length > 0 && (
                       <div className="mt-3 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
                         {m.meta.safetyFlags[0]}
+                      </div>
+                    )}
+                    {m.meta?.sourceNotice && (
+                      <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
+                        {m.meta.sourceNotice}
                       </div>
                     )}
                     {m.meta?.clarifyingQuestions && m.meta.clarifyingQuestions.length > 0 && (() => {

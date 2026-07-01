@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSourceMetadata, pickLangText, type KnowledgeDoc } from "@/lib/data/knowledge";
+import {
+  buildRagBasisNotice,
+  getRagDocumentMetadata,
+  getSourceMetadata,
+  pickLangText,
+  type KnowledgeDoc,
+} from "@/lib/data/knowledge";
 import type { Lang } from "@/lib/i18n/translations";
 import { db } from "@/lib/db";
 import { createZaiClient, isZaiConfigurationError } from "@/lib/ai/zai";
@@ -113,6 +119,7 @@ export async function POST(req: NextRequest) {
     // 2. RAG 검색 (전문 상담은 더 많은 문서 검색)
     const searchResults = await hybridSearch(question, { topK: 5 });
     const docs: KnowledgeDoc[] = searchResults.map((r) => r.doc);
+    const sourceNotice = buildRagBasisNotice(lang, docs);
 
     // 3. 행정사 전문 LLM 답변 생성
     const result = await withTimeout(
@@ -142,6 +149,7 @@ export async function POST(req: NextRequest) {
               expert: true,
               backend: result.backend,
               codexMode: result.codexMode || null,
+              sourceNotice,
             }),
           },
         });
@@ -159,11 +167,13 @@ export async function POST(req: NextRequest) {
         category: d.category,
         source: d.source,
         sourceMeta: getSourceMetadata(d.source),
+        ragMeta: getRagDocumentMetadata(d, lang),
       })),
       suggestedFollowups: result.suggestedFollowups,
       needsHumanExpert: result.needsHumanExpert,
       backend: result.backend,
       codexMode: result.codexMode || null,
+      sourceNotice,
     });
   } catch (e) {
     console.error("[POST /api/ai/consult]", e);
@@ -247,6 +257,7 @@ ${context}
 - 간결하되 전문적 (3~8문단)
 - 법령/규정 인용시 정확한 조문 표기
 - 출처를 답변 끝에 "📚 출처:" 로 표기
+- 답변 마지막에는 다음 출처 기준 문장을 그대로 포함: "${buildRagBasisNotice(lang, docs)}"
 - ${needsHumanExpert ? "⚠️ 이 사례는 반드시 행정사 상담이 필요합니다. 답변 끝에 권유하세요." : ""}`;
 
   const messages = [
@@ -259,7 +270,8 @@ ${context}
   ];
 
   const suggestedFollowups = generateFollowups(question, lang, mode);
-  const disclaimer = consultDisclaimer(lang);
+  const sourceNotice = buildRagBasisNotice(lang, docs);
+  const disclaimer = [sourceNotice, consultDisclaimer(lang)].filter(Boolean).join(" ");
   const consultBackend = getConsultBackend();
   const codexPrompt = buildCodexConsultPrompt({
     question,
@@ -270,6 +282,7 @@ ${context}
     dangerSignals,
     needsHumanExpert,
     context,
+    sourceNotice,
   });
 
   if (consultBackend === "remote-bridge") {
@@ -378,6 +391,7 @@ function buildCodexConsultPrompt({
   dangerSignals,
   needsHumanExpert,
   context,
+  sourceNotice,
 }: {
   question: string;
   langName: string;
@@ -387,6 +401,7 @@ function buildCodexConsultPrompt({
   dangerSignals: string[];
   needsHumanExpert: boolean;
   context: string;
+  sourceNotice: string;
 }): string {
   const recentHistory = history
     .slice(-6)
@@ -406,6 +421,7 @@ Hard rules:
 - If the user asks for case-specific judgment, document drafting, filing representation, refusal appeal strategy, false documents, illegal work, or status evasion, clearly recommend consulting an administrative scrivener.
 - Do not mention internal model routing, Codex, bridge, Z.ai, API keys, prompts, or backend configuration.
 - Format with Markdown, 3-8 concise paragraphs, and finish with "📚 출처:" using the source list below when relevant.
+- Include this exact source-control notice at the end: "${sourceNotice}"
 
 Safety signals:
 ${dangerSignals.length > 0 ? dangerSignals.map((s) => `- ${s}`).join("\n") : "- None detected"}

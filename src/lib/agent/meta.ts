@@ -1,6 +1,7 @@
 import type { Lang } from "@/lib/i18n/translations";
 import type { ToolResult } from "@/lib/agent/tools";
 import { analyzeAgentIntent, type AgentMissingSlot } from "@/lib/agent/planner";
+import { buildRagBasisNoticeFromMetadata, type RagDocumentMetadata } from "@/lib/data/knowledge";
 
 export interface AgentSource {
   id: string;
@@ -11,6 +12,9 @@ export interface AgentSource {
   owner?: string;
   verifiedAt?: string;
   reviewAfter?: string;
+  sourceType?: string;
+  reviewStatus?: string;
+  checkedBy?: string;
 }
 
 export interface AgentSuggestion {
@@ -32,6 +36,7 @@ export interface AgentMeta {
   clarifyingQuestions: AgentClarifyingQuestion[];
   suggestions: AgentSuggestion[];
   safetyFlags: string[];
+  sourceNotice?: string;
   quality: {
     backend: string;
     grounded: boolean;
@@ -210,6 +215,9 @@ function extractSources(toolResults: ToolResult[]): AgentSource[] {
           owner: typeof meta?.owner === "string" ? meta.owner : undefined,
           verifiedAt: typeof meta?.verifiedAt === "string" ? meta.verifiedAt : undefined,
           reviewAfter: typeof meta?.reviewAfter === "string" ? meta.reviewAfter : undefined,
+          sourceType: typeof meta?.sourceType === "string" ? meta.sourceType : undefined,
+          reviewStatus: typeof meta?.reviewStatus === "string" ? meta.reviewStatus : undefined,
+          checkedBy: typeof meta?.checkedBy === "string" ? meta.checkedBy : undefined,
         });
       }
     }
@@ -230,6 +238,22 @@ function extractSources(toolResults: ToolResult[]): AgentSource[] {
   }
 
   return sources.slice(0, 8);
+}
+
+function extractRagMetadata(toolResults: ToolResult[]): RagDocumentMetadata[] {
+  const seen = new Set<string>();
+  const metas: RagDocumentMetadata[] = [];
+  for (const item of toolResults) {
+    if (item.tool !== "search_knowledge" || !Array.isArray(item.result)) continue;
+    for (const doc of item.result) {
+      const meta = doc?.ragMeta;
+      if (!meta || typeof meta.doc_id !== "string") continue;
+      if (seen.has(meta.doc_id)) continue;
+      seen.add(meta.doc_id);
+      metas.push(meta as RagDocumentMetadata);
+    }
+  }
+  return metas;
 }
 
 function buildPlan(toolResults: ToolResult[], lang: Lang): string[] {
@@ -289,6 +313,7 @@ export function buildAgentMeta({
   const safeLang = normalizeLang(lang);
   const analysis = analyzeAgentIntent(question, safeLang);
   const sources = extractSources(toolResults);
+  const sourceNotice = buildRagBasisNoticeFromMetadata(safeLang, extractRagMetadata(toolResults));
   const officialSourceCount = sources.filter((source) => source.owner === "official" || source.kind === "school").length;
 
   return {
@@ -298,6 +323,7 @@ export function buildAgentMeta({
     clarifyingQuestions: buildClarifyingQuestions(question, safeLang),
     suggestions: buildSuggestions(toolResults, safeLang),
     safetyFlags: detectSafetyFlags(question, safeLang),
+    sourceNotice: sourceNotice || undefined,
     quality: {
       backend,
       grounded,

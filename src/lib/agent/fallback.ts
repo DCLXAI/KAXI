@@ -132,6 +132,9 @@ function formatFallbackAnswer(
       for (const doc of item.result.slice(0, 3)) {
         lines.push(`- ${doc.title}: ${String(doc.content).slice(0, 180)}...`);
         if (doc.sourceMeta?.url) lines.push(`  Source: ${doc.sourceMeta.url}`);
+        if (doc.ragMeta?.last_checked_at) {
+          lines.push(`  Checked: ${doc.ragMeta.last_checked_at}, status=${doc.ragMeta.review_status}`);
+        }
       }
     }
 

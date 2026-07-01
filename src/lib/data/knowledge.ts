@@ -21,14 +21,58 @@ export interface SourceMetadata {
   verifiedAt: string;
   reviewAfter: string;
   owner: "official" | "internal";
+  sourceType?: SourceType;
+  jurisdiction?: "KR" | "KAXI";
+  validFrom?: string;
+  validTo?: string | null;
+  checkedBy?: string;
+  reviewStatus?: ReviewStatus;
+  supersedes?: string[];
+  supersededBy?: string | null;
+}
+
+export type SourceType = "official_government" | "official_law" | "internal_analysis" | "internal_policy";
+export type ReviewStatus = "draft" | "approved" | "needs_review" | "deprecated";
+
+export interface ResolvedSourceMetadata extends SourceMetadata {
+  sourceType: SourceType;
+  jurisdiction: "KR" | "KAXI";
+  validFrom: string;
+  validTo: string | null;
+  checkedBy: string;
+  reviewStatus: ReviewStatus;
+  supersedes: string[];
+  supersededBy: string | null;
 }
 
 export interface KnowledgeDocWithMetadata extends KnowledgeDoc {
-  sourceMeta: SourceMetadata;
+  sourceMeta: ResolvedSourceMetadata;
 }
 
-const DEFAULT_VERIFIED_AT = "2026-06-30";
-const DEFAULT_REVIEW_AFTER = "2026-09-30";
+export interface RagDocumentMetadata {
+  doc_id: string;
+  title: string;
+  source_url: string;
+  source_type: SourceType;
+  language: Lang;
+  jurisdiction: "KR" | "KAXI";
+  topic: KnowledgeDoc["category"];
+  valid_from: string;
+  valid_to: string | null;
+  last_checked_at: string;
+  checked_by: string;
+  review_status: ReviewStatus;
+  supersedes: string[];
+  superseded_by: string | null;
+  review_after: string;
+  source_label: string;
+  owner: "official" | "internal";
+}
+
+const DEFAULT_VERIFIED_AT = "2026-07-01";
+const DEFAULT_REVIEW_AFTER = "2026-10-01";
+const DEFAULT_VALID_FROM = "2026-01-01";
+const DEFAULT_CHECKED_BY = "partner_agent_001";
 
 export const SOURCE_METADATA: Record<string, SourceMetadata> = {
   "Study in Korea · 한국유학종합시스템": {
@@ -131,14 +175,41 @@ export const SOURCE_METADATA: Record<string, SourceMetadata> = {
   },
 };
 
-export function getSourceMetadata(source: string): SourceMetadata {
-  return SOURCE_METADATA[source] ?? {
+function inferSourceType(source: string, meta: SourceMetadata): SourceType {
+  if (meta.owner === "internal") {
+    return source.includes("안전") ? "internal_policy" : "internal_analysis";
+  }
+  const explicitLawSource =
+    meta.url.includes("law.go.kr") ||
+    /제\d+조/.test(source) ||
+    ["출입국관리법", "직업안정법", "형법", "행정사법"].some((name) => source.includes(name));
+  if (explicitLawSource) return "official_law";
+  return "official_government";
+}
+
+function resolveSourceMetadata(source: string, meta: SourceMetadata): ResolvedSourceMetadata {
+  return {
+    ...meta,
+    sourceType: meta.sourceType || inferSourceType(source, meta),
+    jurisdiction: meta.jurisdiction || (meta.owner === "internal" ? "KAXI" : "KR"),
+    validFrom: meta.validFrom || DEFAULT_VALID_FROM,
+    validTo: meta.validTo ?? null,
+    checkedBy: meta.checkedBy || DEFAULT_CHECKED_BY,
+    reviewStatus: meta.reviewStatus || "approved",
+    supersedes: meta.supersedes || [],
+    supersededBy: meta.supersededBy ?? null,
+  };
+}
+
+export function getSourceMetadata(source: string): ResolvedSourceMetadata {
+  const meta = SOURCE_METADATA[source] ?? {
     label: source,
     url: "internal://kaxi/unregistered-source",
     verifiedAt: "1970-01-01",
     reviewAfter: "1970-01-01",
     owner: "internal",
   };
+  return resolveSourceMetadata(source, meta);
 }
 
 export function hasRegisteredSourceMetadata(source: string): boolean {
@@ -157,7 +228,75 @@ export function isSourceReviewCurrent(
 ): boolean {
   if (!hasRegisteredSourceMetadata(source)) return false;
   const meta = getSourceMetadata(source);
-  return dateAtStartOfDay(meta.reviewAfter) >= dateAtStartOfDay(referenceDate);
+  const reference = dateAtStartOfDay(referenceDate);
+  if (meta.reviewStatus !== "approved") return false;
+  if (meta.supersededBy) return false;
+  if (dateAtStartOfDay(meta.validFrom) > reference) return false;
+  if (meta.validTo && dateAtStartOfDay(meta.validTo) < reference) return false;
+  return dateAtStartOfDay(meta.reviewAfter) >= reference;
+}
+
+export function getRagDocumentMetadata(doc: KnowledgeDoc, lang: Lang): RagDocumentMetadata {
+  const meta = getSourceMetadata(doc.source);
+  return {
+    doc_id: doc.id,
+    title: pickLangText(doc.title, lang),
+    source_url: meta.url,
+    source_type: meta.sourceType,
+    language: lang,
+    jurisdiction: meta.jurisdiction,
+    topic: doc.category,
+    valid_from: meta.validFrom,
+    valid_to: meta.validTo,
+    last_checked_at: meta.verifiedAt,
+    checked_by: meta.checkedBy,
+    review_status: meta.reviewStatus,
+    supersedes: meta.supersedes,
+    superseded_by: meta.supersededBy,
+    review_after: meta.reviewAfter,
+    source_label: meta.label,
+    owner: meta.owner,
+  };
+}
+
+function compactSourceLabel(label: string): string {
+  if (/study in korea|한국유학종합시스템/i.test(label)) return "Study in Korea";
+  if (/법무부|출입국/i.test(label)) return "법무부";
+  if (/교육부/i.test(label)) return "교육부";
+  if (/국가법령|법제처/i.test(label)) return "국가법령정보센터";
+  if (/topik|국립국제교육원/i.test(label)) return "국립국제교육원/TOPIK";
+  if (/kaxi/i.test(label)) return "KAXI";
+  return label;
+}
+
+function earliestDate(values: string[]): string {
+  return values
+    .filter(Boolean)
+    .sort((a, b) => dateAtStartOfDay(a) - dateAtStartOfDay(b))[0] || DEFAULT_VERIFIED_AT;
+}
+
+export function buildRagBasisNoticeFromMetadata(
+  lang: Lang,
+  metas: RagDocumentMetadata[]
+): string {
+  if (metas.length === 0) return "";
+  const checkedAt = earliestDate(metas.map((meta) => meta.last_checked_at));
+  const officialMetas = metas.filter((meta) => meta.owner === "official");
+  const sourceLabels = Array.from(
+    new Set((officialMetas.length > 0 ? officialMetas : metas).map((meta) => compactSourceLabel(meta.source_label)))
+  ).slice(0, 4);
+  const sourceText = sourceLabels.join(" / ");
+
+  return {
+    ko: `이 안내는 ${checkedAt}에 확인된 ${sourceText} 출처 기준입니다. 개인 상황에 따라 달라질 수 있어 접수 전 행정사 검토가 필요합니다.`,
+    vi: `Hướng dẫn này dựa trên nguồn ${sourceText} được kiểm tra ngày ${checkedAt}. Tình huống cá nhân có thể khác, nên cần chuyên gia hành chính kiểm tra trước khi nộp.`,
+    mn: `Энэхүү мэдээлэл нь ${checkedAt}-нд шалгасан ${sourceText} эх сурвалжид үндэслэв. Хувийн нөхцөл өөр байж болох тул мэдүүлэхээс өмнө мэргэжлийн зөвлөгөө авна уу.`,
+    en: `This guidance is based on ${sourceText} sources checked on ${checkedAt}. Individual circumstances may differ, so administrative-scrivener review is needed before filing.`,
+  }[lang];
+}
+
+export function buildRagBasisNotice(lang: Lang, docs: KnowledgeDoc[]): string {
+  return buildRagBasisNoticeFromMetadata(lang, docs.map((doc) => getRagDocumentMetadata(doc, lang)));
 }
 
 export function getKnowledgeDocsWithMetadata(

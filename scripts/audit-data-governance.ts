@@ -1,8 +1,10 @@
 import {
   KNOWLEDGE_DOCS,
   SOURCE_METADATA,
+  getRagDocumentMetadata,
   getKnowledgeDocsWithMetadata,
   getKnowledgeSourceAudit,
+  getSourceMetadata,
 } from "../src/lib/data/knowledge";
 import {
   SCHOOLS,
@@ -30,13 +32,26 @@ function maxReviewAfterDate(): Date {
 }
 
 for (const [source, meta] of Object.entries(SOURCE_METADATA)) {
-  if (!meta.verifiedAt || !meta.reviewAfter) fail(`${source} missing verifiedAt/reviewAfter`);
-  assertHttpOrInternal(meta.url, `${source}.url`);
-  if (meta.owner === "official" && meta.url.startsWith("internal://")) {
+  const resolved = getSourceMetadata(source);
+  if (!resolved.verifiedAt || !resolved.reviewAfter) fail(`${source} missing verifiedAt/reviewAfter`);
+  if (!resolved.validFrom || !resolved.checkedBy || !resolved.reviewStatus || !resolved.sourceType || !resolved.jurisdiction) {
+    fail(`${source} missing RAG governance metadata`);
+  }
+  assertHttpOrInternal(resolved.url, `${source}.url`);
+  if (resolved.owner === "official" && resolved.url.startsWith("internal://")) {
     fail(`${source} is official but points to internal URL`);
   }
-  if (new Date(meta.verifiedAt).getTime() > new Date(meta.reviewAfter).getTime()) {
+  if (new Date(resolved.verifiedAt).getTime() > new Date(resolved.reviewAfter).getTime()) {
     fail(`${source} reviewAfter must be >= verifiedAt`);
+  }
+  if (resolved.validTo && new Date(resolved.validFrom).getTime() > new Date(resolved.validTo).getTime()) {
+    fail(`${source} validTo must be >= validFrom`);
+  }
+  if (resolved.reviewStatus !== "approved") {
+    fail(`${source} must be approved before it is searchable`);
+  }
+  if (resolved.supersededBy) {
+    fail(`${source} must not be superseded while active`);
   }
 }
 
@@ -52,6 +67,31 @@ const afterAllReviews = maxReviewAfterDate();
 const futureDocs = getKnowledgeDocsWithMetadata({ referenceDate: afterAllReviews });
 if (futureDocs.length !== 0) {
   fail("RAG reviewAfter filtering did not exclude expired documents");
+}
+
+const activeDocs = getKnowledgeDocsWithMetadata();
+for (const doc of activeDocs) {
+  const ragMeta = getRagDocumentMetadata(doc, "ko");
+  const requiredKeys = [
+    "doc_id",
+    "title",
+    "source_url",
+    "source_type",
+    "language",
+    "jurisdiction",
+    "topic",
+    "valid_from",
+    "last_checked_at",
+    "checked_by",
+    "review_status",
+    "supersedes",
+    "superseded_by",
+  ];
+  for (const key of requiredKeys) {
+    if (!(key in ragMeta)) fail(`${doc.id} missing RAG metadata field ${key}`);
+  }
+  if (ragMeta.review_status !== "approved") fail(`${doc.id} RAG metadata is not approved`);
+  if (ragMeta.superseded_by !== null) fail(`${doc.id} RAG metadata is superseded`);
 }
 
 const missingSourceDoc = {

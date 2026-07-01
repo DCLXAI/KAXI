@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSourceMetadata, pickLangText, type KnowledgeDoc } from "@/lib/data/knowledge";
+import {
+  buildRagBasisNotice,
+  getRagDocumentMetadata,
+  getSourceMetadata,
+  pickLangText,
+  type KnowledgeDoc,
+} from "@/lib/data/knowledge";
 import type { Lang } from "@/lib/i18n/translations";
 import { findFAQ, AI_DEFAULT_REPLY } from "@/lib/data/faq";
 import { db } from "@/lib/db";
@@ -58,6 +64,7 @@ export async function POST(req: NextRequest) {
     // 2. 하이브리드 검색 (Transformer + Keyword)
     const searchResults = await hybridSearch(question, { topK: 3 });
     const docs: KnowledgeDoc[] = searchResults.map((r) => r.doc);
+    const sourceNotice = buildRagBasisNotice(lang, docs);
 
     // 3. FAQ 룰베이스 확인 (빠른 응답)
     const faq = findFAQ(question, lang);
@@ -114,6 +121,10 @@ export async function POST(req: NextRequest) {
       answer = AI_DEFAULT_REPLY[lang];
     }
 
+    if (sourceNotice && !answer.includes(sourceNotice)) {
+      answer = `${answer}\n\n${sourceNotice}`;
+    }
+
     // 5. 로그 저장 (비동기, 실패 무시)
     try {
       if (canPersistChatQuestion(question)) {
@@ -128,6 +139,7 @@ export async function POST(req: NextRequest) {
               docIds: retrievedDocIds,
               searchMeta,
               storeMethod: storeStats.method,
+              sourceNotice,
             }),
           },
         });
@@ -145,7 +157,9 @@ export async function POST(req: NextRequest) {
         category: d.category,
         source: d.source,
         sourceMeta: getSourceMetadata(d.source),
+        ragMeta: getRagDocumentMetadata(d, lang),
       })),
+      sourceNotice,
       searchMeta,
       storeStats,
     });
@@ -176,8 +190,12 @@ async function generateWithLLM(
 
     const langName = { ko: "Korean", vi: "Vietnamese", mn: "Mongolian", en: "English" }[lang];
 
+    const sourceNotice = buildRagBasisNotice(lang, docs);
     const context = docs
-      .map((d, i) => `[문서 ${i + 1}] ${pickLangText(d.title, lang)}\n${pickLangText(d.content, lang)}\n출처: ${d.source}`)
+      .map((d, i) => {
+        const ragMeta = getRagDocumentMetadata(d, lang);
+        return `[문서 ${i + 1}] ${pickLangText(d.title, lang)}\n${pickLangText(d.content, lang)}\n출처: ${d.source}\n확인일: ${ragMeta.last_checked_at}\n검수자: ${ragMeta.checked_by}\n검수상태: ${ragMeta.review_status}`;
+      })
       .join("\n\n---\n\n");
 
     const systemPrompt = `당신은 KAXI의 유학 준비 내비게이터입니다. 한국 유학 준비생에게 공식 정보 기반으로 답변합니다.
@@ -190,6 +208,7 @@ async function generateWithLLM(
 5. 비용 관련 질문은 항목별로 분해해서 설명하세요.
 6. 답변은 간결하고 실용적으로 (3~5문장 이내).
 7. 출처를 답변 끝에 표기하세요.
+8. 답변 마지막에는 다음 출처 기준 문장을 그대로 포함하세요: "${sourceNotice}"
 
 컨텍스트 문서 (Vector Search + Keyword Match로 검색됨):
 ${context}`;

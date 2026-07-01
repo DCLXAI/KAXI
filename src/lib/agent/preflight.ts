@@ -90,6 +90,9 @@ function summarizeToolResult(item: ToolResult, lang: Lang): string[] {
     for (const doc of item.result.slice(0, 4)) {
       lines.push(`- ${doc.title} (${doc.category}) score=${doc.score}`);
       lines.push(`  Source: ${doc.sourceMeta?.label || doc.source} <${doc.sourceMeta?.url || ""}>`);
+      if (doc.ragMeta?.last_checked_at) {
+        lines.push(`  Checked: ${doc.ragMeta.last_checked_at}, status=${doc.ragMeta.review_status}`);
+      }
       lines.push(`  ${truncate(String(doc.content), lang === "ko" ? 260 : 220)}`);
     }
   } else if (item.tool === "request_partner" && item.result) {
