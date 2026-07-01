@@ -120,6 +120,17 @@ try {
     )
   );
   assert(approvedDoc.document.reviewStatus === "APPROVED", "knowledge approve should persist APPROVED status");
+  assert(approvedDoc.document.chunkCount > 0, "knowledge approve should create searchable chunks");
+  const diffDoc = await json(
+    await knowledgeRoute.PATCH(
+      adminRequest("/api/admin/knowledge", {
+        method: "PATCH",
+        body: JSON.stringify({ docId, action: "diff" }),
+      })
+    )
+  );
+  assert(typeof diffDoc.diff.changed === "boolean", "knowledge diff should return change status");
+  assert(diffDoc.diff.currentChunkCount > 0, "knowledge diff should inspect existing chunks without mutating approval");
 
   const audit = await json(await auditRoute.GET(adminRequest(`/api/admin/audit?caseId=${newCase.id}`)));
   assert(

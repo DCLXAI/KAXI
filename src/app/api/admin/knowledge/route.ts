@@ -1,19 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getAdminContext, requireAdmin } from "@/lib/api/security";
 import { recordRequestAudit } from "@/lib/audit";
-import { getRagDocumentMetadata, KNOWLEDGE_DOCS, pickLangText } from "@/lib/data/knowledge";
 import { staticKnowledgeItems, toAdminKnowledgeItem } from "@/lib/admin/serializers";
+import type { AdminKnowledgeItem } from "@/lib/admin/types";
+import {
+  analyzeKnowledgeDocumentDiff,
+  approveKnowledgeDocument,
+  calculateKnowledgeImpact,
+  discardKnowledgeDocument,
+  recheckKnowledgeDocument,
+} from "@/lib/knowledge/repository";
 
 export const runtime = "nodejs";
 
-function isKnowledgeAction(value: unknown): value is "approve" | "discard" | "recheck" {
-  return value === "approve" || value === "discard" || value === "recheck";
+type KnowledgeAction = "approve" | "discard" | "recheck" | "diff";
+
+function isKnowledgeAction(value: unknown): value is KnowledgeAction {
+  return value === "approve" || value === "discard" || value === "recheck" || value === "diff";
 }
 
-function supersedesJson(value: unknown): Prisma.InputJsonValue {
-  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+async function withImpact(item: AdminKnowledgeItem): Promise<AdminKnowledgeItem> {
+  return {
+    ...item,
+    impact: await calculateKnowledgeImpact({
+      docId: item.docId,
+      title: item.title,
+      sourceUrl: item.sourceUrl,
+      topic: item.topic,
+    }),
+  };
 }
 
 export async function GET(req: NextRequest) {
@@ -27,10 +43,12 @@ export async function GET(req: NextRequest) {
     });
 
     if (documents.length === 0) {
-      return NextResponse.json({ documents: staticKnowledgeItems(), source: "static" });
+      const staticDocuments = await Promise.all(staticKnowledgeItems().map(withImpact));
+      return NextResponse.json({ documents: staticDocuments, source: "static" });
     }
 
-    return NextResponse.json({ documents: documents.map(toAdminKnowledgeItem), source: "db" });
+    const serialized = await Promise.all(documents.map((document) => withImpact(toAdminKnowledgeItem(document))));
+    return NextResponse.json({ documents: serialized, source: "db" });
   } catch (err) {
     console.error("[GET /api/admin/knowledge]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
@@ -45,63 +63,97 @@ export async function PATCH(req: NextRequest) {
     const body = (await req.json().catch(() => ({}))) as {
       docId?: string;
       action?: string;
+      title?: string;
+      content?: string;
+      sourceUrl?: string;
+      sourceType?: string;
+      language?: string;
+      jurisdiction?: string;
+      topic?: string;
+      supersedes?: unknown;
+      supersededBy?: string | null;
     };
 
     if (!body.docId || !isKnowledgeAction(body.action)) {
       return NextResponse.json({ error: "docId and valid action are required" }, { status: 400 });
     }
 
-    const now = new Date();
-    const staticDoc = KNOWLEDGE_DOCS.find((doc) => doc.id === body.docId);
-    const existing = await db.knowledgeDocument.findUnique({ where: { docId: body.docId } });
+    const actor = context?.actor || "admin";
+    const mutationInput = {
+      docId: body.docId,
+      actor,
+      title: body.title,
+      content: body.content,
+      sourceUrl: body.sourceUrl,
+      sourceType: body.sourceType,
+      language: body.language,
+      jurisdiction: body.jurisdiction,
+      topic: body.topic,
+      supersedes: body.supersedes,
+      supersededBy: body.supersededBy,
+    };
 
-    const reviewStatus = body.action === "discard" ? "REJECTED" : "APPROVED";
-    const validTo = body.action === "discard" ? now : null;
+    if (body.action === "diff") {
+      const diff = await analyzeKnowledgeDocumentDiff(mutationInput);
+      await recordRequestAudit(req, {
+        actor,
+        actorRole: context?.role || "admin",
+        action: "knowledge.diff",
+        targetType: "knowledgeDocument",
+        targetId: body.docId,
+        metadata: {
+          changed: diff.changed,
+          addedChunks: diff.addedChunks,
+          removedChunks: diff.removedChunks,
+          impact: {
+            ruleCount: diff.impact.ruleCount,
+            userCount: diff.impact.userCount,
+          },
+        },
+      });
+      return NextResponse.json({ ok: true, diff });
+    }
 
-    const document = existing
-      ? await db.knowledgeDocument.update({
-          where: { docId: body.docId },
-          data: {
-            reviewStatus,
-            validTo,
-            lastCheckedAt: now,
-            checkedBy: context?.actor || "admin",
-          },
-          include: { chunks: true },
-        })
-      : await db.knowledgeDocument.create({
-          data: {
-            docId: body.docId,
-            title: staticDoc ? pickLangText(staticDoc.title, "ko") : body.docId,
-            sourceUrl: staticDoc ? getRagDocumentMetadata(staticDoc, "ko").source_url : "",
-            sourceType: staticDoc ? getRagDocumentMetadata(staticDoc, "ko").source_type : "internal_analysis",
-            language: "ko",
-            jurisdiction: staticDoc ? getRagDocumentMetadata(staticDoc, "ko").jurisdiction : "KAXI",
-            topic: staticDoc?.category || "process",
-            validFrom: staticDoc ? new Date(getRagDocumentMetadata(staticDoc, "ko").valid_from) : now,
-            validTo,
-            lastCheckedAt: now,
-            checkedBy: context?.actor || "admin",
-            reviewStatus,
-            supersedes: staticDoc ? supersedesJson(getRagDocumentMetadata(staticDoc, "ko").supersedes) : Prisma.JsonNull,
-            supersededBy: staticDoc ? getRagDocumentMetadata(staticDoc, "ko").superseded_by : null,
-          },
-          include: { chunks: true },
-        });
+    const result =
+      body.action === "approve"
+        ? await approveKnowledgeDocument(mutationInput)
+        : body.action === "recheck"
+          ? await recheckKnowledgeDocument(mutationInput)
+          : { document: await discardKnowledgeDocument(mutationInput), diff: await analyzeKnowledgeDocumentDiff(mutationInput) };
+
+    if (!result.document) {
+      return NextResponse.json(
+        {
+          error: "문서가 아직 DB에 없습니다. 변경 사항을 검토한 뒤 승인하면 production RAG에 반영됩니다.",
+          diff: result.diff,
+        },
+        { status: 409 }
+      );
+    }
 
     await recordRequestAudit(req, {
-      actor: context?.actor || "admin",
+      actor,
       actorRole: context?.role || "admin",
       action: `knowledge.${body.action}`,
       targetType: "knowledgeDocument",
-      targetId: document.docId,
+      targetId: result.document.docId,
       metadata: {
-        reviewStatus,
-        validTo: validTo?.toISOString() || null,
+        reviewStatus: result.document.reviewStatus,
+        validTo: result.document.validTo?.toISOString() || null,
+        changed: result.diff.changed,
+        impact: {
+          ruleCount: result.diff.impact.ruleCount,
+          userCount: result.diff.impact.userCount,
+        },
       },
     });
 
-    return NextResponse.json({ ok: true, document: toAdminKnowledgeItem(document) });
+    const document = await withImpact({
+      ...toAdminKnowledgeItem(result.document),
+      diff: result.diff,
+    });
+
+    return NextResponse.json({ ok: true, document, diff: result.diff });
   } catch (err) {
     console.error("[PATCH /api/admin/knowledge]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

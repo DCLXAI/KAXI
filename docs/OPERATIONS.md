@@ -103,15 +103,18 @@ bun run db:check-production
 
 Visa, immigration, school-accreditation, and cost guidance are time-sensitive.
 
-1. Every RAG source label must exist in `SOURCE_METADATA` in `src/lib/data/knowledge.ts`.
+1. Every static RAG source label must exist in `SOURCE_METADATA` in `src/lib/data/knowledge.ts`.
 2. Official sources must include a public official-domain URL, `verifiedAt`, and `reviewAfter`.
 3. Internal analysis sources must be marked `owner: "internal"` and reviewed at least quarterly.
-4. Any document past `reviewAfter` must be excluded from production answers or reverified before release.
+4. Production RAG may use a `KnowledgeDocument` only when `reviewStatus=APPROVED`, `validFrom` is active, `validTo` is empty or in the future, `supersededBy` is empty, and at least one `KnowledgeChunk` exists.
 5. School data is served from the `School` table. `src/lib/data/schools.ts` remains a local development seed/fallback only; hosted and production runtimes fail closed instead of silently serving seed data when the table is unavailable or empty.
-6. RAG search and legacy retrieval automatically exclude documents whose source metadata is past `reviewAfter`.
-7. Each `School` row must include `sourceUrl`, `verifiedAt`, and `reviewAfter`; public school APIs hide rows past `reviewAfter`.
-8. Admins can inspect expired schools with `includeExpired=true` and reverify a school through `POST /api/schools/:id/review`.
-9. `bun run test:governance` verifies source metadata, school seed metadata, and automatic expiry filtering.
+6. RAG search and legacy retrieval automatically exclude documents whose source metadata is past `reviewAfter`; DB-backed RAG additionally excludes rejected and superseded documents.
+7. Automated crawling must only calculate diff and impact. It must not write new production chunks or change approval status without an admin approval action.
+8. Every answer grounded in RAG must show the source label and `lastCheckedAt` basis notice.
+9. Knowledge diff output must include impacted `ComplianceRuleVersion` rows and impacted chat/user records so operators know which rules and prior users may need follow-up after a source change.
+10. Each `School` row must include `sourceUrl`, `verifiedAt`, and `reviewAfter`; public school APIs hide rows past `reviewAfter`.
+11. Admins can inspect expired schools with `includeExpired=true` and reverify a school through `POST /api/schools/:id/review`.
+12. `bun run test:governance` verifies source metadata, school seed metadata, and automatic expiry filtering.
 
 ## Admin Access
 
@@ -122,11 +125,12 @@ Production/hosted admin login fails closed unless `NEXTAUTH_SECRET`, `ADMIN_EMAI
 
 ## CI Quality Gates
 
-GitHub Actions restores non-DB runtime artifacts during `bun install --frozen-lockfile`, prepares the local test DB from Prisma migrations and seed scripts, then runs typecheck, lint, `test:schema`, `test:vector`, `test:rules`, `test:quality`, `test:governance`, `test:privacy`, `test:agent`, and production build.
+GitHub Actions restores non-DB runtime artifacts during `bun install --frozen-lockfile`, prepares the local test DB from Prisma migrations and seed scripts, then runs typecheck, lint, `test:schema`, `test:vector`, `test:rules`, `test:quality`, `test:governance`, `test:rag-ops`, `test:privacy`, `test:agent`, and production build.
 `test:schema` verifies the Phase 1 domain models, SQLite-compatible migration replay, and PostgreSQL operational migration DDL.
 `test:vector` verifies the restored model/vector cache can retrieve expected KAXI source documents.
 `test:rules` verifies the DB-backed D-2/D-4 Compliance Rule Engine, including approved-only execution, effective date windows, required source refs, 20+ golden cases, and `ComplianceEvaluation` persistence.
 `test:quality` validates the multilingual evaluation set in `quality/multilingual-eval-cases.json`, including expected source document, refusal expectation, and cost-format labels.
+`test:rag-ops` verifies Phase 7 RAG operations: approved-only production search, rejected/superseded blocking, answer source/checked-date notices, impact lists for rules/users, and diff-only crawler behavior.
 `test:privacy` verifies consent-gated partner routing, third-party/consignment/overseas consent rows, privacy audit events, deletion/retention consent status changes, PII encryption/redaction behavior, production PII persistence guards, and hosted SQLite write guards.
 `test:agent` verifies Agent status diagnostics, dry-run preflight behavior, and partner-request PII masking.
 `test:admin-dashboard` verifies the Phase 3 admin APIs for cases, case actions, rules, knowledge documents, and audit logs.
