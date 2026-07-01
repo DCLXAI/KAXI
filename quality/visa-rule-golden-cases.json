@@ -1,0 +1,103 @@
+[
+  {
+    "id": "d2-vietnam-full",
+    "input": { "visa_type": "D-2", "nationality": "vn" },
+    "expect": { "visa_type": "D-2", "includes_docs": ["passport", "standard_admission", "financial_proof", "topik_certificate", "tuberculosis_certificate"], "financial_note_contains": "20,000", "missing_inputs": [] }
+  },
+  {
+    "id": "d4-mongolia-full",
+    "input": { "visa_type": "D-4", "nationality": "mn" },
+    "expect": { "visa_type": "D-4", "includes_docs": ["passport", "standard_admission", "financial_proof", "tuberculosis_certificate"], "excludes_docs": ["topik_certificate"], "financial_note_contains": "13,000", "missing_inputs": [] }
+  },
+  {
+    "id": "d2-other-no-tb",
+    "input": { "visa_type": "D-2", "nationality": "other" },
+    "expect": { "visa_type": "D-2", "includes_docs": ["topik_certificate", "financial_proof"], "excludes_docs": ["tuberculosis_certificate"], "financial_note_contains": "20,000", "missing_inputs": [] }
+  },
+  {
+    "id": "d4-vietnam-tb",
+    "input": { "visa_type": "D-4", "nationality": "베트남" },
+    "expect": { "visa_type": "D-4", "includes_docs": ["tuberculosis_certificate", "financial_proof"], "excludes_docs": ["topik_certificate"], "financial_note_contains": "13,000", "missing_inputs": [] }
+  },
+  {
+    "id": "program-degree-infers-d2",
+    "input": { "program": "degree", "nationality": "other" },
+    "expect": { "visa_type": "D-2", "includes_docs": ["topik_certificate", "study_plan"], "excludes_docs": ["tuberculosis_certificate"], "missing_inputs": [] }
+  },
+  {
+    "id": "program-language-infers-d4",
+    "input": { "program": "language", "nationality": "other" },
+    "expect": { "visa_type": "D-4", "includes_docs": ["financial_proof"], "excludes_docs": ["topik_certificate", "tuberculosis_certificate"], "missing_inputs": [] }
+  },
+  {
+    "id": "missing-visa-and-nationality",
+    "input": {},
+    "expect": { "visa_type": null, "includes_missing": ["visa_type_or_program", "nationality"], "includes_warnings": ["비자 종류", "국적"], "includes_docs": [] }
+  },
+  {
+    "id": "d2-missing-nationality",
+    "input": { "visa_type": "D-2" },
+    "expect": { "visa_type": "D-2", "includes_docs": ["topik_certificate", "financial_proof"], "includes_missing": ["nationality"], "includes_warnings": ["국적"] }
+  },
+  {
+    "id": "d4-philippines-tb",
+    "input": { "visa_type": "D-4", "nationality": "ph" },
+    "expect": { "visa_type": "D-4", "includes_docs": ["tuberculosis_certificate"], "excludes_docs": ["topik_certificate"], "missing_inputs": [] }
+  },
+  {
+    "id": "d4-uzbekistan-tb",
+    "input": { "visa_type": "D-4", "nationality": "uzbekistan" },
+    "expect": { "visa_type": "D-4", "includes_docs": ["tuberculosis_certificate"], "missing_inputs": [] }
+  },
+  {
+    "id": "d4-thailand-tb",
+    "input": { "visa_type": "D-4", "nationality": "thailand" },
+    "expect": { "visa_type": "D-4", "includes_docs": ["tuberculosis_certificate"], "missing_inputs": [] }
+  },
+  {
+    "id": "d2-nepal-tb",
+    "input": { "visa_type": "D-2", "nationality": "np" },
+    "expect": { "visa_type": "D-2", "includes_docs": ["tuberculosis_certificate", "topik_certificate"], "missing_inputs": [] }
+  },
+  {
+    "id": "refusal-history-escalates",
+    "input": { "visa_type": "D-2", "nationality": "other", "has_refusal_history": true },
+    "expect": { "visa_type": "D-2", "partner_escalation": true, "blocked": false, "missing_inputs": [] }
+  },
+  {
+    "id": "filing-representation-escalates",
+    "input": { "visa_type": "D-4", "nationality": "other", "requests_filing_representation": true },
+    "expect": { "visa_type": "D-4", "partner_escalation": true, "blocked": false, "missing_inputs": [] }
+  },
+  {
+    "id": "fake-documents-blocked",
+    "input": { "visa_type": "D-4", "nationality": "other", "asks_for_fake_documents": true },
+    "expect": { "visa_type": "D-4", "blocked": true, "includes_warnings": ["불법"] }
+  },
+  {
+    "id": "illegal-work-blocked",
+    "input": { "visa_type": "D-2", "nationality": "other", "asks_for_illegal_work": true },
+    "expect": { "visa_type": "D-2", "blocked": true, "includes_warnings": ["불법"] }
+  },
+  {
+    "id": "visa-guarantee-blocked",
+    "input": { "visa_type": "D-2", "nationality": "other", "asks_for_visa_guarantee": true },
+    "expect": { "visa_type": "D-2", "blocked": true, "includes_warnings": ["보장"] }
+  },
+  {
+    "id": "d2-china-tb-topik",
+    "input": { "visa_type": "D2", "nationality": "china" },
+    "expect": { "visa_type": "D-2", "includes_docs": ["tuberculosis_certificate", "topik_certificate"], "financial_note_contains": "20,000", "missing_inputs": [] }
+  },
+  {
+    "id": "d4-other-no-tb-no-topik",
+    "input": { "visa_type": "D4", "nationality": "other" },
+    "expect": { "visa_type": "D-4", "excludes_docs": ["tuberculosis_certificate", "topik_certificate"], "financial_note_contains": "13,000", "missing_inputs": [] }
+  },
+  {
+    "id": "unknown-program-needs-visa",
+    "input": { "program": "unknown", "nationality": "other" },
+    "expect": { "visa_type": null, "includes_missing": ["visa_type_or_program"], "includes_warnings": ["비자 종류"] }
+  }
+]
+

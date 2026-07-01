@@ -8,6 +8,7 @@ import type { Lang } from "../i18n/translations";
 import { findSchoolById, listSchools } from "../schools/repository";
 import { createPartnerRequest } from "../partners/repository";
 import { redactSensitiveText } from "../privacy/pii";
+import { evaluateVisaRules } from "../rules/visa-rules";
 
 // 도구 호출 결과 (UI에서 시각화)
 export interface ToolResult {
@@ -193,29 +194,37 @@ const getDocumentsTool: Tool = {
     required: ["visa_type"],
   },
   execute: async (args) => {
-    const docs = [
-      { doc: "여권", required: true, note: "유효기간 6개월 이상" },
-      { doc: "증명사진", required: true, note: "3.5×4.5cm, 최근 6개월 이내" },
-      { doc: "표준입학허가서", required: true, note: "학교 합격 후 발급, 1-2주 소요" },
-      { doc: "교육기관 사업자등록증", required: true, note: "학교 제공" },
-      { doc: "졸업증명서", required: true, note: "번역·공증 필요" },
-      { doc: "성적증명서", required: true, note: "번역·공증 필요" },
-      { doc: "재정증빙", required: true, note: args.visa_type === "D-2" ? "20,000달러 이상" : "13,000달러 이상" },
-    ];
-
-    if (args.visa_type === "D-2") {
-      docs.push({ doc: "TOPIK 증명서", required: true, note: "4급 이상 (전공별 상이)" });
-      docs.push({ doc: "유학계획서", required: true, note: "한국어 또는 영어 작성" });
-    }
-
-    // 결핵진단서 — 베트남, 몽골, 중국 등
-    if (["vn", "mn", "cn"].includes(args.nationality || "")) {
-      docs.push({ doc: "결핵진단서", required: true, note: "법무부 지정 병원, 6개월 유효" });
-    }
+    const evaluation = evaluateVisaRules({
+      visa_type: args.visa_type,
+      nationality: args.nationality,
+    });
+    const docs = evaluation.documents.map((doc) => ({
+      id: doc.id,
+      doc: doc.label,
+      required: doc.required,
+      note: doc.note,
+      source_refs: doc.source_refs,
+    }));
 
     return {
-      result: { visa_type: args.visa_type, nationality: args.nationality, documents: docs },
-      summary: `${args.visa_type} 비자 서류 ${docs.length}종${args.nationality ? ` (국적: ${args.nationality.toUpperCase()})` : ""}`,
+      result: {
+        visa_type: evaluation.visa_type || args.visa_type,
+        nationality: args.nationality,
+        documents: docs,
+        rule_meta: {
+          required_inputs: evaluation.required_inputs,
+          missing_inputs: evaluation.missing_inputs,
+          applied_rule_ids: evaluation.applied_rule_ids,
+          effective_from: evaluation.effective_from,
+          source_refs: evaluation.source_refs,
+          review_status: evaluation.review_status,
+          fallback_policy: evaluation.fallback_policy,
+          warnings: evaluation.warnings,
+          partner_escalation_reasons: evaluation.partner_escalation_reasons,
+          blocked_reasons: evaluation.blocked_reasons,
+        },
+      },
+      summary: `${evaluation.visa_type || args.visa_type || "D-2/D-4"} 비자 서류 ${docs.length}종${args.nationality ? ` (국적: ${String(args.nationality).toUpperCase()})` : ""}`,
     };
   },
 };
