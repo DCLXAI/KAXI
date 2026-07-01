@@ -6,11 +6,12 @@ import { tr, type Lang } from "@/lib/i18n/translations";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Scale, Languages, BookOpen, School, Home, CheckCircle2, Ban, Loader2 } from "lucide-react";
+import { Scale, Languages, BookOpen, School, Home, CheckCircle2, Ban, Loader2, ShieldCheck } from "lucide-react";
 
 interface PartnerType {
   key: string;
@@ -126,16 +127,40 @@ export function Partners() {
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
   const [question, setQuestion] = useState("");
+  const [thirdPartyProvision, setThirdPartyProvision] = useState(false);
+  const [processingConsignment, setProcessingConsignment] = useState(false);
+  const [overseasTransfer, setOverseasTransfer] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const consentReady = thirdPartyProvision && processingConsignment && overseasTransfer;
 
   const submit = async () => {
     setError(null);
     setSubmitted(false);
+    if (!consentReady) {
+      setError(
+        lang === "ko"
+          ? "파트너 연결 전 필수 동의가 필요합니다."
+          : lang === "vi"
+          ? "Cần đồng ý trước khi kết nối đối tác."
+          : lang === "mn"
+          ? "Түнштэй холбохын өмнө зөвшөөрөл хэрэгтэй."
+          : "Required consent is needed before partner routing."
+      );
+      return;
+    }
     const ok = await submitPartnerRequest(
       currentLeadId,
       open!,
-      `${name} (${contact}): ${question}`
+      `${name} (${contact}): ${question}`,
+      {
+        thirdPartyProvision,
+        processingConsignment,
+        overseasTransfer,
+        version: "partner-routing-2026-07-01",
+        locale: lang,
+        source: "partner-request-form",
+      }
     );
     if (ok) {
       setSubmitted(true);
@@ -145,6 +170,9 @@ export function Partners() {
         setName("");
         setContact("");
         setQuestion("");
+        setThirdPartyProvision(false);
+        setProcessingConsignment(false);
+        setOverseasTransfer(false);
       }, 2000);
     } else {
       setError(
@@ -256,12 +284,59 @@ export function Partners() {
                       disabled={submitting}
                     />
                   </div>
+                  <div className="rounded-md border bg-muted/20 p-3">
+                    <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                      <ShieldCheck className="h-4 w-4 text-primary" />
+                      {lang === "ko" ? "개인정보 제공 동의" : lang === "vi" ? "Đồng ý dữ liệu cá nhân" : lang === "mn" ? "Хувийн мэдээллийн зөвшөөрөл" : "Personal data consent"}
+                    </div>
+                    <div className="space-y-3">
+                      <label className="flex items-start gap-2 text-xs leading-relaxed">
+                        <Checkbox
+                          checked={thirdPartyProvision}
+                          onCheckedChange={(value) => setThirdPartyProvision(value === true)}
+                          disabled={submitting}
+                        />
+                        <span>
+                          {lang === "ko" && "선택한 독립 파트너에게 연락처, 상담 주제, 유학·비자 관련 입력 정보를 제공하는 데 동의합니다."}
+                          {lang === "vi" && "Tôi đồng ý cung cấp liên hệ, chủ đề tư vấn và thông tin du học/visa cho đối tác độc lập đã chọn."}
+                          {lang === "mn" && "Сонгосон түншид холбоо барих мэдээлэл, зөвлөгөөний сэдэв, суралцах/визийн мэдээлэл өгөхийг зөвшөөрч байна."}
+                          {lang === "en" && "I agree to provide contact, consultation topic, and study/visa context to the selected independent partner."}
+                        </span>
+                      </label>
+                      <label className="flex items-start gap-2 text-xs leading-relaxed">
+                        <Checkbox
+                          checked={processingConsignment}
+                          onCheckedChange={(value) => setProcessingConsignment(value === true)}
+                          disabled={submitting}
+                        />
+                        <span>
+                          {lang === "ko" && "요청 처리와 보안·운영을 위한 위탁 처리 고지를 확인했습니다."}
+                          {lang === "vi" && "Tôi đã xem thông báo xử lý ủy thác cho vận hành, bảo mật và xử lý yêu cầu."}
+                          {lang === "mn" && "Хүсэлт боловсруулах, аюулгүй байдал, үйл ажиллагааны боловсруулалтын мэдэгдлийг шалгалаа."}
+                          {lang === "en" && "I have reviewed the processing consignment notice for request handling, security, and operations."}
+                        </span>
+                      </label>
+                      <label className="flex items-start gap-2 text-xs leading-relaxed">
+                        <Checkbox
+                          checked={overseasTransfer}
+                          onCheckedChange={(value) => setOverseasTransfer(value === true)}
+                          disabled={submitting}
+                        />
+                        <span>
+                          {lang === "ko" && "파트너 또는 인프라 접근이 국외에서 발생할 수 있다는 국외이전 고지를 확인했습니다."}
+                          {lang === "vi" && "Tôi đã xem thông báo dữ liệu có thể được truy cập/chuyển ra nước ngoài bởi đối tác hoặc hạ tầng."}
+                          {lang === "mn" && "Түнш эсвэл дэд бүтэц гадаадаас хандаж болзошгүй тухай мэдэгдлийг шалгалаа."}
+                          {lang === "en" && "I have reviewed the overseas-transfer notice for possible partner or infrastructure access outside Korea."}
+                        </span>
+                      </label>
+                    </div>
+                  </div>
                   {error && (
                     <Alert variant="destructive">
                       <AlertDescription>{error}</AlertDescription>
                     </Alert>
                   )}
-                  <Button className="w-full" onClick={submit} disabled={submitting}>
+                  <Button className="w-full" onClick={submit} disabled={submitting || !consentReady}>
                     {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                     {tr("partner_request", lang)}
                   </Button>

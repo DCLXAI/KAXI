@@ -28,7 +28,7 @@ KAXI collects minimum necessary information to provide the requested service, se
 
 ## 4. Third-Party Provision
 
-KAXI may provide personal information to an external partner only when the user requests partner connection and the required notice/consent basis is satisfied.
+KAXI may provide personal information to an external partner only when the user requests partner connection and the required notice/consent basis is satisfied. The MVP runtime blocks partner routing unless active consent exists for third-party provision, processing consignment notice, and overseas-transfer notice.
 
 Draft third-party provision table:
 
@@ -75,6 +75,8 @@ Operational guardrails already implemented in the app include:
 
 - PII redaction/encryption helpers;
 - chat-log persistence guards;
+- explicit partner-routing consent checks before `PartnerRequest` creation;
+- consent grant/missing/withdrawal/expiry audit events;
 - retention enforcement endpoint and script;
 - privacy delete request endpoint;
 - admin audit logs for privacy operations.
@@ -107,4 +109,3 @@ Material changes to collection, third-party provision, consignment, overseas tra
 
 - 개인정보보호위원회 안내서 목록: https://www.pipc.go.kr/np/cop/bbs/selectBoardList.do?bbsId=BS217&mCode=D010030000
 - 개인정보 보호법: https://www.law.go.kr/LSW/lsInfoP.do?ancNo=21445&ancYd=20260310&efYd=20260911&lsiSeq=283839
-

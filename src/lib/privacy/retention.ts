@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { parsePositiveInt } from "@/lib/api/security";
+import { expireLeadConsentsForRetention } from "@/lib/privacy/consent";
 
 export interface RetentionResult {
   dryRun: boolean;
@@ -7,6 +8,7 @@ export interface RetentionResult {
   partnerRequests: number;
   leadsRedacted: number;
   leadsDeleted: number;
+  consentsExpired: number;
 }
 
 function daysAgo(days: number): Date {
@@ -49,19 +51,49 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
     ],
     contactRedacted: false,
   };
+  const leadConsentExpiryWhere = {
+    OR: [
+      { retentionUntil: { lte: now } },
+      { createdAt: { lt: daysAgo(config.leadDays) } },
+      { deleteRequestedAt: { not: null } },
+    ],
+  };
   const leadDeleteWhere = {
     deleteRequestedAt: { not: null },
   };
 
   if (dryRun) {
-    const [chatLogs, partnerRequests, leadsRedacted, leadsDeleted] = await Promise.all([
+    const [chatLogs, partnerRequests, leadsRedacted, leadsDeleted, redactLeads, deleteLeads] = await Promise.all([
       db.chatLog.count({ where: chatWhere }),
       db.partnerRequest.count({ where: partnerWhere }),
       db.lead.count({ where: leadRedactWhere }),
       db.lead.count({ where: leadDeleteWhere }),
+      db.lead.findMany({ where: leadConsentExpiryWhere, select: { id: true } }),
+      db.lead.findMany({ where: leadDeleteWhere, select: { id: true } }),
     ]);
-    return { dryRun, chatLogs, partnerRequests, leadsRedacted, leadsDeleted };
+    const leadIds = [...new Set([...redactLeads, ...deleteLeads].map((lead) => lead.id))];
+    const consentUsers = leadIds.length
+      ? await db.user.findMany({
+          where: { zaloUid: { in: leadIds.map((id) => `lead:${id}`) } },
+          select: { id: true },
+        })
+      : [];
+    const consentsExpired = consentUsers.length
+      ? await db.consent.count({
+          where: {
+            userId: { in: consentUsers.map((user) => user.id) },
+            status: "GRANTED",
+          },
+        })
+      : 0;
+    return { dryRun, chatLogs, partnerRequests, leadsRedacted, leadsDeleted, consentsExpired };
   }
+
+  const [redactLeads, deleteLeads] = await Promise.all([
+    db.lead.findMany({ where: leadConsentExpiryWhere, select: { id: true } }),
+    db.lead.findMany({ where: leadDeleteWhere, select: { id: true } }),
+  ]);
+  const consentLeadIds = [...new Set([...redactLeads, ...deleteLeads].map((lead) => lead.id))];
 
   const [chatLogs, partnerRequests, leadsRedacted, leadsDeleted] = await db.$transaction([
     db.chatLog.updateMany({
@@ -97,11 +129,21 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
     db.lead.deleteMany({ where: leadDeleteWhere }),
   ]);
 
+  const consentExpiry = await expireLeadConsentsForRetention({
+    leadIds: consentLeadIds,
+    reason: "privacy.retention",
+    context: {
+      actor: "retention-policy",
+      actorRole: "system",
+    },
+  });
+
   return {
     dryRun,
     chatLogs: chatLogs.count,
     partnerRequests: partnerRequests.count,
     leadsRedacted: leadsRedacted.count,
     leadsDeleted: leadsDeleted.count,
+    consentsExpired: consentExpiry.consents,
   };
 }

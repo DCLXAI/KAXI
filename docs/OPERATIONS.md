@@ -54,11 +54,12 @@ Phase 1 fixes the domain schema and PostgreSQL operating target while keeping th
 1. Use Prisma migrations for every schema change.
 2. Do not use `prisma db push` against production.
 3. Keep personal/local demo user data out of deployment artifacts.
-4. Treat `Lead`, `PartnerRequest`, `ChatLog.question`, and `AgentRequestLedger.ip/userId` as user data.
+4. Treat `Lead`, `PartnerRequest`, `ChatLog.question`, `Consent`, and `AgentRequestLedger.ip/userId` as user data.
 5. `Lead.contact`, `PartnerRequest.question`, and `ChatLog.question` are stored with ciphertext/hash columns when `DATA_ENCRYPTION_KEY` is set. Existing plaintext columns keep only a masked display value. In production, PII-bearing writes are not persisted unless encryption is configured; local development without a key stores `[redacted-unencrypted]` unless the local-only `PII_ALLOW_UNENCRYPTED_PLAINTEXT=true` escape hatch is set outside production.
-6. Deletion requests are accepted through `POST /api/privacy/delete-request` with `leadId`, `contact`, or an exact `question`. The request does not reveal whether a record exists.
-7. Retention is enforced by `POST /api/privacy/retention` for admins and daily Vercel Cron `GET /api/privacy/retention`.
-8. Before analytics export, use the redacted ChatLog analysis route or scripts; free-form questions are masked for emails, phone numbers, and private messenger handles.
+6. Partner routing requires active consent for `THIRD_PARTY_PROVISION`, `PROCESSING_CONSIGNMENT`, and `OVERSEAS_TRANSFER`; otherwise `POST /api/partner-requests` returns `428 CONSENT_REQUIRED` before creating a `PartnerRequest`.
+7. Deletion requests are accepted through `POST /api/privacy/delete-request` with `leadId`, `contact`, or an exact `question`. The request does not reveal whether a record exists and withdraws active lead consents when a matching lead is found.
+8. Retention is enforced by `POST /api/privacy/retention` for admins and daily Vercel Cron `GET /api/privacy/retention`; lead consent rows are expired when the linked lead reaches deletion or retention expiry.
+9. Before analytics export, use the redacted ChatLog analysis route or scripts; free-form questions are masked for emails, phone numbers, and private messenger handles.
 
 Hosted Vercel deployments must not rely on bundled SQLite for writes. The bundled DB is a demo seed/read model. Use a reachable managed PostgreSQL database for admin CRUD, lead capture, partner requests, chat logs, Agent ledger persistence, audit logs, retention, compliance evaluations, knowledge governance, escalation cases, and shared rate-limit buckets.
 
@@ -126,7 +127,7 @@ GitHub Actions restores non-DB runtime artifacts during `bun install --frozen-lo
 `test:vector` verifies the restored model/vector cache can retrieve expected KAXI source documents.
 `test:rules` verifies the DB-backed D-2/D-4 Compliance Rule Engine, including approved-only execution, effective date windows, required source refs, 20+ golden cases, and `ComplianceEvaluation` persistence.
 `test:quality` validates the multilingual evaluation set in `quality/multilingual-eval-cases.json`, including expected source document, refusal expectation, and cost-format labels.
-`test:privacy` verifies PII encryption/redaction behavior, production PII persistence guards, and hosted SQLite write guards.
+`test:privacy` verifies consent-gated partner routing, third-party/consignment/overseas consent rows, privacy audit events, deletion/retention consent status changes, PII encryption/redaction behavior, production PII persistence guards, and hosted SQLite write guards.
 `test:agent` verifies Agent status diagnostics, dry-run preflight behavior, and partner-request PII masking.
 `test:admin-dashboard` verifies the Phase 3 admin APIs for cases, case actions, rules, knowledge documents, and audit logs.
 `test:documents` verifies Phase 5 signed document upload, file hash/size/MIME validation, admin review status changes, and audit logs.

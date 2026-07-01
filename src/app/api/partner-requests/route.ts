@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { jsonError, rateLimit, requireAdmin } from "@/lib/api/security";
+import { getClientIp, jsonError, rateLimit, requireAdmin } from "@/lib/api/security";
 import { createPartnerRequest } from "@/lib/partners/repository";
+import { ConsentRequiredError } from "@/lib/privacy/consent";
 import { serializePartnerRequestForResponse } from "@/lib/privacy/serializers";
 
 // POST /api/partner-requests - 파트너 상담 요청
@@ -11,7 +12,7 @@ export async function POST(req: NextRequest) {
     if (limited) return limited;
 
     const body = await req.json();
-    const { leadId, partnerType, question } = body || {};
+    const { leadId, partnerType, question, consent } = body || {};
 
     if (!leadId || !partnerType) return jsonError("Missing required fields: leadId, partnerType", 400);
     if (question && String(question).length > 1000) return jsonError("Question is too long", 413);
@@ -20,6 +21,13 @@ export async function POST(req: NextRequest) {
       leadId,
       partnerType: String(partnerType),
       question: question || null,
+      consent: consent || null,
+      auditContext: {
+        actor: "public-user",
+        actorRole: "user",
+        ip: getClientIp(req),
+        userAgent: req.headers.get("user-agent"),
+      },
     });
 
     return NextResponse.json(
@@ -27,6 +35,16 @@ export async function POST(req: NextRequest) {
       { status: (request as any).persisted === false ? 202 : 201 }
     );
   } catch (e) {
+    if (e instanceof ConsentRequiredError) {
+      return NextResponse.json(
+        {
+          error: e.message,
+          code: e.code,
+          missingScopes: e.missingScopes,
+        },
+        { status: e.status }
+      );
+    }
     console.error("[POST /api/partner-requests]", e);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

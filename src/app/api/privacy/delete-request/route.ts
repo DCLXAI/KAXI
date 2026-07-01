@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { canWriteRuntimeDatabase, db } from "@/lib/db";
 import { recordRequestAudit } from "@/lib/audit";
+import { withdrawLeadConsentsForPrivacyRequest } from "@/lib/privacy/consent";
 import { hashPii } from "@/lib/privacy/pii";
-import { jsonError, rateLimit } from "@/lib/api/security";
+import { getClientIp, jsonError, rateLimit } from "@/lib/api/security";
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,17 +26,24 @@ export async function POST(req: NextRequest) {
 
     const now = new Date();
     let matched = 0;
+    const consentLeadIds = new Set<string>();
     if (leadId) {
       const result = await db.lead.updateMany({
         where: { id: leadId },
         data: { deleteRequestedAt: now },
       });
       matched += result.count;
+      if (result.count > 0) consentLeadIds.add(leadId);
     }
 
     if (contact) {
       const contactHash = hashPii(contact);
       if (contactHash) {
+        const leads = await db.lead.findMany({
+          where: { contactHash },
+          select: { id: true },
+        });
+        leads.forEach((lead) => consentLeadIds.add(lead.id));
         const result = await db.lead.updateMany({
           where: { contactHash },
           data: { deleteRequestedAt: now },
@@ -47,6 +55,11 @@ export async function POST(req: NextRequest) {
     if (question) {
       const questionHash = hashPii(question);
       if (questionHash) {
+        const partnerLeadIds = await db.partnerRequest.findMany({
+          where: { questionHash },
+          select: { leadId: true },
+        });
+        partnerLeadIds.forEach((request) => consentLeadIds.add(request.leadId));
         const [chatLogs, partnerRequests] = await Promise.all([
           db.chatLog.updateMany({
             where: { questionHash },
@@ -61,6 +74,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const consentWithdrawal = await withdrawLeadConsentsForPrivacyRequest({
+      leadIds: [...consentLeadIds],
+      reason: "privacy.delete.request",
+      context: {
+        actor: "public-user",
+        actorRole: "user",
+        ip: getClientIp(req),
+        userAgent: req.headers.get("user-agent"),
+      },
+    });
+
     await recordRequestAudit(req, {
       actor: "public-user",
       actorRole: "user",
@@ -71,6 +95,8 @@ export async function POST(req: NextRequest) {
         matched: matched > 0,
         contactProvided: Boolean(contact),
         questionProvided: Boolean(question),
+        consentLeadIds: consentLeadIds.size,
+        consentsWithdrawn: consentWithdrawal.consents,
       },
     });
 

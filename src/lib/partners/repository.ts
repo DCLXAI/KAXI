@@ -1,11 +1,19 @@
 import { canWriteRuntimeDatabase, db } from "@/lib/db";
 import { parsePositiveInt } from "@/lib/api/security";
 import { canPersistPiiValue, preparePiiField, retentionUntil } from "@/lib/privacy/pii";
+import {
+  ensurePartnerRoutingConsentForLead,
+  recordPrivacyProcessingEvent,
+  type PartnerRoutingConsentInput,
+  type PrivacyAuditContext,
+} from "@/lib/privacy/consent";
 
 export interface CreatePartnerRequestInput {
   leadId?: string | null;
   partnerType: string;
   question?: string | null;
+  consent?: PartnerRoutingConsentInput | null;
+  auditContext?: PrivacyAuditContext;
 }
 
 const PARTNER_TYPES = new Set(["admin", "translation", "academy", "admission", "settlement"]);
@@ -66,7 +74,18 @@ export async function createPartnerRequest(input: CreatePartnerRequestInput) {
     finalLeadId = lead.id;
   }
 
-  return db.partnerRequest.create({
+  const context = input.auditContext || {
+    actor: "public-user",
+    actorRole: "user",
+  };
+  const consentSnapshot = await ensurePartnerRoutingConsentForLead({
+    leadId: finalLeadId,
+    partnerType,
+    consent: input.consent || null,
+    context,
+  });
+
+  const request = await db.partnerRequest.create({
     data: {
       leadId: finalLeadId,
       partnerType,
@@ -77,4 +96,25 @@ export async function createPartnerRequest(input: CreatePartnerRequestInput) {
       retentionUntil: retentionUntil(parsePositiveInt(process.env.PRIVACY_PARTNER_REQUEST_RETENTION_DAYS, 180)),
     },
   });
+
+  await recordPrivacyProcessingEvent({
+    action: "partner.routing.created",
+    targetType: "PartnerRequest",
+    targetId: request.id,
+    actorUserId: consentSnapshot.userId,
+    context,
+    metadata: {
+      leadId: finalLeadId,
+      partnerType,
+      consentUserId: consentSnapshot.userId,
+      consentScopes: consentSnapshot.scopes,
+      consentGrantedNow: consentSnapshot.grantedNow,
+      consentVersion: consentSnapshot.version,
+      retentionUntil: request.retentionUntil?.toISOString() || null,
+      questionRedacted: request.questionRedacted,
+      questionHashStored: Boolean(request.questionHash),
+    },
+  });
+
+  return request;
 }

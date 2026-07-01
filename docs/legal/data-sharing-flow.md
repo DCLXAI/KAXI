@@ -64,14 +64,15 @@ flowchart TD
 ## Minimum Runtime Controls
 
 - Partner transfer must be triggered only by explicit user request or clear confirmation.
+- Partner transfer must fail closed with no `PartnerRequest` if active consent is missing for third-party provision, processing consignment notice, or overseas-transfer notice.
+- Partner consent capture, missing-consent blocks, routing creation, deletion withdrawal, and retention expiry must be audit logged.
 - Partner request response must redact sensitive free-text in UI/log summaries.
 - Admin access to partner/audit data must require authenticated admin credentials.
 - Production PII persistence must require encryption/hash secrets and managed DB policy.
-- Retention automation must cover chat logs, leads, partner requests, and deletion-request records.
+- Retention automation must cover chat logs, leads, partner requests, consent expiry, and deletion-request records.
 - Overseas-transfer table must be updated whenever AI/backend/hosting provider changes.
 
 ## Evidence Sources
 
 - 개인정보보호위원회 안내서 목록: https://www.pipc.go.kr/np/cop/bbs/selectBoardList.do?bbsId=BS217&mCode=D010030000
 - 개인정보 보호법: https://www.law.go.kr/LSW/lsInfoP.do?ancNo=21445&ancYd=20260310&efYd=20260911&lsiSeq=283839
-

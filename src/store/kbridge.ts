@@ -154,12 +154,24 @@ export const useLeadStore = create<LeadState>()((set, get) => ({
 // --- 파트너 요청 (서버 동기화) ---
 interface PartnerState {
   submitting: boolean;
-  submitPartnerRequest: (leadId: string | null, partnerType: string, question?: string) => Promise<boolean>;
+  submitPartnerRequest: (
+    leadId: string | null,
+    partnerType: string,
+    question?: string,
+    consent?: {
+      thirdPartyProvision: boolean;
+      processingConsignment: boolean;
+      overseasTransfer: boolean;
+      version?: string;
+      locale?: string;
+      source?: string;
+    }
+  ) => Promise<boolean>;
 }
 
 export const usePartnerStore = create<PartnerState>()((set) => ({
   submitting: false,
-  submitPartnerRequest: async (leadId, partnerType, question) => {
+  submitPartnerRequest: async (leadId, partnerType, question, consent) => {
     set({ submitting: true });
     try {
       const res = await fetch("/api/partner-requests", {
@@ -169,6 +181,7 @@ export const usePartnerStore = create<PartnerState>()((set) => ({
           leadId: leadId || "anonymous",
           partnerType,
           question: question || null,
+          consent: consent || null,
         }),
       });
       if (!res.ok) throw new Error("Failed to submit");
