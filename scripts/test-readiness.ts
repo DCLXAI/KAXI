@@ -93,10 +93,24 @@ function testDatabaseRuntimeInfo() {
     delete process.env.TURSO_AUTH_TOKEN;
 
     const postgres = getRuntimeDatabaseInfo();
-    if (postgres.kind !== "postgresql" || !postgres.postgresqlConfigured || postgres.writable) {
-      fail(`postgres URL should be detected but not writable under sqlite runtime provider: ${JSON.stringify(postgres)}`);
+    if (
+      postgres.kind !== "postgresql" ||
+      !postgres.postgresqlConfigured ||
+      !postgres.writable ||
+      !postgres.sharedWritable ||
+      postgres.activePrismaProvider !== "postgresql"
+    ) {
+      fail(`postgres URL should be detected as PostgreSQL writable runtime: ${JSON.stringify(postgres)}`);
     }
 
+    process.env.TURSO_DATABASE_URL = "libsql://stale-transition-db.turso.io";
+    process.env.TURSO_AUTH_TOKEN = "stale-token";
+    const postgresWithStaleTurso = getRuntimeDatabaseInfo();
+    if (postgresWithStaleTurso.kind !== "postgresql" || postgresWithStaleTurso.source !== "DATABASE_URL") {
+      fail(`PostgreSQL DATABASE_URL should override stale TURSO_DATABASE_URL: ${JSON.stringify(postgresWithStaleTurso)}`);
+    }
+
+    process.env.DATABASE_URL = "file:./db/custom.db";
     process.env.TURSO_DATABASE_URL = "libsql://kaxi-example.turso.io";
     process.env.TURSO_AUTH_TOKEN = "test-token";
     const libsql = getRuntimeDatabaseInfo();

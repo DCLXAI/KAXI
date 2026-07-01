@@ -1,0 +1,669 @@
+// KAXI Production Prisma Schema
+// PostgreSQL operational schema used when DATABASE_URL is postgres:// or postgresql://.
+// Local and CI SQLite compatibility remains in prisma/schema.prisma.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrgType {
+  PLATFORM
+  PARTNER_AGENT_OFFICE
+}
+
+enum UserRole {
+  STUDENT
+  PARTNER_AGENT
+  PLATFORM_ADMIN
+}
+
+enum ConsentScope {
+  TERMS
+  PRIVACY
+  THIRD_PARTY_PROVISION
+  PROCESSING_CONSIGNMENT
+  OVERSEAS_TRANSFER
+  MARKETING
+}
+
+enum ConsentStatus {
+  GRANTED
+  WITHDRAWN
+  EXPIRED
+}
+
+enum DocumentStatus {
+  NOT_UPLOADED
+  UPLOADED
+  OCR_PROCESSING
+  OCR_DONE
+  MISSING
+  EXPIRED
+  NEEDS_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  NEEDS_HUMAN_REVIEW
+}
+
+enum RuleStatus {
+  DRAFT
+  ACTIVE
+  SUPERSEDED
+  ARCHIVED
+}
+
+enum LegalReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum EscalationStatus {
+  NEW
+  NEEDS_MORE_DOCUMENTS
+  HIGH_RISK
+  APPROVED
+  REJECTED
+  CLOSED
+  STOPPED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  UNKNOWN
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  type      OrgType
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users           User[]
+  escalationCases EscalationCase[]
+  auditEvents     AuditEvent[]
+
+  @@index([type])
+  @@index([createdAt])
+}
+
+model User {
+  id             String   @id @default(cuid())
+  organizationId String?
+  role           UserRole
+  email          String?  @unique
+  phone          String?  @unique
+  zaloUid        String?  @unique
+  locale         String   @default("vi")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  studentProfile StudentProfile?
+  consents       Consent[]
+  uploadedFiles  UploadedFile[] @relation("UploadedFileOwner")
+  assignedCases  EscalationCase[] @relation("AssignedCases")
+  agentReviews   AgentReview[] @relation("AgentReviewReviewer")
+  auditEvents    AuditEvent[] @relation("AuditActor")
+
+  @@index([organizationId])
+  @@index([role])
+  @@index([createdAt])
+}
+
+model StudentProfile {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  nationality          String   @default("VN")
+  visaType             String?
+  visaExpiryDate       DateTime?
+  alienRegistrationNo  String?
+  alienRegistrationHash String?
+  passportNo           String?
+  passportHash         String?
+  schoolName           String?
+  programType          String?
+  semesterStatus       String?
+  topikLevel           Int?
+  partTimePermitStatus String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  journeyState          JourneyState?
+  documents             DocumentItem[]
+  complianceEvaluations ComplianceEvaluation[]
+  escalationCases       EscalationCase[]
+
+  @@index([nationality])
+  @@index([visaType])
+  @@index([visaExpiryDate])
+  @@index([alienRegistrationHash])
+  @@index([passportHash])
+}
+
+model Consent {
+  id           String        @id @default(cuid())
+  userId       String
+  scope        ConsentScope
+  status       ConsentStatus @default(GRANTED)
+  version      String
+  locale       String        @default("vi")
+  grantedAt    DateTime      @default(now())
+  withdrawnAt  DateTime?
+  expiresAt    DateTime?
+  evidenceJson Json?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([scope])
+  @@index([status])
+  @@index([grantedAt])
+}
+
+model JourneyState {
+  id               String   @id @default(cuid())
+  studentProfileId String   @unique
+  primaryStage     String
+  modules          Json
+  completionScore  Float    @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+}
+
+model DocumentItem {
+  id               String         @id @default(cuid())
+  studentProfileId String
+  documentType     String
+  required         Boolean        @default(true)
+  status           DocumentStatus @default(NOT_UPLOADED)
+  expiresAt        DateTime?
+  fileId           String?
+  reviewStatus     ReviewStatus   @default(PENDING)
+  reviewNote       String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  file           UploadedFile?  @relation(fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([studentProfileId])
+  @@index([documentType])
+  @@index([status])
+  @@index([reviewStatus])
+  @@index([expiresAt])
+}
+
+model UploadedFile {
+  id           String   @id @default(cuid())
+  ownerUserId  String
+  storageKey   String   @unique
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  sha256       String
+  piiClass     String
+  createdAt    DateTime @default(now())
+  deletedAt    DateTime?
+
+  owner     User           @relation("UploadedFileOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  documents DocumentItem[]
+
+  @@index([ownerUserId])
+  @@index([sha256])
+  @@index([piiClass])
+  @@index([createdAt])
+}
+
+// 유학 경로 진단을 완료한 사용자 (리드)
+model Lead {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 기본 정보
+  nickname    String
+  nationality String   // vn, mn, cn, uz, other
+  age         Int
+  education   String   // highschool, college, university, master
+  koreanLevel String   // none, topik1, topik2, topik3
+  goal        String   // language, degree, transfer, career, unsure
+  budget      Int      // KRW
+  region      String   // seoul, gyeonggi, ...
+  usingBroker Boolean  @default(false)
+  brokerCost  Int      @default(0)
+  hasHistory  Boolean  @default(false)
+
+  // 진단 결과 (snapshot)
+  pathKey        String  // goal_language, goal_degree, ...
+  estimatedCost  Int     // KRW
+  prepTime       String
+  requiredDocs   String  // JSON array of translation keys
+  warningsJson   String  // JSON array of {ko,vi,mn,en}
+  nextActionsJson String // JSON array
+
+  // 연락처 (선택)
+  contact     String?
+  contactType String? // email, zalo, wechat, telegram
+  contactCiphertext String?
+  contactHash       String?
+  contactRedacted   Boolean  @default(false)
+  deleteRequestedAt DateTime?
+  deletedAt         DateTime?
+  retentionUntil    DateTime?
+
+  // 상담 요청
+  partnerRequests PartnerRequest[]
+
+  @@index([createdAt])
+  @@index([nationality])
+  @@index([pathKey])
+  @@index([contactHash])
+  @@index([deleteRequestedAt])
+  @@index([retentionUntil])
+}
+
+// 파트너 상담 요청
+model PartnerRequest {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+
+  leadId      String
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  partnerType String   // admin, translation, academy, admission, settlement
+  question    String?
+  questionCiphertext String?
+  questionHash       String?
+  questionRedacted   Boolean  @default(false)
+  deleteRequestedAt  DateTime?
+  deletedAt          DateTime?
+  retentionUntil     DateTime?
+  status      String   @default("pending") // pending, contacted, closed
+
+  @@index([leadId])
+  @@index([partnerType])
+  @@index([status])
+  @@index([questionHash])
+  @@index([deleteRequestedAt])
+  @@index([retentionUntil])
+}
+
+// 학교 데이터 (수동 시드 — 운영시 관리자 페이지에서 편집)
+// 현재는 src/lib/data/schools.ts 사용하지만, 운영 확장용으로 스키마만 정의
+model School {
+  id                  String   @id
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  nameKo              String
+  nameVi              String
+  nameMn              String
+  nameEn              String
+
+  region              String
+  program             String
+  tuitionPerSemester  Int
+  dormitoryAvailable  Boolean  @default(false)
+  dormitoryCost       Int?
+  koreanRequirement   String
+  accreditation       String   // accredited, standard, caution
+  topikLevel          Int?
+  intake              String   // JSON array
+  officialUrl         String
+  sourceUrl           String   @default("")
+  verifiedAt          DateTime @default(now())
+  reviewAfter         DateTime @default(now())
+  notesKo             String
+  notesVi             String
+  notesMn             String
+  notesEn             String
+
+  @@index([region])
+  @@index([program])
+  @@index([accreditation])
+  @@index([reviewAfter])
+}
+
+// AI 대화 로그 (RAG 검증/개선용)
+model ChatLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  lang      String
+  question  String
+  questionCiphertext String?
+  questionHash       String?
+  questionRedacted   Boolean  @default(false)
+  deleteRequestedAt  DateTime?
+  deletedAt          DateTime?
+  retentionUntil     DateTime?
+  answer    String
+  source    String   // rule, rag, hybrid
+  retrievedDocs String? // JSON
+
+  @@index([createdAt])
+  @@index([lang])
+  @@index([questionHash])
+  @@index([deleteRequestedAt])
+  @@index([retentionUntil])
+}
+
+// AI Agent 요청 비용/품질 원장
+model AgentRequestLedger {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+
+  ip            String?
+  userId        String?
+  questionChars Int
+  answerChars   Int      @default(0)
+
+  backend       String
+  codexMode     String?
+  durationMs    Int?
+  tokenEstimate Int
+
+  success       Boolean
+  errorType     String?
+  errorMessage  String?
+  grounded      Boolean  @default(false)
+  toolCount     Int      @default(0)
+
+  @@index([createdAt])
+  @@index([ip])
+  @@index([backend])
+  @@index([success])
+}
+
+// 동의어 사전 (검색 품질 향상용)
+// 일상어/방언/약어 → 공식 용어 매핑
+// vector-store에서 쿼리 확장시 사용
+model Synonym {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 원본 표현 (사용자가 실제로 입력하는 단어/구)
+  // 예: "돈", "얼마", "비싸", "거절"
+  source    String   @unique
+
+  // 동의어/확장어 (공식 용어 리스트, JSON 배열)
+  // 예: ["비용", "cost", "chi phí", "зардал"]
+  targets   String   // JSON array
+
+  // 카테고리 (관리 편의)
+  category  String   @default("general") // cost, visa, documents, school, warning, general
+
+  // 출처 — 자동 추출 or 관리자 수동 등록
+  origin    String   @default("manual") // manual, auto, chatlog
+
+  // 활성화 여부 (비활성시 검색에 사용 안 함)
+  enabled   Boolean  @default(true)
+
+  // 자동 추출 메타데이터
+  autoMeta  String?  // JSON: { frequency, confidence, suggestedAt, chatLogIds }
+
+  @@index([category])
+  @@index([enabled])
+  @@index([origin])
+}
+
+// 관리자 및 개인정보 운영 감사 로그
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+
+  actor      String
+  actorRole  String   @default("admin")
+  action     String
+  targetType String
+  targetId   String?
+  ip         String?
+  userAgent  String?
+  success    Boolean  @default(true)
+  metadata   String?
+
+  @@index([createdAt])
+  @@index([actor])
+  @@index([action])
+  @@index([targetType])
+}
+
+// 다중 인스턴스 공유 rate limit 버킷
+model RateLimitBucket {
+  key       String   @id
+  count     Int      @default(0)
+  resetAt   DateTime
+  updatedAt DateTime @updatedAt
+
+  @@index([resetAt])
+}
+
+model ComplianceRule {
+  id        String     @id @default(cuid())
+  code      String     @unique
+  domain    String
+  visaType  String
+  ruleType  String
+  status    RuleStatus @default(DRAFT)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  versions ComplianceRuleVersion[]
+
+  @@index([domain])
+  @@index([visaType])
+  @@index([ruleType])
+  @@index([status])
+}
+
+model ComplianceRuleVersion {
+  id             String            @id @default(cuid())
+  ruleId         String
+  version        Int
+  effectiveFrom  DateTime
+  effectiveTo    DateTime?
+  conditionAst   Json
+  outputAst      Json
+  requiredInputs Json
+  sourceRefs     Json
+  fallbackPolicy String
+  reviewStatus   LegalReviewStatus @default(PENDING)
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  createdAt      DateTime          @default(now())
+
+  rule        ComplianceRule        @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  tests       ComplianceRuleTest[]
+  evaluations ComplianceEvaluation[]
+
+  @@unique([ruleId, version])
+  @@index([effectiveFrom])
+  @@index([effectiveTo])
+  @@index([reviewStatus])
+}
+
+model ComplianceRuleTest {
+  id            String   @id @default(cuid())
+  ruleVersionId String
+  caseId        String
+  input         Json
+  expected      Json
+  lastResult    Json?
+  passed        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  ruleVersion ComplianceRuleVersion @relation(fields: [ruleVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleVersionId, caseId])
+  @@index([passed])
+}
+
+model ComplianceEvaluation {
+  id               String   @id @default(cuid())
+  studentProfileId String
+  ruleVersionId    String
+  inputSnapshot    Json
+  outputSnapshot   Json
+  riskLevel        RiskLevel @default(UNKNOWN)
+  inputHash        String
+  outputHash       String
+  evaluatedAt      DateTime @default(now())
+
+  studentProfile StudentProfile        @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  ruleVersion    ComplianceRuleVersion @relation(fields: [ruleVersionId], references: [id], onDelete: Restrict)
+
+  @@index([studentProfileId])
+  @@index([ruleVersionId])
+  @@index([riskLevel])
+  @@index([evaluatedAt])
+  @@index([inputHash])
+  @@index([outputHash])
+}
+
+model KnowledgeDocument {
+  id            String            @id @default(cuid())
+  docId         String            @unique
+  title         String
+  sourceUrl     String
+  sourceType    String
+  language      String
+  jurisdiction  String            @default("KR")
+  topic         String
+  validFrom     DateTime
+  validTo       DateTime?
+  lastCheckedAt DateTime
+  checkedBy     String
+  reviewStatus  LegalReviewStatus @default(PENDING)
+  supersedes    Json?
+  supersededBy  String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  chunks KnowledgeChunk[]
+
+  @@index([sourceType])
+  @@index([language])
+  @@index([topic])
+  @@index([validFrom])
+  @@index([validTo])
+  @@index([lastCheckedAt])
+  @@index([reviewStatus])
+  @@index([supersededBy])
+}
+
+model KnowledgeChunk {
+  id           String   @id @default(cuid())
+  documentId   String
+  chunkIndex   Int
+  content      String
+  contentHash  String
+  embeddingJson Json?
+  embeddingModel String?
+  embeddingDim Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, chunkIndex])
+  @@index([contentHash])
+  @@index([embeddingModel])
+}
+
+model EscalationCase {
+  id               String           @id @default(cuid())
+  organizationId   String?
+  studentProfileId String
+  assignedUserId   String?
+  status           EscalationStatus @default(NEW)
+  riskLevel        RiskLevel        @default(UNKNOWN)
+  category         String
+  summary          String
+  conversationSummary String?
+  ruleSnapshot     Json?
+  aiDraft          String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  closedAt         DateTime?
+
+  organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  assignedUser   User?          @relation("AssignedCases", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  reviews        AgentReview[]
+
+  @@index([organizationId])
+  @@index([studentProfileId])
+  @@index([assignedUserId])
+  @@index([status])
+  @@index([riskLevel])
+  @@index([category])
+  @@index([createdAt])
+}
+
+model AgentReview {
+  id               String       @id @default(cuid())
+  escalationCaseId String
+  reviewerUserId   String?
+  decision         ReviewStatus
+  note             String?
+  responseDraft    String?
+  reviewedAt       DateTime     @default(now())
+  createdAt        DateTime     @default(now())
+
+  escalationCase EscalationCase @relation(fields: [escalationCaseId], references: [id], onDelete: Cascade)
+  reviewer       User?          @relation("AgentReviewReviewer", fields: [reviewerUserId], references: [id], onDelete: SetNull)
+
+  @@index([escalationCaseId])
+  @@index([reviewerUserId])
+  @@index([decision])
+  @@index([reviewedAt])
+}
+
+model AuditEvent {
+  id             String   @id @default(cuid())
+  organizationId String?
+  actorUserId    String?
+  actorRole      String?
+  action         String
+  targetType     String
+  targetId       String?
+  caseId         String?
+  ip             String?
+  userAgent      String?
+  success        Boolean  @default(true)
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  actor       User?          @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([actorUserId])
+  @@index([action])
+  @@index([targetType])
+  @@index([targetId])
+  @@index([caseId])
+  @@index([createdAt])
+}

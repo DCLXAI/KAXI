@@ -82,6 +82,12 @@ const postgresMigration = join(
   "20260701090000_phase1_operational_domain",
   "migration.sql"
 );
+const postgresSchema = join(root, "prisma", "postgres", "schema.prisma");
+assert(existsSync(postgresSchema), "missing PostgreSQL Prisma schema");
+const postgresSchemaText = readFileSync(postgresSchema, "utf8");
+assert(postgresSchemaText.includes('provider = "postgresql"'), "PostgreSQL schema must use provider postgresql");
+assert(!postgresSchemaText.includes('provider = "sqlite"'), "PostgreSQL schema must not use sqlite provider");
+
 assert(existsSync(postgresMigration), "missing PostgreSQL operational migration");
 const postgresSql = readFileSync(postgresMigration, "utf8");
 for (const model of requiredModels) {
@@ -91,4 +97,3 @@ assert(postgresSql.includes("CREATE TYPE \"OrgType\""), "PostgreSQL migration sh
 assert(postgresSql.includes("JSONB"), "PostgreSQL migration should use JSONB for structured fields");
 
 console.log(`PASS DB schema policy: ${requiredModels.length} domain models and migrations verified`);
-

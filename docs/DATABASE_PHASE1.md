@@ -5,7 +5,7 @@ Last updated: 2026-07-01
 
 ## Scope
 
-Phase 1 fixes the operational domain schema while keeping the current public MVP deploy path stable. The app still has a SQLite-compatible development schema for local/demo tests, but the operating target is PostgreSQL.
+Phase 1 fixes the operational domain schema while keeping the current public MVP local test path stable. The app still has a SQLite-compatible development schema for local/demo tests, but production builds now generate Prisma Client from the PostgreSQL schema whenever `DATABASE_URL` is `postgres://...` or `postgresql://...`.
 
 ## Implemented Prisma Domain Models
 
@@ -40,6 +40,12 @@ prisma/postgres/migrations/20260701090000_phase1_operational_domain/migration.sq
 
 The PostgreSQL migration uses enum types and JSONB fields for compliance rule ASTs, RAG metadata, consent evidence, and audit metadata.
 
+PostgreSQL Prisma schema:
+
+```text
+prisma/postgres/schema.prisma
+```
+
 ## Environment Policy
 
 | environment | database | required behavior |
@@ -62,9 +68,15 @@ bun run test:schema
 ## Production Cutover
 
 1. Provision managed PostgreSQL.
-2. Apply `prisma/postgres/migrations/20260701090000_phase1_operational_domain/migration.sql`.
+2. Rotate any database URL or API key that has been exposed outside Vercel/Prisma secret storage.
 3. Load `DATABASE_URL=postgresql://...` into the deployment environment.
-4. Seed operational lookup tables:
+4. Apply production migrations:
+
+```bash
+bun run db:migrate:deploy
+```
+
+5. Seed operational lookup tables:
 
 ```bash
 bun run db:seed:schools
@@ -72,13 +84,14 @@ bun run db:seed:synonyms
 bun run db:seed:rules
 ```
 
-5. Run:
+6. Regenerate/check the provider-selected client and verify DB access:
 
 ```bash
+bun run db:generate
 bun run db:check-production
 ```
 
-6. Confirm `/api/readiness` reports the PostgreSQL target and no production write blockers.
+7. Confirm `/api/readiness` reports the PostgreSQL target and no production write blockers.
 
 ## Readiness Gate
 
@@ -88,7 +101,7 @@ Production is considered unfinished when:
 
 - `DATABASE_URL` is `file:...`;
 - the deployment relies on the bundled SQLite artifact;
-- the active runtime provider has not completed PostgreSQL cutover;
+- the active runtime provider is not PostgreSQL for a PostgreSQL URL;
 - PII secrets, retention secret, admin MFA, or shared limiter DB are missing.
 
 ## RLS / pgvector Notes

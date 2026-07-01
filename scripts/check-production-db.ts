@@ -12,6 +12,10 @@ console.log(`PostgreSQL configured: ${info.postgresqlConfigured ? "yes" : "no"}`
 console.log(`Active Prisma provider: ${info.activePrismaProvider}`);
 console.log(`Shared writable: ${info.sharedWritable ? "yes" : "no"}`);
 
+if (info.kind !== "postgresql" || info.activePrismaProvider !== "postgresql") {
+  fail("Production database check requires DATABASE_URL=postgres://... and a PostgreSQL-generated Prisma Client.");
+}
+
 if (!info.sharedWritable) {
   fail(info.reason);
 }

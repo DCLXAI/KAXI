@@ -65,6 +65,8 @@ Phase 1 fixes the domain schema and PostgreSQL operating target while keeping th
 
 Hosted Vercel deployments must not rely on bundled SQLite for writes. The bundled DB is a demo seed/read model. Use a reachable managed PostgreSQL database for admin CRUD, lead capture, partner requests, chat logs, Agent ledger persistence, audit logs, retention, compliance evaluations, knowledge governance, escalation cases, and shared rate-limit buckets.
 
+When `DATABASE_URL` is `postgres://...` or `postgresql://...`, `bun run db:generate` and `postinstall` generate `@prisma/client` from `prisma/postgres/schema.prisma`. Local/CI `file:` URLs continue to generate the SQLite-compatible client from `prisma/schema.prisma`.
+
 ### Environment Policy
 
 | environment | database policy | artifact policy |
@@ -91,11 +93,13 @@ bun run db:seed:admin-demo
 CI / production sanity check:
 
 ```bash
-bunx prisma migrate deploy
-bunx prisma generate
+bun run db:migrate:deploy
+bun run db:generate
 ```
 
-For PostgreSQL production, provision the database first, load `DATABASE_URL=postgresql://...`, then apply `prisma/postgres/migrations/20260701090000_phase1_operational_domain/migration.sql` from a trusted operator machine or CI job. After migration, run `bun run db:seed:schools`, `bun run db:seed:synonyms`, and `bun run db:seed:rules` with production DB env loaded so `School`, `Synonym`, and approved compliance rule versions are operational tables. `GET /api/readiness` will not pass merely because the env var exists; it also reports whether the active runtime is still SQLite-compatible and whether managed writes are reachable.
+For PostgreSQL production, provision the database first, load `DATABASE_URL=postgresql://...`, then run `bun run db:migrate:deploy` from a trusted operator machine or CI job. This command uses `prisma/postgres/schema.prisma` and `prisma/postgres/migrations`. After migration, run `bun run db:seed:schools`, `bun run db:seed:synonyms`, and `bun run db:seed:rules` with production DB env loaded so `School`, `Synonym`, and approved compliance rule versions are operational tables. `GET /api/readiness` will not pass merely because the env var exists; it also checks connectivity and required production secrets.
+
+If a production `DATABASE_URL`, Prisma Accelerate URL, or Blob token is exposed in chat, logs, or a committed file, rotate it before using it in Vercel.
 
 After loading production DB env locally, verify the managed DB before deploying or promoting:
 
