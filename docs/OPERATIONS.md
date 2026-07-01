@@ -76,6 +76,7 @@ bunx prisma generate
 bun run db:seed:schools
 bun run db:seed:synonyms
 bun run db:seed:rules
+bun run db:seed:admin-demo
 ```
 
 CI / production sanity check:
@@ -123,6 +124,7 @@ GitHub Actions restores non-DB runtime artifacts during `bun install --frozen-lo
 `test:quality` validates the multilingual evaluation set in `quality/multilingual-eval-cases.json`, including expected source document, refusal expectation, and cost-format labels.
 `test:privacy` verifies PII encryption/redaction behavior, production PII persistence guards, and hosted SQLite write guards.
 `test:agent` verifies Agent status diagnostics, dry-run preflight behavior, and partner-request PII masking.
+`test:admin-dashboard` verifies the Phase 3 admin APIs for cases, case actions, rules, knowledge documents, and audit logs.
 `test:readiness` verifies that production readiness fails closed when managed DB, PII secrets, MFA, retention, or shared limiter settings are missing.
 
 ## Production Readiness

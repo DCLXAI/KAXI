@@ -48,6 +48,8 @@ jobs:
         run: bun run test:privacy
       - name: Verify agent guards
         run: bun run test:agent
+      - name: Verify admin dashboard
+        run: bun run test:admin-dashboard
       - name: Verify production readiness guards
         run: bun run test:readiness
       - name: Build

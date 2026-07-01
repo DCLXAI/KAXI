@@ -55,6 +55,7 @@ RESTORE_SQLITE_DEMO_DB=false bun run db:prepare-local
 bun run db:seed:schools
 bun run db:seed:synonyms
 bun run db:seed:rules
+bun run db:seed:admin-demo
 bun run test:schema
 ```
 

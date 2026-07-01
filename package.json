@@ -19,11 +19,12 @@
     "test:governance": "bun run scripts/audit-data-governance.ts",
     "test:privacy": "bun run scripts/test-privacy-guards.ts",
     "test:agent": "bun run scripts/test-agent-guards.ts",
+    "test:admin-dashboard": "bun run scripts/test-admin-dashboard.ts",
     "test:readiness": "bun run scripts/test-readiness.ts",
     "privacy:enforce-retention": "bun run scripts/enforce-retention.ts",
     "db:check-production": "bun run scripts/check-production-db.ts",
     "admin:hash-password": "bun run scripts/hash-admin-password.ts",
-    "ci": "bunx tsc --noEmit && bunx tsc --noEmit -p tsconfig.scripts.json && bun run test:e2e:types && bun run lint && bun run test:schema && bun run test:vector && bun run test:rules && bun run test:quality && bun run test:governance && bun run test:privacy && bun run test:agent && bun run test:readiness && bun run build",
+    "ci": "bunx tsc --noEmit && bunx tsc --noEmit -p tsconfig.scripts.json && bun run test:e2e:types && bun run lint && bun run test:schema && bun run test:vector && bun run test:rules && bun run test:quality && bun run test:governance && bun run test:privacy && bun run test:agent && bun run test:admin-dashboard && bun run test:readiness && bun run build",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
@@ -31,7 +32,8 @@
     "db:prepare-local": "bun run scripts/prepare-local-db.ts",
     "db:seed:schools": "bun run scripts/seed-schools.ts",
     "db:seed:synonyms": "bun run scripts/seed-synonyms.ts",
-    "db:seed:rules": "bun run scripts/seed-compliance-rules.ts"
+    "db:seed:rules": "bun run scripts/seed-compliance-rules.ts",
+    "db:seed:admin-demo": "bun run scripts/seed-admin-demo.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
