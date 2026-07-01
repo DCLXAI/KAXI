@@ -50,6 +50,8 @@ jobs:
         run: bun run test:agent
       - name: Verify admin dashboard
         run: bun run test:admin-dashboard
+      - name: Verify document upload flow
+        run: bun run test:documents
       - name: Verify production readiness guards
         run: bun run test:readiness
       - name: Build

@@ -56,6 +56,7 @@ export function AdminCaseDetail({ caseId }: { caseId: string }) {
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingAction, setSavingAction] = useState<AdminCaseAction | null>(null);
+  const [savingDocumentId, setSavingDocumentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadCase = useCallback(async () => {
@@ -94,6 +95,29 @@ export function AdminCaseDetail({ caseId }: { caseId: string }) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSavingAction(null);
+    }
+  };
+
+  const reviewDocument = async (
+    documentId: string,
+    status: "OCR_PROCESSING" | "OCR_DONE" | "NEEDS_REVIEW" | "APPROVED" | "REJECTED",
+    reviewStatus: "PENDING" | "APPROVED" | "REJECTED" | "NEEDS_HUMAN_REVIEW",
+    reviewNote: string
+  ) => {
+    setSavingDocumentId(documentId);
+    setError(null);
+    try {
+      const res = await adminFetch(`/api/admin/documents/${documentId}/review`, {
+        method: "PATCH",
+        body: JSON.stringify({ status, reviewStatus, reviewNote }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "서류 상태를 변경하지 못했습니다.");
+      await loadCase();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingDocumentId(null);
     }
   };
 
@@ -214,7 +238,8 @@ export function AdminCaseDetail({ caseId }: { caseId: string }) {
                         <th className="py-2 pr-3 font-medium">업로드</th>
                         <th className="py-2 pr-3 font-medium">검토</th>
                         <th className="py-2 pr-3 font-medium">만료</th>
-                        <th className="py-2 font-medium">파일</th>
+                        <th className="py-2 pr-3 font-medium">파일</th>
+                        <th className="py-2 font-medium">검수</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -224,7 +249,51 @@ export function AdminCaseDetail({ caseId }: { caseId: string }) {
                           <td className="py-2 pr-3"><Badge variant="outline">{doc.status}</Badge></td>
                           <td className="py-2 pr-3"><Badge variant="secondary">{doc.reviewStatus}</Badge></td>
                           <td className="py-2 pr-3 font-mono text-xs">{formatDate(doc.expiresAt)}</td>
-                          <td className="py-2 text-xs text-muted-foreground">{doc.file?.originalName || "-"}</td>
+                          <td className="py-2 pr-3 text-xs text-muted-foreground">{doc.file?.originalName || "-"}</td>
+                          <td className="py-2">
+                            <div className="flex flex-wrap gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={savingDocumentId === doc.id}
+                                onClick={() => reviewDocument(doc.id, "OCR_PROCESSING", "PENDING", "OCR 비동기 처리 대기")}
+                              >
+                                OCR
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={savingDocumentId === doc.id}
+                                onClick={() => reviewDocument(doc.id, "OCR_DONE", "PENDING", "OCR 처리 완료")}
+                              >
+                                완료
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={savingDocumentId === doc.id}
+                                onClick={() => reviewDocument(doc.id, "NEEDS_REVIEW", "NEEDS_HUMAN_REVIEW", "추가 검토 필요")}
+                              >
+                                보완
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={savingDocumentId === doc.id}
+                                onClick={() => reviewDocument(doc.id, "APPROVED", "APPROVED", "행정사 검수 승인")}
+                              >
+                                승인
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={savingDocumentId === doc.id}
+                                onClick={() => reviewDocument(doc.id, "REJECTED", "REJECTED", "서류 반려")}
+                              >
+                                반려
+                              </Button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>

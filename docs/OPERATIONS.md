@@ -28,6 +28,10 @@
 - `CODEX_API_KEY`: Required on Vercel when `AGENT_BACKEND=codex`.
 - `CODEX_AGENT_REQUIRE_ADMIN`: Optional guard for `/api/ai/agent` Codex execution. Keep `false` for public demo, `true` for private/internal use.
 - `ZAI_ENABLED`, `ZAI_API_KEY`, `ZAI_CONFIG_PATH`: Optional legacy Z.ai SDK configuration. Leave disabled for Codex CLI/bridge operation.
+- `DOCUMENT_UPLOAD_SIGNING_SECRET`: HMAC secret for short-lived document upload URLs. Required before enabling document uploads outside local development.
+- `DOCUMENT_UPLOAD_MAX_BYTES`: Optional max upload size. Defaults to 10 MB.
+- `DOCUMENT_UPLOAD_DIR`: Local byte-storage path for development. Production should use managed object storage.
+- `DOCUMENT_UPLOAD_STORE_BYTES`: Set `false` only when the direct upload endpoint should persist metadata without local bytes, usually during storage-provider migration tests.
 
 ## Runtime Artifacts
 
@@ -125,6 +129,7 @@ GitHub Actions restores non-DB runtime artifacts during `bun install --frozen-lo
 `test:privacy` verifies PII encryption/redaction behavior, production PII persistence guards, and hosted SQLite write guards.
 `test:agent` verifies Agent status diagnostics, dry-run preflight behavior, and partner-request PII masking.
 `test:admin-dashboard` verifies the Phase 3 admin APIs for cases, case actions, rules, knowledge documents, and audit logs.
+`test:documents` verifies Phase 5 signed document upload, file hash/size/MIME validation, admin review status changes, and audit logs.
 `test:readiness` verifies that production readiness fails closed when managed DB, PII secrets, MFA, retention, or shared limiter settings are missing.
 
 ## Production Readiness
