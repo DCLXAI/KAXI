@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
       program: searchParams.get("program") || "all",
       accreditation: searchParams.get("accreditation") || "all",
       maxTuition: Number(searchParams.get("maxTuition") || 0) || undefined,
+      query: searchParams.get("query") || undefined,
       includeExpired,
     });
 

@@ -7,6 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { MessageResponse } from "@/components/ai-elements/message";
 import {
   ArrowUp,
@@ -275,6 +283,298 @@ const EXAMPLE_PROMPTS: Record<Lang, string[]> = {
   ],
 };
 
+type ClarifyDraft = {
+  budget: string;
+  schoolName: string;
+  region: string;
+  program: string;
+  visaType: string;
+  nationality: string;
+  education: string;
+  koreanLevel: string;
+  goal: string;
+};
+
+const EMPTY_CLARIFY_DRAFT: ClarifyDraft = {
+  budget: "",
+  schoolName: "",
+  region: "",
+  program: "",
+  visaType: "",
+  nationality: "",
+  education: "",
+  koreanLevel: "",
+  goal: "",
+};
+
+type OptionKey = "region" | "program" | "visaType" | "nationality" | "education" | "koreanLevel" | "goal";
+
+const CLARIFY_OPTIONS: Record<OptionKey, Record<Lang, { value: string; label: string }[]>> = {
+  region: {
+    ko: [
+      { value: "서울", label: "서울" },
+      { value: "경기", label: "경기" },
+      { value: "부산", label: "부산" },
+      { value: "대구", label: "대구" },
+      { value: "광주", label: "광주" },
+      { value: "지역 무관", label: "지역 무관" },
+    ],
+    vi: [
+      { value: "Seoul", label: "Seoul" },
+      { value: "Gyeonggi", label: "Gyeonggi" },
+      { value: "Busan", label: "Busan" },
+      { value: "Daegu", label: "Daegu" },
+      { value: "Gwangju", label: "Gwangju" },
+      { value: "Any region", label: "Bất kỳ" },
+    ],
+    mn: [
+      { value: "Seoul", label: "Сөүл" },
+      { value: "Gyeonggi", label: "Кёнги" },
+      { value: "Busan", label: "Пусан" },
+      { value: "Daegu", label: "Дэгү" },
+      { value: "Gwangju", label: "Гванжу" },
+      { value: "Any region", label: "Аль ч бүс" },
+    ],
+    en: [
+      { value: "Seoul", label: "Seoul" },
+      { value: "Gyeonggi", label: "Gyeonggi" },
+      { value: "Busan", label: "Busan" },
+      { value: "Daegu", label: "Daegu" },
+      { value: "Gwangju", label: "Gwangju" },
+      { value: "Any region", label: "Any region" },
+    ],
+  },
+  program: {
+    ko: [
+      { value: "어학당", label: "어학당" },
+      { value: "전문대", label: "전문대" },
+      { value: "학부", label: "학부" },
+      { value: "대학원", label: "대학원" },
+      { value: "직업 과정", label: "직업 과정" },
+    ],
+    vi: [
+      { value: "language school", label: "Tiếng Hàn" },
+      { value: "college", label: "Cao đẳng" },
+      { value: "undergraduate", label: "Đại học" },
+      { value: "graduate", label: "Sau đại học" },
+      { value: "vocational", label: "Nghề" },
+    ],
+    mn: [
+      { value: "language school", label: "Хэлний курс" },
+      { value: "college", label: "Коллеж" },
+      { value: "undergraduate", label: "Бакалавр" },
+      { value: "graduate", label: "Магистр" },
+      { value: "vocational", label: "Мэргэжил" },
+    ],
+    en: [
+      { value: "language school", label: "Language" },
+      { value: "college", label: "College" },
+      { value: "undergraduate", label: "Undergraduate" },
+      { value: "graduate", label: "Graduate" },
+      { value: "vocational", label: "Vocational" },
+    ],
+  },
+  visaType: {
+    ko: [
+      { value: "D-4 어학연수", label: "D-4" },
+      { value: "D-2 학위과정", label: "D-2" },
+    ],
+    vi: [
+      { value: "D-4 language study", label: "D-4" },
+      { value: "D-2 degree study", label: "D-2" },
+    ],
+    mn: [
+      { value: "D-4 language study", label: "D-4" },
+      { value: "D-2 degree study", label: "D-2" },
+    ],
+    en: [
+      { value: "D-4 language study", label: "D-4" },
+      { value: "D-2 degree study", label: "D-2" },
+    ],
+  },
+  nationality: {
+    ko: [
+      { value: "베트남", label: "베트남" },
+      { value: "몽골", label: "몽골" },
+      { value: "중국", label: "중국" },
+      { value: "우즈베키스탄", label: "우즈벡" },
+      { value: "기타", label: "기타" },
+    ],
+    vi: [
+      { value: "Vietnam", label: "Việt Nam" },
+      { value: "Mongolia", label: "Mông Cổ" },
+      { value: "China", label: "Trung Quốc" },
+      { value: "Uzbekistan", label: "Uzbekistan" },
+      { value: "Other", label: "Khác" },
+    ],
+    mn: [
+      { value: "Vietnam", label: "Вьетнам" },
+      { value: "Mongolia", label: "Монгол" },
+      { value: "China", label: "Хятад" },
+      { value: "Uzbekistan", label: "Узбекистан" },
+      { value: "Other", label: "Бусад" },
+    ],
+    en: [
+      { value: "Vietnam", label: "Vietnam" },
+      { value: "Mongolia", label: "Mongolia" },
+      { value: "China", label: "China" },
+      { value: "Uzbekistan", label: "Uzbekistan" },
+      { value: "Other", label: "Other" },
+    ],
+  },
+  education: {
+    ko: [
+      { value: "고졸", label: "고졸" },
+      { value: "전문대", label: "전문대" },
+      { value: "대졸", label: "대졸" },
+      { value: "석사", label: "석사" },
+    ],
+    vi: [
+      { value: "high school", label: "THPT" },
+      { value: "college", label: "Cao đẳng" },
+      { value: "university", label: "Đại học" },
+      { value: "master", label: "Thạc sĩ" },
+    ],
+    mn: [
+      { value: "high school", label: "Ахлах" },
+      { value: "college", label: "Коллеж" },
+      { value: "university", label: "Бакалавр" },
+      { value: "master", label: "Магистр" },
+    ],
+    en: [
+      { value: "high school", label: "High school" },
+      { value: "college", label: "College" },
+      { value: "university", label: "University" },
+      { value: "master", label: "Master" },
+    ],
+  },
+  koreanLevel: {
+    ko: [
+      { value: "한국어 없음", label: "없음" },
+      { value: "TOPIK 1급", label: "TOPIK 1" },
+      { value: "TOPIK 2급", label: "TOPIK 2" },
+      { value: "TOPIK 3급 이상", label: "TOPIK 3+" },
+    ],
+    vi: [
+      { value: "no Korean", label: "Chưa biết" },
+      { value: "TOPIK 1", label: "TOPIK 1" },
+      { value: "TOPIK 2", label: "TOPIK 2" },
+      { value: "TOPIK 3 or higher", label: "TOPIK 3+" },
+    ],
+    mn: [
+      { value: "no Korean", label: "Байхгүй" },
+      { value: "TOPIK 1", label: "TOPIK 1" },
+      { value: "TOPIK 2", label: "TOPIK 2" },
+      { value: "TOPIK 3 or higher", label: "TOPIK 3+" },
+    ],
+    en: [
+      { value: "no Korean", label: "None" },
+      { value: "TOPIK 1", label: "TOPIK 1" },
+      { value: "TOPIK 2", label: "TOPIK 2" },
+      { value: "TOPIK 3 or higher", label: "TOPIK 3+" },
+    ],
+  },
+  goal: {
+    ko: [
+      { value: "어학", label: "어학" },
+      { value: "학위", label: "학위" },
+      { value: "편입", label: "편입" },
+      { value: "취업 준비", label: "취업 준비" },
+    ],
+    vi: [
+      { value: "language study", label: "Học tiếng" },
+      { value: "degree", label: "Lấy bằng" },
+      { value: "transfer", label: "Chuyển tiếp" },
+      { value: "career preparation", label: "Việc làm" },
+    ],
+    mn: [
+      { value: "language study", label: "Хэл" },
+      { value: "degree", label: "Зэрэг" },
+      { value: "transfer", label: "Шилжилт" },
+      { value: "career preparation", label: "Ажил" },
+    ],
+    en: [
+      { value: "language study", label: "Language" },
+      { value: "degree", label: "Degree" },
+      { value: "transfer", label: "Transfer" },
+      { value: "career preparation", label: "Career" },
+    ],
+  },
+};
+
+const SLOT_TO_DRAFT_KEY: Record<string, OptionKey | null> = {
+  region: "region",
+  program: "program",
+  visa_type: "visaType",
+  nationality: "nationality",
+  education: "education",
+  korean_level: "koreanLevel",
+  goal: "goal",
+  budget: null,
+};
+
+function cloneEmptyClarifyDraft(): ClarifyDraft {
+  return { ...EMPTY_CLARIFY_DRAFT };
+}
+
+function budgetForPrompt(value: string): string {
+  const trimmed = value.trim();
+  const digits = trimmed.replace(/[,\s]/g, "");
+  if (/^\d+$/.test(digits)) {
+    const amount = Number(digits);
+    if (amount > 0 && amount < 10000) return `${amount}만원`;
+    return `${amount.toLocaleString()}원`;
+  }
+  return trimmed;
+}
+
+function clarifyFieldText(lang: Lang) {
+  return {
+    budget: lang === "ko" ? "예산" : "Budget",
+    budgetPlaceholder: lang === "ko" ? "예: 500만원" : "e.g. 5M KRW",
+    schoolName: lang === "ko" ? "학교명" : "School name",
+    schoolPlaceholder: lang === "ko" ? "예: 연세대학교" : "e.g. Yonsei",
+    apply: lang === "ko" ? "조건 적용" : "Apply details",
+    quickAsk: lang === "ko" ? "질문만 보내기" : "Ask only",
+  };
+}
+
+function shouldShowSchoolFields(message: Msg): boolean {
+  const slots = new Set(message.meta?.clarifyingQuestions.map((item) => item.slot));
+  return Boolean(
+    slots.has("region") ||
+      slots.has("program") ||
+      slots.has("budget") ||
+      message.toolResults?.some((item) => item.tool === "search_schools" || item.tool === "calculate_cost") ||
+      message.meta?.plan.some((step) => /학교|school|trường|сургууль/i.test(step))
+  );
+}
+
+function hasClarifyDraftValue(draft: ClarifyDraft): boolean {
+  return Object.values(draft).some((value) => value.trim().length > 0);
+}
+
+function buildClarifyPrompt(lang: Lang, originalRequest: string, draft: ClarifyDraft): string {
+  const lines: string[] = [];
+  if (draft.budget.trim()) lines.push(`${lang === "ko" ? "예산" : "Budget"}: ${budgetForPrompt(draft.budget)}`);
+  if (draft.schoolName.trim()) lines.push(`${lang === "ko" ? "학교명" : "School name"}: ${draft.schoolName.trim()}`);
+  if (draft.region.trim()) lines.push(`${lang === "ko" ? "희망 지역" : "Preferred region"}: ${draft.region}`);
+  if (draft.program.trim()) lines.push(`${lang === "ko" ? "과정" : "Program"}: ${draft.program}`);
+  if (draft.visaType.trim()) lines.push(`${lang === "ko" ? "비자 종류" : "Visa type"}: ${draft.visaType}`);
+  if (draft.nationality.trim()) lines.push(`${lang === "ko" ? "국적" : "Nationality"}: ${draft.nationality}`);
+  if (draft.education.trim()) lines.push(`${lang === "ko" ? "최종 학력" : "Education"}: ${draft.education}`);
+  if (draft.koreanLevel.trim()) lines.push(`${lang === "ko" ? "한국어 수준" : "Korean level"}: ${draft.koreanLevel}`);
+  if (draft.goal.trim()) lines.push(`${lang === "ko" ? "목표" : "Goal"}: ${draft.goal}`);
+
+  if (lines.length === 0) return "";
+
+  const base = originalRequest.trim();
+  if (lang === "ko") {
+    return `다음 조건을 반영해서 다시 추천/계산해줘.\n- ${lines.join("\n- ")}${base ? `\n\n원래 요청: ${base}` : ""}`;
+  }
+  return `Use these details and answer again.\n- ${lines.join("\n- ")}${base ? `\n\nOriginal request: ${base}` : ""}`;
+}
+
 export function Agent() {
   const { lang } = useLangStore();
   const [input, setInput] = useState("");
@@ -283,6 +583,7 @@ export function Agent() {
   const [started, setStarted] = useState(false);
   const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
   const [bridgeState, setBridgeState] = useState<BridgeState>("checking");
+  const [clarifyDrafts, setClarifyDrafts] = useState<Record<number, ClarifyDraft>>({});
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -386,9 +687,27 @@ export function Agent() {
 
   const reset = () => {
     setMsgs([]);
+    setClarifyDrafts({});
     setStarted(false);
     setInput("");
     setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const updateClarifyDraft = (messageIndex: number, patch: Partial<ClarifyDraft>) => {
+    setClarifyDrafts((current) => ({
+      ...current,
+      [messageIndex]: {
+        ...(current[messageIndex] || cloneEmptyClarifyDraft()),
+        ...patch,
+      },
+    }));
+  };
+
+  const sendClarifyDraft = (messageIndex: number, originalRequest: string) => {
+    const draft = clarifyDrafts[messageIndex] || cloneEmptyClarifyDraft();
+    const prompt = buildClarifyPrompt(lang, originalRequest, draft);
+    if (!prompt) return;
+    send(prompt);
   };
 
   // 시작 화면 (Z.ai 스타일 + 에이전트 강조)
@@ -621,27 +940,123 @@ export function Agent() {
                         {m.meta.safetyFlags[0]}
                       </div>
                     )}
-                    {m.meta?.clarifyingQuestions && m.meta.clarifyingQuestions.length > 0 && (
-                      <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 dark:border-amber-800/70 dark:bg-amber-950/30">
-                        <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-amber-800 dark:text-amber-200">
-                          <AlertCircle className="h-3 w-3" />
-                          {lang === "ko" ? "정확도를 높이려면" : "To improve accuracy"}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {m.meta.clarifyingQuestions.map((item) => (
-                            <button
-                              key={`${item.slot}-${item.label}`}
+                    {m.meta?.clarifyingQuestions && m.meta.clarifyingQuestions.length > 0 && (() => {
+                      const draft = clarifyDrafts[i] || EMPTY_CLARIFY_DRAFT;
+                      const labels = clarifyFieldText(lang);
+                      const originalRequest = msgs
+                        .slice(0, i)
+                        .reverse()
+                        .find((item) => item.role === "user")?.text || "";
+                      const showSchoolFields = shouldShowSchoolFields(m);
+
+                      return (
+                        <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-3 dark:border-amber-800/70 dark:bg-amber-950/30">
+                          <div className="mb-3 flex items-center gap-1.5 text-[11px] font-medium text-amber-800 dark:text-amber-200">
+                            <AlertCircle className="h-3 w-3" />
+                            {lang === "ko" ? "정확도를 높이려면" : "To improve accuracy"}
+                          </div>
+
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {showSchoolFields && (
+                              <>
+                                <label className="space-y-1 text-[11px] font-medium text-amber-900 dark:text-amber-100">
+                                  <span>{labels.budget}</span>
+                                  <Input
+                                    value={draft.budget}
+                                    inputMode="numeric"
+                                    placeholder={labels.budgetPlaceholder}
+                                    disabled={loading}
+                                    onChange={(event) => updateClarifyDraft(i, { budget: event.target.value })}
+                                    onKeyDown={(event) => {
+                                      if (event.key === "Enter") {
+                                        event.preventDefault();
+                                        sendClarifyDraft(i, originalRequest);
+                                      }
+                                    }}
+                                    className="h-8 bg-background text-xs"
+                                  />
+                                </label>
+                                <label className="space-y-1 text-[11px] font-medium text-amber-900 dark:text-amber-100">
+                                  <span>{labels.schoolName}</span>
+                                  <Input
+                                    value={draft.schoolName}
+                                    placeholder={labels.schoolPlaceholder}
+                                    disabled={loading}
+                                    onChange={(event) => updateClarifyDraft(i, { schoolName: event.target.value })}
+                                    onKeyDown={(event) => {
+                                      if (event.key === "Enter") {
+                                        event.preventDefault();
+                                        sendClarifyDraft(i, originalRequest);
+                                      }
+                                    }}
+                                    className="h-8 bg-background text-xs"
+                                  />
+                                </label>
+                              </>
+                            )}
+
+                            {m.meta.clarifyingQuestions.map((item) => {
+                              if (item.slot === "budget" && showSchoolFields) return null;
+                              const draftKey = SLOT_TO_DRAFT_KEY[item.slot];
+                              if (!draftKey) return null;
+                              const options = CLARIFY_OPTIONS[draftKey][lang];
+                              const value = draft[draftKey];
+
+                              return (
+                                <label
+                                  key={`${item.slot}-${item.label}-field`}
+                                  className="space-y-1 text-[11px] font-medium text-amber-900 dark:text-amber-100"
+                                >
+                                  <span>{item.label}</span>
+                                  <Select
+                                    value={value}
+                                    disabled={loading}
+                                    onValueChange={(nextValue) =>
+                                      updateClarifyDraft(i, { [draftKey]: nextValue } as Partial<ClarifyDraft>)
+                                    }
+                                  >
+                                    <SelectTrigger className="h-8 w-full bg-background text-xs">
+                                      <SelectValue placeholder={item.prompt} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {options.map((option) => (
+                                        <SelectItem key={option.value} value={option.value}>
+                                          {option.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </label>
+                              );
+                            })}
+                          </div>
+
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <Button
                               type="button"
-                              disabled={loading}
-                              onClick={() => send(item.prompt)}
-                              className="inline-flex max-w-full items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-left text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                              size="sm"
+                              disabled={loading || !hasClarifyDraftValue(draft)}
+                              onClick={() => sendClarifyDraft(i, originalRequest)}
+                              className="h-8 gap-1.5 text-xs"
                             >
-                              <span className="font-medium">{item.label}</span>
-                            </button>
-                          ))}
+                              <ArrowRight className="h-3 w-3" />
+                              {labels.apply}
+                            </Button>
+                            {m.meta.clarifyingQuestions.map((item) => (
+                              <button
+                                key={`${item.slot}-${item.label}`}
+                                type="button"
+                                disabled={loading}
+                                onClick={() => send(item.prompt)}
+                                className="inline-flex max-w-full items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-left text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <span className="font-medium">{labels.quickAsk}: {item.label}</span>
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
                     {m.meta?.sources && m.meta.sources.length > 0 && (
                       <div className="mt-4 border-t pt-3">
                         <div className="mb-2 text-[11px] font-medium uppercase tracking-normal text-muted-foreground">

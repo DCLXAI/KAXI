@@ -18,6 +18,7 @@ export interface SchoolFilters {
   program?: string;
   accreditation?: string;
   maxTuition?: number;
+  query?: string;
   includeExpired?: boolean;
 }
 
@@ -147,6 +148,28 @@ function staticSchools(filters: SchoolFilters = {}): School[] {
     .filter((school) => filters.includeExpired || isSchoolReviewCurrent(school));
 }
 
+function normalizeSchoolQuery(value?: string): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
+
+function matchesSchoolQuery(school: School, normalizedQuery: string): boolean {
+  if (!normalizedQuery) return true;
+  const haystack = [
+    school.id,
+    school.name.ko,
+    school.name.vi,
+    school.name.mn,
+    school.name.en,
+  ]
+    .join(" ")
+    .toLowerCase()
+    .replace(/\s+/g, "");
+  return haystack.includes(normalizedQuery);
+}
+
 function buildWhere(filters: SchoolFilters) {
   const where: Record<string, unknown> = {};
   if (filters.region && filters.region !== "all") where.region = filters.region;
@@ -164,12 +187,13 @@ function buildWhere(filters: SchoolFilters) {
 }
 
 export async function listSchools(filters: SchoolFilters = {}): Promise<School[]> {
+  const query = normalizeSchoolQuery(filters.query);
   try {
     const rows = await db.school.findMany({
       where: buildWhere(filters),
       orderBy: [{ accreditation: "asc" }, { region: "asc" }, { tuitionPerSemester: "asc" }],
     });
-    if (rows.length > 0) return rows.map(mapDbSchool);
+    if (rows.length > 0) return rows.map(mapDbSchool).filter((school) => matchesSchoolQuery(school, query));
   } catch (err) {
     if (!canUseSchoolSeedFallback()) {
       throw new SchoolOperationalDatabaseError(

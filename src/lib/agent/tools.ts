@@ -71,6 +71,10 @@ const searchSchoolsTool: Tool = {
         type: "number",
         description: "최대 등록금 (KRW, 학기당). 예: 2000000",
       },
+      school_name: {
+        type: "string",
+        description: "사용자가 지정한 학교명 또는 학교명 일부. 예: 연세대학교",
+      },
       limit: {
         type: "number",
         description: "최대 결과 수 (기본 5)",
@@ -84,6 +88,7 @@ const searchSchoolsTool: Tool = {
       program: args.program || "all",
       accreditation: args.accreditation || "all",
       maxTuition: args.max_tuition,
+      query: typeof args.school_name === "string" ? args.school_name : undefined,
     })).slice(0, args.limit || 5);
 
     return {
@@ -101,7 +106,7 @@ const searchSchoolsTool: Tool = {
         verifiedAt: s.verifiedAt,
         reviewAfter: s.reviewAfter,
       })),
-      summary: `${schools.length}개 학교 검색됨${args.region ? ` (지역: ${args.region})` : ""}${args.max_tuition ? ` (학비 ≤ ${args.max_tuition.toLocaleString()}₩)` : ""}`,
+      summary: `${schools.length}개 학교 검색됨${args.school_name ? ` (학교명: ${args.school_name})` : ""}${args.region ? ` (지역: ${args.region})` : ""}${args.max_tuition ? ` (학비 ≤ ${args.max_tuition.toLocaleString()}₩)` : ""}`,
     };
   },
 };

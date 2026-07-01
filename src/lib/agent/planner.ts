@@ -37,6 +37,7 @@ export interface AgentIntentAnalysis {
   diagnosis: boolean;
   partner: boolean;
   budget?: number;
+  schoolName?: string;
   region: string;
   program: string;
   accreditation: string;
@@ -74,6 +75,19 @@ export function parseKrwBudget(text: string): number | undefined {
 
   const rawWon = normalized.match(/(\d{6,})\s*(?:krw|won|원|вон)?/i);
   if (rawWon) return Number(rawWon[1]);
+
+  return undefined;
+}
+
+export function detectSchoolName(text: string): string | undefined {
+  const explicit = text.match(/(?:학교명|관심\s*학교명|school\s*name|school|trường|truong)\s*[:：]\s*([^\n,，;]+)/i);
+  if (explicit?.[1]) return explicit[1].trim().replace(/[.。]$/, "");
+
+  const koreanName = text.match(/([가-힣A-Za-z0-9·.'\-\s]{2,40}(?:전문대학교|대학교|대학원|어학당|한국어교육센터|국제어학원))/);
+  if (koreanName?.[1]) {
+    const value = koreanName[1].trim();
+    if (!/인증대학|희망\s*대학|어떤\s*대학/.test(value)) return value;
+  }
 
   return undefined;
 }
@@ -226,6 +240,7 @@ function hasSafetySignal(text: string): boolean {
 export function analyzeAgentIntent(question: string, lang?: Lang): AgentIntentAnalysis {
   const text = question.toLowerCase();
   const budget = parseKrwBudget(text);
+  const schoolName = detectSchoolName(question);
   const region = detectRegion(text);
   const program = detectProgram(text);
   const accreditation = detectAccreditation(text);
@@ -238,7 +253,7 @@ export function analyzeAgentIntent(question: string, lang?: Lang): AgentIntentAn
 
   const smallTalk = isSmallTalk(text);
   const safety = hasSafetySignal(text);
-  const school = includesAny(text, ["학교", "어학당", "대학", "school", "university", "language", "trường", "truong", "du học", "du hoc", "сургууль"]);
+  const school = Boolean(schoolName) || includesAny(text, ["학교", "어학당", "대학", "school", "university", "language", "trường", "truong", "du học", "du hoc", "сургууль"]);
   const cost = includesAny(text, ["비용", "견적", "예산", "등록금", "학비", "cost", "budget", "tuition", "chi phí", "chi phi", "học phí", "hoc phi", "зардал", "төлбөр"]) || Boolean(budget);
   const documents = includesAny(text, ["서류", "문서", "documents", "hồ sơ", "ho so", "비자", "visa", "d-2", "d-4", "d2", "d4", "баримт", "виз"]);
   const knowledge =
@@ -260,6 +275,7 @@ export function analyzeAgentIntent(question: string, lang?: Lang): AgentIntentAn
           program,
           accreditation,
           max_tuition: budget,
+          school_name: schoolName,
           limit: cost ? 3 : 5,
         },
         reason: "school_or_cost_request",
@@ -309,8 +325,8 @@ export function analyzeAgentIntent(question: string, lang?: Lang): AgentIntentAn
   }
 
   const missingSlots = new Set<AgentMissingSlot>();
-  if ((school || cost) && region === "all") missingSlots.add("region");
-  if (school && program === "all") missingSlots.add("program");
+  if ((school || cost) && !schoolName && region === "all") missingSlots.add("region");
+  if (school && !schoolName && program === "all") missingSlots.add("program");
   if (hasBudgetSignal(text) && !budget) missingSlots.add("budget");
   if (documents && !hasExplicitVisaType(text)) missingSlots.add("visa_type");
   if ((documents || diagnosis) && nationality === "other") missingSlots.add("nationality");
@@ -333,6 +349,7 @@ export function analyzeAgentIntent(question: string, lang?: Lang): AgentIntentAn
     diagnosis,
     partner,
     budget,
+    schoolName,
     region,
     program,
     accreditation,

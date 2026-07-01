@@ -835,12 +835,37 @@ export function filterSchools(opts: {
   program?: string;
   accreditation?: string;
   maxTuition?: number;
+  query?: string;
 }): School[] {
+  const query = normalizeSchoolQuery(opts.query);
   return SCHOOLS.filter((s) => {
     if (opts.region && opts.region !== "all" && s.region !== opts.region) return false;
     if (opts.program && opts.program !== "all" && s.program !== opts.program) return false;
     if (opts.accreditation && opts.accreditation !== "all" && s.accreditation !== opts.accreditation) return false;
     if (opts.maxTuition && s.tuitionPerSemester > opts.maxTuition) return false;
+    if (query && !matchesSchoolQuery(s, query)) return false;
     return true;
   });
+}
+
+function normalizeSchoolQuery(value?: string): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
+
+function matchesSchoolQuery(school: School, normalizedQuery: string): boolean {
+  if (!normalizedQuery) return true;
+  const haystack = [
+    school.id,
+    school.name.ko,
+    school.name.vi,
+    school.name.mn,
+    school.name.en,
+  ]
+    .join(" ")
+    .toLowerCase()
+    .replace(/\s+/g, "");
+  return haystack.includes(normalizedQuery);
 }

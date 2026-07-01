@@ -107,6 +107,47 @@ function testPlannerSurfacesMissingSlots() {
   }
 }
 
+function testPlannerUsesSchoolNameRefinement() {
+  const refined = analyzeAgentIntent(
+    "다음 조건을 반영해서 다시 추천/계산해줘.\n- 예산: 500만원\n- 학교명: 연세대학교\n\n원래 요청: 비용 계산해줘",
+    "ko"
+  );
+  const schoolSearch = refined.plan.find((item) => item.tool === "search_schools");
+
+  if (!schoolSearch) {
+    fail(`refined planner should search schools: ${JSON.stringify(refined)}`);
+  }
+  if (schoolSearch.args.school_name !== "연세대학교") {
+    fail(`refined planner should pass school_name: ${JSON.stringify(refined)}`);
+  }
+  if (schoolSearch.args.max_tuition !== 5_000_000) {
+    fail(`refined planner should parse budget: ${JSON.stringify(refined)}`);
+  }
+  if (refined.missingSlots.includes("region") || refined.missingSlots.includes("program")) {
+    fail(`exact school refinement should not require region/program: ${JSON.stringify(refined)}`);
+  }
+}
+
+async function testSchoolToolFiltersByName() {
+  const tool = TOOL_MAP.search_schools;
+  if (!tool) fail("search_schools tool missing");
+
+  const { result, summary } = await tool.execute(
+    {
+      school_name: "연세대학교",
+      limit: 5,
+    },
+    { lang: "ko", leadId: "local-agent-guard", dryRun: true }
+  );
+
+  if (!Array.isArray(result) || result.length === 0) {
+    fail(`school name filter should return matches: ${summary}`);
+  }
+  if (!result.every((school: any) => String(school.name || "").includes("연세대학교"))) {
+    fail(`school name filter returned unrelated schools: ${JSON.stringify(result)}`);
+  }
+}
+
 async function testPreflightUsesDiagnosisPlanner() {
   const result = await runAgentPreflight(
     "고졸이고 TOPIK 2급, 예산 500만원인데 한국 유학 맞춤 로드맵 진단해줘",
@@ -418,6 +459,8 @@ await testPartnerToolDryRun();
 await testPreflightDoesNotPersistPartnerRequest();
 testPlannerUnderstandsMultilingualRequests();
 testPlannerSurfacesMissingSlots();
+testPlannerUsesSchoolNameRefinement();
+await testSchoolToolFiltersByName();
 await testPreflightUsesDiagnosisPlanner();
 await testPreflightCarriesPlannerContext();
 await testFallbackPartnerRequestStaysDraft();
