@@ -57,6 +57,7 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
     for (const key of [
       "rag.review_after",
       "schools.source_metadata",
+      "database.postgresql_operational",
       "database.managed_writable",
       "privacy.encryption",
       "privacy.retention",
@@ -68,6 +69,7 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
       if (!byKey.has(key)) fail(`missing readiness check: ${key}`);
     }
 
+    if (byKey.get("database.postgresql_operational")?.ok) fail("file SQLite should not pass PostgreSQL operational check");
     if (byKey.get("database.managed_writable")?.ok) fail("file SQLite should not pass managed DB check");
     if (byKey.get("privacy.encryption")?.ok) fail("missing PII secrets should not pass encryption check");
     if (byKey.get("admin.mfa_role")?.ok) fail("missing MFA should not pass admin MFA check");
@@ -88,15 +90,15 @@ function testDatabaseRuntimeInfo() {
     delete process.env.TURSO_DATABASE_URL;
     delete process.env.TURSO_AUTH_TOKEN;
 
-    const unsupported = getRuntimeDatabaseInfo();
-    if (unsupported.kind !== "unsupported-managed" || unsupported.writable) {
-      fail(`postgres URL should not pass sqlite-provider runtime check: ${JSON.stringify(unsupported)}`);
+    const postgres = getRuntimeDatabaseInfo();
+    if (postgres.kind !== "postgresql" || !postgres.postgresqlConfigured || postgres.writable) {
+      fail(`postgres URL should be detected but not writable under sqlite runtime provider: ${JSON.stringify(postgres)}`);
     }
 
     process.env.TURSO_DATABASE_URL = "libsql://kaxi-example.turso.io";
     process.env.TURSO_AUTH_TOKEN = "test-token";
     const libsql = getRuntimeDatabaseInfo();
-    if (libsql.kind !== "libsql" || !libsql.sharedWritable || !libsql.libSqlAuthConfigured) {
+    if (libsql.kind !== "libsql" || !libsql.sharedWritable || !libsql.libSqlAuthConfigured || libsql.postgresqlConfigured) {
       fail(`libSQL config should be recognized as shared writable: ${JSON.stringify(libsql)}`);
     }
   } finally {

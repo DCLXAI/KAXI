@@ -13,6 +13,7 @@ jobs:
       MODEL_CACHE_DIR: ${{ github.workspace }}/data/model-cache
       VECTOR_CACHE_FILE: ${{ github.workspace }}/data/vector-store/embeddings-cache.json
       RESTORE_MODEL_CACHE_ON_INSTALL: "true"
+      RESTORE_SQLITE_DEMO_DB: "false"
       TRANSFORMERS_ALLOW_REMOTE: "false"
       TRANSFORMERS_ALLOW_LOCAL: "true"
       ZAI_ENABLED: "false"
@@ -23,6 +24,8 @@ jobs:
           bun-version: latest
       - name: Install and restore runtime artifacts
         run: bun install --frozen-lockfile
+      - name: Prepare local database from migrations
+        run: bun run db:prepare-local && bun run db:seed:schools && bun run db:seed:synonyms
       - name: Typecheck app
         run: bunx tsc --noEmit
       - name: Typecheck scripts
@@ -31,6 +34,8 @@ jobs:
         run: bun run test:e2e:types
       - name: Lint
         run: bun run lint
+      - name: Verify DB schema policy
+        run: bun run test:schema
       - name: Verify vector cache search
         run: bun run test:vector
       - name: Verify visa rules

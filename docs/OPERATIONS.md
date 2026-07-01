@@ -2,14 +2,14 @@
 
 ## Required Environment Variables
 
-- `DATABASE_URL`: Local Prisma SQLite URL. `file:./db/custom.db` is acceptable for local demos only.
-- `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`: Managed libSQL/Turso database for production writes. The current Prisma schema uses the `sqlite` provider, so do not point production at Postgres unless the Prisma provider/migrations are intentionally migrated too.
+- `DATABASE_URL`: Database URL. Local development may use `file:./db/custom.db`; production must target PostgreSQL after the Phase 1 cutover (`postgresql://...` or `postgres://...`).
+- `RESTORE_SQLITE_DEMO_DB`: Set `false` in CI/hosted builds to avoid depending on the bundled SQLite demo DB. Local demos may leave it unset to restore `runtime-artifacts/db/custom.db`.
 - `ADMIN_API_KEY`: Break-glass admin API key for admin APIs. Prefer session login for day-to-day operations.
 - `MODEL_CACHE_DIR`: Optional local cache path for Transformer models. Defaults to `data/model-cache` locally and `/tmp/kaxi-model-cache` on Vercel/serverless runtimes.
 - `VECTOR_CACHE_FILE`: Optional embedding cache file path. Defaults to `data/vector-store/embeddings-cache.json`.
 - `RESTORE_MODEL_CACHE_ON_INSTALL`: Set `true` to decompress the local Transformer model during install. Vercel builds skip this by default to keep function bundles under file-size limits.
 - `AI_*_RATE_LIMIT`, `AI_*_DAILY_QUOTA`: Optional AI abuse and cost controls. Use `0` to disable a specific limit. Public Agent and Consult demos default to disabled limits until a managed shared limiter is configured.
-- `RATE_LIMIT_BACKEND`: `auto`, `database`, or `memory`. Use `database` with a writable shared production DB so Vercel instances share quota.
+- `RATE_LIMIT_BACKEND`: `auto`, `database`, or `memory`. Use `database` with a writable shared PostgreSQL production DB so Vercel instances share quota.
 - `AI_CONSULT_BACKEND`: Optional Consult backend override: `remote-bridge`, `codex`, or `zai`. When unset, Consult follows the remote Codex bridge if the Agent backend is configured that way.
 - `AI_AGENT_PREFLIGHT_ENABLED`: Enables deterministic server-side tool/RAG preflight before Codex bridge calls.
 - `AI_AGENT_PREFLIGHT_TIMEOUT_MS`, `AI_AGENT_CONTEXT_MAX_CHARS`, `AI_AGENT_GROUNDED_QUESTION_MAX_CHARS`: Bound preflight latency and context sent to the LLM bridge.
@@ -38,14 +38,14 @@ Included artifacts:
 
 - `multilingual-e5-small` model cache, stored as gzip files so no single GitHub file exceeds 100 MB.
 - Vector embedding cache for the bundled knowledge base.
-- Sanitized SQLite MVP database with `Synonym` seed data, 50 `School` rows including source metadata, and empty user-generated tables.
+- Sanitized SQLite MVP database with `Synonym` seed data, 50 `School` rows including source metadata, and empty user-generated tables. This artifact is a local/demo convenience only, not an operational production database.
 
 The restore script only creates missing files. It does not overwrite local runtime data.
 On Vercel builds it restores vector/DB artifacts but does not decompress the large ONNX model unless `RESTORE_MODEL_CACHE_ON_INSTALL=true`.
 
 ## Database Policy
 
-The checked-in schema is SQLite-oriented for the public MVP artifact. Production writes must use a managed SQLite-compatible libSQL/Turso database through the Prisma libSQL adapter, or a deliberate provider migration to Postgres with new migrations.
+Phase 1 fixes the domain schema and PostgreSQL operating target while keeping the public MVP's SQLite-compatible development schema available during cutover. Production writes must move to PostgreSQL. The checked-in `prisma/postgres/migrations/20260701090000_phase1_operational_domain/migration.sql` is the operational PostgreSQL DDL for the Phase 1 domain model.
 
 1. Use Prisma migrations for every schema change.
 2. Do not use `prisma db push` against production.
@@ -56,7 +56,15 @@ The checked-in schema is SQLite-oriented for the public MVP artifact. Production
 7. Retention is enforced by `POST /api/privacy/retention` for admins and daily Vercel Cron `GET /api/privacy/retention`.
 8. Before analytics export, use the redacted ChatLog analysis route or scripts; free-form questions are masked for emails, phone numbers, and private messenger handles.
 
-Hosted Vercel deployments must not rely on bundled SQLite for writes. The bundled DB is a demo seed/read model. Use a reachable managed libSQL/Turso database for admin CRUD, lead capture, partner requests, chat logs, Agent ledger persistence, audit logs, retention, and the shared rate-limit buckets.
+Hosted Vercel deployments must not rely on bundled SQLite for writes. The bundled DB is a demo seed/read model. Use a reachable managed PostgreSQL database for admin CRUD, lead capture, partner requests, chat logs, Agent ledger persistence, audit logs, retention, compliance evaluations, knowledge governance, escalation cases, and shared rate-limit buckets.
+
+### Environment Policy
+
+| environment | database policy | artifact policy |
+| --- | --- | --- |
+| Local demo | `DATABASE_URL=file:./db/custom.db` is allowed. Run `bun run db:prepare-local`, `bun run db:seed:schools`, and `bun run db:seed:synonyms` when rebuilding from migrations. | `RESTORE_SQLITE_DEMO_DB` may be unset so the demo DB is restored if missing. |
+| CI | Uses SQLite-compatible migration replay for fast tests, with `RESTORE_SQLITE_DEMO_DB=false`; the DB must be created from migrations and seeds, not copied from runtime artifacts. | Runtime vector/model artifacts may be restored; DB artifact is skipped. |
+| Preview/Production | Must configure PostgreSQL as the operational target and pass `/api/readiness` checks before write-bearing features are considered production-ready. | SQLite DB artifact is read-only/demo fallback only and must not be used for production writes. |
 
 ## Migration Workflow
 
@@ -75,7 +83,7 @@ bunx prisma migrate deploy
 bunx prisma generate
 ```
 
-For Turso/libSQL production, set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in Vercel, then apply the checked-in SQLite migration SQL to the managed database from a trusted operator machine or CI job. After migration, run `bun run db:seed:schools` with the production database env loaded so the `School` table becomes the operational source of truth. `GET /api/readiness` will not pass merely because the env vars exist; it also checks database reachability.
+For PostgreSQL production, provision the database first, load `DATABASE_URL=postgresql://...`, then apply `prisma/postgres/migrations/20260701090000_phase1_operational_domain/migration.sql` from a trusted operator machine or CI job. After migration, run `bun run db:seed:schools` and `bun run db:seed:synonyms` with production DB env loaded so `School` and `Synonym` are operational tables. `GET /api/readiness` will not pass merely because the env var exists; it also reports whether the active runtime is still SQLite-compatible and whether managed writes are reachable.
 
 After loading production DB env locally, verify the managed DB before deploying or promoting:
 
@@ -106,7 +114,8 @@ Production/hosted admin login fails closed unless `NEXTAUTH_SECRET`, `ADMIN_EMAI
 
 ## CI Quality Gates
 
-GitHub Actions restores runtime artifacts during `bun install --frozen-lockfile`, then runs typecheck, lint, `test:vector`, `test:quality`, `test:governance`, `test:privacy`, `test:agent`, and production build.
+GitHub Actions restores non-DB runtime artifacts during `bun install --frozen-lockfile`, prepares the local test DB from Prisma migrations and seed scripts, then runs typecheck, lint, `test:schema`, `test:vector`, `test:quality`, `test:governance`, `test:privacy`, `test:agent`, and production build.
+`test:schema` verifies the Phase 1 domain models, SQLite-compatible migration replay, and PostgreSQL operational migration DDL.
 `test:vector` verifies the restored model/vector cache can retrieve expected KAXI source documents.
 `test:quality` validates the multilingual evaluation set in `quality/multilingual-eval-cases.json`, including expected source document, refusal expectation, and cost-format labels.
 `test:privacy` verifies PII encryption/redaction behavior, production PII persistence guards, and hosted SQLite write guards.
@@ -122,7 +131,7 @@ The readiness response intentionally exposes only booleans and reason strings, n
 Before treating KAXI as production-ready, `/api/readiness` must report `status: "ready"` for:
 
 - current RAG `reviewAfter` metadata and non-expired school source metadata,
-- reachable managed libSQL/Turso database instead of bundled SQLite,
+- PostgreSQL operational database target and reachable managed database instead of bundled SQLite,
 - `DATA_ENCRYPTION_KEY`, `PII_HASH_SECRET`, retention `CRON_SECRET`,
 - shared database-backed rate limit,
 - hashed admin login, MFA, valid role, and audit-log persistence.

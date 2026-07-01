@@ -6,6 +6,7 @@ const root = process.cwd();
 const artifactRoot = join(root, "runtime-artifacts");
 const isVercelBuild = process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV);
 const restoreModelCache = process.env.RESTORE_MODEL_CACHE_ON_INSTALL === "true" || !isVercelBuild;
+const restoreSqliteDemoDb = process.env.RESTORE_SQLITE_DEMO_DB !== "false";
 
 const files = [
   {
@@ -48,6 +49,7 @@ const files = [
 
 function restoreFile(entry: (typeof files)[number]) {
   if (entry.kind === "model" && !restoreModelCache) return false;
+  if (entry.artifact === "db/custom.db" && !restoreSqliteDemoDb) return false;
 
   const source = join(artifactRoot, entry.artifact);
   const target = join(root, entry.target);

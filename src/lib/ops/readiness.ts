@@ -55,6 +55,7 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
   const schoolAudit = await getSchoolSourceAudit();
 
   const managedDatabase = databaseInfo.sharedWritable && databaseConnectivity.ok;
+  const postgresqlOperationalUrl = databaseInfo.kind === "postgresql" && databaseInfo.postgresqlConfigured;
   const sharedRateLimit =
     managedDatabase && (rateLimitBackend === "auto" || rateLimitBackend === "database");
   const ragReviewReady =
@@ -96,13 +97,29 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
       schoolAudit
     ),
     check(
+      "database.postgresql_operational",
+      "PostgreSQL operational database target",
+      production ? postgresqlOperationalUrl : true,
+      postgresqlOperationalUrl
+        ? "DATABASE_URL is configured with a PostgreSQL URL for the operational database target."
+        : production
+          ? "Production must target PostgreSQL for the operational database; bundled SQLite/libSQL is only a transition/demo path."
+          : "Local development may still use SQLite-compatible artifacts while PostgreSQL cutover is prepared.",
+      {
+        databaseUrlKind: databaseInfo.kind,
+        databaseUrlSource: databaseInfo.source,
+        postgresqlConfigured: databaseInfo.postgresqlConfigured,
+        activePrismaProvider: databaseInfo.activePrismaProvider,
+      }
+    ),
+    check(
       "database.managed_writable",
       "Managed writable database",
       production ? managedDatabase : databaseInfo.writable,
       managedDatabase
-        ? "A managed libSQL/Turso database is writable and reachable."
+        ? "A shared managed runtime database is writable and reachable."
         : production
-          ? "Production must use a reachable managed libSQL/Turso database, not bundled file SQLite."
+          ? "Production writes require a reachable managed operational database; bundled file SQLite is read-only/demo only."
           : databaseInfo.reason,
       {
         databaseUrlKind: databaseInfo.kind,
@@ -110,6 +127,8 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
         writableDatabase: databaseInfo.writable,
         sharedWritableDatabase: databaseInfo.sharedWritable,
         libSqlAuthConfigured: databaseInfo.libSqlAuthConfigured,
+        postgresqlConfigured: databaseInfo.postgresqlConfigured,
+        activePrismaProvider: databaseInfo.activePrismaProvider,
         connectivity: databaseConnectivity.ok,
       }
     ),

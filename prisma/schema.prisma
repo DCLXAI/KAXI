@@ -1,5 +1,7 @@
 // KAXI Prisma Schema
-// SQLite for MVP (7/22 데모). 운영환경 전환시 Postgres 등으로 변경.
+// SQLite-compatible dev schema for the public MVP artifact.
+// Phase 1 fixes the operational domain model and ships a PostgreSQL migration
+// target under prisma/postgres/. Production readiness now requires PostgreSQL.
 
 generator client {
   provider = "prisma-client-js"
@@ -8,6 +10,229 @@ generator client {
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
+}
+
+enum OrgType {
+  PLATFORM
+  PARTNER_AGENT_OFFICE
+}
+
+enum UserRole {
+  STUDENT
+  PARTNER_AGENT
+  PLATFORM_ADMIN
+}
+
+enum ConsentScope {
+  TERMS
+  PRIVACY
+  THIRD_PARTY_PROVISION
+  PROCESSING_CONSIGNMENT
+  OVERSEAS_TRANSFER
+  MARKETING
+}
+
+enum ConsentStatus {
+  GRANTED
+  WITHDRAWN
+  EXPIRED
+}
+
+enum DocumentStatus {
+  NOT_UPLOADED
+  UPLOADED
+  OCR_PROCESSING
+  OCR_DONE
+  MISSING
+  EXPIRED
+  NEEDS_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  NEEDS_HUMAN_REVIEW
+}
+
+enum RuleStatus {
+  DRAFT
+  ACTIVE
+  SUPERSEDED
+  ARCHIVED
+}
+
+enum LegalReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum EscalationStatus {
+  NEW
+  NEEDS_MORE_DOCUMENTS
+  HIGH_RISK
+  APPROVED
+  REJECTED
+  CLOSED
+  STOPPED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  UNKNOWN
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  type      OrgType
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users           User[]
+  escalationCases EscalationCase[]
+  auditEvents     AuditEvent[]
+
+  @@index([type])
+  @@index([createdAt])
+}
+
+model User {
+  id             String   @id @default(cuid())
+  organizationId String?
+  role           UserRole
+  email          String?  @unique
+  phone          String?  @unique
+  zaloUid        String?  @unique
+  locale         String   @default("vi")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  studentProfile StudentProfile?
+  consents       Consent[]
+  uploadedFiles  UploadedFile[] @relation("UploadedFileOwner")
+  assignedCases  EscalationCase[] @relation("AssignedCases")
+  agentReviews   AgentReview[] @relation("AgentReviewReviewer")
+  auditEvents    AuditEvent[] @relation("AuditActor")
+
+  @@index([organizationId])
+  @@index([role])
+  @@index([createdAt])
+}
+
+model StudentProfile {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  nationality          String   @default("VN")
+  visaType             String?
+  visaExpiryDate       DateTime?
+  alienRegistrationNo  String?
+  alienRegistrationHash String?
+  passportNo           String?
+  passportHash         String?
+  schoolName           String?
+  programType          String?
+  semesterStatus       String?
+  topikLevel           Int?
+  partTimePermitStatus String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  journeyState          JourneyState?
+  documents             DocumentItem[]
+  complianceEvaluations ComplianceEvaluation[]
+  escalationCases       EscalationCase[]
+
+  @@index([nationality])
+  @@index([visaType])
+  @@index([visaExpiryDate])
+  @@index([alienRegistrationHash])
+  @@index([passportHash])
+}
+
+model Consent {
+  id           String        @id @default(cuid())
+  userId       String
+  scope        ConsentScope
+  status       ConsentStatus @default(GRANTED)
+  version      String
+  locale       String        @default("vi")
+  grantedAt    DateTime      @default(now())
+  withdrawnAt  DateTime?
+  expiresAt    DateTime?
+  evidenceJson Json?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([scope])
+  @@index([status])
+  @@index([grantedAt])
+}
+
+model JourneyState {
+  id               String   @id @default(cuid())
+  studentProfileId String   @unique
+  primaryStage     String
+  modules          Json
+  completionScore  Float    @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+}
+
+model DocumentItem {
+  id               String         @id @default(cuid())
+  studentProfileId String
+  documentType     String
+  required         Boolean        @default(true)
+  status           DocumentStatus @default(NOT_UPLOADED)
+  expiresAt        DateTime?
+  fileId           String?
+  reviewStatus     ReviewStatus   @default(PENDING)
+  reviewNote       String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  file           UploadedFile?  @relation(fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([studentProfileId])
+  @@index([documentType])
+  @@index([status])
+  @@index([reviewStatus])
+  @@index([expiresAt])
+}
+
+model UploadedFile {
+  id           String   @id @default(cuid())
+  ownerUserId  String
+  storageKey   String   @unique
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  sha256       String
+  piiClass     String
+  createdAt    DateTime @default(now())
+  deletedAt    DateTime?
+
+  owner     User           @relation("UploadedFileOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  documents DocumentItem[]
+
+  @@index([ownerUserId])
+  @@index([sha256])
+  @@index([piiClass])
+  @@index([createdAt])
 }
 
 // 유학 경로 진단을 완료한 사용자 (리드)
@@ -233,4 +458,213 @@ model RateLimitBucket {
   updatedAt DateTime @updatedAt
 
   @@index([resetAt])
+}
+
+model ComplianceRule {
+  id        String     @id @default(cuid())
+  code      String     @unique
+  domain    String
+  visaType  String
+  ruleType  String
+  status    RuleStatus @default(DRAFT)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  versions ComplianceRuleVersion[]
+
+  @@index([domain])
+  @@index([visaType])
+  @@index([ruleType])
+  @@index([status])
+}
+
+model ComplianceRuleVersion {
+  id             String            @id @default(cuid())
+  ruleId         String
+  version        Int
+  effectiveFrom  DateTime
+  effectiveTo    DateTime?
+  conditionAst   Json
+  outputAst      Json
+  requiredInputs Json
+  sourceRefs     Json
+  fallbackPolicy String
+  reviewStatus   LegalReviewStatus @default(PENDING)
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  createdAt      DateTime          @default(now())
+
+  rule        ComplianceRule        @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  tests       ComplianceRuleTest[]
+  evaluations ComplianceEvaluation[]
+
+  @@unique([ruleId, version])
+  @@index([effectiveFrom])
+  @@index([effectiveTo])
+  @@index([reviewStatus])
+}
+
+model ComplianceRuleTest {
+  id            String   @id @default(cuid())
+  ruleVersionId String
+  caseId        String
+  input         Json
+  expected      Json
+  lastResult    Json?
+  passed        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  ruleVersion ComplianceRuleVersion @relation(fields: [ruleVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleVersionId, caseId])
+  @@index([passed])
+}
+
+model ComplianceEvaluation {
+  id               String   @id @default(cuid())
+  studentProfileId String
+  ruleVersionId    String
+  inputSnapshot    Json
+  outputSnapshot   Json
+  riskLevel        RiskLevel @default(UNKNOWN)
+  inputHash        String
+  outputHash       String
+  evaluatedAt      DateTime @default(now())
+
+  studentProfile StudentProfile        @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  ruleVersion    ComplianceRuleVersion @relation(fields: [ruleVersionId], references: [id], onDelete: Restrict)
+
+  @@index([studentProfileId])
+  @@index([ruleVersionId])
+  @@index([riskLevel])
+  @@index([evaluatedAt])
+  @@index([inputHash])
+  @@index([outputHash])
+}
+
+model KnowledgeDocument {
+  id            String            @id @default(cuid())
+  docId         String            @unique
+  title         String
+  sourceUrl     String
+  sourceType    String
+  language      String
+  jurisdiction  String            @default("KR")
+  topic         String
+  validFrom     DateTime
+  validTo       DateTime?
+  lastCheckedAt DateTime
+  checkedBy     String
+  reviewStatus  LegalReviewStatus @default(PENDING)
+  supersedes    Json?
+  supersededBy  String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  chunks KnowledgeChunk[]
+
+  @@index([sourceType])
+  @@index([language])
+  @@index([topic])
+  @@index([validFrom])
+  @@index([validTo])
+  @@index([lastCheckedAt])
+  @@index([reviewStatus])
+  @@index([supersededBy])
+}
+
+model KnowledgeChunk {
+  id           String   @id @default(cuid())
+  documentId   String
+  chunkIndex   Int
+  content      String
+  contentHash  String
+  embeddingJson Json?
+  embeddingModel String?
+  embeddingDim Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, chunkIndex])
+  @@index([contentHash])
+  @@index([embeddingModel])
+}
+
+model EscalationCase {
+  id               String           @id @default(cuid())
+  organizationId   String?
+  studentProfileId String
+  assignedUserId   String?
+  status           EscalationStatus @default(NEW)
+  riskLevel        RiskLevel        @default(UNKNOWN)
+  category         String
+  summary          String
+  conversationSummary String?
+  ruleSnapshot     Json?
+  aiDraft          String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  closedAt         DateTime?
+
+  organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  assignedUser   User?          @relation("AssignedCases", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  reviews        AgentReview[]
+
+  @@index([organizationId])
+  @@index([studentProfileId])
+  @@index([assignedUserId])
+  @@index([status])
+  @@index([riskLevel])
+  @@index([category])
+  @@index([createdAt])
+}
+
+model AgentReview {
+  id               String       @id @default(cuid())
+  escalationCaseId String
+  reviewerUserId   String?
+  decision         ReviewStatus
+  note             String?
+  responseDraft    String?
+  reviewedAt       DateTime     @default(now())
+  createdAt        DateTime     @default(now())
+
+  escalationCase EscalationCase @relation(fields: [escalationCaseId], references: [id], onDelete: Cascade)
+  reviewer       User?          @relation("AgentReviewReviewer", fields: [reviewerUserId], references: [id], onDelete: SetNull)
+
+  @@index([escalationCaseId])
+  @@index([reviewerUserId])
+  @@index([decision])
+  @@index([reviewedAt])
+}
+
+model AuditEvent {
+  id             String   @id @default(cuid())
+  organizationId String?
+  actorUserId    String?
+  actorRole      String?
+  action         String
+  targetType     String
+  targetId       String?
+  caseId         String?
+  ip             String?
+  userAgent      String?
+  success        Boolean  @default(true)
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  actor       User?          @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([actorUserId])
+  @@index([action])
+  @@index([targetType])
+  @@index([targetId])
+  @@index([caseId])
+  @@index([createdAt])
 }

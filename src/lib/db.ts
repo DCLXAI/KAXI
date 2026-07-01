@@ -2,7 +2,7 @@ import { PrismaClient, type Prisma } from "@prisma/client";
 import { PrismaLibSQL } from "@prisma/adapter-libsql/web";
 import { join } from "path";
 
-export type RuntimeDatabaseKind = "missing" | "file" | "libsql" | "unsupported-managed";
+export type RuntimeDatabaseKind = "missing" | "file" | "libsql" | "postgresql" | "unsupported-managed";
 
 export interface RuntimeDatabaseInfo {
   kind: RuntimeDatabaseKind;
@@ -11,6 +11,8 @@ export interface RuntimeDatabaseInfo {
   writable: boolean;
   sharedWritable: boolean;
   libSqlAuthConfigured: boolean;
+  postgresqlConfigured: boolean;
+  activePrismaProvider: "sqlite";
   reason: string;
 }
 
@@ -49,10 +51,17 @@ function isLibSqlUrl(url: string): boolean {
   return /^(libsql|wss|https):\/\//i.test(url);
 }
 
+function isPostgresUrl(url: string): boolean {
+  return /^postgres(?:ql)?:\/\//i.test(url);
+}
+
+const ACTIVE_PRISMA_PROVIDER = "sqlite" as const;
+
 export function getRuntimeDatabaseInfo(env: NodeJS.ProcessEnv = process.env): RuntimeDatabaseInfo {
   const { url, source } = databaseUrlFromEnv(env);
   const hostedRuntime = isHostedRuntime(env);
   const libSqlAuthConfigured = configured(env.TURSO_AUTH_TOKEN) || configured(env.DATABASE_AUTH_TOKEN);
+  const postgresqlConfigured = isPostgresUrl(url);
 
   if (!url) {
     return {
@@ -62,6 +71,8 @@ export function getRuntimeDatabaseInfo(env: NodeJS.ProcessEnv = process.env): Ru
       writable: false,
       sharedWritable: false,
       libSqlAuthConfigured,
+      postgresqlConfigured,
+      activePrismaProvider: ACTIVE_PRISMA_PROVIDER,
       reason: "DATABASE_URL or TURSO_DATABASE_URL is not configured.",
     };
   }
@@ -75,6 +86,8 @@ export function getRuntimeDatabaseInfo(env: NodeJS.ProcessEnv = process.env): Ru
       writable,
       sharedWritable: false,
       libSqlAuthConfigured,
+      postgresqlConfigured,
+      activePrismaProvider: ACTIVE_PRISMA_PROVIDER,
       reason: writable
         ? "Local SQLite file is writable for development."
         : "Hosted deployments cannot rely on bundled file SQLite for writes.",
@@ -89,9 +102,26 @@ export function getRuntimeDatabaseInfo(env: NodeJS.ProcessEnv = process.env): Ru
       writable: libSqlAuthConfigured,
       sharedWritable: libSqlAuthConfigured,
       libSqlAuthConfigured,
+      postgresqlConfigured,
+      activePrismaProvider: ACTIVE_PRISMA_PROVIDER,
       reason: libSqlAuthConfigured
         ? "libSQL/Turso managed database is configured."
         : "TURSO_AUTH_TOKEN or DATABASE_AUTH_TOKEN is required for managed libSQL writes.",
+    };
+  }
+
+  if (isPostgresUrl(url)) {
+    return {
+      kind: "postgresql",
+      source,
+      hostedRuntime,
+      writable: false,
+      sharedWritable: false,
+      libSqlAuthConfigured,
+      postgresqlConfigured: true,
+      activePrismaProvider: ACTIVE_PRISMA_PROVIDER,
+      reason:
+        "PostgreSQL DATABASE_URL is configured, but the active Prisma runtime provider is still sqlite-compatible. Use the checked-in prisma/postgres migration and provider cutover before enabling writes.",
     };
   }
 
@@ -102,7 +132,10 @@ export function getRuntimeDatabaseInfo(env: NodeJS.ProcessEnv = process.env): Ru
     writable: false,
     sharedWritable: false,
     libSqlAuthConfigured,
-    reason: "This build uses the Prisma sqlite provider; use file: locally or libsql:// with the libSQL adapter.",
+    postgresqlConfigured,
+    activePrismaProvider: ACTIVE_PRISMA_PROVIDER,
+    reason:
+      "This build uses the Prisma sqlite provider for local/demo compatibility. Production must target PostgreSQL through the Phase 1 cutover path.",
   };
 }
 
