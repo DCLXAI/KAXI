@@ -1,6 +1,4 @@
 import { DocumentStatus, Prisma, ReviewStatus, UserRole } from "@prisma/client";
-import { mkdir, writeFile } from "fs/promises";
-import { dirname, join } from "path";
 import { db } from "@/lib/db";
 import { recordAuditLog } from "@/lib/audit";
 import {
@@ -11,6 +9,7 @@ import {
   type SupportedReviewStatus,
 } from "./config";
 import { sha256Hex } from "./crypto";
+import { persistUploadedBytes } from "./storage";
 
 export interface DocumentValidationInput {
   originalName: string;
@@ -73,18 +72,6 @@ export function createDocumentStorageKey(input: {
   const studentHash = sha256Hex(input.studentRef).slice(0, 20);
   const docType = input.documentType.replace(/[^\w.\-]+/g, "_").slice(0, 64);
   return `uploads/${studentHash}/${docType}/${Date.now()}-${input.sha256.slice(0, 16)}-${safeFileName(input.originalName)}`;
-}
-
-export function localUploadPath(storageKey: string): string {
-  const root = process.env.DOCUMENT_UPLOAD_DIR || join(process.cwd(), "data", "uploads");
-  return join(root, storageKey);
-}
-
-export async function persistUploadedBytes(storageKey: string, bytes: Uint8Array) {
-  if (process.env.DOCUMENT_UPLOAD_STORE_BYTES === "false") return;
-  const filePath = localUploadPath(storageKey);
-  await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(filePath, bytes);
 }
 
 export async function ensureStudentProfile(studentRef: string) {
@@ -214,7 +201,7 @@ export async function commitDocumentUpload(input: DocumentUploadCommitInput, con
   }
 
   const profile = await ensureStudentProfile(input.studentRef);
-  await persistUploadedBytes(input.storageKey, input.bytes);
+  await persistUploadedBytes(input.storageKey, input.bytes, input.mimeType);
 
   const result = await db.$transaction(async (tx) => {
     const file = await tx.uploadedFile.create({

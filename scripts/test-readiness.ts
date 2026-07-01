@@ -61,6 +61,7 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
       "database.managed_writable",
       "privacy.encryption",
       "privacy.retention",
+      "documents.upload_workspace",
       "rate_limit.shared",
       "admin.session_hash",
       "admin.mfa_role",
@@ -72,6 +73,7 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
     if (byKey.get("database.postgresql_operational")?.ok) fail("file SQLite should not pass PostgreSQL operational check");
     if (byKey.get("database.managed_writable")?.ok) fail("file SQLite should not pass managed DB check");
     if (byKey.get("privacy.encryption")?.ok) fail("missing PII secrets should not pass encryption check");
+    if (byKey.get("documents.upload_workspace")?.ok) fail("hosted local document storage should not pass upload workspace check");
     if (byKey.get("admin.mfa_role")?.ok) fail("missing MFA should not pass admin MFA check");
   } finally {
     restoreEnv(snapshot);

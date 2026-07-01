@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { canWriteRuntimeDatabase } from "@/lib/db";
 import { listStudentDocuments } from "@/lib/documents/repository";
+import { getDocumentWorkspaceIssue } from "@/lib/documents/workspace-availability";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   try {
-    if (!canWriteRuntimeDatabase()) {
-      return NextResponse.json({ error: "Document workspace requires a writable database" }, { status: 503 });
-    }
+    const workspaceIssue = getDocumentWorkspaceIssue("list");
+    if (workspaceIssue) return NextResponse.json(workspaceIssue, { status: 503 });
 
     const studentRef = req.nextUrl.searchParams.get("studentRef") || "";
     if (!studentRef) return NextResponse.json({ error: "studentRef is required" }, { status: 400 });

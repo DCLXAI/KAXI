@@ -28,6 +28,13 @@ interface StudentDocument {
   } | null;
 }
 
+interface DocumentWorkspaceIssue {
+  error?: string;
+  detail?: string;
+  operatorHint?: string;
+  requirements?: string[];
+}
+
 const STATUS_LABELS: Record<string, { ko: string; en: string }> = {
   NOT_UPLOADED: { ko: "미업로드", en: "Not uploaded" },
   UPLOADED: { ko: "업로드 완료", en: "Uploaded" },
@@ -130,19 +137,33 @@ export function Documents({ onNavigate }: { onNavigate: (v: string) => void }) {
   const [uploadingType, setUploadingType] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [serverBacked, setServerBacked] = useState(false);
+  const [workspaceIssue, setWorkspaceIssue] = useState<DocumentWorkspaceIssue | null>(null);
 
   const loadDocuments = useCallback(async (ref = studentRef) => {
     if (!ref) return;
     setLoading(true);
     setError(null);
+    setWorkspaceIssue(null);
     try {
       const res = await fetch(`/api/documents?studentRef=${encodeURIComponent(ref)}`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "문서 목록을 불러오지 못했습니다.");
+      if (!res.ok) {
+        setServerBacked(false);
+        setWorkspaceIssue({
+          error: data.error,
+          detail: data.detail,
+          operatorHint: data.operatorHint,
+          requirements: Array.isArray(data.requirements) ? data.requirements : [],
+        });
+        setError(data.error || "문서 목록을 불러오지 못했습니다.");
+        setDocuments(FALLBACK_DOCS);
+        return;
+      }
       setDocuments(data.documents || []);
       setServerBacked(true);
     } catch (err) {
       setServerBacked(false);
+      setWorkspaceIssue(null);
       setError(err instanceof Error ? err.message : String(err));
       setDocuments(FALLBACK_DOCS);
     } finally {
@@ -186,6 +207,14 @@ export function Documents({ onNavigate }: { onNavigate: (v: string) => void }) {
         }),
       });
       const intent = await intentRes.json();
+      if (!intentRes.ok && intent?.code === "DOCUMENT_WORKSPACE_UNAVAILABLE") {
+        setWorkspaceIssue({
+          error: intent.error,
+          detail: intent.detail,
+          operatorHint: intent.operatorHint,
+          requirements: Array.isArray(intent.requirements) ? intent.requirements : [],
+        });
+      }
       if (!intentRes.ok) throw new Error(intent.error || "업로드 URL을 만들지 못했습니다.");
 
       const uploadRes = await fetch(intent.uploadUrl, {
@@ -225,10 +254,25 @@ export function Documents({ onNavigate }: { onNavigate: (v: string) => void }) {
       <Card className={serverBacked ? "border-blue-200 bg-blue-50" : "border-amber-200 bg-amber-50"}>
         <CardContent className="flex items-start gap-3 py-4">
           <AlertCircle className={`mt-0.5 h-4 w-4 shrink-0 ${serverBacked ? "text-blue-600" : "text-amber-600"}`} />
-          <div className={`text-xs ${serverBacked ? "text-blue-900" : "text-amber-900"}`}>
-            {serverBacked
-              ? "파일은 SHA-256 해시, 용량, MIME 검증을 거쳐 업로드되고 행정사 검수 상태가 기록됩니다. OCR은 이후 비동기 처리로 확장됩니다."
-              : `현재 문서 서버가 준비되지 않아 업로드가 비활성화되어 있습니다.${error ? ` (${error})` : ""}`}
+          <div className={`space-y-2 text-xs ${serverBacked ? "text-blue-900" : "text-amber-900"}`}>
+            {serverBacked ? (
+              <p>파일은 SHA-256 해시, 용량, MIME 검증을 거쳐 업로드되고 행정사 검수 상태가 기록됩니다. OCR은 이후 비동기 처리로 확장됩니다.</p>
+            ) : (
+              <>
+                <p>
+                  현재 문서 업로드가 운영 저장소 준비 전이라 비활성화되어 있습니다.
+                  {error ? ` (${error})` : ""}
+                </p>
+                {workspaceIssue?.detail && <p>진단: {workspaceIssue.detail}</p>}
+                {workspaceIssue?.requirements?.length ? (
+                  <ul className="list-disc space-y-1 pl-4">
+                    {workspaceIssue.requirements.slice(0, 3).map((requirement) => (
+                      <li key={requirement}>{requirement}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
