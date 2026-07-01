@@ -42,6 +42,8 @@ interface VectorStore {
   transformerDocVectors: EmbeddingVector[]; // 384-dim normalized
   docIds: string[];
   reviewDateKey: string;
+  sourceKey: string;
+  knowledgeSource: "db" | "static" | "mixed";
   ready: boolean;
   method: "transformer" | "tfidf" | "mixed";
 }
@@ -53,6 +55,8 @@ let store: VectorStore = {
   transformerDocVectors: [],
   docIds: [],
   reviewDateKey: "",
+  sourceKey: "",
+  knowledgeSource: "static",
   ready: false,
   method: "tfidf",
 };
@@ -67,6 +71,71 @@ function reviewDateKey(date = new Date()): string {
 
 function searchableDocs(): KnowledgeDoc[] {
   return getKnowledgeDocsWithMetadata().map(({ sourceMeta: _sourceMeta, ...doc }) => doc);
+}
+
+function buildStoreFromDocs(
+  docs: KnowledgeDoc[],
+  sourceKey: string,
+  knowledgeSource: VectorStore["knowledgeSource"],
+  currentReviewDateKey = reviewDateKey()
+): void {
+  const docTexts = docs.map((d) =>
+    multilingualText({
+      title: d.title,
+      content: d.content,
+      keywords: d.keywords,
+    })
+  );
+  const tfidfVectorizer = fitVectorizer(docTexts);
+  const tfidfDocVectors = docTexts.map((t) => tfidfVectorize(t, tfidfVectorizer));
+
+  store = {
+    ...store,
+    docs,
+    tfidfVectorizer,
+    tfidfDocVectors,
+    transformerDocVectors: [],
+    docIds: docs.map((d) => d.id),
+    reviewDateKey: currentReviewDateKey,
+    sourceKey,
+    knowledgeSource,
+    ready: true,
+    method: "tfidf",
+  };
+
+  console.log(
+    `[VectorStore] TF-IDF ready: ${store.docIds.length} docs, source=${knowledgeSource}, dim=${tfidfVectorizer.dim}`
+  );
+}
+
+async function refreshRuntimeKnowledgeDocs(): Promise<void> {
+  const currentReviewDateKey = reviewDateKey();
+  const mode = process.env.KNOWLEDGE_RAG_SOURCE || "governed";
+  if (mode === "static") {
+    if (!store.ready || store.reviewDateKey !== currentReviewDateKey || store.knowledgeSource !== "static") {
+      buildStoreFromDocs(searchableDocs(), `static:${currentReviewDateKey}`, "static", currentReviewDateKey);
+    }
+    return;
+  }
+
+  try {
+    const { getProductionKnowledgeDocsForRag } = await import("../knowledge/repository");
+    const production = await getProductionKnowledgeDocsForRag({ referenceDate: new Date(), mode });
+    const sourceKey = `${currentReviewDateKey}:${production.signature}`;
+    if (!store.ready || store.sourceKey !== sourceKey) {
+      buildStoreFromDocs(production.docs, sourceKey, production.source, currentReviewDateKey);
+    }
+  } catch (err) {
+    const error = err as { code?: string; meta?: { modelName?: string; table?: string }; message?: string };
+    if (error.code === "P2021" && (error.meta?.modelName === "KnowledgeDocument" || error.meta?.table?.includes("KnowledgeDocument"))) {
+      console.warn("[VectorStore] Knowledge governance table unavailable, using static fallback");
+    } else {
+      console.error("[VectorStore] Knowledge governance load failed, using static fallback:", err);
+    }
+    if (!store.ready || store.reviewDateKey !== currentReviewDateKey) {
+      buildStoreFromDocs(searchableDocs(), `static-fallback:${currentReviewDateKey}`, "static", currentReviewDateKey);
+    }
+  }
 }
 
 // 다국어 결합 텍스트에서 각 언어별로 분리 (transformer용)
@@ -127,43 +196,18 @@ function saveCache(cache: Record<string, number[]>): void {
 // 동기 초기화 (TF-IDF만 — transformer는 async init 필요)
 export function initVectorStore(): void {
   const currentReviewDateKey = reviewDateKey();
-  if (store.ready && store.reviewDateKey === currentReviewDateKey) return;
+  if (store.ready && store.reviewDateKey === currentReviewDateKey && store.knowledgeSource === "static") return;
 
   const docs = searchableDocs();
-
-  // TF-IDF vectorizer 학습 (폴백용)
-  const docTexts = docs.map((d) =>
-    multilingualText({
-      title: d.title,
-      content: d.content,
-      keywords: d.keywords,
-    })
-  );
-  const tfidfVectorizer = fitVectorizer(docTexts);
-  const tfidfDocVectors = docTexts.map((t) => tfidfVectorize(t, tfidfVectorizer));
-
-  store = {
-    ...store,
-    docs,
-    tfidfVectorizer,
-    tfidfDocVectors,
-    transformerDocVectors: [],
-    docIds: docs.map((d) => d.id),
-    reviewDateKey: currentReviewDateKey,
-    ready: true,
-    method: "tfidf",
-  };
-
-  console.log(
-    `[VectorStore] TF-IDF ready: ${store.docIds.length} docs, dim=${tfidfVectorizer.dim}`
-  );
+  buildStoreFromDocs(docs, `static:${currentReviewDateKey}`, "static", currentReviewDateKey);
 }
 
 // 비동기 초기화 (Transformer 모델 로드 + 문서 임베딩)
 export async function initTransformerStore(): Promise<void> {
+  await refreshRuntimeKnowledgeDocs();
   if (store.method === "transformer" || store.method === "mixed") return;
 
-  initVectorStore(); // TF-IDF 먼저 초기화 (폴백 보장)
+  if (!store.ready) initVectorStore(); // TF-IDF 먼저 초기화 (폴백 보장)
 
   if (!isTransformerAvailable()) {
     console.log("[VectorStore] Transformer unavailable, using TF-IDF only");
@@ -345,7 +389,7 @@ export async function hybridSearch(
   const vectorWeight = options.vectorWeight ?? 1.2;
   const keywordWeight = options.keywordWeight ?? 0.6;
 
-  if (!store.ready) initVectorStore();
+  await refreshRuntimeKnowledgeDocs();
   if (!query.trim()) return [];
 
   // Transformer 사용 가능시 비동기 초기화
@@ -420,6 +464,8 @@ export function getStoreStats() {
     totalKnowledgeDocs: sourceAudit.totalDocs,
     expiredDocCount: sourceAudit.expiredDocs.length,
     method: store.method,
+    knowledgeSource: store.knowledgeSource,
+    sourceKey: store.sourceKey,
     transformerAvailable: isTransformerAvailable(),
     tfidfDim: store.tfidfVectorizer?.dim ?? 0,
     transformerDim: store.transformerDocVectors[0]?.length ?? 0,

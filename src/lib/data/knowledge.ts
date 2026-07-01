@@ -13,6 +13,7 @@ export interface KnowledgeDoc {
   keywords: string[];
   content: { ko: string; vi: string; mn: string; en: string };
   source: string;
+  ragMeta?: RagDocumentMetadata;
 }
 
 export interface SourceMetadata {
@@ -237,6 +238,15 @@ export function isSourceReviewCurrent(
 }
 
 export function getRagDocumentMetadata(doc: KnowledgeDoc, lang: Lang): RagDocumentMetadata {
+  if (doc.ragMeta) {
+    return {
+      ...doc.ragMeta,
+      title: pickLangText(doc.title, lang),
+      language: lang,
+      topic: doc.category,
+    };
+  }
+
   const meta = getSourceMetadata(doc.source);
   return {
     doc_id: doc.id,

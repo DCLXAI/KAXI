@@ -151,4 +151,36 @@ export interface AdminKnowledgeItem {
   supersededBy: string | null;
   chunkCount: number;
   persisted: boolean;
+  impact?: AdminKnowledgeImpact;
+  diff?: AdminKnowledgeDiff;
+}
+
+export interface AdminKnowledgeImpact {
+  ruleCount: number;
+  userCount: number;
+  rules: Array<{
+    id: string;
+    ruleId: string;
+    code: string;
+    version: number;
+    reviewStatus: string;
+    sourceRefs: string[];
+  }>;
+  users: Array<{
+    chatLogId: string;
+    createdAt: string;
+    lang: string;
+    source: string;
+  }>;
+}
+
+export interface AdminKnowledgeDiff {
+  changed: boolean;
+  addedChunks: number;
+  removedChunks: number;
+  unchangedChunks: number;
+  currentChunkCount: number;
+  candidateChunkCount: number;
+  candidateContentHash: string;
+  impact: AdminKnowledgeImpact;
 }
