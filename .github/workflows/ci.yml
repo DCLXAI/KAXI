@@ -33,6 +33,8 @@ jobs:
         run: bun run lint
       - name: Verify vector cache search
         run: bun run test:vector
+      - name: Verify visa rules
+        run: bun run test:rules
       - name: Verify multilingual quality dataset
         run: bun run test:quality
       - name: Verify data governance policy
