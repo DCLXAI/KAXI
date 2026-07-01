@@ -6,13 +6,13 @@ export type RuntimeDatabaseKind = "missing" | "file" | "libsql" | "postgresql" |
 
 export interface RuntimeDatabaseInfo {
   kind: RuntimeDatabaseKind;
-  source: "DATABASE_URL" | "TURSO_DATABASE_URL" | "default";
+  source: "DATABASE_URL" | "POSTGRES_URL" | "TURSO_DATABASE_URL" | "default";
   hostedRuntime: boolean;
   writable: boolean;
   sharedWritable: boolean;
   libSqlAuthConfigured: boolean;
   postgresqlConfigured: boolean;
-  activePrismaProvider: "sqlite";
+  activePrismaProvider: "sqlite" | "postgresql";
   reason: string;
 }
 
@@ -32,6 +32,11 @@ function defaultDatabaseUrl(): string {
 function normalizeDatabaseEnv() {
   const databaseUrl = process.env.DATABASE_URL?.trim();
   const tursoUrl = process.env.TURSO_DATABASE_URL?.trim();
+  const postgresUrl = process.env.POSTGRES_URL?.trim();
+  if (postgresUrl && (!databaseUrl || databaseUrl.includes("/home/z/my-project"))) {
+    process.env.DATABASE_URL = postgresUrl;
+    return;
+  }
   if (!databaseUrl || databaseUrl.includes("/home/z/my-project")) {
     process.env.DATABASE_URL = tursoUrl || defaultDatabaseUrl();
   }
@@ -42,6 +47,11 @@ normalizeDatabaseEnv();
 function databaseUrlFromEnv(env: NodeJS.ProcessEnv) {
   const tursoUrl = env.TURSO_DATABASE_URL?.trim();
   const databaseUrl = env.DATABASE_URL?.trim();
+  const postgresUrl = env.POSTGRES_URL?.trim();
+  if (databaseUrl && isPostgresUrl(databaseUrl)) return { url: databaseUrl, source: "DATABASE_URL" as const };
+  if (postgresUrl && (!databaseUrl || databaseUrl.includes("/home/z/my-project") || databaseUrl.startsWith("file:"))) {
+    return { url: postgresUrl, source: "POSTGRES_URL" as const };
+  }
   if (tursoUrl) return { url: tursoUrl, source: "TURSO_DATABASE_URL" as const };
   if (databaseUrl) return { url: databaseUrl, source: "DATABASE_URL" as const };
   return { url: "", source: "default" as const };
@@ -55,13 +65,16 @@ function isPostgresUrl(url: string): boolean {
   return /^postgres(?:ql)?:\/\//i.test(url);
 }
 
-const ACTIVE_PRISMA_PROVIDER = "sqlite" as const;
+function activePrismaProviderForUrl(url: string): RuntimeDatabaseInfo["activePrismaProvider"] {
+  return isPostgresUrl(url) ? "postgresql" : "sqlite";
+}
 
 export function getRuntimeDatabaseInfo(env: NodeJS.ProcessEnv = process.env): RuntimeDatabaseInfo {
   const { url, source } = databaseUrlFromEnv(env);
   const hostedRuntime = isHostedRuntime(env);
   const libSqlAuthConfigured = configured(env.TURSO_AUTH_TOKEN) || configured(env.DATABASE_AUTH_TOKEN);
   const postgresqlConfigured = isPostgresUrl(url);
+  const activePrismaProvider = activePrismaProviderForUrl(url);
 
   if (!url) {
     return {
@@ -72,7 +85,7 @@ export function getRuntimeDatabaseInfo(env: NodeJS.ProcessEnv = process.env): Ru
       sharedWritable: false,
       libSqlAuthConfigured,
       postgresqlConfigured,
-      activePrismaProvider: ACTIVE_PRISMA_PROVIDER,
+      activePrismaProvider,
       reason: "DATABASE_URL or TURSO_DATABASE_URL is not configured.",
     };
   }
@@ -87,7 +100,7 @@ export function getRuntimeDatabaseInfo(env: NodeJS.ProcessEnv = process.env): Ru
       sharedWritable: false,
       libSqlAuthConfigured,
       postgresqlConfigured,
-      activePrismaProvider: ACTIVE_PRISMA_PROVIDER,
+      activePrismaProvider,
       reason: writable
         ? "Local SQLite file is writable for development."
         : "Hosted deployments cannot rely on bundled file SQLite for writes.",
@@ -103,7 +116,7 @@ export function getRuntimeDatabaseInfo(env: NodeJS.ProcessEnv = process.env): Ru
       sharedWritable: libSqlAuthConfigured,
       libSqlAuthConfigured,
       postgresqlConfigured,
-      activePrismaProvider: ACTIVE_PRISMA_PROVIDER,
+      activePrismaProvider,
       reason: libSqlAuthConfigured
         ? "libSQL/Turso managed database is configured."
         : "TURSO_AUTH_TOKEN or DATABASE_AUTH_TOKEN is required for managed libSQL writes.",
@@ -115,13 +128,12 @@ export function getRuntimeDatabaseInfo(env: NodeJS.ProcessEnv = process.env): Ru
       kind: "postgresql",
       source,
       hostedRuntime,
-      writable: false,
-      sharedWritable: false,
+      writable: true,
+      sharedWritable: true,
       libSqlAuthConfigured,
       postgresqlConfigured: true,
-      activePrismaProvider: ACTIVE_PRISMA_PROVIDER,
-      reason:
-        "PostgreSQL DATABASE_URL is configured, but the active Prisma runtime provider is still sqlite-compatible. Use the checked-in prisma/postgres migration and provider cutover before enabling writes.",
+      activePrismaProvider,
+      reason: "PostgreSQL operational database is configured.",
     };
   }
 
@@ -133,7 +145,7 @@ export function getRuntimeDatabaseInfo(env: NodeJS.ProcessEnv = process.env): Ru
     sharedWritable: false,
     libSqlAuthConfigured,
     postgresqlConfigured,
-    activePrismaProvider: ACTIVE_PRISMA_PROVIDER,
+    activePrismaProvider,
     reason:
       "This build uses the Prisma sqlite provider for local/demo compatibility. Production must target PostgreSQL through the Phase 1 cutover path.",
   };
