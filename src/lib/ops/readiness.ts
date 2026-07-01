@@ -1,5 +1,7 @@
 import { checkRuntimeDatabaseConnectivity, getRuntimeDatabaseInfo } from "@/lib/db";
 import { getKnowledgeSourceAudit } from "@/lib/data/knowledge";
+import { getDocumentUploadSigningSecret } from "@/lib/documents/crypto";
+import { getDocumentStorageInfo } from "@/lib/documents/storage";
 import { getSchoolSourceAudit } from "@/lib/schools/repository";
 
 export type ReadinessStatus = "ready" | "degraded";
@@ -50,6 +52,8 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
   const production = isProductionEnv(env);
   const databaseInfo = getRuntimeDatabaseInfo(env);
   const databaseConnectivity = await checkRuntimeDatabaseConnectivity();
+  const documentStorage = getDocumentStorageInfo(env);
+  const documentSigningConfigured = Boolean(getDocumentUploadSigningSecret(env));
   const rateLimitBackend = (env.RATE_LIMIT_BACKEND || "auto").trim().toLowerCase();
   const sourceAudit = getKnowledgeSourceAudit();
   const schoolAudit = await getSchoolSourceAudit();
@@ -58,6 +62,9 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
   const postgresqlOperationalUrl = databaseInfo.kind === "postgresql" && databaseInfo.postgresqlConfigured;
   const sharedRateLimit =
     managedDatabase && (rateLimitBackend === "auto" || rateLimitBackend === "database");
+  const documentUploadWorkspaceReady = production
+    ? documentStorage.writable && documentStorage.durable && documentSigningConfigured
+    : documentStorage.writable && documentSigningConfigured;
   const ragReviewReady =
     sourceAudit.missingMetadata.length === 0 &&
     sourceAudit.expiredDocs.length === 0 &&
@@ -148,6 +155,23 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
       configured(env.CRON_SECRET),
       "CRON_SECRET must be configured so scheduled retention enforcement can authenticate.",
       { cronSecretConfigured: configured(env.CRON_SECRET) }
+    ),
+    check(
+      "documents.upload_workspace",
+      "Document upload workspace",
+      documentUploadWorkspaceReady,
+      documentUploadWorkspaceReady
+        ? "Document uploads have signing and writable byte storage."
+        : production
+          ? "Production document uploads require signing plus durable object storage such as Vercel Blob."
+          : documentStorage.reason,
+      {
+        storageKind: documentStorage.kind,
+        storageWritable: documentStorage.writable,
+        storageDurable: documentStorage.durable,
+        blobTokenConfigured: documentStorage.blobTokenConfigured,
+        uploadSigningConfigured: documentSigningConfigured,
+      }
     ),
     check(
       "rate_limit.shared",

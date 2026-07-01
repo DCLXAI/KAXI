@@ -31,6 +31,8 @@
 - `DOCUMENT_UPLOAD_SIGNING_SECRET`: HMAC secret for short-lived document upload URLs. Required before enabling document uploads outside local development.
 - `DOCUMENT_UPLOAD_MAX_BYTES`: Optional max upload size. Defaults to 10 MB.
 - `DOCUMENT_UPLOAD_DIR`: Local byte-storage path for development. Production should use managed object storage.
+- `DOCUMENT_UPLOAD_STORAGE_BACKEND`: Set to `blob` for hosted document uploads.
+- `BLOB_READ_WRITE_TOKEN`: Vercel Blob read/write token. Required when hosted document uploads store original document bytes.
 - `DOCUMENT_UPLOAD_STORE_BYTES`: Set `false` only when the direct upload endpoint should persist metadata without local bytes, usually during storage-provider migration tests.
 
 ## Runtime Artifacts
@@ -70,6 +72,8 @@ Hosted Vercel deployments must not rely on bundled SQLite for writes. The bundle
 | Local demo | `DATABASE_URL=file:./db/custom.db` is allowed. Run `bun run db:prepare-local`, `bun run db:seed:schools`, `bun run db:seed:synonyms`, and `bun run db:seed:rules` when rebuilding from migrations. | `RESTORE_SQLITE_DEMO_DB` may be unset so the demo DB is restored if missing. |
 | CI | Uses SQLite-compatible migration replay for fast tests, with `RESTORE_SQLITE_DEMO_DB=false`; the DB must be created from migrations and seeds, not copied from runtime artifacts. | Runtime vector/model artifacts may be restored; DB artifact is skipped. |
 | Preview/Production | Must configure PostgreSQL as the operational target and pass `/api/readiness` checks before write-bearing features are considered production-ready. | SQLite DB artifact is read-only/demo fallback only and must not be used for production writes. |
+
+Document uploads additionally require durable object storage in hosted environments. Set `DOCUMENT_UPLOAD_STORAGE_BACKEND=blob` and `BLOB_READ_WRITE_TOKEN` before enabling upload URLs. Without durable storage, `/api/documents/upload-intent` returns `DOCUMENT_WORKSPACE_UNAVAILABLE` instead of accepting files into an ephemeral serverless filesystem.
 
 ## Migration Workflow
 

@@ -36,6 +36,7 @@ const listRoute = await import("../src/app/api/documents/route");
 const intentRoute = await import("../src/app/api/documents/upload-intent/route");
 const directRoute = await import("../src/app/api/documents/upload-direct/route");
 const reviewRoute = await import("../src/app/api/admin/documents/[id]/review/route");
+const { getDocumentWorkspaceIssue } = await import("../src/lib/documents/workspace-availability");
 
 function request(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers || {});
@@ -59,6 +60,23 @@ function adminRequest(path: string, init: RequestInit = {}) {
 }
 
 try {
+  const blockedHostedUpload = getDocumentWorkspaceIssue("upload", {
+    ...process.env,
+    VERCEL: "1",
+    DATABASE_URL: "file:./db/custom.db",
+    DOCUMENT_UPLOAD_STORAGE_BACKEND: "local",
+    DOCUMENT_UPLOAD_SIGNING_SECRET: "",
+  });
+  assert(blockedHostedUpload, "hosted file SQLite upload should report workspace unavailable");
+  assert(
+    blockedHostedUpload.metadata.writableDatabase === false,
+    "hosted file SQLite should not be considered writable"
+  );
+  assert(
+    blockedHostedUpload.metadata.storageWritable === false,
+    "hosted local document storage should not be considered writable"
+  );
+
   const studentRef = "student-flow-test-001";
   const listBefore = await json(await listRoute.GET(request(`/api/documents?studentRef=${studentRef}`)));
   assert(listBefore.ok, "student document list should load");

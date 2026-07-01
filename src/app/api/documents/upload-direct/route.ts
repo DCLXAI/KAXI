@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { canWriteRuntimeDatabase } from "@/lib/db";
 import { getClientIp } from "@/lib/api/security";
 import { getDocumentUploadSigningSecret, verifyDocumentUploadToken } from "@/lib/documents/crypto";
 import { commitDocumentUpload } from "@/lib/documents/repository";
+import { getDocumentWorkspaceIssue } from "@/lib/documents/workspace-availability";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -19,9 +19,8 @@ function isExpectedValidationError(err: unknown): boolean {
 
 export async function PUT(req: NextRequest) {
   try {
-    if (!canWriteRuntimeDatabase()) {
-      return NextResponse.json({ error: "Document upload requires a writable database" }, { status: 503 });
-    }
+    const workspaceIssue = getDocumentWorkspaceIssue("upload");
+    if (workspaceIssue) return NextResponse.json(workspaceIssue, { status: 503 });
 
     const token = req.nextUrl.searchParams.get("token") || "";
     const secret = getDocumentUploadSigningSecret();

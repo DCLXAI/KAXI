@@ -113,7 +113,14 @@ DOCUMENT_UPLOAD_DIR=data/uploads
 DOCUMENT_UPLOAD_STORE_BYTES=true
 ```
 
-Production should replace local byte storage with managed object storage such as S3 or Vercel Blob. The API contract is already shaped as a direct signed upload flow so that storage provider can be swapped later.
+Production byte storage:
+
+```env
+DOCUMENT_UPLOAD_STORAGE_BACKEND=blob
+BLOB_READ_WRITE_TOKEN=...
+```
+
+Hosted deployments fail closed unless document bytes can be stored durably. Local filesystem storage remains available for development only. Production should use managed object storage such as Vercel Blob, alongside a managed operational database for `DocumentItem`, `UploadedFile`, and audit metadata.
 
 ## CI
 

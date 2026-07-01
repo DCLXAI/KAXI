@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { canWriteRuntimeDatabase } from "@/lib/db";
 import { DOCUMENT_UPLOAD_TOKEN_TTL_SECONDS } from "@/lib/documents/config";
 import { getDocumentUploadSigningSecret, signDocumentUploadPayload } from "@/lib/documents/crypto";
 import { createDocumentStorageKey, validateDocumentUpload } from "@/lib/documents/repository";
+import { getDocumentWorkspaceIssue } from "@/lib/documents/workspace-availability";
 
 export const runtime = "nodejs";
 
@@ -18,14 +18,10 @@ function isExpectedValidationError(err: unknown): boolean {
 
 export async function POST(req: NextRequest) {
   try {
-    if (!canWriteRuntimeDatabase()) {
-      return NextResponse.json({ error: "Document upload requires a writable database" }, { status: 503 });
-    }
+    const workspaceIssue = getDocumentWorkspaceIssue("upload");
+    if (workspaceIssue) return NextResponse.json(workspaceIssue, { status: 503 });
 
     const secret = getDocumentUploadSigningSecret();
-    if (!secret) {
-      return NextResponse.json({ error: "Document upload signing is not configured" }, { status: 503 });
-    }
 
     const body = (await req.json().catch(() => ({}))) as {
       studentRef?: string;

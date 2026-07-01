@@ -30,15 +30,15 @@ export function sha256Hex(value: Buffer | Uint8Array | string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-export function getDocumentUploadSigningSecret(): string {
+export function getDocumentUploadSigningSecret(env: NodeJS.ProcessEnv = process.env): string {
   const configured =
-    process.env.DOCUMENT_UPLOAD_SIGNING_SECRET ||
-    process.env.NEXTAUTH_SECRET ||
-    process.env.ADMIN_API_KEY ||
+    env.DOCUMENT_UPLOAD_SIGNING_SECRET ||
+    env.NEXTAUTH_SECRET ||
+    env.ADMIN_API_KEY ||
     "";
 
   if (configured.trim()) return configured.trim();
-  if (process.env.NODE_ENV !== "production" && process.env.VERCEL !== "1") {
+  if (env.NODE_ENV !== "production" && env.VERCEL !== "1") {
     return "kaxi-local-document-upload-development-secret";
   }
   return "";
