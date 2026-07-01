@@ -54,6 +54,7 @@ The PostgreSQL migration uses enum types and JSONB fields for compliance rule AS
 RESTORE_SQLITE_DEMO_DB=false bun run db:prepare-local
 bun run db:seed:schools
 bun run db:seed:synonyms
+bun run db:seed:rules
 bun run test:schema
 ```
 
@@ -67,6 +68,7 @@ bun run test:schema
 ```bash
 bun run db:seed:schools
 bun run db:seed:synonyms
+bun run db:seed:rules
 ```
 
 5. Run:
@@ -91,4 +93,3 @@ Production is considered unfinished when:
 ## RLS / pgvector Notes
 
 The Phase 1 Prisma schema establishes the table boundaries needed for future PostgreSQL Row-Level Security and pgvector work. RLS policies and vector indexes are intentionally separate follow-up migrations because they require the actual production PostgreSQL provider and extension setup.
-

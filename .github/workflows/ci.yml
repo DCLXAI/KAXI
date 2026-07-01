@@ -25,7 +25,7 @@ jobs:
       - name: Install and restore runtime artifacts
         run: bun install --frozen-lockfile
       - name: Prepare local database from migrations
-        run: bun run db:prepare-local && bun run db:seed:schools && bun run db:seed:synonyms
+        run: bun run db:prepare-local && bun run db:seed:schools && bun run db:seed:synonyms && bun run db:seed:rules
       - name: Typecheck app
         run: bunx tsc --noEmit
       - name: Typecheck scripts

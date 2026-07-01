@@ -62,7 +62,7 @@ Hosted Vercel deployments must not rely on bundled SQLite for writes. The bundle
 
 | environment | database policy | artifact policy |
 | --- | --- | --- |
-| Local demo | `DATABASE_URL=file:./db/custom.db` is allowed. Run `bun run db:prepare-local`, `bun run db:seed:schools`, and `bun run db:seed:synonyms` when rebuilding from migrations. | `RESTORE_SQLITE_DEMO_DB` may be unset so the demo DB is restored if missing. |
+| Local demo | `DATABASE_URL=file:./db/custom.db` is allowed. Run `bun run db:prepare-local`, `bun run db:seed:schools`, `bun run db:seed:synonyms`, and `bun run db:seed:rules` when rebuilding from migrations. | `RESTORE_SQLITE_DEMO_DB` may be unset so the demo DB is restored if missing. |
 | CI | Uses SQLite-compatible migration replay for fast tests, with `RESTORE_SQLITE_DEMO_DB=false`; the DB must be created from migrations and seeds, not copied from runtime artifacts. | Runtime vector/model artifacts may be restored; DB artifact is skipped. |
 | Preview/Production | Must configure PostgreSQL as the operational target and pass `/api/readiness` checks before write-bearing features are considered production-ready. | SQLite DB artifact is read-only/demo fallback only and must not be used for production writes. |
 
@@ -74,6 +74,8 @@ Local development:
 bunx prisma migrate dev --name <change-name>
 bunx prisma generate
 bun run db:seed:schools
+bun run db:seed:synonyms
+bun run db:seed:rules
 ```
 
 CI / production sanity check:
@@ -83,7 +85,7 @@ bunx prisma migrate deploy
 bunx prisma generate
 ```
 
-For PostgreSQL production, provision the database first, load `DATABASE_URL=postgresql://...`, then apply `prisma/postgres/migrations/20260701090000_phase1_operational_domain/migration.sql` from a trusted operator machine or CI job. After migration, run `bun run db:seed:schools` and `bun run db:seed:synonyms` with production DB env loaded so `School` and `Synonym` are operational tables. `GET /api/readiness` will not pass merely because the env var exists; it also reports whether the active runtime is still SQLite-compatible and whether managed writes are reachable.
+For PostgreSQL production, provision the database first, load `DATABASE_URL=postgresql://...`, then apply `prisma/postgres/migrations/20260701090000_phase1_operational_domain/migration.sql` from a trusted operator machine or CI job. After migration, run `bun run db:seed:schools`, `bun run db:seed:synonyms`, and `bun run db:seed:rules` with production DB env loaded so `School`, `Synonym`, and approved compliance rule versions are operational tables. `GET /api/readiness` will not pass merely because the env var exists; it also reports whether the active runtime is still SQLite-compatible and whether managed writes are reachable.
 
 After loading production DB env locally, verify the managed DB before deploying or promoting:
 
@@ -114,9 +116,10 @@ Production/hosted admin login fails closed unless `NEXTAUTH_SECRET`, `ADMIN_EMAI
 
 ## CI Quality Gates
 
-GitHub Actions restores non-DB runtime artifacts during `bun install --frozen-lockfile`, prepares the local test DB from Prisma migrations and seed scripts, then runs typecheck, lint, `test:schema`, `test:vector`, `test:quality`, `test:governance`, `test:privacy`, `test:agent`, and production build.
+GitHub Actions restores non-DB runtime artifacts during `bun install --frozen-lockfile`, prepares the local test DB from Prisma migrations and seed scripts, then runs typecheck, lint, `test:schema`, `test:vector`, `test:rules`, `test:quality`, `test:governance`, `test:privacy`, `test:agent`, and production build.
 `test:schema` verifies the Phase 1 domain models, SQLite-compatible migration replay, and PostgreSQL operational migration DDL.
 `test:vector` verifies the restored model/vector cache can retrieve expected KAXI source documents.
+`test:rules` verifies the DB-backed D-2/D-4 Compliance Rule Engine, including approved-only execution, effective date windows, required source refs, 20+ golden cases, and `ComplianceEvaluation` persistence.
 `test:quality` validates the multilingual evaluation set in `quality/multilingual-eval-cases.json`, including expected source document, refusal expectation, and cost-format labels.
 `test:privacy` verifies PII encryption/redaction behavior, production PII persistence guards, and hosted SQLite write guards.
 `test:agent` verifies Agent status diagnostics, dry-run preflight behavior, and partner-request PII masking.

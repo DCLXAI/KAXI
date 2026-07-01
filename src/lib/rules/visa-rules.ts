@@ -76,9 +76,9 @@ export const VISA_RULE_SOURCE_REFS = {
   },
 } as const;
 
-const STUDY_SOURCE = VISA_RULE_SOURCE_REFS.studyInKoreaVisaDocuments.id;
-const IMMIGRATION_SOURCE = VISA_RULE_SOURCE_REFS.immigrationVisaNavigator.id;
-const ADMIN_SOURCE = VISA_RULE_SOURCE_REFS.administrativeScrivenerAct.id;
+export const STUDY_SOURCE = VISA_RULE_SOURCE_REFS.studyInKoreaVisaDocuments.id;
+export const IMMIGRATION_SOURCE = VISA_RULE_SOURCE_REFS.immigrationVisaNavigator.id;
+export const ADMIN_SOURCE = VISA_RULE_SOURCE_REFS.administrativeScrivenerAct.id;
 
 export const VISA_RULES: VisaRuleDefinition[] = [
   {
@@ -134,7 +134,7 @@ export const VISA_RULES: VisaRuleDefinition[] = [
   },
 ];
 
-const CORE_DOCUMENTS: VisaRuleDocument[] = [
+export const CORE_DOCUMENTS: VisaRuleDocument[] = [
   {
     id: "passport",
     label: "여권",
@@ -186,7 +186,7 @@ const CORE_DOCUMENTS: VisaRuleDocument[] = [
   },
 ];
 
-const D2_DOCUMENTS: VisaRuleDocument[] = [
+export const D2_DOCUMENTS: VisaRuleDocument[] = [
   {
     id: "topik_certificate",
     label: "TOPIK 또는 한국어/영어 능력 증빙",
@@ -203,7 +203,7 @@ const D2_DOCUMENTS: VisaRuleDocument[] = [
   },
 ];
 
-const TB_REQUIRED_NATIONALITIES = new Set(["vn", "mn", "cn", "ph", "mm", "uz", "th", "id", "np"]);
+export const TB_REQUIRED_NATIONALITIES = new Set(["vn", "mn", "cn", "ph", "mm", "uz", "th", "id", "np"]);
 
 const NATIONALITY_ALIASES: Record<string, string> = {
   vietnam: "vn",
@@ -230,7 +230,7 @@ const NATIONALITY_ALIASES: Record<string, string> = {
   other: "other",
 };
 
-function normalizeVisaType(value: VisaRuleInput["visa_type"]): VisaType | null {
+export function normalizeVisaType(value: VisaRuleInput["visa_type"]): VisaType | null {
   if (value === "D-2" || value === "D-4") return value;
   const text = String(value || "").toUpperCase();
   if (text.includes("D-2") || text.includes("D2")) return "D-2";
@@ -238,7 +238,7 @@ function normalizeVisaType(value: VisaRuleInput["visa_type"]): VisaType | null {
   return null;
 }
 
-function inferVisaTypeFromProgram(program: string | null | undefined): VisaType | null {
+export function inferVisaTypeFromProgram(program: string | null | undefined): VisaType | null {
   const text = String(program || "").trim().toLowerCase();
   if (!text || text === "unknown" || text === "unsure") return null;
   if (/(degree|college|university|graduate|bachelor|master|phd|학위|대학|대학원|전문대)/i.test(text)) return "D-2";
@@ -253,7 +253,7 @@ export function normalizeRuleNationality(value: string | null | undefined): stri
   return NATIONALITY_ALIASES[text] || text;
 }
 
-function addDocument(map: Map<string, VisaRuleDocument>, doc: VisaRuleDocument) {
+export function addVisaRuleDocument(map: Map<string, VisaRuleDocument>, doc: VisaRuleDocument) {
   const existing = map.get(doc.id);
   if (!existing) {
     map.set(doc.id, { ...doc, source_refs: [...doc.source_refs] });
@@ -305,9 +305,9 @@ export function evaluateVisaRules(input: VisaRuleInput): VisaRuleEvaluation {
   const coreDocRule = VISA_RULES[1];
   collectRuleMeta(coreDocRule, appliedRuleIds, sourceRefs);
   if (visaType) {
-    for (const doc of CORE_DOCUMENTS) addDocument(documents, doc);
+    for (const doc of CORE_DOCUMENTS) addVisaRuleDocument(documents, doc);
     if (visaType === "D-2") {
-      for (const doc of D2_DOCUMENTS) addDocument(documents, doc);
+      for (const doc of D2_DOCUMENTS) addVisaRuleDocument(documents, doc);
     }
   } else {
     warnings.push("비자 종류(D-2/D-4)를 확인해야 최종 서류 체크리스트를 확정할 수 있습니다.");
@@ -317,7 +317,7 @@ export function evaluateVisaRules(input: VisaRuleInput): VisaRuleEvaluation {
   collectRuleMeta(financialRule, appliedRuleIds, sourceRefs);
   if (visaType) {
     const threshold = visaType === "D-2" ? "20,000달러 이상" : "13,000달러 이상";
-    addDocument(documents, {
+    addVisaRuleDocument(documents, {
       id: "financial_proof",
       label: "재정능력 증빙",
       required: true,
@@ -333,7 +333,7 @@ export function evaluateVisaRules(input: VisaRuleInput): VisaRuleEvaluation {
     missingInputs.add("nationality");
     warnings.push("국적에 따라 결핵진단서 등 추가 서류가 달라질 수 있습니다.");
   } else if (TB_REQUIRED_NATIONALITIES.has(nationality)) {
-    addDocument(documents, {
+    addVisaRuleDocument(documents, {
       id: "tuberculosis_certificate",
       label: "결핵진단서",
       required: true,
@@ -378,4 +378,3 @@ export function evaluateVisaRules(input: VisaRuleInput): VisaRuleEvaluation {
     blocked_reasons: blockedReasons,
   };
 }
-

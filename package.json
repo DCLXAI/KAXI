@@ -30,7 +30,8 @@
     "db:reset": "prisma migrate reset",
     "db:prepare-local": "bun run scripts/prepare-local-db.ts",
     "db:seed:schools": "bun run scripts/seed-schools.ts",
-    "db:seed:synonyms": "bun run scripts/seed-synonyms.ts"
+    "db:seed:synonyms": "bun run scripts/seed-synonyms.ts",
+    "db:seed:rules": "bun run scripts/seed-compliance-rules.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

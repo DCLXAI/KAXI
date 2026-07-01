@@ -8,7 +8,7 @@ import type { Lang } from "../i18n/translations";
 import { findSchoolById, listSchools } from "../schools/repository";
 import { createPartnerRequest } from "../partners/repository";
 import { redactSensitiveText } from "../privacy/pii";
-import { evaluateVisaRules } from "../rules/visa-rules";
+import { evaluateVisaRulesWithDbFallback } from "../rules/visa-rule-engine";
 
 // 도구 호출 결과 (UI에서 시각화)
 export interface ToolResult {
@@ -194,7 +194,7 @@ const getDocumentsTool: Tool = {
     required: ["visa_type"],
   },
   execute: async (args) => {
-    const evaluation = evaluateVisaRules({
+    const evaluation = await evaluateVisaRulesWithDbFallback({
       visa_type: args.visa_type,
       nationality: args.nationality,
     });
