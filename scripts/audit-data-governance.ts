@@ -116,6 +116,10 @@ const requiredMojPolicyDocs = [
   "moj-stay-management-policy",
   "moj-tax-health-arrears-extension-restriction",
   "moj-social-integration-program-kiip",
+  "moj-k-eta-entry-authorization",
+  "moj-k-eta-scam-warning",
+  "moj-e-arrival-card",
+  "moj-e-arrival-card-notice",
 ];
 for (const docId of requiredMojPolicyDocs) {
   const doc = KNOWLEDGE_DOCS.find((item) => item.id === docId);

@@ -60,6 +60,10 @@ try {
     "moj-stay-management-policy",
     "moj-tax-health-arrears-extension-restriction",
     "moj-social-integration-program-kiip",
+    "moj-k-eta-entry-authorization",
+    "moj-k-eta-scam-warning",
+    "moj-e-arrival-card",
+    "moj-e-arrival-card-notice",
     "accredited-university",
     "visa-portal-visa-types",
   ];

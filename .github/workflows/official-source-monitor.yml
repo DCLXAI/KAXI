@@ -46,6 +46,8 @@ jobs:
             source_ids: moj-skilled-worker-points-visa,moj-seasonal-worker-program,moj-online-stay-visa-center
           - batch: moj-stay-compliance
             source_ids: moj-stay-management-policy,moj-tax-health-arrears-extension-restriction,moj-social-integration-program-kiip
+          - batch: moj-entry-procedure
+            source_ids: moj-k-eta-entry-authorization,moj-k-eta-scam-warning,moj-e-arrival-card,moj-e-arrival-card-notice
           - batch: study-visa-portal
             source_ids: accredited-university,visa-portal-visa-types
     env:

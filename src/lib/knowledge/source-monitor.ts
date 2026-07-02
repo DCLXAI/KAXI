@@ -68,6 +68,11 @@ const MOJ_ONLINE_STAY_VISA_CENTER_URL = "https://www.immigration.go.kr/moj/198/s
 const MOJ_STAY_MANAGEMENT_POLICY_URL = "https://www.immigration.go.kr/immigration/1515/subview.do";
 const MOJ_TAX_HEALTH_ARREARS_EXTENSION_URL = "https://www.immigration.go.kr/immigration/1522/subview.do";
 const MOJ_SOCIAL_INTEGRATION_PROGRAM_URL = "https://www.immigration.go.kr/moj/369/subview.do";
+const MOJ_K_ETA_URL = "https://www.immigration.go.kr/immigration/3339/subview.do";
+const MOJ_K_ETA_SCAM_WARNING_URL = "https://www.immigration.go.kr/bbs/immigration/220/597906/artclView.do";
+const MOJ_E_ARRIVAL_CARD_URL = "https://www.immigration.go.kr/immigration/3509/subview.do";
+const MOJ_E_ARRIVAL_NOTICE_URL =
+  "https://www.immigration.go.kr/bbs/immigration/224/592036/artclView.do?layout=unknown";
 const STUDY_IN_KOREA_CERTIFIED_UNIVERSITY_URL =
   "https://studyinkorea.go.kr/ko/plan/certifiedUniversity.do";
 const VISA_PORTAL_VISA_TYPES_URL = "https://www.visa.go.kr/openPage.do?LANG_TYPE=EN&MENU_ID=10102";
@@ -338,6 +343,46 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     legalPriority: 4,
     monitorCadence: "daily",
     changeSignals: ["kiip", "permanent_residence", "naturalization", "points", "course_hours", "pre_test_fee"],
+  },
+  {
+    docId: "moj-k-eta-entry-authorization",
+    title: "법무부 전자여행허가제(K-ETA)",
+    sourceUrl: MOJ_K_ETA_URL,
+    sourceType: "official_government",
+    topic: "process",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["k_eta", "visa_free_entry", "fee", "validity", "exemption", "boarding_requirement", "official_site"],
+  },
+  {
+    docId: "moj-k-eta-scam-warning",
+    title: "K-ETA 유사 웹사이트 주의",
+    sourceUrl: MOJ_K_ETA_SCAM_WARNING_URL,
+    sourceType: "official_government",
+    topic: "warning",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["unofficial_site", "agency_warning", "official_website", "mobile_app", "scam_warning"],
+  },
+  {
+    docId: "moj-e-arrival-card",
+    title: "법무부 전자입국신고서(e-Arrival card)",
+    sourceUrl: MOJ_E_ARRIVAL_CARD_URL,
+    sourceType: "official_government",
+    topic: "process",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["e_arrival_card", "arrival_card", "submission_window", "exemption", "paper_card_transition", "fee"],
+  },
+  {
+    docId: "moj-e-arrival-card-notice",
+    title: "전자입국신고서 제도 시행 알림",
+    sourceUrl: MOJ_E_ARRIVAL_NOTICE_URL,
+    sourceType: "official_government",
+    topic: "process",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["effective_date", "submission_window", "exemptions", "group_submission", "paper_card_transition"],
   },
   {
     docId: "accredited-university",
