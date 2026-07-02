@@ -450,6 +450,8 @@ function officialSummaryDocScore(question: string, doc: KnowledgeDoc, lang: Lang
   const wantsDocuments = /서류|제출|첨부|체크리스트|신청|document|checklist|forms|hồ sơ/i.test(question);
   const wantsExtension = /연장|체류기간|extend|extension|gia hạn/i.test(question);
   const wantsFreshness = asksForFreshness(question);
+  const asksKeta = /k[-\s]?eta|전자여행허가/i.test(question);
+  const asksEArrival = /e[-\s]?arrival|전자입국신고|arrival card|입국신고서/i.test(question);
 
   for (const word of words) {
     if (haystack.includes(word)) score += 0.75;
@@ -476,6 +478,16 @@ function officialSummaryDocScore(question: string, doc: KnowledgeDoc, lang: Lang
   }
   if (/수수료|비용|처리기간|fee|cost|payment/i.test(question)) {
     if (/수수료|비용|fee|cost|payment/i.test(haystack)) score += 5;
+  }
+  if (asksKeta) {
+    if (doc.id === "moj-k-eta-entry-authorization") score += 30;
+    if (doc.id === "moj-k-eta-scam-warning") score += 12;
+    if (!/k[-_ ]?eta|전자여행허가/i.test(haystack)) score -= 4;
+  }
+  if (asksEArrival) {
+    if (doc.id === "moj-e-arrival-card") score += 30;
+    if (doc.id === "moj-e-arrival-card-notice") score += 18;
+    if (!/e[-_ ]?arrival|전자입국신고|arrival card|입국신고서/i.test(haystack)) score -= 4;
   }
 
   if (doc.id === "immigration-law-recent-promulgations") {
