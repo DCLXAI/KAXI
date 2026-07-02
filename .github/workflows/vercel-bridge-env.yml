@@ -33,6 +33,10 @@ jobs:
       AI_AGENT_DAILY_QUOTA: "0"
       AI_CONSULT_RATE_LIMIT: "0"
       AI_CONSULT_DAILY_QUOTA: "0"
+      AI_CONSULT_REMOTE_BRIDGE_TIMEOUT_MS: "40000"
+      AI_CONSULT_CODEX_MAX_DOCS: "5"
+      AI_CONSULT_CODEX_DOC_CHARS: "650"
+      AI_CONSULT_CODEX_CONTEXT_CHARS: "5500"
       DEPLOY_AFTER_UPDATE: ${{ inputs.deploy }}
       NEXTAUTH_URL: https://kaxi.vercel.app
       NEXTAUTH_URL_INTERNAL: https://kaxi.vercel.app
@@ -85,6 +89,10 @@ jobs:
           update_env "AI_AGENT_DAILY_QUOTA" "$AI_AGENT_DAILY_QUOTA"
           update_env "AI_CONSULT_RATE_LIMIT" "$AI_CONSULT_RATE_LIMIT"
           update_env "AI_CONSULT_DAILY_QUOTA" "$AI_CONSULT_DAILY_QUOTA"
+          update_env "AI_CONSULT_REMOTE_BRIDGE_TIMEOUT_MS" "$AI_CONSULT_REMOTE_BRIDGE_TIMEOUT_MS"
+          update_env "AI_CONSULT_CODEX_MAX_DOCS" "$AI_CONSULT_CODEX_MAX_DOCS"
+          update_env "AI_CONSULT_CODEX_DOC_CHARS" "$AI_CONSULT_CODEX_DOC_CHARS"
+          update_env "AI_CONSULT_CODEX_CONTEXT_CHARS" "$AI_CONSULT_CODEX_CONTEXT_CHARS"
 
       - name: Pull Vercel production environment
         if: ${{ env.DEPLOY_AFTER_UPDATE == 'true' }}

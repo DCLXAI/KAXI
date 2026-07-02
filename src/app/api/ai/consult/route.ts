@@ -229,6 +229,7 @@ async function generateExpertAnswer(
         .map((d, i) => `[문서 ${i + 1}] ${pickLangText(d.title, lang)}\n${pickLangText(d.content, lang)}\n출처: ${d.source}`)
         .join("\n\n---\n\n")
     : "(관련 공식 문서가 검색되지 않음 — 일반 지식으로 답변시 명확히 표시)";
+  const codexContext = buildCompactCodexContext(docs, lang);
 
   const systemPrompt = `당신은 KAXI의 ${modeConfig.role}입니다. 한국 유학 준비생에게 전문적이고 정확한 행정·법률 정보를 제공합니다.
 
@@ -287,7 +288,7 @@ ${context}
     modeConfig,
     dangerSignals,
     needsHumanExpert,
-    context,
+    context: codexContext,
     sourceNotice,
   });
 
@@ -298,7 +299,10 @@ ${context}
         lang,
         history: [],
         requestIp,
-        timeoutMs: parsePositiveInt(process.env.CODEX_REMOTE_BRIDGE_TIMEOUT_MS, 55_000),
+        timeoutMs: Math.min(
+          parsePositiveInt(process.env.AI_CONSULT_REMOTE_BRIDGE_TIMEOUT_MS, 40_000),
+          parsePositiveInt(process.env.CODEX_REMOTE_BRIDGE_TIMEOUT_MS, 55_000)
+        ),
       });
       const answer = result.answer.trim();
       if (!answer) throw new Error("Remote Codex bridge returned an empty answer");
@@ -386,6 +390,35 @@ ${context}
       backend: "official-summary",
     };
   }
+}
+
+function buildCompactCodexContext(docs: KnowledgeDoc[], lang: Lang): string {
+  if (docs.length === 0) return "(no official source matched)";
+
+  const maxDocs = parsePositiveInt(process.env.AI_CONSULT_CODEX_MAX_DOCS, 5);
+  const maxDocChars = parsePositiveInt(process.env.AI_CONSULT_CODEX_DOC_CHARS, 650);
+  const maxTotalChars = parsePositiveInt(process.env.AI_CONSULT_CODEX_CONTEXT_CHARS, 5_500);
+  const lines: string[] = [];
+
+  for (const [index, doc] of docs.slice(0, Math.max(1, maxDocs)).entries()) {
+    const meta = getRagDocumentMetadata(doc, lang);
+    const content = pickLangText(doc.content, lang);
+    lines.push(
+      [
+        `[문서 ${index + 1}] ${pickLangText(doc.title, lang)}`,
+        `출처: ${doc.source}`,
+        meta?.last_checked_at ? `확인일: ${meta.last_checked_at}` : "",
+        content.length > maxDocChars ? `${content.slice(0, maxDocChars)}\n...[truncated]` : content,
+      ]
+        .filter(Boolean)
+        .join("\n")
+    );
+
+    if (lines.join("\n\n---\n\n").length >= maxTotalChars) break;
+  }
+
+  const joined = lines.join("\n\n---\n\n");
+  return joined.length > maxTotalChars ? `${joined.slice(0, maxTotalChars)}\n...[truncated]` : joined;
 }
 
 function buildCodexConsultPrompt({
