@@ -17,6 +17,8 @@ const IMMIGRATION_PERMANENT_RESIDENCE_DOC_ID = "immigration-decree-permanent-res
 const IMMIGRATION_PERMISSION_DOC_ID = "immigration-act-permission-matrix";
 const IMMIGRATION_GENERAL_STAY_STATUS_DOC_ID = "immigration-act-general-stay-status";
 const IMMIGRATION_PERMANENT_RESIDENCE_STATUS_DOC_ID = "immigration-act-permanent-residence-status";
+const IMMIGRATION_ENTRY_BAN_DOC_ID = "immigration-act-entry-ban";
+const IMMIGRATION_ENTRY_INSPECTION_DOC_ID = "immigration-act-entry-inspection";
 const IMMIGRATION_EMPLOYMENT_RESTRICTION_DOC_ID = "immigration-act-employment-restriction";
 const IMMIGRATION_OUTSIDE_STATUS_ACTIVITY_DOC_ID = "immigration-act-outside-status-activity";
 const IMMIGRATION_WORKPLACE_CHANGE_DOC_ID = "immigration-act-workplace-change-addition";
@@ -31,6 +33,8 @@ const IMMIGRATION_REENTRY_DOC_ID = "immigration-act-reentry-permit";
 const IMMIGRATION_ALIEN_REGISTRATION_DOC_ID = "immigration-act-alien-registration";
 const IMMIGRATION_REGISTRATION_CHANGE_DOC_ID = "immigration-act-registration-change-report";
 const IMMIGRATION_ADDRESS_CHANGE_DOC_ID = "immigration-act-address-change-report";
+const IMMIGRATION_DEPORTATION_GROUNDS_DOC_ID = "immigration-act-deportation-grounds";
+const IMMIGRATION_DEPARTURE_RECOMMENDATION_ORDER_DOC_ID = "immigration-act-departure-recommendation-order";
 const IMMIGRATION_REVIEW_CRITERIA_DOC_ID = "immigration-rule-stay-permission-review-criteria";
 const IMMIGRATION_ATTACHMENTS_DOC_ID = "immigration-rule-documents-attachments";
 const IMMIGRATION_FEES_DOC_ID = "immigration-rule-fees";
@@ -58,6 +62,15 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
   if (/단기|단기방문|단기취업|무사증|사증면제|관광|통과|입국|b-?1|b-?2|c-?1|c-?3|c-?4|short.?term|visa.?free|waiver|tourist|transit/.test(text)) {
     priorityIds.push(IMMIGRATION_GENERAL_STAY_STATUS_DOC_ID, IMMIGRATION_SHORT_TERM_STATUS_DOC_ID);
     ids.add(IMMIGRATION_SHORT_TERM_STATUS_DOC_ID);
+  }
+  if (/입국금지|입국\s*거부|입국거부|입국불허|입국\s*제한|입국\s*금지|inadmissible|entry ban|refusal of entry|denied entry/.test(text)) {
+    priorityIds.push(IMMIGRATION_ENTRY_BAN_DOC_ID);
+    ids.add(IMMIGRATION_ENTRY_BAN_DOC_ID);
+  }
+  if (/입국심사|입국\s*심사|입국목적|입국\s*목적|사전여행허가|전자여행허가|k-?eta|entry inspection|entry purpose|arrival inspection/.test(text)) {
+    priorityIds.push(IMMIGRATION_ENTRY_INSPECTION_DOC_ID, IMMIGRATION_ENTRY_BAN_DOC_ID);
+    ids.add(IMMIGRATION_ENTRY_INSPECTION_DOC_ID);
+    ids.add(IMMIGRATION_ENTRY_BAN_DOC_ID);
   }
   if (/영주|영주권|f-?5|permanent|residence/.test(text)) {
     priorityIds.push(IMMIGRATION_PERMANENT_RESIDENCE_STATUS_DOC_ID, IMMIGRATION_PERMANENT_RESIDENCE_DOC_ID);
@@ -121,9 +134,15 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
   if (/수수료|비용|처리기간|납부|fee|cost|payment/.test(text)) {
     ids.add(IMMIGRATION_FEES_DOC_ID);
   }
+  if (/강제퇴거|퇴거명령|추방|출국명령|출국권고|자진출국|출국기한|이행보증금|removal|deportation|departure order|departure recommendation|voluntary departure/.test(text)) {
+    priorityIds.push(IMMIGRATION_DEPORTATION_GROUNDS_DOC_ID, IMMIGRATION_DEPARTURE_RECOMMENDATION_ORDER_DOC_ID);
+    ids.add(IMMIGRATION_DEPORTATION_GROUNDS_DOC_ID);
+    ids.add(IMMIGRATION_DEPARTURE_RECOMMENDATION_ORDER_DOC_ID);
+  }
   if (/불법|허위|위조|무허가|강제퇴거|입국금지|overstay|fake|illegal|deport/.test(text)) {
     ids.add(IMMIGRATION_PERMISSION_DOC_ID);
     ids.add(IMMIGRATION_VIOLATION_DOC_ID);
+    ids.add(IMMIGRATION_DEPORTATION_GROUNDS_DOC_ID);
   }
 
   const orderedPriorityIds = priorityIds.filter((id, index) => priorityIds.indexOf(id) === index);

@@ -21,6 +21,8 @@ const TEST_QUERIES = [
   { q: "F-5 영주권 기본 법령 요건은 뭐야?", expect: "immigration-decree-permanent-residence-table" },
   { q: "단기체류자격과 장기체류자격은 90일 기준으로 어떻게 달라?", expect: "immigration-act-general-stay-status" },
   { q: "F-5 영주자격은 활동범위와 체류기간 제한을 받지 않아?", expect: "immigration-act-permanent-residence-status" },
+  { q: "과거 강제퇴거 이력이 있으면 입국금지 사유가 될 수 있어?", expect: "immigration-act-entry-ban" },
+  { q: "입국심사에서 입국목적과 체류자격을 확인해?", expect: "immigration-act-entry-inspection" },
   { q: "취업 가능한 체류자격이 아니어도 한국에서 일할 수 있어?", expect: "immigration-act-employment-restriction" },
   { q: "D-2 유학생이 아르바이트하려면 체류자격외활동허가가 필요해?", expect: "immigration-act-outside-status-activity" },
   { q: "E-7 근무처를 바꾸거나 추가하면 허가나 신고가 필요해?", expect: "immigration-act-workplace-change-addition" },
@@ -34,6 +36,8 @@ const TEST_QUERIES = [
   { q: "입국 후 외국인등록은 언제까지 해야 해?", expect: "immigration-act-alien-registration" },
   { q: "여권 갱신하면 외국인등록사항 변경신고 해야 해?", expect: "immigration-act-registration-change-report" },
   { q: "이사했는데 체류지 변경신고 기한은?", expect: "immigration-act-address-change-report" },
+  { q: "무허가취업이나 허위서류가 강제퇴거 사유가 될 수 있어?", expect: "immigration-act-deportation-grounds" },
+  { q: "출국권고를 받고도 안 나가면 출국명령이나 강제퇴거로 갈 수 있어?", expect: "immigration-act-departure-recommendation-order" },
   { q: "재입국허가 기간 안에 못 들어가면 어떻게 해?", expect: "immigration-act-reentry-permit" },
 ];
 

@@ -78,10 +78,17 @@ const LAW_ACT_GENERAL_STAY_STATUS_URL =
   "https://www.law.go.kr/LSW/lsLawLinkInfo.do?chrClsCd=010202&lsJoLnkSeq=1000817596";
 const LAW_ACT_PERMANENT_RESIDENCE_STATUS_URL =
   "https://www.law.go.kr/LSW/lsLawLinkInfo.do?chrClsCd=010202&lsJoLnkSeq=1000817607";
+const LAW_ACT_ENTRY_BAN_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0011&lsiSeq=272921&urlMode=lsScJoRltInfoR";
+const LAW_ACT_ENTRY_INSPECTION_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0012&lsiSeq=272921&urlMode=lsScJoRltInfoR";
 const LAW_ACT_MARRIAGE_IMMIGRANT_EXTENSION_SPECIAL_URL =
   "https://www.law.go.kr/LSW/lsLawLinkInfo.do?chrClsCd=010202&lsJoLnkSeq=1000822759";
 const LAW_ACT_EMERGENCY_EXTENSION_SPECIAL_URL =
   "https://www.law.go.kr/LSW/lsRvsDocListP.do?chrClsCd=010202&lsId=001707&lsRvsGubun=all";
+const LAW_ACT_DEPORTATION_GROUNDS_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0046&lsiSeq=272921&urlMode=lsScJoRltInfoR";
+const LAW_ACT_DEPARTURE_RECOMMENDATION_ORDER_URL = LAW_ACT_URL;
 const LAW_DECREE_SHORT_TERM_STATUS_TABLE_URL =
   "https://www.law.go.kr/LSW/lsBylInfoPLinkR.do?lsiSeq=271319&lsNm=%EC%B6%9C%EC%9E%85%EA%B5%AD%EA%B4%80%EB%A6%AC%EB%B2%95+%EC%8B%9C%ED%96%89%EB%A0%B9&bylNo=0001&bylBrNo=00&bylCls=BE&bylEfYd=20250601&bylEfYdYn=Y";
 const LAW_DECREE_LONG_TERM_STATUS_TABLE_URL =
@@ -236,6 +243,26 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     changeSignals: ["permanent_residence", "f5", "conduct", "livelihood", "basic_knowledge", "relaxation"],
   },
   {
+    docId: "immigration-act-entry-ban",
+    title: "출입국관리법 제11조 입국의 금지 등",
+    sourceUrl: LAW_ACT_ENTRY_BAN_URL,
+    sourceType: "official_law",
+    topic: "warning",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["entry_ban", "refusal_of_entry", "public_safety", "deportation_history", "stay_cost"],
+  },
+  {
+    docId: "immigration-act-entry-inspection",
+    title: "출입국관리법 제12조 입국심사",
+    sourceUrl: LAW_ACT_ENTRY_INSPECTION_URL,
+    sourceType: "official_law",
+    topic: "process",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["entry_inspection", "valid_passport", "visa", "entry_purpose", "k_eta", "stay_period"],
+  },
+  {
     docId: "immigration-act-status-grant",
     title: "출입국관리법 제23조 체류자격 부여",
     sourceUrl: LAW_ACT_STATUS_GRANT_URL,
@@ -324,6 +351,26 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     legalPriority: 1,
     monitorCadence: "daily",
     changeSignals: ["address_change", "place_of_stay", "moving", "15_days", "online_report", "mobile_arc"],
+  },
+  {
+    docId: "immigration-act-deportation-grounds",
+    title: "출입국관리법 제46조 강제퇴거의 대상자",
+    sourceUrl: LAW_ACT_DEPORTATION_GROUNDS_URL,
+    sourceType: "official_law",
+    topic: "warning",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["deportation", "removal", "unauthorized_work", "false_documents", "alien_registration_violation", "f5_exception"],
+  },
+  {
+    docId: "immigration-act-departure-recommendation-order",
+    title: "출입국관리법 제67조·제68조 출국권고·출국명령",
+    sourceUrl: LAW_ACT_DEPARTURE_RECOMMENDATION_ORDER_URL,
+    sourceType: "official_law",
+    topic: "warning",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["departure_recommendation", "departure_order", "departure_deadline", "performance_bond", "deportation_order"],
   },
   {
     docId: "immigration-decree-current-text",
