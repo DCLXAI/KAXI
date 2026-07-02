@@ -27,8 +27,6 @@ process.env.NEXTAUTH_URL_INTERNAL = normalizePublicUrl(process.env.NEXTAUTH_URL_
 
 const codexCliTrace = [
   "./node_modules/@openai/codex/bin/codex.js",
-  "./node_modules/@openai/codex-linux-x64/**/*",
-  "./node_modules/@openai/codex-linux-arm64/**/*",
 ];
 
 const onnxRuntimeNodeTrace = [
