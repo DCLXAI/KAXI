@@ -5,12 +5,12 @@ import {
 } from "../data/knowledge";
 
 const BASE_IMMIGRATION_LEGAL_DOC_IDS = [
-  "immigration-law-recent-promulgations",
   "immigration-law-interpretation-hierarchy",
   "immigration-act-stay-status-scope",
   "immigration-decree-current-text",
 ] as const;
 
+const IMMIGRATION_RECENT_PROMULGATIONS_DOC_ID = "immigration-law-recent-promulgations";
 const IMMIGRATION_STATUS_DOC_ID = "immigration-decree-long-term-status-table";
 const IMMIGRATION_PERMISSION_DOC_ID = "immigration-act-permission-matrix";
 const IMMIGRATION_ATTACHMENTS_DOC_ID = "immigration-rule-documents-attachments";
@@ -34,6 +34,9 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
   const ids = new Set<string>(BASE_IMMIGRATION_LEGAL_DOC_IDS);
   ids.add(IMMIGRATION_STATUS_DOC_ID);
 
+  if (/최신|최근공포|시행일|시행예정|개정|변경된|바뀐|현행|current|recent|updated|amended|effective date/.test(text)) {
+    ids.add(IMMIGRATION_RECENT_PROMULGATIONS_DOC_ID);
+  }
   if (/변경|연장|자격외|근무처|외국인등록|등록|신고|취업|일|change|extend|extension|work|registration/.test(text)) {
     ids.add(IMMIGRATION_PERMISSION_DOC_ID);
   }

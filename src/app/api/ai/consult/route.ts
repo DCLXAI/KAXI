@@ -367,7 +367,7 @@ ${context}
     }
     // 폴백: 검색된 문서를 직접 조합
     const fallback = docs.length > 0
-      ? `## ${pickLangText(docs[0].title, lang)}\n\n${pickLangText(docs[0].content, lang)}\n\n📚 출처: ${docs[0].source}`
+      ? buildOfficialSummaryFallback(question, docs, lang, sourceNotice)
       : {
           ko: "관련 공식 문서를 충분히 찾지 못했습니다. 비자·체류, 서류, 거절 대응, 유학원 운영 중 어느 영역인지 조금 더 구체적으로 알려주세요. 개별 사례의 판단·서류 작성·제출 대행은 행정사 상담을 권장합니다.",
           vi: "Chưa tìm thấy đủ tài liệu chính thức liên quan. Hãy cho biết rõ hơn về visa/lưu trú, hồ sơ, kháng từ chối, hoặc vận hành tư vấn du học. Trường hợp cá nhân nên tư vấn luật sư hành chính.",
@@ -390,6 +390,88 @@ ${context}
       backend: "official-summary",
     };
   }
+}
+
+function asksForFreshness(question: string): boolean {
+  return /최신|최근공포|시행일|시행예정|개정|변경된|바뀐|현행|current|recent|updated|amended|effective date/i.test(
+    question
+  );
+}
+
+function officialSummaryDocScore(question: string, doc: KnowledgeDoc, lang: Lang): number {
+  const q = question.toLowerCase();
+  const title = pickLangText(doc.title, lang).toLowerCase();
+  const content = pickLangText(doc.content, lang).slice(0, 1200).toLowerCase();
+  const haystack = `${doc.id} ${title} ${doc.keywords.join(" ")} ${content}`.toLowerCase();
+  const words = q.split(/\s+/).filter((word) => word.length > 1);
+
+  let score = 0;
+
+  for (const word of words) {
+    if (haystack.includes(word)) score += 0.75;
+  }
+
+  for (const visaType of ["d-2", "d2", "d-4", "d4", "d-10", "d10", "e-7", "e7", "f-2", "f2", "f-5", "f5"]) {
+    if (q.includes(visaType) && haystack.includes(visaType)) score += 6;
+  }
+
+  if (/서류|제출|첨부|체크리스트|신청|document|checklist|forms|hồ sơ/i.test(question)) {
+    if (/서류|첨부|체크리스트|통합신청서|documents|attachments|forms|checklist/i.test(haystack)) score += 7;
+  }
+  if (/연장|체류기간|extend|extension|gia hạn/i.test(question)) {
+    if (/연장|체류기간|허가|permission|extension|stay-extension/i.test(haystack)) score += 6;
+  }
+  if (/변경|전환|change|transfer/i.test(question)) {
+    if (/변경|전환|change|transfer|permission/i.test(haystack)) score += 5;
+  }
+  if (/수수료|비용|처리기간|fee|cost|payment/i.test(question)) {
+    if (/수수료|비용|fee|cost|payment/i.test(haystack)) score += 5;
+  }
+
+  if (doc.id === "immigration-law-recent-promulgations") {
+    score += asksForFreshness(question) ? 6 : -8;
+  }
+  if (doc.id === "immigration-law-interpretation-hierarchy") score += 1;
+
+  return score;
+}
+
+function buildOfficialSummaryFallback(
+  question: string,
+  docs: KnowledgeDoc[],
+  lang: Lang,
+  sourceNotice: string
+): string {
+  const prioritized = docs
+    .map((doc) => ({ doc, score: officialSummaryDocScore(question, doc, lang) }))
+    .sort((a, b) => b.score - a.score)
+    .map(({ doc }) => doc)
+    .slice(0, 5);
+
+  const sections = prioritized
+    .map((doc, index) => {
+      const meta = getRagDocumentMetadata(doc, lang);
+      const content = pickLangText(doc.content, lang).replace(/\s+/g, " ").trim();
+      const excerpt = content.length > 520 ? `${content.slice(0, 520)}...` : content;
+      const checked = meta?.last_checked_at ? `\n확인일: ${meta.last_checked_at}` : "";
+      return `### ${index + 1}. ${pickLangText(doc.title, lang)}\n\n${excerpt}\n\n출처: ${doc.source}${checked}`;
+    })
+    .join("\n\n");
+
+  const sourceList = prioritized
+    .map((doc) => `- ${pickLangText(doc.title, lang)} — ${doc.source}`)
+    .join("\n");
+
+  return `## 공식 근거 기반 요약
+
+검색된 승인 문서를 기준으로 질문과 가까운 근거를 먼저 정리했습니다. 개별 체류 이력, 학교 상태, 만료일, 재정 상황에 따라 요구 서류가 달라질 수 있으므로 접수 전 원문 확인과 행정사 검토가 필요합니다.
+
+${sections}
+
+📚 출처:
+${sourceList}
+
+${sourceNotice}`;
 }
 
 function buildCompactCodexContext(docs: KnowledgeDoc[], lang: Lang): string {

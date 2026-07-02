@@ -293,6 +293,59 @@ async function testConsultRouteDoesNotRequireSharedLimiterWhenDisabled() {
   }
 }
 
+async function testConsultOfficialSummaryPrioritizesQuestionDocuments() {
+  const snapshot = { ...process.env };
+  try {
+    Object.assign(process.env, {
+      NODE_ENV: "production",
+      VERCEL_ENV: "production",
+      VERCEL: "1",
+      DATABASE_URL: "file:./db/custom.db",
+      RATE_LIMIT_BACKEND: "auto",
+      AI_CONSULT_RATE_LIMIT: "0",
+      AI_CONSULT_DAILY_QUOTA: "0",
+      AI_CONSULT_BACKEND: "zai",
+      AI_EMBEDDING_INIT_TIMEOUT_MS: "1",
+      AI_LLM_TIMEOUT_MS: "1000",
+      ZAI_ENABLED: "false",
+    });
+    delete process.env.TURSO_DATABASE_URL;
+    delete process.env.TURSO_AUTH_TOKEN;
+    delete process.env.DATABASE_AUTH_TOKEN;
+    delete process.env.DATA_ENCRYPTION_KEY;
+
+    const route = await import("../src/app/api/ai/consult/route");
+    const req = new NextRequest("https://kaxi.local/api/ai/consult", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-forwarded-for": "203.0.113.78",
+      },
+      body: JSON.stringify({
+        question: "D-2 비자 연장에 필요한 핵심 서류는 뭐야?",
+        lang: "ko",
+        history: [],
+        mode: "documents",
+      }),
+    });
+    const res = await route.POST(req);
+    const body = await res.json();
+    const answer = String(body.answer || "");
+
+    if (res.status !== 200 || body.backend !== "official-summary" || !answer) {
+      fail(`consult route should return official-summary fallback: status=${res.status} body=${JSON.stringify(body)}`);
+    }
+    if (!/서류|첨부|체류기간 연장|제출/.test(answer)) {
+      fail(`consult official summary should prioritize document/extension sources: ${answer.slice(0, 600)}`);
+    }
+    if (/^## 출입국관리법 최근공포/.test(answer.trim())) {
+      fail(`consult official summary should not lead with recent promulgation monitor: ${answer.slice(0, 600)}`);
+    }
+  } finally {
+    restoreEnv(snapshot);
+  }
+}
+
 async function testConsultRouteUsesRemoteCodexBridge() {
   const snapshot = { ...process.env };
   let seenBody = "";
@@ -467,6 +520,7 @@ await testFallbackPartnerRequestStaysDraft();
 await testAgentStatusRoute();
 await testRemoteBridgeFailureFallsBackToTools();
 await testConsultRouteDoesNotRequireSharedLimiterWhenDisabled();
+await testConsultOfficialSummaryPrioritizesQuestionDocuments();
 await testConsultRouteUsesRemoteCodexBridge();
 testAgentMetaDoesNotEchoPii();
 testAgentMetaClarifyingQuestions();
