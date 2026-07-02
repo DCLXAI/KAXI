@@ -23,6 +23,9 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+      PRISMA_DATABASE_URL: ${{ secrets.PRISMA_DATABASE_URL }}
       CODEX_REMOTE_BRIDGE_TOKEN: ${{ secrets.CODEX_REMOTE_BRIDGE_TOKEN }}
       BRIDGE_URL: ${{ inputs.bridge_url }}
       CODEX_REMOTE_BRIDGE_URL: ${{ inputs.bridge_url }}
@@ -50,6 +53,10 @@ jobs:
             echo "VERCEL_TOKEN, VERCEL_ORG_ID, and VERCEL_PROJECT_ID are required."
             exit 1
           fi
+          if [ -z "$DATABASE_URL" ] && [ -z "$POSTGRES_URL" ]; then
+            echo "DATABASE_URL or POSTGRES_URL GitHub secret is required for production migrations."
+            exit 1
+          fi
           if [ -z "$CODEX_REMOTE_BRIDGE_TOKEN" ]; then
             echo "CODEX_REMOTE_BRIDGE_TOKEN secret is required."
             exit 1
@@ -58,6 +65,9 @@ jobs:
             echo "bridge_url must be an https URL."
             exit 1
           fi
+          [ -z "$DATABASE_URL" ] || echo "::add-mask::$DATABASE_URL"
+          [ -z "$POSTGRES_URL" ] || echo "::add-mask::$POSTGRES_URL"
+          [ -z "$PRISMA_DATABASE_URL" ] || echo "::add-mask::$PRISMA_DATABASE_URL"
           echo "::add-mask::$CODEX_REMOTE_BRIDGE_TOKEN"
 
       - uses: actions/checkout@v4
@@ -95,6 +105,9 @@ jobs:
           update_env "AI_CONSULT_CODEX_DOC_CHARS" "$AI_CONSULT_CODEX_DOC_CHARS"
           update_env "AI_CONSULT_CODEX_CONTEXT_CHARS" "$AI_CONSULT_CODEX_CONTEXT_CHARS"
           update_env "DOCUMENT_UPLOAD_STORAGE_BACKEND" "$DOCUMENT_UPLOAD_STORAGE_BACKEND"
+          [ -z "$DATABASE_URL" ] || update_env "DATABASE_URL" "$DATABASE_URL"
+          [ -z "$POSTGRES_URL" ] || update_env "POSTGRES_URL" "$POSTGRES_URL"
+          [ -z "$PRISMA_DATABASE_URL" ] || update_env "PRISMA_DATABASE_URL" "$PRISMA_DATABASE_URL"
 
       - name: Pull Vercel production environment
         if: ${{ env.DEPLOY_AFTER_UPDATE == 'true' }}

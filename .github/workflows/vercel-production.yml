@@ -12,6 +12,9 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+      PRISMA_DATABASE_URL: ${{ secrets.PRISMA_DATABASE_URL }}
       NEXTAUTH_URL: https://kaxi.vercel.app
       NEXTAUTH_URL_INTERNAL: https://kaxi.vercel.app
       KAXI_PRISMA_PROVIDER: postgresql
@@ -21,6 +24,17 @@ jobs:
         run: |
           echo "VERCEL_TOKEN, VERCEL_ORG_ID, and VERCEL_PROJECT_ID are required for production deployment."
           exit 1
+      - name: Require production database secrets
+        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' && env.DATABASE_URL == '' && env.POSTGRES_URL == '' }}
+        run: |
+          echo "DATABASE_URL or POSTGRES_URL GitHub secret is required for production migrations."
+          exit 1
+      - name: Mask production database secrets
+        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
+        run: |
+          [ -z "$DATABASE_URL" ] || echo "::add-mask::$DATABASE_URL"
+          [ -z "$POSTGRES_URL" ] || echo "::add-mask::$POSTGRES_URL"
+          [ -z "$PRISMA_DATABASE_URL" ] || echo "::add-mask::$PRISMA_DATABASE_URL"
       - uses: actions/checkout@v4
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
       - uses: oven-sh/setup-bun@v2
