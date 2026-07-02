@@ -66,6 +66,9 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
     ids.add(IMMIGRATION_SHORT_TERM_STATUS_DOC_ID);
   }
   if (/사증|비자|여권|무사증|사증면제|재입국허가|외국인입국허가|visa|valid passport|visa.?free|visa waiver|re-?entry permit/.test(text)) {
+    if (/여권|무사증|사증면제|외국인입국허가|valid passport|visa.?free|visa waiver/.test(text)) {
+      priorityIds.unshift(IMMIGRATION_VISA_PASSPORT_REQUIREMENT_DOC_ID);
+    }
     ids.add(IMMIGRATION_VISA_PASSPORT_REQUIREMENT_DOC_ID);
   }
   if (/사증발급인정서|비자발급인정서|사증\s*발급|단수사증|복수사증|초청인|초청자|대리\s*신청|visa issuance certificate|certificate for confirmation of visa issuance|ccvi|single visa|multiple visa|inviter|sponsor/.test(text)) {
@@ -127,6 +130,7 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
     ids.add(IMMIGRATION_EMERGENCY_EXTENSION_SPECIAL_DOC_ID);
   }
   if (/재입국|re-?entry|reentry/.test(text)) {
+    priorityIds.unshift(IMMIGRATION_REENTRY_DOC_ID);
     ids.add(IMMIGRATION_REENTRY_DOC_ID);
   }
   if (/외국인등록|등록증|arc|alien registration/.test(text)) {
