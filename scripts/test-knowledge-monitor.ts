@@ -29,9 +29,34 @@ const {
   approveKnowledgeDocument,
   listApprovedKnowledgeDocsForRag,
 } = await import("../src/lib/knowledge/repository");
-const { runOfficialKnowledgeSourceMonitor } = await import("../src/lib/knowledge/source-monitor");
+const {
+  OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST,
+  runOfficialKnowledgeSourceMonitor,
+} = await import("../src/lib/knowledge/source-monitor");
 
 try {
+  const requiredWatchlistIds = [
+    "immigration-law-recent-promulgations",
+    "immigration-act-stay-status-scope",
+    "immigration-decree-current-text",
+    "immigration-decree-long-term-status-table",
+    "immigration-rule-documents-attachments",
+    "hikorea-homepage-urgent-notices",
+    "hikorea-integrated-status-manual",
+    "hikorea-policy-notice-monitor",
+    "moj-immigration-policy-news",
+  ];
+  for (const docId of requiredWatchlistIds) {
+    const source = OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST.find((item) => item.docId === docId);
+    assert(source, `official watchlist missing required source: ${docId}`);
+    assert(source.monitorCadence === "daily", `${docId} must be monitored daily`);
+    assert(source.sourceType.startsWith("official_"), `${docId} must use an official source type`);
+  }
+  assert(
+    OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST.some((item) => item.docId === "immigration-law-recent-promulgations" && item.legalPriority === 1),
+    "recent promulgation monitor must be top legal priority"
+  );
+
   const source: OfficialKnowledgeSource = {
     docId: "monitor-base-law-doc",
     title: "감시 대상 출입국 법령",

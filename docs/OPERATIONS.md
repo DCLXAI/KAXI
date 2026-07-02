@@ -24,7 +24,7 @@
 - `PRIVACY_CHATLOG_RETENTION_DAYS`, `PRIVACY_PARTNER_REQUEST_RETENTION_DAYS`, `PRIVACY_LEAD_RETENTION_DAYS`: Retention windows enforced by `/api/privacy/retention`.
 - `CRON_SECRET`: Required for Vercel Cron to call `/api/privacy/retention` and `/api/knowledge/monitor`.
 - `KNOWLEDGE_MONITOR_PERSIST_CANDIDATES`: Optional. Defaults to creating `PENDING` knowledge candidates from official-source changes. Set `false` to make `/api/knowledge/monitor` audit-only.
-- `KNOWLEDGE_MONITOR_SOURCE_IDS`, `KNOWLEDGE_MONITOR_MAX_SOURCES`: Optional controls for limiting the official immigration-law/HiKorea watchlist during incident response or staged rollout.
+- `KNOWLEDGE_MONITOR_SOURCE_IDS`, `KNOWLEDGE_MONITOR_MAX_SOURCES`: Optional controls for limiting the official immigration-law/HiKorea/MOJ watchlist during incident response or staged rollout.
 - `AGENT_BACKEND`: Agent backend selector. Defaults to `codex`; set `zai` only when explicit Z.ai settings are present.
 - `CODEX_AUTH_MODE`: `auto`, `local`, or `api-key`. `auto` uses the current local Codex CLI login in local dev and API-key mode on Vercel.
 - `CODEX_API_KEY`: Required on Vercel when `AGENT_BACKEND=codex`.
@@ -124,10 +124,10 @@ Visa, immigration, school-accreditation, and cost guidance are time-sensitive.
 9. Knowledge diff output must include impacted `ComplianceRuleVersion` rows and impacted chat/user records so operators know which rules and prior users may need follow-up after a source change.
 10. Each `School` row must include `sourceUrl`, `verifiedAt`, and `reviewAfter`; public school APIs hide rows past `reviewAfter`.
 11. Admins can inspect expired schools with `includeExpired=true` and reverify a school through `POST /api/schools/:id/review`.
-12. Immigration, visa, and stay-status answers must use a law-first hierarchy: Immigration Act, then Enforcement Decree stay-status tables, then Enforcement Rule attachment/fee rules, then HiKorea/manual operational guidance. HiKorea sources are official operational RAG sources, but they are not the final legal basis when a statute or regulation controls the issue.
-13. HiKorea sources cover the integrated stay-status manual, D-2/D-4/D-10/E-7/F-2/F-5 requirement checks, extension/change/outside-activity procedures, e-application/visit reservation, forms, fees/authentication cautions, and policy-change notices. Treat these as official RAG sources, but still route case-specific filing judgment to 1345, the competent immigration office, or an administrative-scrivener review.
-14. `/api/knowledge/monitor` checks the official watchlist for Immigration Act, Enforcement Decree/Rule, HiKorea manuals/procedures/forms/notices, and the Ministry of Justice immigration portal. Vercel Cron calls it daily; changed sources become `PENDING` candidates for admin review and approval before production RAG use.
-15. `bun run test:governance` verifies source metadata, required immigration-law RAG coverage, required HiKorea RAG coverage, school seed metadata, and automatic expiry filtering.
+12. Immigration, visa, and stay-status answers must use a law-first hierarchy: recent promulgation/effective-date check, Immigration Act, Enforcement Decree stay-status tables, Enforcement Rule attachment/fee rules, then HiKorea/manual operational guidance. HiKorea sources are official operational RAG sources, but they are not the final legal basis when a statute or regulation controls the issue.
+13. HiKorea sources cover the homepage urgent notices, integrated stay-status manual, D-2/D-4/D-10/E-7/F-2/F-5 requirement checks, extension/change/outside-activity procedures, e-application/visit reservation, forms, fees/authentication cautions, and policy-change notices. Treat these as official RAG sources, but still route case-specific filing judgment to 1345, the competent immigration office, or an administrative-scrivener review.
+14. `/api/knowledge/monitor` checks the official watchlist for recent Immigration Act/Decree/Rule promulgations and effective dates, current Immigration Act/Enforcement Decree/Enforcement Rule text, HiKorea homepage/manual/procedure/form/notice sources, and Ministry of Justice immigration policy news. Vercel Cron calls it daily; changed sources become `PENDING` candidates for admin review and approval before production RAG use.
+15. `bun run test:governance` verifies source metadata, required immigration-law RAG coverage, required HiKorea RAG coverage, required MOJ policy-news coverage, school seed metadata, and automatic expiry filtering.
 
 ## Admin Access
 

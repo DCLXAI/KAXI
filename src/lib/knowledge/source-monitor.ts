@@ -17,6 +17,9 @@ export interface OfficialKnowledgeSource {
   topic: KnowledgeDoc["category"];
   language?: string;
   jurisdiction?: "KR" | "KAXI";
+  legalPriority?: 1 | 2 | 3 | 4;
+  monitorCadence?: "daily" | "weekly" | "monthly";
+  changeSignals?: string[];
 }
 
 export interface OfficialKnowledgeMonitorResult {
@@ -43,15 +46,35 @@ export interface OfficialKnowledgeMonitorSummary {
 }
 
 const LAW_ACT_URL = "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=245973";
+const LAW_DECREE_URL = "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=271319";
 const LAW_RULE_URL = "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=283059";
+const LAW_RECENT_PROMULGATION_URL =
+  "https://www.law.go.kr/LSW/nwRvsLsPop.do?chrIdx=10&cptOfi=&lsKndCd=&lsNm=%EC%B6%9C%EC%9E%85%EA%B5%AD%EA%B4%80%EB%A6%AC%EB%B2%95&p_epubdt=&p_epubno=&p_spubdt=&p_spubno=&searchType=lsNm&sortIdx=0";
+const HIKOREA_HOME_URL = "https://www.hikorea.go.kr/index.html";
+const HIKOREA_STATUS_MANUAL_URL =
+  "https://www.hikorea.go.kr/board/BoardNtcDetailR.pt?BBS_GB_CD=BS10&BBS_SEQ=1&NTCCTT_SEQ=1062&page=1";
+const HIKOREA_NOTICE_URL = "https://www.hikorea.go.kr/board/BoardNtcListR.pt";
+const MOJ_MAJOR_NEWS_URL = "https://www.immigration.go.kr/immigration/3341/subview.do";
 
 export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
+  {
+    docId: "immigration-law-recent-promulgations",
+    title: "국가법령정보센터 출입국관리법 최근공포·시행일자",
+    sourceUrl: LAW_RECENT_PROMULGATION_URL,
+    sourceType: "official_law",
+    topic: "legal",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["new_promulgation", "effective_date", "law_number", "decree_or_rule_update"],
+  },
   {
     docId: "immigration-act-stay-status-scope",
     title: "출입국관리법 체류자격·활동범위",
     sourceUrl: LAW_ACT_URL,
     sourceType: "official_law",
     topic: "legal",
+    legalPriority: 1,
+    monitorCadence: "daily",
   },
   {
     docId: "immigration-act-permission-matrix",
@@ -59,6 +82,8 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     sourceUrl: LAW_ACT_URL,
     sourceType: "official_law",
     topic: "legal",
+    legalPriority: 1,
+    monitorCadence: "daily",
   },
   {
     docId: "immigration-law-violation-risk",
@@ -66,6 +91,17 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     sourceUrl: LAW_ACT_URL,
     sourceType: "official_law",
     topic: "warning",
+    legalPriority: 1,
+    monitorCadence: "daily",
+  },
+  {
+    docId: "immigration-decree-current-text",
+    title: "출입국관리법 시행령 최신 본문",
+    sourceUrl: LAW_DECREE_URL,
+    sourceType: "official_law",
+    topic: "legal",
+    legalPriority: 2,
+    monitorCadence: "daily",
   },
   {
     docId: "immigration-decree-long-term-status-table",
@@ -73,6 +109,8 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     sourceUrl: "https://www.law.go.kr/LSW/lsLawLinkInfo.do?lsJoLnkSeq=1000870036",
     sourceType: "official_law",
     topic: "legal",
+    legalPriority: 2,
+    monitorCadence: "daily",
   },
   {
     docId: "immigration-rule-documents-attachments",
@@ -80,6 +118,8 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     sourceUrl: LAW_RULE_URL,
     sourceType: "official_law",
     topic: "documents",
+    legalPriority: 3,
+    monitorCadence: "daily",
   },
   {
     docId: "immigration-rule-fees",
@@ -87,20 +127,36 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     sourceUrl: "https://www.law.go.kr/LSW//lumLsLinkPop.do?chrClsCd=010202&lspttninfSeq=82731",
     sourceType: "official_law",
     topic: "cost",
+    legalPriority: 3,
+    monitorCadence: "daily",
+  },
+  {
+    docId: "hikorea-homepage-urgent-notices",
+    title: "하이코리아 첫 화면 긴급 공지·사칭사이트·전자민원 변경",
+    sourceUrl: HIKOREA_HOME_URL,
+    sourceType: "official_government",
+    topic: "warning",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["homepage_notice", "scam_warning", "e-application_change", "fax_policy_change"],
   },
   {
     docId: "hikorea-integrated-status-manual",
     title: "하이코리아 체류자격별 통합 안내 매뉴얼",
-    sourceUrl: "https://www.hikorea.go.kr/board/BoardNtcDetailR.pt?BBS_GB_CD=BS10&BBS_SEQ=1&NTCCTT_SEQ=1062&page=1",
+    sourceUrl: HIKOREA_STATUS_MANUAL_URL,
     sourceType: "official_government",
     topic: "process",
+    legalPriority: 4,
+    monitorCadence: "daily",
   },
   {
     docId: "hikorea-d2-d4-d10-e7-f2-f5-requirements",
     title: "하이코리아 D-2/D-4/D-10/E-7/F-2/F-5 요건",
-    sourceUrl: "https://www.hikorea.go.kr/board/BoardNtcDetailR.pt?BBS_GB_CD=BS10&BBS_SEQ=1&NTCCTT_SEQ=1062&page=1",
+    sourceUrl: HIKOREA_STATUS_MANUAL_URL,
     sourceType: "official_government",
     topic: "visa",
+    legalPriority: 4,
+    monitorCadence: "daily",
   },
   {
     docId: "hikorea-stay-extension",
@@ -108,6 +164,8 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     sourceUrl: "https://www.hikorea.go.kr/info/InfoDatail.pt?CAT_SEQ=181&PARENT_ID=140",
     sourceType: "official_government",
     topic: "process",
+    legalPriority: 4,
+    monitorCadence: "daily",
   },
   {
     docId: "hikorea-status-change",
@@ -115,6 +173,8 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     sourceUrl: "https://www.hikorea.go.kr/info/InfoDatail.pt?CAT_SEQ=184&PARENT_ID=141",
     sourceType: "official_government",
     topic: "process",
+    legalPriority: 4,
+    monitorCadence: "daily",
   },
   {
     docId: "hikorea-activity-permit",
@@ -122,6 +182,8 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     sourceUrl: "https://www.hikorea.go.kr/info/InfoDatail.pt?CAT_SEQ=187&PARENT_ID=142",
     sourceType: "official_government",
     topic: "process",
+    legalPriority: 4,
+    monitorCadence: "daily",
   },
   {
     docId: "hikorea-forms-document-checklist",
@@ -129,6 +191,8 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     sourceUrl: "https://www.hikorea.go.kr/board/BoardApplicationListR.pt",
     sourceType: "official_government",
     topic: "documents",
+    legalPriority: 4,
+    monitorCadence: "daily",
   },
   {
     docId: "hikorea-online-visit-application",
@@ -136,20 +200,28 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     sourceUrl: "https://www.hikorea.go.kr/cvlappl/CvlapplStep1.pt",
     sourceType: "official_government",
     topic: "process",
+    legalPriority: 4,
+    monitorCadence: "daily",
   },
   {
     docId: "hikorea-policy-notice-monitor",
     title: "하이코리아 공지사항 정책 변경 감시",
-    sourceUrl: "https://www.hikorea.go.kr/board/BoardNtcListR.pt",
+    sourceUrl: HIKOREA_NOTICE_URL,
     sourceType: "official_government",
     topic: "warning",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["notice_title", "attachment", "posted_date", "manual_update"],
   },
   {
     docId: "moj-immigration-policy-news",
     title: "법무부 출입국·외국인정책본부 주요소식",
-    sourceUrl: "https://www.immigration.go.kr/",
+    sourceUrl: MOJ_MAJOR_NEWS_URL,
     sourceType: "official_government",
     topic: "process",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["policy_news", "visa_program", "status_program", "effective_period"],
   },
 ];
 
@@ -239,6 +311,9 @@ export async function fetchOfficialKnowledgeSource(
     `source_url: ${source.sourceUrl}`,
     `source_type: ${source.sourceType}`,
     `topic: ${source.topic}`,
+    `legal_priority: ${source.legalPriority || "unclassified"}`,
+    `monitor_cadence: ${source.monitorCadence || "daily"}`,
+    `change_signals: ${(source.changeSignals || []).join(", ") || "content_hash"}`,
     "",
     clipped,
   ].join("\n");

@@ -5,8 +5,10 @@ import {
 } from "../data/knowledge";
 
 const BASE_IMMIGRATION_LEGAL_DOC_IDS = [
+  "immigration-law-recent-promulgations",
   "immigration-law-interpretation-hierarchy",
   "immigration-act-stay-status-scope",
+  "immigration-decree-current-text",
 ] as const;
 
 const IMMIGRATION_STATUS_DOC_ID = "immigration-decree-long-term-status-table";
