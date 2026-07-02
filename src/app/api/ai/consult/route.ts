@@ -46,13 +46,17 @@ interface ExpertAnswerResult {
 
 function getConsultBackend(): ConsultBackend {
   const configured = process.env.AI_CONSULT_BACKEND?.trim().toLowerCase();
-  if (configured === "remote-bridge" || configured === "codex" || configured === "zai") {
+  if (configured === "remote-bridge" || configured === "codex") {
     return configured;
   }
 
   const agentBackend = getAgentBackend();
   if (agentBackend === "remote-bridge" || isRemoteCodexBridgeEnabled()) {
     return "remote-bridge";
+  }
+
+  if (configured === "zai") {
+    return "zai";
   }
 
   const hostedRuntime = process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV);
