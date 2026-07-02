@@ -100,24 +100,13 @@ jobs:
         if: ${{ env.DEPLOY_AFTER_UPDATE == 'true' }}
         run: bunx vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
 
-      - name: Apply PostgreSQL migrations
-        if: ${{ env.DEPLOY_AFTER_UPDATE == 'true' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          set -a
-          . .vercel/.env.production.local
-          set +a
-
-          if [[ "${DATABASE_URL:-}" =~ ^postgres(ql)?:// ]]; then
-            bunx prisma migrate deploy --schema prisma/postgres/schema.prisma
-          else
-            echo "Skipping PostgreSQL migrations: DATABASE_URL is not PostgreSQL."
-          fi
-
       - name: Build with Vercel
         if: ${{ env.DEPLOY_AFTER_UPDATE == 'true' }}
         run: bunx vercel build --prod --token="$VERCEL_TOKEN"
+
+      - name: Apply PostgreSQL migrations
+        if: ${{ env.DEPLOY_AFTER_UPDATE == 'true' }}
+        run: bun run scripts/deploy-postgres-migrations.ts
 
       - name: Prune deployment model cache
         if: ${{ env.DEPLOY_AFTER_UPDATE == 'true' }}
