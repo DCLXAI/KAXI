@@ -183,6 +183,18 @@ try {
     const pendingCandidate = await db.knowledgeDocument.findUnique({ where: { docId: candidateDocId } });
     assert(pendingCandidate?.reviewStatus === "PENDING", "admin monitor candidate must stay pending until approval");
 
+    const emptyBulkApproved = await json(
+      await knowledgeRoute.PATCH(
+        adminRequest("/api/admin/knowledge", {
+          method: "PATCH",
+          body: JSON.stringify({ action: "bulkApproveCandidates", docIds: [] }),
+        })
+      )
+    );
+    assert(emptyBulkApproved.processed === 0, "empty bulk candidate approve should not process all candidates");
+    const stillPendingCandidate = await db.knowledgeDocument.findUnique({ where: { docId: candidateDocId } });
+    assert(stillPendingCandidate?.reviewStatus === "PENDING", "empty bulk candidate approve must leave candidates pending");
+
     const bulkApproved = await json(
       await knowledgeRoute.PATCH(
         adminRequest("/api/admin/knowledge", {

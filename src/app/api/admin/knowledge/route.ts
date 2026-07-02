@@ -51,10 +51,12 @@ function stringList(value: unknown): string[] {
 }
 
 async function pendingCandidateDocIds(requestedDocIds: string[]): Promise<string[]> {
+  if (requestedDocIds.length === 0) return [];
+
   const documents = await db.knowledgeDocument.findMany({
     where: {
       reviewStatus: "PENDING",
-      docId: requestedDocIds.length > 0 ? { in: requestedDocIds } : { contains: "__candidate__" },
+      docId: { in: requestedDocIds },
     },
     select: { docId: true },
     orderBy: { lastCheckedAt: "desc" },
