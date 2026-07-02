@@ -88,6 +88,8 @@ const requiredImmigrationLawDocs = [
   "immigration-law-recent-promulgations",
   "immigration-law-interpretation-hierarchy",
   "immigration-act-stay-status-scope",
+  "immigration-act-visa-passport-requirement",
+  "immigration-act-visa-issuance-certificate",
   "immigration-act-general-stay-status",
   "immigration-act-permanent-residence-status",
   "immigration-act-entry-ban",

@@ -36,6 +36,8 @@ jobs:
         include:
           - batch: law-core
             source_ids: immigration-law-recent-promulgations,immigration-act-stay-status-scope,immigration-act-general-stay-status,immigration-act-permanent-residence-status,immigration-act-permission-matrix,immigration-law-violation-risk,immigration-decree-current-text,immigration-decree-long-term-status-table,immigration-decree-short-term-status-table,immigration-decree-permanent-residence-table
+          - batch: law-visa-entry
+            source_ids: immigration-act-visa-passport-requirement,immigration-act-visa-issuance-certificate
           - batch: law-entry-removal
             source_ids: immigration-act-entry-ban,immigration-act-entry-inspection,immigration-act-deportation-grounds,immigration-act-departure-recommendation-order
           - batch: law-work-permissions

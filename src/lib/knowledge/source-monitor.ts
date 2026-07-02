@@ -50,6 +50,8 @@ const LAW_DECREE_URL = "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=271319";
 const LAW_RULE_URL = "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=283059";
 const LAW_RECENT_PROMULGATION_URL =
   "https://www.law.go.kr/LSW/nwRvsLsPop.do?chrIdx=10&cptOfi=&lsKndCd=&lsNm=%EC%B6%9C%EC%9E%85%EA%B5%AD%EA%B4%80%EB%A6%AC%EB%B2%95&p_epubdt=&p_epubno=&p_spubdt=&p_spubno=&searchType=lsNm&sortIdx=0";
+const LAW_ACT_VISA_PASSPORT_REQUIREMENT_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0007&lsiSeq=272921&urlMode=lsScJoRltInfoR";
 const LAW_ACT_EMPLOYMENT_RESTRICTION_URL =
   "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0018&lsiSeq=272921&urlMode=lsScJoRltInfoR";
 const LAW_ACT_OUTSIDE_STATUS_ACTIVITY_URL =
@@ -153,6 +155,33 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     topic: "legal",
     legalPriority: 1,
     monitorCadence: "daily",
+  },
+  {
+    docId: "immigration-act-visa-passport-requirement",
+    title: "출입국관리법 제7조 외국인의 입국",
+    sourceUrl: LAW_ACT_VISA_PASSPORT_REQUIREMENT_URL,
+    sourceType: "official_law",
+    topic: "legal",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["valid_passport", "visa_requirement", "visa_free", "visa_waiver", "reentry_permit", "entry_permission"],
+  },
+  {
+    docId: "immigration-act-visa-issuance-certificate",
+    title: "출입국관리법 제8조·제9조 사증·사증발급인정서",
+    sourceUrl: LAW_ACT_URL,
+    sourceType: "official_law",
+    topic: "process",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: [
+      "single_visa",
+      "multiple_visa",
+      "visa_issuance_certificate",
+      "certificate_for_confirmation_of_visa_issuance",
+      "inviter_proxy_application",
+      "article_8_single_multiple_visa",
+    ],
   },
   {
     docId: "immigration-act-permission-matrix",

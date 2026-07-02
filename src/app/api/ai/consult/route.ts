@@ -456,6 +456,8 @@ function officialSummaryDocScore(question: string, doc: KnowledgeDoc, lang: Lang
   const wantsFreshness = asksForFreshness(question);
   const asksKeta = /k[-\s]?eta|전자여행허가/i.test(question);
   const asksEArrival = /e[-\s]?arrival|전자입국신고|arrival card|입국신고서/i.test(question);
+  const asksVisaPassport = /사증|비자|여권|무사증|사증면제|재입국허가|visa|valid passport|visa[-\s]?free|visa waiver|re[-\s]?entry permit/i.test(question);
+  const asksVisaCertificate = /사증발급인정서|비자발급인정서|사증\s*발급|단수사증|복수사증|초청인|초청자|대리\s*신청|visa issuance certificate|certificate for confirmation of visa issuance|ccvi|single visa|multiple visa|inviter|sponsor/i.test(question);
   const asksEntryInspection = /입국심사|입국\s*목적|entry inspection|entry purpose|arrival inspection/i.test(question);
   const asksEntryBan = /입국금지|입국\s*거부|입국불허|entry ban|refusal of entry|denied entry|inadmissible/i.test(question);
   const asksDeportation = /강제퇴거|퇴거명령|추방|deportation|removal/i.test(question);
@@ -496,6 +498,14 @@ function officialSummaryDocScore(question: string, doc: KnowledgeDoc, lang: Lang
     if (doc.id === "moj-e-arrival-card") score += 30;
     if (doc.id === "moj-e-arrival-card-notice") score += 18;
     if (!/e[-_ ]?arrival|전자입국신고|arrival card|입국신고서/i.test(haystack)) score -= 4;
+  }
+  if (asksVisaPassport) {
+    if (doc.id === "immigration-act-visa-passport-requirement") score += 26;
+    if (doc.id === "immigration-act-entry-inspection") score += 8;
+  }
+  if (asksVisaCertificate) {
+    if (doc.id === "immigration-act-visa-issuance-certificate") score += 32;
+    if (doc.id === "immigration-rule-documents-attachments") score += 8;
   }
   if (asksEntryInspection) {
     if (doc.id === "immigration-act-entry-inspection") score += 28;

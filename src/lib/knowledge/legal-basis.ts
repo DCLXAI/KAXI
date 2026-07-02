@@ -15,6 +15,8 @@ const IMMIGRATION_STATUS_DOC_ID = "immigration-decree-long-term-status-table";
 const IMMIGRATION_SHORT_TERM_STATUS_DOC_ID = "immigration-decree-short-term-status-table";
 const IMMIGRATION_PERMANENT_RESIDENCE_DOC_ID = "immigration-decree-permanent-residence-table";
 const IMMIGRATION_PERMISSION_DOC_ID = "immigration-act-permission-matrix";
+const IMMIGRATION_VISA_PASSPORT_REQUIREMENT_DOC_ID = "immigration-act-visa-passport-requirement";
+const IMMIGRATION_VISA_ISSUANCE_CERTIFICATE_DOC_ID = "immigration-act-visa-issuance-certificate";
 const IMMIGRATION_GENERAL_STAY_STATUS_DOC_ID = "immigration-act-general-stay-status";
 const IMMIGRATION_PERMANENT_RESIDENCE_STATUS_DOC_ID = "immigration-act-permanent-residence-status";
 const IMMIGRATION_ENTRY_BAN_DOC_ID = "immigration-act-entry-ban";
@@ -47,7 +49,7 @@ function stripSourceMeta(doc: KnowledgeDocWithMetadata): KnowledgeDoc {
 
 export function isImmigrationStayQuestion(query: string, mode?: string): boolean {
   const text = `${mode || ""} ${query}`.toLowerCase();
-  return /비자|체류|출입국|외국인등록|유학|어학|연수|구직|특정활동|거주|영주|취업|고용|근무처|아르바이트|시간제|불법취업|d-?2|d-?4|d-?10|e-?7|f-?2|f-?5|visa|immigration|stay status|sojourn|employment|workplace|part-?time/.test(text);
+  return /비자|사증|입국|여권|초청|체류|출입국|외국인등록|유학|어학|연수|구직|특정활동|거주|영주|취업|고용|근무처|아르바이트|시간제|불법취업|d-?2|d-?4|d-?10|e-?7|f-?2|f-?5|visa|passport|entry|inviter|sponsor|immigration|stay status|sojourn|employment|workplace|part-?time/.test(text);
 }
 
 export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string): string[] {
@@ -62,6 +64,14 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
   if (/단기|단기방문|단기취업|무사증|사증면제|관광|통과|입국|b-?1|b-?2|c-?1|c-?3|c-?4|short.?term|visa.?free|waiver|tourist|transit/.test(text)) {
     priorityIds.push(IMMIGRATION_GENERAL_STAY_STATUS_DOC_ID, IMMIGRATION_SHORT_TERM_STATUS_DOC_ID);
     ids.add(IMMIGRATION_SHORT_TERM_STATUS_DOC_ID);
+  }
+  if (/사증|비자|여권|무사증|사증면제|재입국허가|외국인입국허가|visa|valid passport|visa.?free|visa waiver|re-?entry permit/.test(text)) {
+    ids.add(IMMIGRATION_VISA_PASSPORT_REQUIREMENT_DOC_ID);
+  }
+  if (/사증발급인정서|비자발급인정서|사증\s*발급|단수사증|복수사증|초청인|초청자|대리\s*신청|visa issuance certificate|certificate for confirmation of visa issuance|ccvi|single visa|multiple visa|inviter|sponsor/.test(text)) {
+    priorityIds.push(IMMIGRATION_VISA_ISSUANCE_CERTIFICATE_DOC_ID);
+    ids.add(IMMIGRATION_VISA_ISSUANCE_CERTIFICATE_DOC_ID);
+    ids.add(IMMIGRATION_ATTACHMENTS_DOC_ID);
   }
   if (/입국금지|입국\s*거부|입국거부|입국불허|입국\s*제한|입국\s*금지|inadmissible|entry ban|refusal of entry|denied entry/.test(text)) {
     priorityIds.push(IMMIGRATION_ENTRY_BAN_DOC_ID);

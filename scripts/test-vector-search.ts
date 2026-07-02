@@ -21,6 +21,8 @@ const TEST_QUERIES = [
   { q: "F-5 영주권 기본 법령 요건은 뭐야?", expect: "immigration-decree-permanent-residence-table" },
   { q: "단기체류자격과 장기체류자격은 90일 기준으로 어떻게 달라?", expect: "immigration-act-general-stay-status" },
   { q: "F-5 영주자격은 활동범위와 체류기간 제한을 받지 않아?", expect: "immigration-act-permanent-residence-status" },
+  { q: "무사증 입국도 유효한 여권과 사증 예외 요건을 확인해야 해?", expect: "immigration-act-visa-passport-requirement" },
+  { q: "사증발급인정서는 초청인이 대리 신청할 수 있어?", expect: "immigration-act-visa-issuance-certificate" },
   { q: "과거 강제퇴거 이력이 있으면 입국금지 사유가 될 수 있어?", expect: "immigration-act-entry-ban" },
   { q: "입국심사에서 입국목적과 체류자격을 확인해?", expect: "immigration-act-entry-inspection" },
   { q: "취업 가능한 체류자격이 아니어도 한국에서 일할 수 있어?", expect: "immigration-act-employment-restriction" },
