@@ -11,7 +11,7 @@ import { db } from "@/lib/db";
 import { createZaiClient, isZaiConfigurationError } from "@/lib/ai/zai";
 import { getAgentBackend, runCodexServerless } from "@/lib/codex/serverless";
 import { isRemoteCodexBridgeEnabled, runRemoteCodexBridge } from "@/lib/codex/remote-bridge";
-import { hybridSearch, initVectorStore, initTransformerStore } from "@/lib/embeddings/vector-store";
+import { hybridSearch, initVectorStore } from "@/lib/embeddings/vector-store";
 import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
 import { withImmigrationLegalBasisDocs } from "@/lib/knowledge/legal-basis";
 import {
@@ -108,18 +108,12 @@ export async function POST(req: NextRequest) {
 
     // 1. Vector Store 초기화
     initVectorStore();
-    try {
-      await withTimeout(
-        initTransformerStore(),
-        parsePositiveInt(process.env.AI_EMBEDDING_INIT_TIMEOUT_MS, 15_000),
-        "Transformer initialization"
-      );
-    } catch (initErr) {
-      console.error("[Transformer init timeout/failure]", initErr);
-    }
 
     // 2. RAG 검색 (전문 상담은 더 많은 문서 검색)
-    const searchResults = await hybridSearch(question, { topK: 6 });
+    const searchResults = await hybridSearch(question, {
+      topK: 6,
+      useTransformer: process.env.AI_CONSULT_USE_TRANSFORMER_RAG === "true",
+    });
     const docs: KnowledgeDoc[] = withImmigrationLegalBasisDocs(
       question,
       searchResults.map((r) => r.doc),

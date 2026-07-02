@@ -383,17 +383,19 @@ export async function hybridSearch(
     topK?: number;
     vectorWeight?: number;
     keywordWeight?: number;
+    useTransformer?: boolean;
   } = {}
 ): Promise<ScoredDoc[]> {
   const topK = options.topK ?? 3;
   const vectorWeight = options.vectorWeight ?? 1.2;
   const keywordWeight = options.keywordWeight ?? 0.6;
+  const useTransformer = options.useTransformer ?? true;
 
   await refreshRuntimeKnowledgeDocs();
   if (!query.trim()) return [];
 
   // Transformer 사용 가능시 비동기 초기화
-  if (isTransformerAvailable() && store.method === "tfidf") {
+  if (useTransformer && isTransformerAvailable() && store.method === "tfidf") {
     await initTransformerStore();
   }
 
@@ -404,7 +406,7 @@ export async function hybridSearch(
   let queryVec: EmbeddingVector;
   let method: "transformer" | "tfidf" = "tfidf";
 
-  if (store.method === "transformer" || store.method === "mixed") {
+  if (useTransformer && (store.method === "transformer" || store.method === "mixed")) {
     try {
       const result = await embedText(query, { vectorizer: store.tfidfVectorizer! });
       queryVec = result.vector;
