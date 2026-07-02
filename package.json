@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
     "postinstall": "bun run scripts/generate-prisma-client.ts && bun run scripts/restore-runtime-artifacts.ts",
-    "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
+    "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/ && bun run scripts/prune-vercel-output.ts",
     "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
     "codex:bridge": "bun run scripts/codex-local-bridge.ts",
     "codex:bridge:awake": "CODEX_BRIDGE_PREVENT_SLEEP=true bun run scripts/codex-local-bridge.ts",

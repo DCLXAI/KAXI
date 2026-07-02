@@ -35,6 +35,9 @@ jobs:
       - name: Build with Vercel
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
         run: bunx vercel build --prod --token="$VERCEL_TOKEN"
+      - name: Prune deployment model cache
+        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
+        run: bun run scripts/prune-vercel-output.ts
       - name: Deploy prebuilt output to production
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
         run: bunx vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
