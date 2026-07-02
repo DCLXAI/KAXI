@@ -1,0 +1,95 @@
+name: Update Codex Bridge Env
+
+on:
+  workflow_dispatch:
+    inputs:
+      bridge_url:
+        description: "HTTPS URL for the local Codex bridge tunnel"
+        required: true
+        type: string
+      deploy:
+        description: "Redeploy production after updating env"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      CODEX_REMOTE_BRIDGE_TOKEN: ${{ secrets.CODEX_REMOTE_BRIDGE_TOKEN }}
+      BRIDGE_URL: ${{ inputs.bridge_url }}
+      DEPLOY_AFTER_UPDATE: ${{ inputs.deploy }}
+      NEXTAUTH_URL: https://kaxi.vercel.app
+      NEXTAUTH_URL_INTERNAL: https://kaxi.vercel.app
+      KAXI_PRISMA_PROVIDER: postgresql
+    steps:
+      - name: Require deployment and bridge secrets
+        run: |
+          set -euo pipefail
+          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "VERCEL_TOKEN, VERCEL_ORG_ID, and VERCEL_PROJECT_ID are required."
+            exit 1
+          fi
+          if [ -z "$CODEX_REMOTE_BRIDGE_TOKEN" ]; then
+            echo "CODEX_REMOTE_BRIDGE_TOKEN secret is required."
+            exit 1
+          fi
+          if ! printf '%s' "$BRIDGE_URL" | grep -Eq '^https://[^[:space:]]+$'; then
+            echo "bridge_url must be an https URL."
+            exit 1
+          fi
+          echo "::add-mask::$CODEX_REMOTE_BRIDGE_TOKEN"
+
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Update Vercel production bridge env
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          update_env() {
+            local name="$1"
+            local value="$2"
+            bunx vercel env rm "$name" production --yes --token="$VERCEL_TOKEN" >/dev/null 2>&1 || true
+            printf '%s' "$value" | bunx vercel env add "$name" production --token="$VERCEL_TOKEN"
+          }
+
+          update_env "CODEX_REMOTE_BRIDGE_URL" "$BRIDGE_URL"
+          update_env "CODEX_REMOTE_BRIDGE_TOKEN" "$CODEX_REMOTE_BRIDGE_TOKEN"
+          update_env "AGENT_BACKEND" "remote-bridge"
+          update_env "AI_CONSULT_BACKEND" "remote-bridge"
+          update_env "CODEX_REMOTE_BRIDGE_TIMEOUT_MS" "55000"
+
+      - name: Pull Vercel production environment
+        if: ${{ env.DEPLOY_AFTER_UPDATE == 'true' }}
+        run: bunx vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Build with Vercel
+        if: ${{ env.DEPLOY_AFTER_UPDATE == 'true' }}
+        run: bunx vercel build --prod --token="$VERCEL_TOKEN"
+
+      - name: Prune deployment model cache
+        if: ${{ env.DEPLOY_AFTER_UPDATE == 'true' }}
+        run: bun run scripts/prune-vercel-output.ts
+
+      - name: Inject runtime environment into prebuilt functions
+        if: ${{ env.DEPLOY_AFTER_UPDATE == 'true' }}
+        run: bun run scripts/inject-vercel-runtime-env.ts
+
+      - name: Deploy prebuilt output to production
+        if: ${{ env.DEPLOY_AFTER_UPDATE == 'true' }}
+        run: bunx vercel deploy --prebuilt --archive=tgz --prod --token="$VERCEL_TOKEN"
