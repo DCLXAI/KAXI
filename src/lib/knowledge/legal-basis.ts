@@ -15,6 +15,10 @@ const IMMIGRATION_STATUS_DOC_ID = "immigration-decree-long-term-status-table";
 const IMMIGRATION_SHORT_TERM_STATUS_DOC_ID = "immigration-decree-short-term-status-table";
 const IMMIGRATION_PERMANENT_RESIDENCE_DOC_ID = "immigration-decree-permanent-residence-table";
 const IMMIGRATION_PERMISSION_DOC_ID = "immigration-act-permission-matrix";
+const IMMIGRATION_REENTRY_DOC_ID = "immigration-act-reentry-permit";
+const IMMIGRATION_ALIEN_REGISTRATION_DOC_ID = "immigration-act-alien-registration";
+const IMMIGRATION_REGISTRATION_CHANGE_DOC_ID = "immigration-act-registration-change-report";
+const IMMIGRATION_ADDRESS_CHANGE_DOC_ID = "immigration-act-address-change-report";
 const IMMIGRATION_REVIEW_CRITERIA_DOC_ID = "immigration-rule-stay-permission-review-criteria";
 const IMMIGRATION_ATTACHMENTS_DOC_ID = "immigration-rule-documents-attachments";
 const IMMIGRATION_FEES_DOC_ID = "immigration-rule-fees";
@@ -49,6 +53,18 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
   if (/변경|연장|자격외|근무처|외국인등록|등록|신고|취업|일|change|extend|extension|work|registration/.test(text)) {
     ids.add(IMMIGRATION_PERMISSION_DOC_ID);
     ids.add(IMMIGRATION_REVIEW_CRITERIA_DOC_ID);
+  }
+  if (/재입국|re-?entry|reentry/.test(text)) {
+    ids.add(IMMIGRATION_REENTRY_DOC_ID);
+  }
+  if (/외국인등록|등록증|arc|alien registration/.test(text)) {
+    ids.add(IMMIGRATION_ALIEN_REGISTRATION_DOC_ID);
+  }
+  if (/여권|등록사항|성명|성별|생년월일|국적|passport|nationality|name change/.test(text)) {
+    ids.add(IMMIGRATION_REGISTRATION_CHANGE_DOC_ID);
+  }
+  if (/체류지|주소|전입|이사|기숙사|거주지|address|place of stay|move|moving|dorm/.test(text)) {
+    ids.add(IMMIGRATION_ADDRESS_CHANGE_DOC_ID);
   }
   if (/서류|제출|첨부|아포스티유|영사확인|공증|번역|체크리스트|신청|document|apostille|notar/.test(text)) {
     ids.add(IMMIGRATION_ATTACHMENTS_DOC_ID);

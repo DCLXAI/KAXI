@@ -45,11 +45,19 @@ export interface OfficialKnowledgeMonitorSummary {
   results: OfficialKnowledgeMonitorResult[];
 }
 
-const LAW_ACT_URL = "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=245973";
+const LAW_ACT_URL = "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=272921";
 const LAW_DECREE_URL = "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=271319";
 const LAW_RULE_URL = "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=283059";
 const LAW_RECENT_PROMULGATION_URL =
   "https://www.law.go.kr/LSW/nwRvsLsPop.do?chrIdx=10&cptOfi=&lsKndCd=&lsNm=%EC%B6%9C%EC%9E%85%EA%B5%AD%EA%B4%80%EB%A6%AC%EB%B2%95&p_epubdt=&p_epubno=&p_spubdt=&p_spubno=&searchType=lsNm&sortIdx=0";
+const LAW_ACT_REENTRY_PERMIT_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0030&lsiSeq=272921&urlMode=lsScJoRltInfoR";
+const LAW_ACT_ALIEN_REGISTRATION_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0031&lsiSeq=272921&urlMode=lsScJoRltInfoR";
+const LAW_ACT_REGISTRATION_CHANGE_REPORT_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0035&lsiSeq=272921&urlMode=lsScJoRltInfoR";
+const LAW_ACT_ADDRESS_CHANGE_REPORT_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0036&lsiSeq=272921&urlMode=lsScJoRltInfoR";
 const LAW_DECREE_SHORT_TERM_STATUS_TABLE_URL =
   "https://www.law.go.kr/LSW/lsBylInfoPLinkR.do?lsiSeq=271319&lsNm=%EC%B6%9C%EC%9E%85%EA%B5%AD%EA%B4%80%EB%A6%AC%EB%B2%95+%EC%8B%9C%ED%96%89%EB%A0%B9&bylNo=0001&bylBrNo=00&bylCls=BE&bylEfYd=20250601&bylEfYdYn=Y";
 const LAW_DECREE_LONG_TERM_STATUS_TABLE_URL =
@@ -132,6 +140,46 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     topic: "warning",
     legalPriority: 1,
     monitorCadence: "daily",
+  },
+  {
+    docId: "immigration-act-reentry-permit",
+    title: "출입국관리법 제30조 재입국허가",
+    sourceUrl: LAW_ACT_REENTRY_PERMIT_URL,
+    sourceType: "official_law",
+    topic: "process",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["reentry_permit", "single_multiple_permit", "exemption", "extension", "f5"],
+  },
+  {
+    docId: "immigration-act-alien-registration",
+    title: "출입국관리법 제31조 외국인등록",
+    sourceUrl: LAW_ACT_ALIEN_REGISTRATION_URL,
+    sourceType: "official_law",
+    topic: "process",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["alien_registration", "90_days", "registration_number", "local_office", "status_change"],
+  },
+  {
+    docId: "immigration-act-registration-change-report",
+    title: "출입국관리법 제35조 외국인등록사항 변경신고",
+    sourceUrl: LAW_ACT_REGISTRATION_CHANGE_REPORT_URL,
+    sourceType: "official_law",
+    topic: "process",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["registration_change", "passport_change", "name_gender_birth_nationality", "15_days"],
+  },
+  {
+    docId: "immigration-act-address-change-report",
+    title: "출입국관리법 제36조 체류지 변경신고",
+    sourceUrl: LAW_ACT_ADDRESS_CHANGE_REPORT_URL,
+    sourceType: "official_law",
+    topic: "process",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["address_change", "place_of_stay", "moving", "15_days", "online_report", "mobile_arc"],
   },
   {
     docId: "immigration-decree-current-text",

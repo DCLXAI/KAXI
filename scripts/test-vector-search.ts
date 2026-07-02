@@ -19,6 +19,10 @@ const TEST_QUERIES = [
   { q: "원주 이동출입국사무소 운영 여부는 어디서 확인해?", expect: "moj-mobile-immigration-office" },
   { q: "C-3 단기방문으로 일해도 돼?", expect: "immigration-decree-short-term-status-table" },
   { q: "F-5 영주권 기본 법령 요건은 뭐야?", expect: "immigration-decree-permanent-residence-table" },
+  { q: "입국 후 외국인등록은 언제까지 해야 해?", expect: "immigration-act-alien-registration" },
+  { q: "여권 갱신하면 외국인등록사항 변경신고 해야 해?", expect: "immigration-act-registration-change-report" },
+  { q: "이사했는데 체류지 변경신고 기한은?", expect: "immigration-act-address-change-report" },
+  { q: "재입국허가 기간 안에 못 들어가면 어떻게 해?", expect: "immigration-act-reentry-permit" },
 ];
 
 async function main() {
