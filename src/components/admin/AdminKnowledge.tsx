@@ -1,12 +1,32 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, RefreshCw, RotateCcw, Satellite, Trash2 } from "lucide-react";
 import { useAdminApi } from "@/components/admin/AdminShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { AdminKnowledgeItem } from "@/lib/admin/types";
+
+interface MonitorResult {
+  checkedAt: string;
+  persistCandidates: boolean;
+  total: number;
+  changed: number;
+  unchanged: number;
+  failed: number;
+  candidatesCreated: number;
+  results: Array<{
+    docId: string;
+    title: string;
+    sourceUrl: string;
+    status: "changed" | "unchanged" | "failed";
+    candidateDocId?: string;
+    candidatePersisted?: boolean;
+    error?: string;
+    diff?: NonNullable<AdminKnowledgeItem["diff"]>;
+  }>;
+}
 
 function formatDate(value: string | null) {
   if (!value) return "-";
@@ -20,6 +40,8 @@ export function AdminKnowledge() {
   const [source, setSource] = useState<"db" | "static">("db");
   const [loading, setLoading] = useState(true);
   const [savingDocId, setSavingDocId] = useState<string | null>(null);
+  const [monitoringMode, setMonitoringMode] = useState<"preview" | "persist" | null>(null);
+  const [monitorResult, setMonitorResult] = useState<MonitorResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadDocuments = useCallback(async () => {
@@ -63,6 +85,36 @@ export function AdminKnowledge() {
     }
   };
 
+  const runMonitor = async (persistCandidates: boolean) => {
+    setMonitoringMode(persistCandidates ? "persist" : "preview");
+    setError(null);
+    try {
+      const res = await adminFetch("/api/knowledge/monitor", {
+        method: "POST",
+        body: JSON.stringify({ persistCandidates }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "공식 출처 감시를 실행하지 못했습니다.");
+      setMonitorResult(data);
+      const diffEntries = Object.fromEntries(
+        (data.results || [])
+          .filter((item: MonitorResult["results"][number]) => item.diff)
+          .map((item: MonitorResult["results"][number]) => [item.docId, item.diff])
+      );
+      if (Object.keys(diffEntries).length > 0) {
+        setDiffByDocId((prev) => ({ ...prev, ...diffEntries }));
+      }
+      if (persistCandidates) await loadDocuments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setMonitoringMode(null);
+    }
+  };
+
+  const changedResults = monitorResult?.results.filter((item) => item.status === "changed") || [];
+  const failedResults = monitorResult?.results.filter((item) => item.status === "failed") || [];
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -70,10 +122,20 @@ export function AdminKnowledge() {
           <h1 className="text-2xl font-semibold tracking-tight">출처 문서</h1>
           <p className="text-sm text-muted-foreground">RAG 문서의 확인일, 공식 출처, 승인/폐기 상태를 검수합니다.</p>
         </div>
-        <Button variant="outline" size="sm" onClick={loadDocuments} disabled={loading}>
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-          새로고침
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={() => runMonitor(false)} disabled={Boolean(monitoringMode)}>
+            <Satellite className={`h-3.5 w-3.5 ${monitoringMode === "preview" ? "animate-pulse" : ""}`} />
+            실시간 감시
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => runMonitor(true)} disabled={Boolean(monitoringMode)}>
+            <AlertTriangle className={`h-3.5 w-3.5 ${monitoringMode === "persist" ? "animate-pulse" : ""}`} />
+            후보 생성
+          </Button>
+          <Button variant="outline" size="sm" onClick={loadDocuments} disabled={loading}>
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            새로고침
+          </Button>
+        </div>
       </div>
 
       {source === "static" && (
@@ -85,6 +147,36 @@ export function AdminKnowledge() {
       {error && (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
+        </div>
+      )}
+
+      {monitorResult && (
+        <div className="rounded-md border bg-card px-4 py-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="font-medium">
+              공식 출처 감시 결과: 변경 {monitorResult.changed}개, 실패 {monitorResult.failed}개, 후보 생성 {monitorResult.candidatesCreated}개
+            </div>
+            <div className="text-xs text-muted-foreground">{formatDate(monitorResult.checkedAt)}</div>
+          </div>
+          {(changedResults.length > 0 || failedResults.length > 0) && (
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {changedResults.slice(0, 6).map((item) => (
+                <div key={item.docId} className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-950">
+                  <div className="font-medium">{item.title}</div>
+                  <div className="mt-1 text-xs">
+                    {item.candidatePersisted ? "PENDING 후보 생성" : "변경 감지"}
+                    {item.diff ? ` · 영향 룰 ${item.diff.impact.ruleCount}개 · 대화 ${item.diff.impact.userCount}개` : ""}
+                  </div>
+                </div>
+              ))}
+              {failedResults.slice(0, 4).map((item) => (
+                <div key={item.docId} className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">
+                  <div className="font-medium">{item.title}</div>
+                  <div className="mt-1 text-xs">{item.error || "감시 실패"}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -47,6 +47,7 @@ try {
   const caseActionRoute = await import("../src/app/api/admin/cases/[id]/actions/route");
   const rulesRoute = await import("../src/app/api/admin/rules/route");
   const knowledgeRoute = await import("../src/app/api/admin/knowledge/route");
+  const knowledgeMonitorRoute = await import("../src/app/api/knowledge/monitor/route");
   const auditRoute = await import("../src/app/api/admin/audit/route");
 
   const caseList = await json(await casesRoute.GET(adminRequest("/api/admin/cases")));
@@ -131,6 +132,42 @@ try {
   );
   assert(typeof diffDoc.diff.changed === "boolean", "knowledge diff should return change status");
   assert(diffDoc.diff.currentChunkCount > 0, "knowledge diff should inspect existing chunks without mutating approval");
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response("<html><body><h1>출입국 최신 변경 테스트</h1><p>D-10 E-7 정책 변경 후보</p></body></html>", {
+      status: 200,
+      headers: { "content-type": "text/html; charset=utf-8" },
+    })) as unknown as typeof fetch;
+  try {
+    const monitorPreview = await json(
+      await knowledgeMonitorRoute.POST(
+        adminRequest("/api/knowledge/monitor", {
+          method: "POST",
+          body: JSON.stringify({ persistCandidates: false, maxSources: 1 }),
+        })
+      )
+    );
+    assert(monitorPreview.changed === 1, "admin monitor preview should detect source changes");
+    assert(monitorPreview.candidatesCreated === 0, "admin monitor preview must not persist candidates");
+
+    const monitorPersist = await json(
+      await knowledgeMonitorRoute.POST(
+        adminRequest("/api/knowledge/monitor", {
+          method: "POST",
+          body: JSON.stringify({ persistCandidates: true, maxSources: 1 }),
+        })
+      )
+    );
+    assert(monitorPersist.changed === 1, "admin monitor persist should detect source changes");
+    assert(monitorPersist.candidatesCreated === 1, "admin monitor persist should create a pending candidate");
+    const candidateDocId = monitorPersist.results[0]?.candidateDocId;
+    assert(candidateDocId, "admin monitor persist should expose candidate doc id");
+    const pendingCandidate = await db.knowledgeDocument.findUnique({ where: { docId: candidateDocId } });
+    assert(pendingCandidate?.reviewStatus === "PENDING", "admin monitor candidate must stay pending until approval");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 
   const audit = await json(await auditRoute.GET(adminRequest(`/api/admin/audit?caseId=${newCase.id}`)));
   assert(
