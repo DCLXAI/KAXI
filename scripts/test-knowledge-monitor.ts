@@ -49,6 +49,8 @@ try {
     "hikorea-integrated-status-manual",
     "hikorea-policy-notice-monitor",
     "moj-immigration-policy-news",
+    "accredited-university",
+    "visa-portal-visa-types",
   ];
   for (const docId of requiredWatchlistIds) {
     const source = OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST.find((item) => item.docId === docId);

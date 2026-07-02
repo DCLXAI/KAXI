@@ -116,6 +116,35 @@ for (const docId of requiredPolicyNewsDocs) {
   if (meta.last_checked_at !== "2026-07-02") fail(`${docId} checked date must be 2026-07-02`);
 }
 
+const requiredStudyAndVisaPortalDocs = [
+  {
+    docId: "accredited-university",
+    sourceHost: "studyinkorea.go.kr",
+    sourceType: "official_government",
+    lastCheckedAt: "2026-07-03",
+  },
+  {
+    docId: "visa-portal-visa-types",
+    sourceHost: "visa.go.kr",
+    sourceType: "official_government",
+    lastCheckedAt: "2026-07-03",
+  },
+];
+for (const requirement of requiredStudyAndVisaPortalDocs) {
+  const doc = KNOWLEDGE_DOCS.find((item) => item.id === requirement.docId);
+  if (!doc) fail(`Required Study in Korea / Visa Portal RAG doc missing: ${requirement.docId}`);
+  const meta = getRagDocumentMetadata(doc, "ko");
+  if (!meta.source_url.includes(requirement.sourceHost)) {
+    fail(`${requirement.docId} must point to ${requirement.sourceHost}`);
+  }
+  if (meta.source_type !== requirement.sourceType) {
+    fail(`${requirement.docId} must use ${requirement.sourceType} source type`);
+  }
+  if (meta.last_checked_at !== requirement.lastCheckedAt) {
+    fail(`${requirement.docId} checked date must be ${requirement.lastCheckedAt}`);
+  }
+}
+
 const afterAllReviews = maxReviewAfterDate();
 const futureDocs = getKnowledgeDocsWithMetadata({ referenceDate: afterAllReviews });
 if (futureDocs.length !== 0) {

@@ -55,6 +55,9 @@ const HIKOREA_STATUS_MANUAL_URL =
   "https://www.hikorea.go.kr/board/BoardNtcDetailR.pt?BBS_GB_CD=BS10&BBS_SEQ=1&NTCCTT_SEQ=1062&page=1";
 const HIKOREA_NOTICE_URL = "https://www.hikorea.go.kr/board/BoardNtcListR.pt";
 const MOJ_MAJOR_NEWS_URL = "https://www.immigration.go.kr/immigration/3341/subview.do";
+const STUDY_IN_KOREA_CERTIFIED_UNIVERSITY_URL =
+  "https://studyinkorea.go.kr/ko/plan/certifiedUniversity.do";
+const VISA_PORTAL_VISA_TYPES_URL = "https://www.visa.go.kr/openPage.do?LANG_TYPE=EN&MENU_ID=10102";
 
 export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
   {
@@ -222,6 +225,26 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     legalPriority: 4,
     monitorCadence: "daily",
     changeSignals: ["policy_news", "visa_program", "status_program", "effective_period"],
+  },
+  {
+    docId: "accredited-university",
+    title: "Study in Korea 교육국제화역량 인증대학",
+    sourceUrl: STUDY_IN_KOREA_CERTIFIED_UNIVERSITY_URL,
+    sourceType: "official_government",
+    topic: "school",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["last_modified", "certified_university_count", "degree_program_list", "language_program_list", "excellent_accredited_list"],
+  },
+  {
+    docId: "visa-portal-visa-types",
+    title: "Korea Visa Portal 비자 유형 목록",
+    sourceUrl: VISA_PORTAL_VISA_TYPES_URL,
+    sourceType: "official_government",
+    topic: "visa",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["visa_type_list", "d2_subtypes", "d4_subtypes", "d10_subtypes", "e7_subtypes", "f5_subtypes"],
   },
 ];
 

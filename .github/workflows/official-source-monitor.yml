@@ -40,6 +40,8 @@ jobs:
             source_ids: immigration-rule-documents-attachments,immigration-rule-fees,hikorea-homepage-urgent-notices,hikorea-integrated-status-manual,hikorea-d2-d4-d10-e7-f2-f5-requirements,hikorea-stay-extension
           - batch: hikorea-news
             source_ids: hikorea-status-change,hikorea-activity-permit,hikorea-forms-document-checklist,hikorea-online-visit-application,hikorea-policy-notice-monitor,moj-immigration-policy-news
+          - batch: study-visa-portal
+            source_ids: accredited-university,visa-portal-visa-types
     env:
       KAXI_MONITOR_URL: https://kaxi.vercel.app/api/knowledge/monitor
       KAXI_ADMIN_API_KEY: ${{ secrets.KAXI_ADMIN_API_KEY }}
@@ -85,3 +87,9 @@ jobs:
             changedDocIds: [.results[] | select(.status == "changed") | .docId],
             failedDocIds: [.results[] | select(.status == "failed") | .docId]
           }'
+
+          failed="$(echo "$response" | jq '.failed')"
+          if [ "$failed" -gt 0 ]; then
+            echo "Official source monitor detected failed source checks."
+            exit 1
+          fi

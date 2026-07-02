@@ -78,6 +78,10 @@ const HIKOREA_VERIFIED_AT = "2026-07-02";
 const HIKOREA_REVIEW_AFTER = "2026-08-31";
 const IMMIGRATION_LAW_VERIFIED_AT = "2026-07-02";
 const IMMIGRATION_LAW_REVIEW_AFTER = "2026-08-31";
+const STUDY_IN_KOREA_VERIFIED_AT = "2026-07-03";
+const STUDY_IN_KOREA_REVIEW_AFTER = "2026-08-31";
+const VISA_PORTAL_VERIFIED_AT = "2026-07-03";
+const VISA_PORTAL_REVIEW_AFTER = "2026-08-31";
 
 export const SOURCE_METADATA: Record<string, SourceMetadata> = {
   "Study in Korea · 한국유학종합시스템": {
@@ -115,6 +119,16 @@ export const SOURCE_METADATA: Record<string, SourceMetadata> = {
     reviewAfter: DEFAULT_REVIEW_AFTER,
     owner: "official",
   },
+  "Study in Korea · 인증대학": {
+    label: "Study in Korea · 교육국제화역량 인증대학",
+    url: "https://studyinkorea.go.kr/ko/plan/certifiedUniversity.do",
+    verifiedAt: STUDY_IN_KOREA_VERIFIED_AT,
+    reviewAfter: STUDY_IN_KOREA_REVIEW_AFTER,
+    owner: "official",
+    sourceType: "official_government",
+    jurisdiction: "KR",
+    validFrom: "2026-03-03",
+  },
   "NIIED 한국교육과정평가원": {
     label: "국립국제교육원/TOPIK",
     url: "https://www.topik.go.kr",
@@ -128,6 +142,16 @@ export const SOURCE_METADATA: Record<string, SourceMetadata> = {
     verifiedAt: DEFAULT_VERIFIED_AT,
     reviewAfter: DEFAULT_REVIEW_AFTER,
     owner: "official",
+  },
+  "Korea Visa Portal · Visa Types": {
+    label: "Korea Visa Portal · Visa Types",
+    url: "https://www.visa.go.kr/openPage.do?LANG_TYPE=EN&MENU_ID=10102",
+    verifiedAt: VISA_PORTAL_VERIFIED_AT,
+    reviewAfter: VISA_PORTAL_REVIEW_AFTER,
+    owner: "official",
+    sourceType: "official_government",
+    jurisdiction: "KR",
+    validFrom: "2026-07-02",
   },
   "HiKorea · 체류자격별 통합 안내 매뉴얼": {
     label: "하이코리아 체류자격별 통합 안내 매뉴얼",
@@ -660,12 +684,30 @@ export const KNOWLEDGE_DOCS: KnowledgeDoc[] = [
     },
     keywords: ["인증대학", "accredited", "인증", "국제화역량", "công nhận", "итгэмжлэл", "비자혜택", "visa benefit"],
     content: {
-      ko: "교육부는 매년 대학의 교육국제화역량을 평가하여 인증대학을 선정합니다. 인증대학은 사증 심사 간소화, 유학생 체류기간 단축 등의 혜택이 있습니다. 비인증대학은 유학생 유치가 제한되거나 비자심사 강화대학으로 지정될 수 있습니다. 2025년 기준 학위과정 16개교, 어학연수과정 4개교가 비자정밀 심사대학으로 지정되었으며, 2026년 2학기부터 1년간 비자 발급이 제한됩니다.",
-      vi: "MOE hàng năm đánh giá và认证 các trường đạt chuẩn quốc tế hóa. Trường认证 được hưởng lợi: visa gọn, thời gian lưu trú ngắn hơn. Trường không认证 có thể bị hạn chế hoặc đưa vào danh sách visa gắt. 2025: 16 trường ĐH, 4 trường tiếng bị xét kỹ, hạn chế visa từ 2026/2.",
-      mn: "Боловсролын яам жил бүр олон улсын чадавхын итгэмжлэл олгоно. Итгэмжлэгдсэн сургууль визний хөнгөлөлттэй. Итгэмжлэгдээгүй сургууль визний нарийн шалгалтад орж болно. 2025: 16 их сургууль, 4 хэлний курс нарийн шалгалтад, 2026/II-ээс 1 жил виз хязгаарлагдана.",
-      en: "MOE annually certifies universities with internationalization capacity. Accredited schools get simplified visa screening, shorter stay periods. Non-accredited may face restrictions or strict visa review. In 2025: 16 degree + 4 language programs under strict review, visa restricted 1 year from 2026/2.",
+      ko: "Study in Korea의 교육국제화역량 인증제(IEQAS) 안내에 따르면 법무부와 교육부는 우수 외국인 유학생 유치를 위해 매년 국제화 역량이 높은 대학을 평가·인증합니다. 2026-03-03 최종 수정 기준 인증대학은 학위과정 184개(대학교 135, 전문대학 33, 대학원대학 16), 한국어연수과정 126개(대학교 104, 전문대학 20, 대학원대학 2)로 공시되어 있습니다. 인증대학은 외국인 유학생 사증 심사기준 완화와 주중 시간제취업 허가시간 추가 등 혜택이 있고, 비인증대학은 별도 점검과 비자심사 강화 대상이 될 수 있으므로 학교 추천·서류 안내 전에 최신 인증 여부를 확인해야 합니다.",
+      vi: "Theo Study in Korea về IEQAS, Bộ Tư pháp và Bộ Giáo dục hằng năm đánh giá và chứng nhận các trường có năng lực quốc tế hóa cao để thu hút sinh viên quốc tế. Bản sửa đổi 2026-03-03 công bố 184 chương trình cấp bằng được chứng nhận và 126 chương trình tiếng Hàn được chứng nhận. Trường được chứng nhận có thể hưởng lợi khi xét visa và giờ làm thêm trong tuần; trường không được chứng nhận có thể bị kiểm tra hoặc xét visa chặt hơn, nên cần kiểm tra trạng thái mới nhất trước khi tư vấn trường/hồ sơ.",
+      mn: "Study in Korea-ийн IEQAS тайлбараар Хууль зүйн яам болон Боловсролын яам олон улсын чадавх өндөр сургуулийг жил бүр үнэлж баталгаажуулдаг. 2026-03-03-нд шинэчилсэн жагсаалтаар зэрэг олгох 184 байгууллага, солонгос хэлний 126 байгууллага баталгаажсан байна. Баталгаажсан сургууль визний шалгалт болон долоо хоногийн цагийн ажлын зөвшөөрөлд давуу байж болох тул сургууль санал болгох, материалын зөвлөгөө өгөхийн өмнө одоогийн баталгааг шалгана.",
+      en: "Study in Korea's IEQAS guidance says the Ministry of Justice and Ministry of Education annually evaluate and certify universities with strong internationalization capacity. As last modified on 2026-03-03, it lists 184 certified degree-program institutions and 126 certified Korean-language-program institutions. Certified universities may receive relaxed student-visa screening and additional weekday part-time work allowances, while non-certified universities may be inspected or face stricter visa review, so current certification must be checked before school or document guidance.",
     },
-    source: "교육부 보도자료 (2026.02)",
+    source: "Study in Korea · 인증대학",
+  },
+  {
+    id: "visa-portal-visa-types",
+    category: "visa",
+    title: {
+      ko: "Korea Visa Portal 비자 유형 목록",
+      vi: "Danh mục loại visa trên Korea Visa Portal",
+      mn: "Korea Visa Portal визийн төрлийн жагсаалт",
+      en: "Korea Visa Portal visa-type list",
+    },
+    keywords: ["visa portal", "비자포털", "비자 유형", "d-2", "d-4", "d-10", "e-7", "f-2", "f-5", "visa navigator"],
+    content: {
+      ko: "Korea Visa Portal의 비자 유형 목록은 법무부가 운영하는 사증 안내의 운영 보조 근거입니다. 2026-07-03 확인 기준 Study·Language Training 범주에는 Associate Degree(D-2-1), Bachelor's Degree(D-2-2), Master's Degree(D-2-3), Doctoral Degree(D-2-4), Research Study(D-2-5), Exchange Student(D-2-6), Korean Language Trainee(D-4-1), Student(D-4-3), Foreign Language Trainee(D-4-7)가 표시됩니다. Professional 범주에는 Job Seeker(D-10-1), Business Startup(D-10-2), Foreign National of Special Ability(E-7-1) 등이 표시됩니다. 실제 체류자격 판단은 출입국관리법·시행령·시행규칙을 우선하고, 비자포털은 명칭·분류·신청 경로 확인용으로 사용합니다.",
+      vi: "Danh mục loại visa trên Korea Visa Portal là căn cứ nghiệp vụ bổ trợ do Bộ Tư pháp vận hành. Kiểm tra ngày 2026-07-03: nhóm Study·Language Training gồm D-2-1, D-2-2, D-2-3, D-2-4, D-2-5, D-2-6, D-4-1, D-4-3, D-4-7; nhóm Professional gồm D-10-1, D-10-2 và E-7-1. Việc xác định tư cách lưu trú vẫn ưu tiên Luật Quản lý xuất nhập cảnh, Nghị định và Quy tắc thi hành; cổng visa dùng để kiểm tra tên, phân loại và đường nộp.",
+      mn: "Korea Visa Portal-ийн визийн төрөл нь Хууль зүйн яамны ажиллагааны туслах эх сурвалж. 2026-07-03-ны шалгалтаар Study·Language Training бүлэгт D-2-1, D-2-2, D-2-3, D-2-4, D-2-5, D-2-6, D-4-1, D-4-3, D-4-7; Professional бүлэгт D-10-1, D-10-2, E-7-1 зэрэг байна. Оршин суух эрхийн дүгнэлтэд хууль, журам, дүрмийг түрүүлж үзэж, визийн портал нь нэршил, ангилал, өргөдлийн замыг шалгахад хэрэглэгдэнэ.",
+      en: "The Korea Visa Portal visa-type list is operational guidance run by the Ministry of Justice. As checked on 2026-07-03, Study·Language Training includes D-2-1, D-2-2, D-2-3, D-2-4, D-2-5, D-2-6, D-4-1, D-4-3, and D-4-7; Professional includes D-10-1, D-10-2, and E-7-1. Legal stay-status conclusions must prioritize the Immigration Act, Enforcement Decree, and Enforcement Rule; the portal is used to confirm labels, categories, and application routes.",
+    },
+    source: "Korea Visa Portal · Visa Types",
   },
   {
     id: "cost-breakdown",
