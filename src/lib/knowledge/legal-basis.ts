@@ -50,14 +50,17 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
   if (!isImmigrationStayQuestion(query, mode)) return [];
 
   const text = `${mode || ""} ${query}`.toLowerCase();
+  const priorityIds: string[] = [];
   const ids = new Set<string>(BASE_IMMIGRATION_LEGAL_DOC_IDS);
   ids.add(IMMIGRATION_GENERAL_STAY_STATUS_DOC_ID);
   ids.add(IMMIGRATION_STATUS_DOC_ID);
 
   if (/단기|단기방문|단기취업|무사증|사증면제|관광|통과|입국|b-?1|b-?2|c-?1|c-?3|c-?4|short.?term|visa.?free|waiver|tourist|transit/.test(text)) {
+    priorityIds.push(IMMIGRATION_GENERAL_STAY_STATUS_DOC_ID, IMMIGRATION_SHORT_TERM_STATUS_DOC_ID);
     ids.add(IMMIGRATION_SHORT_TERM_STATUS_DOC_ID);
   }
   if (/영주|영주권|f-?5|permanent|residence/.test(text)) {
+    priorityIds.push(IMMIGRATION_PERMANENT_RESIDENCE_STATUS_DOC_ID, IMMIGRATION_PERMANENT_RESIDENCE_DOC_ID);
     ids.add(IMMIGRATION_PERMANENT_RESIDENCE_STATUS_DOC_ID);
     ids.add(IMMIGRATION_PERMANENT_RESIDENCE_DOC_ID);
   }
@@ -93,9 +96,11 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
     ids.add(IMMIGRATION_STAY_EXTENSION_DOC_ID);
   }
   if (/결혼이민|가정폭력|성폭력|아동학대|인신매매|피해자|권리구제|marriage immigrant|domestic violence|sexual violence|child abuse|human trafficking|victim/.test(text)) {
+    priorityIds.push(IMMIGRATION_MARRIAGE_IMMIGRANT_EXTENSION_SPECIAL_DOC_ID, IMMIGRATION_STAY_EXTENSION_DOC_ID);
     ids.add(IMMIGRATION_MARRIAGE_IMMIGRANT_EXTENSION_SPECIAL_DOC_ID);
   }
   if (/국가비상|비상사태|국경\s*폐쇄|항공기\s*운항\s*중단|항공편\s*(취소|중단)|출국할 수 없|직권\s*연장|emergency|border closure|flight suspension|unable to depart/.test(text)) {
+    priorityIds.push(IMMIGRATION_EMERGENCY_EXTENSION_SPECIAL_DOC_ID, IMMIGRATION_STAY_EXTENSION_DOC_ID);
     ids.add(IMMIGRATION_EMERGENCY_EXTENSION_SPECIAL_DOC_ID);
   }
   if (/재입국|re-?entry|reentry/.test(text)) {
@@ -121,7 +126,11 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
     ids.add(IMMIGRATION_VIOLATION_DOC_ID);
   }
 
-  return Array.from(ids);
+  const orderedPriorityIds = priorityIds.filter((id, index) => priorityIds.indexOf(id) === index);
+  return [
+    ...orderedPriorityIds.filter((id) => ids.has(id)),
+    ...Array.from(ids).filter((id) => !orderedPriorityIds.includes(id)),
+  ];
 }
 
 export function withImmigrationLegalBasisDocs(
