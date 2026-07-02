@@ -22,6 +22,8 @@ const IMMIGRATION_PERMANENT_RESIDENCE_STATUS_DOC_ID = "immigration-act-permanent
 const IMMIGRATION_ENTRY_BAN_DOC_ID = "immigration-act-entry-ban";
 const IMMIGRATION_ENTRY_INSPECTION_DOC_ID = "immigration-act-entry-inspection";
 const IMMIGRATION_EMPLOYMENT_RESTRICTION_DOC_ID = "immigration-act-employment-restriction";
+const IMMIGRATION_EMPLOYER_REPORTING_DUTY_DOC_ID = "immigration-act-employer-reporting-duty";
+const IMMIGRATION_STUDENT_MANAGEMENT_REPORTING_DOC_ID = "immigration-act-student-management-reporting";
 const IMMIGRATION_OUTSIDE_STATUS_ACTIVITY_DOC_ID = "immigration-act-outside-status-activity";
 const IMMIGRATION_WORKPLACE_CHANGE_DOC_ID = "immigration-act-workplace-change-addition";
 const IMMIGRATION_ACTIVITY_SCOPE_RESTRICTION_DOC_ID = "immigration-act-activity-scope-restriction";
@@ -35,6 +37,8 @@ const IMMIGRATION_REENTRY_DOC_ID = "immigration-act-reentry-permit";
 const IMMIGRATION_ALIEN_REGISTRATION_DOC_ID = "immigration-act-alien-registration";
 const IMMIGRATION_REGISTRATION_CHANGE_DOC_ID = "immigration-act-registration-change-report";
 const IMMIGRATION_ADDRESS_CHANGE_DOC_ID = "immigration-act-address-change-report";
+const IMMIGRATION_ARC_RETURN_DUTY_DOC_ID = "immigration-act-arc-return-duty";
+const IMMIGRATION_BIOMETRIC_INFORMATION_DUTY_DOC_ID = "immigration-act-biometric-information-duty";
 const IMMIGRATION_DEPORTATION_GROUNDS_DOC_ID = "immigration-act-deportation-grounds";
 const IMMIGRATION_DEPARTURE_RECOMMENDATION_ORDER_DOC_ID = "immigration-act-departure-recommendation-order";
 const IMMIGRATION_REVIEW_CRITERIA_DOC_ID = "immigration-rule-stay-permission-review-criteria";
@@ -49,7 +53,7 @@ function stripSourceMeta(doc: KnowledgeDocWithMetadata): KnowledgeDoc {
 
 export function isImmigrationStayQuestion(query: string, mode?: string): boolean {
   const text = `${mode || ""} ${query}`.toLowerCase();
-  return /비자|사증|입국|여권|초청|체류|출입국|외국인등록|유학|어학|연수|구직|특정활동|거주|영주|취업|고용|근무처|아르바이트|시간제|불법취업|d-?2|d-?4|d-?10|e-?7|f-?2|f-?5|visa|passport|entry|inviter|sponsor|immigration|stay status|sojourn|employment|workplace|part-?time/.test(text);
+  return /비자|사증|입국|여권|초청|체류|출입국|외국인등록|등록증|생체정보|지문|유학|학적|어학|연수|구직|특정활동|거주|영주|취업|고용|고용주|근무처|아르바이트|시간제|불법취업|d-?2|d-?4|d-?10|e-?7|f-?2|f-?5|visa|passport|entry|inviter|sponsor|immigration|stay status|sojourn|employment|employer|workplace|biometric|fingerprint|part-?time/.test(text);
 }
 
 export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string): string[] {
@@ -100,6 +104,17 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
   if (/취업|고용|일할|일해|근무|불법취업|employment|work authorization|unauthorized work|work status/.test(text)) {
     ids.add(IMMIGRATION_EMPLOYMENT_RESTRICTION_DOC_ID);
   }
+  if (/고용주|사업주|사용자|해고|퇴직|사직|소재불명|고용계약.*변경|계약.*변경|employer report|employer reporting|dismissal|resignation|employment contract change|unable to locate|disappearance/.test(text)) {
+    priorityIds.push(IMMIGRATION_EMPLOYER_REPORTING_DUTY_DOC_ID);
+    ids.add(IMMIGRATION_EMPLOYER_REPORTING_DUTY_DOC_ID);
+    ids.add(IMMIGRATION_EMPLOYMENT_RESTRICTION_DOC_ID);
+    ids.add(IMMIGRATION_WORKPLACE_CHANGE_DOC_ID);
+  }
+  if (/유학생.*(휴학|제적|미등록|행방불명|학적|학교.*신고)|학적변동|학적\s*변동|유학생정보시스템|학교.*(휴학|제적|미등록|행방불명|신고)|school reporting|student status change|leave of absence|removal from register|training discontinuation|student disappearance/.test(text)) {
+    priorityIds.push(IMMIGRATION_STUDENT_MANAGEMENT_REPORTING_DOC_ID);
+    ids.add(IMMIGRATION_STUDENT_MANAGEMENT_REPORTING_DOC_ID);
+    ids.add(IMMIGRATION_OUTSIDE_STATUS_ACTIVITY_DOC_ID);
+  }
   if (/체류자격\s*외|체류자격외|자격외|아르바이트|시간제|part-?time|outside[-\s]?status/.test(text)) {
     ids.add(IMMIGRATION_OUTSIDE_STATUS_ACTIVITY_DOC_ID);
   }
@@ -134,6 +149,17 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
     ids.add(IMMIGRATION_REENTRY_DOC_ID);
   }
   if (/외국인등록|등록증|arc|alien registration/.test(text)) {
+    ids.add(IMMIGRATION_ALIEN_REGISTRATION_DOC_ID);
+  }
+  if (/외국인등록증.*(반납|반환|회수)|등록증.*(반납|반환|회수)|출국.*등록증|arc return|alien registration card.*return|registration card.*return/.test(text)) {
+    priorityIds.push(IMMIGRATION_ARC_RETURN_DUTY_DOC_ID);
+    ids.add(IMMIGRATION_ARC_RETURN_DUTY_DOC_ID);
+    ids.add(IMMIGRATION_ALIEN_REGISTRATION_DOC_ID);
+    ids.add(IMMIGRATION_REENTRY_DOC_ID);
+  }
+  if (/생체정보|지문|얼굴정보|안면정보|지문.*거부|생체.*거부|biometric|fingerprint|face information|fingerprint refusal/.test(text)) {
+    priorityIds.push(IMMIGRATION_BIOMETRIC_INFORMATION_DUTY_DOC_ID);
+    ids.add(IMMIGRATION_BIOMETRIC_INFORMATION_DUTY_DOC_ID);
     ids.add(IMMIGRATION_ALIEN_REGISTRATION_DOC_ID);
   }
   if (/여권|등록사항|성명|성별|생년월일|국적|passport|nationality|name change/.test(text)) {

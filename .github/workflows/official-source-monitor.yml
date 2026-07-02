@@ -41,11 +41,11 @@ jobs:
           - batch: law-entry-removal
             source_ids: immigration-act-entry-ban,immigration-act-entry-inspection,immigration-act-deportation-grounds,immigration-act-departure-recommendation-order
           - batch: law-work-permissions
-            source_ids: immigration-act-employment-restriction,immigration-act-outside-status-activity,immigration-act-workplace-change-addition,immigration-act-activity-scope-restriction,immigration-act-false-application-documents
+            source_ids: immigration-act-employment-restriction,immigration-act-employer-reporting-duty,immigration-act-student-management-reporting,immigration-act-outside-status-activity,immigration-act-workplace-change-addition,immigration-act-activity-scope-restriction,immigration-act-false-application-documents
           - batch: law-stay-permissions
             source_ids: immigration-act-status-grant,immigration-act-status-change,immigration-act-stay-extension,immigration-act-marriage-immigrant-extension-special,immigration-act-emergency-extension-special
           - batch: law-stay-duties
-            source_ids: immigration-act-reentry-permit,immigration-act-alien-registration,immigration-act-registration-change-report,immigration-act-address-change-report
+            source_ids: immigration-act-reentry-permit,immigration-act-alien-registration,immigration-act-registration-change-report,immigration-act-address-change-report,immigration-act-arc-return-duty,immigration-act-biometric-information-duty
           - batch: rule-and-procedure
             source_ids: immigration-rule-stay-permission-review-criteria,immigration-rule-documents-attachments,immigration-rule-fees,hikorea-homepage-urgent-notices,hikorea-integrated-status-manual,hikorea-d2-d4-d10-e7-f2-f5-requirements,hikorea-stay-extension
           - batch: hikorea-news

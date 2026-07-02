@@ -462,6 +462,10 @@ function officialSummaryDocScore(question: string, doc: KnowledgeDoc, lang: Lang
   const asksEntryBan = /입국금지|입국\s*거부|입국불허|entry ban|refusal of entry|denied entry|inadmissible/i.test(question);
   const asksDeportation = /강제퇴거|퇴거명령|추방|deportation|removal/i.test(question);
   const asksDepartureOrder = /출국권고|출국명령|자진출국|출국기한|departure recommendation|departure order|voluntary departure/i.test(question);
+  const asksEmployerReport = /고용주|사업주|사용자|해고|퇴직|사직|소재불명|고용계약.*변경|계약.*변경|employer report|employer reporting|dismissal|resignation|employment contract change|unable to locate|disappearance/i.test(question);
+  const asksStudentManagement = /유학생.*(휴학|제적|미등록|행방불명|학적|학교.*신고)|학적변동|학적\s*변동|유학생정보시스템|학교.*(휴학|제적|미등록|행방불명|신고)|school reporting|student status change|leave of absence|removal from register|training discontinuation|student disappearance/i.test(question);
+  const asksArcReturn = /외국인등록증.*(반납|반환|회수)|등록증.*(반납|반환|회수)|출국.*등록증|arc return|alien registration card.*return|registration card.*return/i.test(question);
+  const asksBiometrics = /생체정보|지문|얼굴정보|안면정보|지문.*거부|생체.*거부|biometric|fingerprint|face information|fingerprint refusal/i.test(question);
 
   for (const word of words) {
     if (haystack.includes(word)) score += 0.75;
@@ -522,6 +526,25 @@ function officialSummaryDocScore(question: string, doc: KnowledgeDoc, lang: Lang
   if (asksDepartureOrder) {
     if (doc.id === "immigration-act-departure-recommendation-order") score += 32;
     if (doc.id === "immigration-act-deportation-grounds") score += 14;
+  }
+  if (asksEmployerReport) {
+    if (doc.id === "immigration-act-employer-reporting-duty") score += 32;
+    if (doc.id === "immigration-act-employment-restriction") score += 10;
+    if (doc.id === "immigration-act-workplace-change-addition") score += 8;
+  }
+  if (asksStudentManagement) {
+    if (doc.id === "immigration-act-student-management-reporting") score += 32;
+    if (doc.id === "hikorea-d2-d4-d10-e7-f2-f5-requirements") score += 8;
+    if (doc.id === "immigration-act-outside-status-activity") score += 6;
+  }
+  if (asksArcReturn) {
+    if (doc.id === "immigration-act-arc-return-duty") score += 32;
+    if (doc.id === "immigration-act-alien-registration") score += 10;
+    if (doc.id === "immigration-act-reentry-permit") score += 8;
+  }
+  if (asksBiometrics) {
+    if (doc.id === "immigration-act-biometric-information-duty") score += 32;
+    if (doc.id === "immigration-act-alien-registration") score += 10;
   }
 
   if (doc.id === "immigration-law-recent-promulgations") {

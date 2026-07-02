@@ -8,6 +8,7 @@ import {
   getKnowledgeSourceAudit,
   type KnowledgeDoc,
 } from "../data/knowledge";
+import { createHash } from "crypto";
 import type { Lang } from "../i18n/translations";
 import {
   fitVectorizer,
@@ -64,6 +65,16 @@ let store: VectorStore = {
 const CACHE_FILE =
   process.env.VECTOR_CACHE_FILE ||
   path.join(process.cwd(), "data", "vector-store", "embeddings-cache.json");
+
+function embeddingCacheKey(doc: KnowledgeDoc): string {
+  const text = multilingualText({
+    title: doc.title,
+    content: doc.content,
+    keywords: doc.keywords,
+  });
+  const digest = createHash("sha256").update(text).digest("hex").slice(0, 16);
+  return `${doc.id}:${digest}`;
+}
 
 function reviewDateKey(date = new Date()): string {
   return date.toISOString().slice(0, 10);
@@ -220,33 +231,44 @@ export async function initTransformerStore(): Promise<void> {
 
   if (cache) {
     for (const doc of store.docs) {
-      if (cache[doc.id]) {
-        cachedVectors[doc.id] = new Float32Array(cache[doc.id]);
+      const cacheKey = embeddingCacheKey(doc);
+      if (cache[cacheKey]) {
+        cachedVectors[doc.id] = new Float32Array(cache[cacheKey]);
       }
     }
     console.log(`[VectorStore] Cache hit: ${Object.keys(cachedVectors).length}/${store.docs.length}`);
   }
 
   // 캐시 안된 문서 임베딩
-  const newCache: Record<string, number[]> = { ...(cache || {}) };
+  const newCache: Record<string, number[]> = {};
   let allSuccess = true;
 
   for (const doc of store.docs) {
+    const cacheKey = embeddingCacheKey(doc);
     if (cachedVectors[doc.id]) continue;
 
     try {
       console.log(`[VectorStore] Embedding: ${doc.id}`);
       const vec = await embedDoc(doc);
       cachedVectors[doc.id] = vec;
-      newCache[doc.id] = Array.from(vec);
+      newCache[cacheKey] = Array.from(vec);
     } catch (e) {
       console.error(`[VectorStore] Embed failed for ${doc.id}:`, e);
       allSuccess = false;
     }
   }
 
+  for (const doc of store.docs) {
+    const cacheKey = embeddingCacheKey(doc);
+    if (!newCache[cacheKey] && cachedVectors[doc.id]) {
+      newCache[cacheKey] = Array.from(cachedVectors[doc.id]);
+    }
+  }
+
   // 캐시 저장
   if (Object.keys(newCache).length > (cache ? Object.keys(cache).length : 0)) {
+    saveCache(newCache);
+  } else if (cache && Object.keys(cache).some((key) => !newCache[key])) {
     saveCache(newCache);
   }
 

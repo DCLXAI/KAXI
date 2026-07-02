@@ -54,6 +54,9 @@ const LAW_ACT_VISA_PASSPORT_REQUIREMENT_URL =
   "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0007&lsiSeq=272921&urlMode=lsScJoRltInfoR";
 const LAW_ACT_EMPLOYMENT_RESTRICTION_URL =
   "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0018&lsiSeq=272921&urlMode=lsScJoRltInfoR";
+const LAW_ACT_EMPLOYER_REPORTING_DUTY_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0019&lsiSeq=272921&urlMode=lsScJoRltInfoR";
+const LAW_ACT_STUDENT_MANAGEMENT_REPORTING_URL = LAW_ACT_URL;
 const LAW_ACT_OUTSIDE_STATUS_ACTIVITY_URL =
   "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0020&lsiSeq=272921&urlMode=lsScJoRltInfoR";
 const LAW_ACT_WORKPLACE_CHANGE_ADDITION_URL =
@@ -74,6 +77,10 @@ const LAW_ACT_REGISTRATION_CHANGE_REPORT_URL =
   "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0035&lsiSeq=272921&urlMode=lsScJoRltInfoR";
 const LAW_ACT_ADDRESS_CHANGE_REPORT_URL =
   "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0036&lsiSeq=272921&urlMode=lsScJoRltInfoR";
+const LAW_ACT_ARC_RETURN_DUTY_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0037&lsiSeq=272921&urlMode=lsScJoRltInfoR";
+const LAW_ACT_BIOMETRIC_INFORMATION_DUTY_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0038&lsiSeq=272921&urlMode=lsScJoRltInfoR";
 const LAW_ACT_FALSE_APPLICATION_DOCUMENTS_URL =
   "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0026&lsiSeq=272921&urlMode=lsScJoRltInfoR";
 const LAW_ACT_GENERAL_STAY_STATUS_URL =
@@ -210,6 +217,43 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     legalPriority: 1,
     monitorCadence: "daily",
     changeSignals: ["employment_restriction", "work_status", "designated_workplace", "employer_ban"],
+  },
+  {
+    docId: "immigration-act-employer-reporting-duty",
+    title: "출입국관리법 제19조 외국인을 고용한 자 등의 신고의무",
+    sourceUrl: LAW_ACT_EMPLOYER_REPORTING_DUTY_URL,
+    sourceType: "official_law",
+    topic: "process",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: [
+      "employer_report",
+      "15_days",
+      "dismissal",
+      "resignation",
+      "disappearance",
+      "employment_contract_change",
+      "e7",
+    ],
+  },
+  {
+    docId: "immigration-act-student-management-reporting",
+    title: "출입국관리법 제19조의4 외국인유학생의 관리 등",
+    sourceUrl: LAW_ACT_STUDENT_MANAGEMENT_REPORTING_URL,
+    sourceType: "official_law",
+    topic: "process",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: [
+      "foreign_student_management",
+      "school_reporting",
+      "leave_of_absence",
+      "removal_from_register",
+      "training_discontinuation",
+      "disappearance",
+      "d2",
+      "d4",
+    ],
   },
   {
     docId: "immigration-act-outside-status-activity",
@@ -380,6 +424,33 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     legalPriority: 1,
     monitorCadence: "daily",
     changeSignals: ["address_change", "place_of_stay", "moving", "15_days", "online_report", "mobile_arc"],
+  },
+  {
+    docId: "immigration-act-arc-return-duty",
+    title: "출입국관리법 제37조 외국인등록증의 반납 등",
+    sourceUrl: LAW_ACT_ARC_RETURN_DUTY_URL,
+    sourceType: "official_law",
+    topic: "process",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["arc_return", "departure", "reentry_permit", "multiple_visa", "naturalization", "death", "15_days"],
+  },
+  {
+    docId: "immigration-act-biometric-information-duty",
+    title: "출입국관리법 제38조 생체정보의 제공 등",
+    sourceUrl: LAW_ACT_BIOMETRIC_INFORMATION_DUTY_URL,
+    sourceType: "official_law",
+    topic: "process",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: [
+      "biometric_information",
+      "fingerprints",
+      "face",
+      "alien_registration",
+      "domestic_residence_report",
+      "extension_denial",
+    ],
   },
   {
     docId: "immigration-act-deportation-grounds",
