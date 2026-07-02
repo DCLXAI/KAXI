@@ -57,6 +57,9 @@ try {
     "moj-skilled-worker-points-visa",
     "moj-seasonal-worker-program",
     "moj-online-stay-visa-center",
+    "moj-stay-management-policy",
+    "moj-tax-health-arrears-extension-restriction",
+    "moj-social-integration-program-kiip",
     "accredited-university",
     "visa-portal-visa-types",
   ];

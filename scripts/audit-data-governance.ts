@@ -113,6 +113,9 @@ const requiredMojPolicyDocs = [
   "moj-skilled-worker-points-visa",
   "moj-seasonal-worker-program",
   "moj-online-stay-visa-center",
+  "moj-stay-management-policy",
+  "moj-tax-health-arrears-extension-restriction",
+  "moj-social-integration-program-kiip",
 ];
 for (const docId of requiredMojPolicyDocs) {
   const doc = KNOWLEDGE_DOCS.find((item) => item.id === docId);

@@ -65,6 +65,9 @@ const MOJ_F4_EMPLOYMENT_RESTRICTION_PREANNOUNCEMENT_URL =
 const MOJ_SKILLED_WORKER_POINTS_VISA_URL = "https://www.immigration.go.kr/moj/187/subview.do";
 const MOJ_SEASONAL_WORKER_PROGRAM_URL = "https://www.immigration.go.kr/moj/194/subview.do";
 const MOJ_ONLINE_STAY_VISA_CENTER_URL = "https://www.immigration.go.kr/moj/198/subview.do";
+const MOJ_STAY_MANAGEMENT_POLICY_URL = "https://www.immigration.go.kr/immigration/1515/subview.do";
+const MOJ_TAX_HEALTH_ARREARS_EXTENSION_URL = "https://www.immigration.go.kr/immigration/1522/subview.do";
+const MOJ_SOCIAL_INTEGRATION_PROGRAM_URL = "https://www.immigration.go.kr/moj/369/subview.do";
 const STUDY_IN_KOREA_CERTIFIED_UNIVERSITY_URL =
   "https://studyinkorea.go.kr/ko/plan/certifiedUniversity.do";
 const VISA_PORTAL_VISA_TYPES_URL = "https://www.visa.go.kr/openPage.do?LANG_TYPE=EN&MENU_ID=10102";
@@ -305,6 +308,36 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     legalPriority: 4,
     monitorCadence: "daily",
     changeSignals: ["e_visa", "e_application", "online_petition", "stay_extension", "fee_discount"],
+  },
+  {
+    docId: "moj-stay-management-policy",
+    title: "법무부 외국인 체류관리 정책",
+    sourceUrl: MOJ_STAY_MANAGEMENT_POLICY_URL,
+    sourceType: "official_government",
+    topic: "process",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["student_policy", "e7_occupation", "seasonal_worker", "e7-4", "stay_management"],
+  },
+  {
+    docId: "moj-tax-health-arrears-extension-restriction",
+    title: "외국인 비자연장 전 세금·건강보험료 체납 확인제도",
+    sourceUrl: MOJ_TAX_HEALTH_ARREARS_EXTENSION_URL,
+    sourceType: "official_government",
+    topic: "warning",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["tax_arrears", "health_insurance_arrears", "extension_restriction", "six_month_limit", "office_scope"],
+  },
+  {
+    docId: "moj-social-integration-program-kiip",
+    title: "법무부 사회통합프로그램",
+    sourceUrl: MOJ_SOCIAL_INTEGRATION_PROGRAM_URL,
+    sourceType: "official_government",
+    topic: "visa",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["kiip", "permanent_residence", "naturalization", "points", "course_hours", "pre_test_fee"],
   },
   {
     docId: "accredited-university",
