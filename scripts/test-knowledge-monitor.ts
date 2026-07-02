@@ -43,6 +43,11 @@ try {
   const requiredWatchlistIds = [
     "immigration-law-recent-promulgations",
     "immigration-act-stay-status-scope",
+    "immigration-act-employment-restriction",
+    "immigration-act-outside-status-activity",
+    "immigration-act-workplace-change-addition",
+    "immigration-act-activity-scope-restriction",
+    "immigration-act-false-application-documents",
     "immigration-act-status-grant",
     "immigration-act-status-change",
     "immigration-act-stay-extension",

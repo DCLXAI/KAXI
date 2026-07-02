@@ -15,6 +15,11 @@ const IMMIGRATION_STATUS_DOC_ID = "immigration-decree-long-term-status-table";
 const IMMIGRATION_SHORT_TERM_STATUS_DOC_ID = "immigration-decree-short-term-status-table";
 const IMMIGRATION_PERMANENT_RESIDENCE_DOC_ID = "immigration-decree-permanent-residence-table";
 const IMMIGRATION_PERMISSION_DOC_ID = "immigration-act-permission-matrix";
+const IMMIGRATION_EMPLOYMENT_RESTRICTION_DOC_ID = "immigration-act-employment-restriction";
+const IMMIGRATION_OUTSIDE_STATUS_ACTIVITY_DOC_ID = "immigration-act-outside-status-activity";
+const IMMIGRATION_WORKPLACE_CHANGE_DOC_ID = "immigration-act-workplace-change-addition";
+const IMMIGRATION_ACTIVITY_SCOPE_RESTRICTION_DOC_ID = "immigration-act-activity-scope-restriction";
+const IMMIGRATION_FALSE_APPLICATION_DOCS_ID = "immigration-act-false-application-documents";
 const IMMIGRATION_STATUS_GRANT_DOC_ID = "immigration-act-status-grant";
 const IMMIGRATION_STATUS_CHANGE_DOC_ID = "immigration-act-status-change";
 const IMMIGRATION_STAY_EXTENSION_DOC_ID = "immigration-act-stay-extension";
@@ -34,7 +39,7 @@ function stripSourceMeta(doc: KnowledgeDocWithMetadata): KnowledgeDoc {
 
 export function isImmigrationStayQuestion(query: string, mode?: string): boolean {
   const text = `${mode || ""} ${query}`.toLowerCase();
-  return /비자|체류|출입국|외국인등록|유학|어학|연수|구직|특정활동|거주|영주|d-?2|d-?4|d-?10|e-?7|f-?2|f-?5|visa|immigration|stay status|sojourn/.test(text);
+  return /비자|체류|출입국|외국인등록|유학|어학|연수|구직|특정활동|거주|영주|취업|고용|근무처|아르바이트|시간제|불법취업|d-?2|d-?4|d-?10|e-?7|f-?2|f-?5|visa|immigration|stay status|sojourn|employment|workplace|part-?time/.test(text);
 }
 
 export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string): string[] {
@@ -56,6 +61,21 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
   if (/변경|연장|자격외|근무처|외국인등록|등록|신고|취업|일|change|extend|extension|work|registration/.test(text)) {
     ids.add(IMMIGRATION_PERMISSION_DOC_ID);
     ids.add(IMMIGRATION_REVIEW_CRITERIA_DOC_ID);
+  }
+  if (/취업|고용|일할|일해|근무|불법취업|employment|work authorization|unauthorized work|work status/.test(text)) {
+    ids.add(IMMIGRATION_EMPLOYMENT_RESTRICTION_DOC_ID);
+  }
+  if (/체류자격\s*외|체류자격외|자격외|아르바이트|시간제|part-?time|outside[-\s]?status/.test(text)) {
+    ids.add(IMMIGRATION_OUTSIDE_STATUS_ACTIVITY_DOC_ID);
+  }
+  if (/근무처|사업장\s*변경|직장\s*변경|고용주\s*변경|workplace|employer change|change.*workplace/.test(text)) {
+    ids.add(IMMIGRATION_WORKPLACE_CHANGE_DOC_ID);
+  }
+  if (/활동범위|거소|준수사항|공공의\s*안녕|activity scope|residence restriction|compliance condition/.test(text)) {
+    ids.add(IMMIGRATION_ACTIVITY_SCOPE_RESTRICTION_DOC_ID);
+  }
+  if (/허위|위조|변조|거짓|브로커|알선|fake|forged|false application|broker/.test(text)) {
+    ids.add(IMMIGRATION_FALSE_APPLICATION_DOCS_ID);
   }
   if (/체류자격\s*부여|체류자격부여|출생|태어난|국적\s*(상실|이탈)|status grant|born in korea|loss of nationality/.test(text)) {
     ids.add(IMMIGRATION_STATUS_GRANT_DOC_ID);
