@@ -1,7 +1,8 @@
 import { mkdir, writeFile } from "fs/promises";
 import { dirname, join } from "path";
+import { getRuntimeDatabaseInfo, db } from "@/lib/db";
 
-export type DocumentStorageKind = "local" | "blob" | "disabled" | "unsupported";
+export type DocumentStorageKind = "local" | "blob" | "database" | "disabled" | "unsupported";
 
 export interface DocumentStorageInfo {
   kind: DocumentStorageKind;
@@ -29,6 +30,7 @@ export function getDocumentStorageInfo(env: NodeJS.ProcessEnv = process.env): Do
   const hostedRuntime = isHostedRuntime(env);
   const blobTokenConfigured = configured(env.BLOB_READ_WRITE_TOKEN);
   const backend = requestedBackend(env);
+  const database = getRuntimeDatabaseInfo(env);
 
   if (env.DOCUMENT_UPLOAD_STORE_BYTES === "false") {
     return {
@@ -53,6 +55,19 @@ export function getDocumentStorageInfo(env: NodeJS.ProcessEnv = process.env): Do
       reason: blobTokenConfigured
         ? "Vercel Blob storage is configured for document bytes."
         : "BLOB_READ_WRITE_TOKEN is required when DOCUMENT_UPLOAD_STORAGE_BACKEND=blob.",
+    };
+  }
+
+  if (backend === "database" || backend === "db" || backend === "postgres" || backend === "postgresql") {
+    return {
+      kind: "database",
+      hostedRuntime,
+      writable: database.writable,
+      durable: database.sharedWritable,
+      blobTokenConfigured,
+      reason: database.writable
+        ? "Document bytes are stored in the shared operational database."
+        : `Document database storage requires a writable operational database. ${database.reason}`,
     };
   }
 
@@ -96,6 +111,22 @@ export async function persistUploadedBytes(storageKey: string, bytes: Uint8Array
       contentType: mimeType,
       addRandomSuffix: false,
       allowOverwrite: false,
+    });
+    return;
+  }
+
+  if (storage.kind === "database") {
+    const buffer = Buffer.from(bytes);
+    const { createHash } = await import("crypto");
+    const sha256 = createHash("sha256").update(buffer).digest("hex");
+    await db.documentFileBlob.create({
+      data: {
+        storageKey,
+        mimeType,
+        sizeBytes: buffer.byteLength,
+        sha256,
+        bytes: buffer,
+      },
     });
     return;
   }

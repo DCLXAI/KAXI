@@ -37,6 +37,7 @@ jobs:
       AI_CONSULT_CODEX_MAX_DOCS: "5"
       AI_CONSULT_CODEX_DOC_CHARS: "650"
       AI_CONSULT_CODEX_CONTEXT_CHARS: "5500"
+      DOCUMENT_UPLOAD_STORAGE_BACKEND: database
       DEPLOY_AFTER_UPDATE: ${{ inputs.deploy }}
       NEXTAUTH_URL: https://kaxi.vercel.app
       NEXTAUTH_URL_INTERNAL: https://kaxi.vercel.app
@@ -93,10 +94,26 @@ jobs:
           update_env "AI_CONSULT_CODEX_MAX_DOCS" "$AI_CONSULT_CODEX_MAX_DOCS"
           update_env "AI_CONSULT_CODEX_DOC_CHARS" "$AI_CONSULT_CODEX_DOC_CHARS"
           update_env "AI_CONSULT_CODEX_CONTEXT_CHARS" "$AI_CONSULT_CODEX_CONTEXT_CHARS"
+          update_env "DOCUMENT_UPLOAD_STORAGE_BACKEND" "$DOCUMENT_UPLOAD_STORAGE_BACKEND"
 
       - name: Pull Vercel production environment
         if: ${{ env.DEPLOY_AFTER_UPDATE == 'true' }}
         run: bunx vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Apply PostgreSQL migrations
+        if: ${{ env.DEPLOY_AFTER_UPDATE == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          . .vercel/.env.production.local
+          set +a
+
+          if [[ "${DATABASE_URL:-}" =~ ^postgres(ql)?:// ]]; then
+            bunx prisma migrate deploy --schema prisma/postgres/schema.prisma
+          else
+            echo "Skipping PostgreSQL migrations: DATABASE_URL is not PostgreSQL."
+          fi
 
       - name: Build with Vercel
         if: ${{ env.DEPLOY_AFTER_UPDATE == 'true' }}

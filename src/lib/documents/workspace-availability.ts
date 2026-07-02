@@ -42,7 +42,7 @@ function databaseRequirements(reason: string): string[] {
 
 function storageRequirements(reason: string): string[] {
   return [
-    "운영 문서 업로드는 Vercel Blob 같은 영구 object storage와 BLOB_READ_WRITE_TOKEN 설정이 필요합니다.",
+    "운영 문서 업로드는 DOCUMENT_UPLOAD_STORAGE_BACKEND=database 같은 공유 DB 저장소 또는 Vercel Blob 같은 영구 object storage와 BLOB_READ_WRITE_TOKEN 설정이 필요합니다.",
     `현재 저장소 상태: ${reason}`,
   ];
 }

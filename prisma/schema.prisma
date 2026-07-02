@@ -236,6 +236,21 @@ model UploadedFile {
   @@index([createdAt])
 }
 
+model DocumentFileBlob {
+  id         String   @id @default(cuid())
+  storageKey String   @unique
+  mimeType   String
+  sizeBytes  Int
+  sha256     String
+  bytes      Bytes
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+
+  @@index([sha256])
+  @@index([createdAt])
+}
+
 // 유학 경로 진단을 완료한 사용자 (리드)
 model Lead {
   id          String   @id @default(cuid())

@@ -33,6 +33,20 @@ jobs:
       - name: Pull Vercel production environment
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
         run: bunx vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+      - name: Apply PostgreSQL migrations
+        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          . .vercel/.env.production.local
+          set +a
+
+          if [[ "${DATABASE_URL:-}" =~ ^postgres(ql)?:// ]]; then
+            bunx prisma migrate deploy --schema prisma/postgres/schema.prisma
+          else
+            echo "Skipping PostgreSQL migrations: DATABASE_URL is not PostgreSQL."
+          fi
       - name: Build with Vercel
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
         run: bunx vercel build --prod --token="$VERCEL_TOKEN"

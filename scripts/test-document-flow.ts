@@ -76,6 +76,14 @@ try {
     blockedHostedUpload.metadata.storageWritable === false,
     "hosted local document storage should not be considered writable"
   );
+  const hostedDatabaseUpload = getDocumentWorkspaceIssue("upload", {
+    ...process.env,
+    VERCEL: "1",
+    DATABASE_URL: "postgres://user:pass@example.com:5432/kaxi",
+    DOCUMENT_UPLOAD_STORAGE_BACKEND: "database",
+    DOCUMENT_UPLOAD_SIGNING_SECRET: "configured",
+  });
+  assert(!hostedDatabaseUpload, "hosted postgres database document storage should be available");
 
   const studentRef = "student-flow-test-001";
   const listBefore = await json(await listRoute.GET(request(`/api/documents?studentRef=${studentRef}`)));
@@ -126,6 +134,48 @@ try {
   assert(uploadedFile.mimeType === "application/pdf", "UploadedFile MIME should be stored");
   assert(uploadedFile.sizeBytes === pdf.byteLength, "UploadedFile size should be stored");
   assert(existsSync(join(process.env.DOCUMENT_UPLOAD_DIR!, uploadedFile.storageKey)), "uploaded bytes should be stored");
+
+  process.env.DOCUMENT_UPLOAD_STORAGE_BACKEND = "database";
+  const dbBackedPdf = Buffer.from("%PDF-1.4\nKAXI database backed document\n%%EOF\n", "utf8");
+  const dbBackedHash = sha256(dbBackedPdf);
+  const databaseIntent = await json(
+    await intentRoute.POST(
+      request("/api/documents/upload-intent", {
+        method: "POST",
+        body: JSON.stringify({
+          studentRef,
+          documentType: "transcript",
+          originalName: "transcript.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: dbBackedPdf.byteLength,
+          sha256: dbBackedHash,
+        }),
+      })
+    )
+  );
+  assert(databaseIntent.ok, `database upload intent should succeed: ${JSON.stringify(databaseIntent.body)}`);
+
+  const databaseUpload = await json(
+    await directRoute.PUT(
+      new NextRequest(databaseIntent.body.uploadUrl, {
+        method: "PUT",
+        headers: {
+          "content-type": "application/pdf",
+          "x-kaxi-file-sha256": dbBackedHash,
+        },
+        body: new Blob([dbBackedPdf], { type: "application/pdf" }),
+      })
+    )
+  );
+  assert(databaseUpload.ok, `database-backed upload should succeed: ${JSON.stringify(databaseUpload.body)}`);
+  const databaseBlob = await db.documentFileBlob.findUnique({
+    where: { storageKey: databaseIntent.body.storageKey },
+  });
+  assert(databaseBlob, "DocumentFileBlob should store database-backed upload bytes");
+  assert(databaseBlob.sizeBytes === dbBackedPdf.byteLength, "DocumentFileBlob size should match upload");
+  assert(databaseBlob.sha256 === dbBackedHash, "DocumentFileBlob sha256 should match upload");
+  assert(Buffer.from(databaseBlob.bytes).equals(dbBackedPdf), "DocumentFileBlob bytes should match upload");
+  process.env.DOCUMENT_UPLOAD_STORAGE_BACKEND = "local";
 
   const uploadedDoc = await db.documentItem.findFirst({
     where: { documentType: "passport" },
