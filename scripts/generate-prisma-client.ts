@@ -4,6 +4,22 @@ function isPostgresUrl(value: string | undefined): boolean {
   return /^postgres(?:ql)?:\/\//i.test((value || "").trim());
 }
 
+function isPrismaPostgresUrl(value: string | undefined): boolean {
+  return /^prisma\+postgres:\/\//i.test((value || "").trim());
+}
+
+function providerOverride(): "postgresql" | "sqlite" | null {
+  const value = (
+    process.env.KAXI_PRISMA_PROVIDER ||
+    process.env.PRISMA_SCHEMA_PROVIDER ||
+    ""
+  ).trim().toLowerCase();
+
+  if (value === "postgres" || value === "postgresql") return "postgresql";
+  if (value === "sqlite") return "sqlite";
+  return null;
+}
+
 function databaseUrlForGeneration(): string {
   const databaseUrl = process.env.DATABASE_URL?.trim();
   const postgresUrl = process.env.POSTGRES_URL?.trim();
@@ -18,8 +34,15 @@ function databaseUrlForGeneration(): string {
 }
 
 const databaseUrl = databaseUrlForGeneration();
-const schema = isPostgresUrl(databaseUrl) ? "prisma/postgres/schema.prisma" : "prisma/schema.prisma";
-const provider = schema.includes("/postgres/") ? "postgresql" : "sqlite";
+const forcedProvider = providerOverride();
+const provider =
+  forcedProvider ||
+  (isPostgresUrl(databaseUrl) ||
+  isPostgresUrl(process.env.POSTGRES_URL) ||
+  isPrismaPostgresUrl(process.env.PRISMA_DATABASE_URL)
+    ? "postgresql"
+    : "sqlite");
+const schema = provider === "postgresql" ? "prisma/postgres/schema.prisma" : "prisma/schema.prisma";
 
 console.log(`[prisma] generating ${provider} client from ${schema}`);
 
