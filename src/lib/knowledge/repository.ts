@@ -512,7 +512,7 @@ export async function upsertPendingKnowledgeCandidate(input: KnowledgeMutationIn
     where: { docId: input.docId },
     include: { chunks: { orderBy: { chunkIndex: "asc" } } },
   });
-  if (existing?.reviewStatus === "APPROVED") {
+  if (existing?.reviewStatus === "APPROVED" || existing?.reviewStatus === "REJECTED") {
     return {
       document: existing,
       diff: await analyzeKnowledgeDocumentDiff({ ...input, now }),

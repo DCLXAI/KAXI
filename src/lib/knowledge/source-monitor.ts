@@ -410,7 +410,7 @@ export async function runOfficialKnowledgeSourceMonitor(
           where: { docId: candidateDocId },
           select: { reviewStatus: true },
         });
-        if (existingCandidate?.reviewStatus !== "APPROVED") {
+        if (!existingCandidate || existingCandidate.reviewStatus === "PENDING") {
           await upsertPendingKnowledgeCandidate({
             docId: candidateDocId,
             actor,

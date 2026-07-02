@@ -27,6 +27,7 @@ prepareLocalDb(process.env.DATABASE_URL);
 const { db } = await import("../src/lib/db");
 const {
   approveKnowledgeDocument,
+  discardKnowledgeDocument,
   listApprovedKnowledgeDocsForRag,
 } = await import("../src/lib/knowledge/repository");
 const {
@@ -167,6 +168,44 @@ try {
   assert(failedAlert.sent === false && failedAlert.status === 503, "alert failure should be reported without throwing");
   delete process.env.KNOWLEDGE_MONITOR_ALERT_WEBHOOK_URL;
   delete process.env.KNOWLEDGE_MONITOR_ALERT_SIGNING_SECRET;
+
+  const rejectedSource: OfficialKnowledgeSource = {
+    docId: "monitor-rejected-source",
+    title: "반복 반려 후보 테스트",
+    sourceUrl: "https://www.hikorea.go.kr/rejected-monitor-test",
+    sourceType: "official_government",
+    topic: "process",
+  };
+  const rejectedFetchImpl = async () =>
+    new Response("<html><body><p>rejected candidate body</p></body></html>", {
+      status: 200,
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
+  const rejectedRun = await runOfficialKnowledgeSourceMonitor({
+    actor: "test-monitor",
+    persistCandidates: true,
+    sources: [rejectedSource],
+    fetchImpl: rejectedFetchImpl,
+    now: new Date("2026-07-02T00:10:00.000Z"),
+  });
+  const rejectedCandidateDocId = rejectedRun.results[0]?.candidateDocId;
+  assert(rejectedCandidateDocId, "rejected monitor setup should create a candidate doc id");
+  assert(rejectedRun.candidatesCreated === 1, "first rejected monitor setup should create a pending candidate");
+  await discardKnowledgeDocument({
+    docId: rejectedCandidateDocId,
+    actor: "admin-test",
+    now: new Date("2026-07-02T00:15:00.000Z"),
+  });
+  const rejectedRepeat = await runOfficialKnowledgeSourceMonitor({
+    actor: "test-monitor",
+    persistCandidates: true,
+    sources: [rejectedSource],
+    fetchImpl: rejectedFetchImpl,
+    now: new Date("2026-07-02T00:20:00.000Z"),
+  });
+  const rejectedAfterRepeat = await db.knowledgeDocument.findUnique({ where: { docId: rejectedCandidateDocId } });
+  assert(rejectedRepeat.candidatesCreated === 0, "same rejected candidate content must not reopen as pending");
+  assert(rejectedAfterRepeat?.reviewStatus === "REJECTED", "same rejected candidate should remain rejected");
 
   const candidate = await db.knowledgeDocument.findUnique({
     where: { docId: candidateDocId },
