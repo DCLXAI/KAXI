@@ -182,6 +182,57 @@ try {
     assert(candidateDocId, "admin monitor persist should expose candidate doc id");
     const pendingCandidate = await db.knowledgeDocument.findUnique({ where: { docId: candidateDocId } });
     assert(pendingCandidate?.reviewStatus === "PENDING", "admin monitor candidate must stay pending until approval");
+
+    const bulkApproved = await json(
+      await knowledgeRoute.PATCH(
+        adminRequest("/api/admin/knowledge", {
+          method: "PATCH",
+          body: JSON.stringify({ action: "bulkApproveCandidates", docIds: [candidateDocId] }),
+        })
+      )
+    );
+    assert(bulkApproved.processed === 1, "bulk candidate approve should process one candidate");
+    assert(bulkApproved.failed === 0, "bulk candidate approve should not fail");
+    const approvedCandidate = await db.knowledgeDocument.findUnique({ where: { docId: candidateDocId } });
+    assert(approvedCandidate?.reviewStatus === "APPROVED", "bulk candidate approve should mark candidate APPROVED");
+
+    const discardCandidateDocId = "manual-policy-update__candidate__discard";
+    await db.knowledgeDocument.create({
+      data: {
+        docId: discardCandidateDocId,
+        title: "[검토 후보] 폐기 테스트",
+        sourceUrl: "https://www.hikorea.go.kr/manual-discard-test",
+        sourceType: "official_government",
+        language: "ko",
+        jurisdiction: "KR",
+        topic: "process",
+        validFrom: new Date("2026-07-02T00:00:00.000Z"),
+        validTo: null,
+        lastCheckedAt: new Date("2026-07-02T00:00:00.000Z"),
+        checkedBy: "test-monitor",
+        reviewStatus: "PENDING",
+        supersedes: [],
+        supersededBy: null,
+        chunks: {
+          create: [{ chunkIndex: 0, content: "discard candidate content", contentHash: "discard-candidate-content" }],
+        },
+      },
+    });
+    const bulkDiscarded = await json(
+      await knowledgeRoute.PATCH(
+        adminRequest("/api/admin/knowledge", {
+          method: "PATCH",
+          body: JSON.stringify({ action: "bulkDiscardCandidates", docIds: [discardCandidateDocId] }),
+        })
+      )
+    );
+    assert(bulkDiscarded.processed === 1, "bulk candidate discard should process one candidate");
+    const discardedCandidate = await db.knowledgeDocument.findUnique({
+      where: { docId: discardCandidateDocId },
+      include: { chunks: true },
+    });
+    assert(discardedCandidate?.reviewStatus === "REJECTED", "bulk candidate discard should mark candidate REJECTED");
+    assert(discardedCandidate.chunks.length === 0, "bulk candidate discard should remove searchable chunks");
   } finally {
     globalThis.fetch = originalFetch;
   }

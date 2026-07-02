@@ -47,6 +47,7 @@ export function AdminKnowledge() {
   const [source, setSource] = useState<"db" | "static">("db");
   const [loading, setLoading] = useState(true);
   const [savingDocId, setSavingDocId] = useState<string | null>(null);
+  const [bulkAction, setBulkAction] = useState<"approve" | "discard" | null>(null);
   const [monitoringMode, setMonitoringMode] = useState<"preview" | "persist" | null>(null);
   const [monitorResult, setMonitorResult] = useState<MonitorResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -119,8 +120,38 @@ export function AdminKnowledge() {
     }
   };
 
+  const bulkUpdateCandidates = async (action: "approve" | "discard") => {
+    const docIds = pendingCandidates.map((doc) => doc.docId);
+    if (docIds.length === 0) return;
+    const message = action === "approve"
+      ? `검수 대기 후보 ${docIds.length}개를 production RAG에 승인 반영할까요?`
+      : `검수 대기 후보 ${docIds.length}개를 폐기할까요?`;
+    if (!window.confirm(message)) return;
+
+    setBulkAction(action);
+    setError(null);
+    try {
+      const res = await adminFetch("/api/admin/knowledge", {
+        method: "PATCH",
+        body: JSON.stringify({
+          action: action === "approve" ? "bulkApproveCandidates" : "bulkDiscardCandidates",
+          docIds,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "후보 문서를 일괄 처리하지 못했습니다.");
+      if (data.failed > 0) throw new Error(`후보 ${data.failed}개 처리 실패`);
+      await loadDocuments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBulkAction(null);
+    }
+  };
+
   const changedResults = monitorResult?.results.filter((item) => item.status === "changed") || [];
   const failedResults = monitorResult?.results.filter((item) => item.status === "failed") || [];
+  const pendingCandidates = documents.filter((doc) => doc.reviewStatus === "PENDING" && doc.docId.includes("__candidate__"));
 
   return (
     <div className="space-y-5">
@@ -154,6 +185,37 @@ export function AdminKnowledge() {
       {error && (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
+        </div>
+      )}
+
+      {pendingCandidates.length > 0 && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="font-medium">검수 대기 공식 후보 {pendingCandidates.length}개</div>
+              <div className="mt-1 text-xs">승인하면 기존 문서를 supersede하고 production RAG에 반영됩니다. 폐기하면 검색 대상에서 제외됩니다.</div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => bulkUpdateCandidates("approve")}
+                disabled={Boolean(bulkAction)}
+              >
+                <CheckCircle2 className={`h-3.5 w-3.5 ${bulkAction === "approve" ? "animate-pulse" : ""}`} />
+                후보 전체 승인
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => bulkUpdateCandidates("discard")}
+                disabled={Boolean(bulkAction)}
+              >
+                <Trash2 className={`h-3.5 w-3.5 ${bulkAction === "discard" ? "animate-pulse" : ""}`} />
+                후보 전체 폐기
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 

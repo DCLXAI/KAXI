@@ -14,10 +14,23 @@ import {
 
 export const runtime = "nodejs";
 
-type KnowledgeAction = "approve" | "discard" | "recheck" | "diff";
+type KnowledgeAction =
+  | "approve"
+  | "discard"
+  | "recheck"
+  | "diff"
+  | "bulkApproveCandidates"
+  | "bulkDiscardCandidates";
 
 function isKnowledgeAction(value: unknown): value is KnowledgeAction {
-  return value === "approve" || value === "discard" || value === "recheck" || value === "diff";
+  return (
+    value === "approve" ||
+    value === "discard" ||
+    value === "recheck" ||
+    value === "diff" ||
+    value === "bulkApproveCandidates" ||
+    value === "bulkDiscardCandidates"
+  );
 }
 
 async function withImpact(item: AdminKnowledgeItem): Promise<AdminKnowledgeItem> {
@@ -30,6 +43,23 @@ async function withImpact(item: AdminKnowledgeItem): Promise<AdminKnowledgeItem>
       topic: item.topic,
     }),
   };
+}
+
+function stringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
+async function pendingCandidateDocIds(requestedDocIds: string[]): Promise<string[]> {
+  const documents = await db.knowledgeDocument.findMany({
+    where: {
+      reviewStatus: "PENDING",
+      docId: requestedDocIds.length > 0 ? { in: requestedDocIds } : { contains: "__candidate__" },
+    },
+    select: { docId: true },
+    orderBy: { lastCheckedAt: "desc" },
+  });
+  return documents.map((document) => document.docId);
 }
 
 export async function GET(req: NextRequest) {
@@ -72,13 +102,85 @@ export async function PATCH(req: NextRequest) {
       topic?: string;
       supersedes?: unknown;
       supersededBy?: string | null;
+      docIds?: string[];
     };
 
-    if (!body.docId || !isKnowledgeAction(body.action)) {
-      return NextResponse.json({ error: "docId and valid action are required" }, { status: 400 });
+    if (!isKnowledgeAction(body.action)) {
+      return NextResponse.json({ error: "valid action is required" }, { status: 400 });
     }
 
     const actor = context?.actor || "admin";
+
+    if (body.action === "bulkApproveCandidates" || body.action === "bulkDiscardCandidates") {
+      const action = body.action === "bulkApproveCandidates" ? "approve" : "discard";
+      const targetDocIds = await pendingCandidateDocIds(stringList(body.docIds));
+      const results: Array<{
+        docId: string;
+        ok: boolean;
+        reviewStatus?: string;
+        error?: string;
+      }> = [];
+      const documents: AdminKnowledgeItem[] = [];
+
+      for (const docId of targetDocIds) {
+        try {
+          const result = action === "approve"
+            ? await approveKnowledgeDocument({ docId, actor })
+            : {
+                document: await discardKnowledgeDocument({ docId, actor }),
+                diff: await analyzeKnowledgeDocumentDiff({ docId, actor }),
+              };
+          results.push({
+            docId,
+            ok: true,
+            reviewStatus: result.document.reviewStatus,
+          });
+          documents.push(
+            await withImpact({
+              ...toAdminKnowledgeItem(result.document),
+              diff: result.diff,
+            })
+          );
+        } catch (err) {
+          results.push({
+            docId,
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
+      const processed = results.filter((result) => result.ok).length;
+      const failed = results.length - processed;
+      await recordRequestAudit(req, {
+        actor,
+        actorRole: context?.role || "admin",
+        action: body.action === "bulkApproveCandidates" ? "knowledge.bulk_approve_candidates" : "knowledge.bulk_discard_candidates",
+        targetType: "knowledgeDocument",
+        metadata: {
+          requested: targetDocIds.length,
+          processed,
+          failed,
+          docIds: targetDocIds,
+        },
+        success: failed === 0,
+      });
+
+      return NextResponse.json({
+        ok: failed === 0,
+        action: body.action,
+        requested: targetDocIds.length,
+        processed,
+        failed,
+        results,
+        documents,
+      }, { status: failed > 0 ? 207 : 200 });
+    }
+
+    if (!body.docId) {
+      return NextResponse.json({ error: "docId is required" }, { status: 400 });
+    }
+
     const mutationInput = {
       docId: body.docId,
       actor,
