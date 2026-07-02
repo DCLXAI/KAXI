@@ -32,7 +32,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 type ConsultBackend = "remote-bridge" | "codex" | "zai";
-const CONSULT_REMOTE_BRIDGE_MAX_WAIT_MS = 12_000;
+const CONSULT_REMOTE_BRIDGE_MAX_WAIT_MS = 45_000;
 
 interface ExpertAnswerResult {
   answer: string;
