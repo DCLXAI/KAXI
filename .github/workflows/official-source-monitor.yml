@@ -40,6 +40,10 @@ jobs:
             source_ids: immigration-rule-documents-attachments,immigration-rule-fees,hikorea-homepage-urgent-notices,hikorea-integrated-status-manual,hikorea-d2-d4-d10-e7-f2-f5-requirements,hikorea-stay-extension
           - batch: hikorea-news
             source_ids: hikorea-status-change,hikorea-activity-permit,hikorea-forms-document-checklist,hikorea-online-visit-application,hikorea-policy-notice-monitor,moj-immigration-policy-news
+          - batch: moj-policy-notices
+            source_ids: moj-notice-board-visa-policy,moj-e7-wage-requirement-2026,moj-f6-marriage-visa-criteria,moj-f4-employment-restriction-preannouncement
+          - batch: moj-program-pages
+            source_ids: moj-skilled-worker-points-visa,moj-seasonal-worker-program,moj-online-stay-visa-center
           - batch: study-visa-portal
             source_ids: accredited-university,visa-portal-visa-types
     env:

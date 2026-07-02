@@ -104,16 +104,23 @@ for (const docId of requiredImmigrationLawDocs) {
   if (meta.last_checked_at !== "2026-07-02") fail(`${docId} checked date must be 2026-07-02`);
 }
 
-const requiredPolicyNewsDocs = [
+const requiredMojPolicyDocs = [
   "moj-immigration-policy-news",
+  "moj-notice-board-visa-policy",
+  "moj-e7-wage-requirement-2026",
+  "moj-f6-marriage-visa-criteria",
+  "moj-f4-employment-restriction-preannouncement",
+  "moj-skilled-worker-points-visa",
+  "moj-seasonal-worker-program",
+  "moj-online-stay-visa-center",
 ];
-for (const docId of requiredPolicyNewsDocs) {
+for (const docId of requiredMojPolicyDocs) {
   const doc = KNOWLEDGE_DOCS.find((item) => item.id === docId);
-  if (!doc) fail(`Required immigration policy news RAG doc missing: ${docId}`);
+  if (!doc) fail(`Required MOJ immigration policy RAG doc missing: ${docId}`);
   const meta = getRagDocumentMetadata(doc, "ko");
   if (!meta.source_url.includes("immigration.go.kr")) fail(`${docId} must point to immigration.go.kr`);
   if (meta.source_type !== "official_government") fail(`${docId} must use official_government source type`);
-  if (meta.last_checked_at !== "2026-07-02") fail(`${docId} checked date must be 2026-07-02`);
+  if (meta.last_checked_at !== "2026-07-03") fail(`${docId} checked date must be 2026-07-03`);
 }
 
 const requiredStudyAndVisaPortalDocs = [

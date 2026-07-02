@@ -55,6 +55,16 @@ const HIKOREA_STATUS_MANUAL_URL =
   "https://www.hikorea.go.kr/board/BoardNtcDetailR.pt?BBS_GB_CD=BS10&BBS_SEQ=1&NTCCTT_SEQ=1062&page=1";
 const HIKOREA_NOTICE_URL = "https://www.hikorea.go.kr/board/BoardNtcListR.pt";
 const MOJ_MAJOR_NEWS_URL = "https://www.immigration.go.kr/immigration/3341/subview.do";
+const MOJ_NOTICE_BOARD_URL = "https://www.immigration.go.kr/moj/223/subview.do";
+const MOJ_E7_WAGE_REQUIREMENT_2026_URL =
+  "https://www.immigration.go.kr/bbs/moj/184/601893/artclView.do?layout=unknown";
+const MOJ_F6_MARRIAGE_VISA_CRITERIA_URL =
+  "https://www.immigration.go.kr/bbs/moj/184/601864/artclView.do?layout=unknown";
+const MOJ_F4_EMPLOYMENT_RESTRICTION_PREANNOUNCEMENT_URL =
+  "https://www.immigration.go.kr/bbs/moj/184/602340/artclView.do?layout=unknown";
+const MOJ_SKILLED_WORKER_POINTS_VISA_URL = "https://www.immigration.go.kr/moj/187/subview.do";
+const MOJ_SEASONAL_WORKER_PROGRAM_URL = "https://www.immigration.go.kr/moj/194/subview.do";
+const MOJ_ONLINE_STAY_VISA_CENTER_URL = "https://www.immigration.go.kr/moj/198/subview.do";
 const STUDY_IN_KOREA_CERTIFIED_UNIVERSITY_URL =
   "https://studyinkorea.go.kr/ko/plan/certifiedUniversity.do";
 const VISA_PORTAL_VISA_TYPES_URL = "https://www.visa.go.kr/openPage.do?LANG_TYPE=EN&MENU_ID=10102";
@@ -225,6 +235,76 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     legalPriority: 4,
     monitorCadence: "daily",
     changeSignals: ["policy_news", "visa_program", "status_program", "effective_period"],
+  },
+  {
+    docId: "moj-notice-board-visa-policy",
+    title: "법무부 공지사항 체류·사증 정책 변경",
+    sourceUrl: MOJ_NOTICE_BOARD_URL,
+    sourceType: "official_government",
+    topic: "warning",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["notice_title", "posted_date", "attachment", "visa_policy", "stay_policy", "e7", "f6", "f4"],
+  },
+  {
+    docId: "moj-e7-wage-requirement-2026",
+    title: "2026년 특정활동(E-7) 체류자격 임금요건 기준",
+    sourceUrl: MOJ_E7_WAGE_REQUIREMENT_2026_URL,
+    sourceType: "official_government",
+    topic: "visa",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["e7", "wage_requirement", "public_notice", "attachment", "effective_year"],
+  },
+  {
+    docId: "moj-f6-marriage-visa-criteria",
+    title: "결혼동거 목적 사증 발급 요건·심사면제 기준 고시",
+    sourceUrl: MOJ_F6_MARRIAGE_VISA_CRITERIA_URL,
+    sourceType: "official_government",
+    topic: "visa",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["f6", "marriage_visa", "ministry_notice", "exemption_standard", "attachment"],
+  },
+  {
+    docId: "moj-f4-employment-restriction-preannouncement",
+    title: "재외동포(F-4) 취업활동 제한범위 고시 행정예고",
+    sourceUrl: MOJ_F4_EMPLOYMENT_RESTRICTION_PREANNOUNCEMENT_URL,
+    sourceType: "official_government",
+    topic: "warning",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["f4", "employment_restriction", "administrative_preannouncement", "attachment", "comment_period"],
+  },
+  {
+    docId: "moj-skilled-worker-points-visa",
+    title: "법무부 외국인 숙련기능인력 점수제 비자",
+    sourceUrl: MOJ_SKILLED_WORKER_POINTS_VISA_URL,
+    sourceType: "official_government",
+    topic: "visa",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["e7-4", "skilled_worker", "quota", "eligibility", "employment_limit"],
+  },
+  {
+    docId: "moj-seasonal-worker-program",
+    title: "법무부 외국인 계절근로자 프로그램",
+    sourceUrl: MOJ_SEASONAL_WORKER_PROGRAM_URL,
+    sourceType: "official_government",
+    topic: "visa",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["seasonal_worker", "mou", "quota", "local_government", "procedure"],
+  },
+  {
+    docId: "moj-online-stay-visa-center",
+    title: "법무부 온라인체류·사증민원센터",
+    sourceUrl: MOJ_ONLINE_STAY_VISA_CENTER_URL,
+    sourceType: "official_government",
+    topic: "process",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["e_visa", "e_application", "online_petition", "stay_extension", "fee_discount"],
   },
   {
     docId: "accredited-university",

@@ -50,6 +50,13 @@ try {
     "hikorea-integrated-status-manual",
     "hikorea-policy-notice-monitor",
     "moj-immigration-policy-news",
+    "moj-notice-board-visa-policy",
+    "moj-e7-wage-requirement-2026",
+    "moj-f6-marriage-visa-criteria",
+    "moj-f4-employment-restriction-preannouncement",
+    "moj-skilled-worker-points-visa",
+    "moj-seasonal-worker-program",
+    "moj-online-stay-visa-center",
     "accredited-university",
     "visa-portal-visa-types",
   ];
