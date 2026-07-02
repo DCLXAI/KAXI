@@ -16,6 +16,13 @@ interface MonitorResult {
   unchanged: number;
   failed: number;
   candidatesCreated: number;
+  alert?: {
+    attempted: boolean;
+    sent: boolean;
+    skippedReason?: "not_configured" | "no_change";
+    status?: number;
+    error?: string;
+  };
   results: Array<{
     docId: string;
     title: string;
@@ -158,6 +165,17 @@ export function AdminKnowledge() {
             </div>
             <div className="text-xs text-muted-foreground">{formatDate(monitorResult.checkedAt)}</div>
           </div>
+          {monitorResult.alert && (
+            <div className="mt-2 text-xs text-muted-foreground">
+              운영 알림: {monitorResult.alert.sent
+                ? `전송됨${monitorResult.alert.status ? ` (${monitorResult.alert.status})` : ""}`
+                : monitorResult.alert.attempted
+                  ? `실패${monitorResult.alert.error ? ` · ${monitorResult.alert.error}` : ""}`
+                  : monitorResult.alert.skippedReason === "not_configured"
+                    ? "웹훅 미설정"
+                    : "변경 없음"}
+            </div>
+          )}
           {(changedResults.length > 0 || failedResults.length > 0) && (
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               {changedResults.slice(0, 6).map((item) => (

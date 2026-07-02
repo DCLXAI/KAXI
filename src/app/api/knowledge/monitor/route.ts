@@ -6,9 +6,11 @@ import {
   getOfficialKnowledgeSourceWatchlist,
   runOfficialKnowledgeSourceMonitor,
 } from "@/lib/knowledge/source-monitor";
+import { sendKnowledgeMonitorAlert } from "@/lib/knowledge/monitor-alerts";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+export const dynamic = "force-dynamic";
 
 function authorizeCron(req: NextRequest): NextResponse | null {
   const secret = process.env.CRON_SECRET;
@@ -40,9 +42,15 @@ function auditMetadata(result: Awaited<ReturnType<typeof runOfficialKnowledgeSou
   };
 }
 
+function jsonNoStore(body: unknown, init?: ResponseInit) {
+  const response = NextResponse.json(body, init);
+  response.headers.set("cache-control", "no-store, no-cache, must-revalidate");
+  return response;
+}
+
 export async function GET(req: NextRequest) {
   if (!canWriteRuntimeDatabase()) {
-    return NextResponse.json({
+    return jsonNoStore({
       skipped: true,
       reason: "Writable production database is not configured",
     }, { status: 202 });
@@ -55,14 +63,18 @@ export async function GET(req: NextRequest) {
     actor: "vercel-cron",
     persistCandidates: process.env.KNOWLEDGE_MONITOR_PERSIST_CANDIDATES !== "false",
   });
+  const alert = await sendKnowledgeMonitorAlert(result, {
+    actor: "vercel-cron",
+    trigger: "cron",
+  });
   await recordRequestAudit(req, {
     actor: "vercel-cron",
     actorRole: "system",
     action: "knowledge.monitor",
     targetType: "KnowledgeDocument",
-    metadata: auditMetadata(result),
+    metadata: { ...auditMetadata(result), alert },
   });
-  return NextResponse.json(result);
+  return jsonNoStore({ ...result, alert });
 }
 
 export async function POST(req: NextRequest) {
@@ -83,12 +95,16 @@ export async function POST(req: NextRequest) {
     persistCandidates: body.persistCandidates === true,
     sources,
   });
+  const alert = await sendKnowledgeMonitorAlert(result, {
+    actor: actor?.actor || "admin",
+    trigger: body.persistCandidates === true ? "admin-persist" : "admin-preview",
+  });
   await recordRequestAudit(req, {
     actor: actor?.actor || "unknown",
     actorRole: actor?.role || "admin",
     action: body.persistCandidates === true ? "knowledge.monitor.persist" : "knowledge.monitor.preview",
     targetType: "KnowledgeDocument",
-    metadata: auditMetadata(result),
+    metadata: { ...auditMetadata(result), alert },
   });
-  return NextResponse.json(result);
+  return jsonNoStore({ ...result, alert });
 }

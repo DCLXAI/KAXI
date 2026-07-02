@@ -33,6 +33,10 @@ const {
   OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST,
   runOfficialKnowledgeSourceMonitor,
 } = await import("../src/lib/knowledge/source-monitor");
+const {
+  buildKnowledgeMonitorAlertPayload,
+  sendKnowledgeMonitorAlert,
+} = await import("../src/lib/knowledge/monitor-alerts");
 
 try {
   const requiredWatchlistIds = [
@@ -115,6 +119,53 @@ try {
   assert(candidateDocId, "changed monitor result should expose candidate doc id");
   assert(persisted.candidatesCreated === 1, "persisted run should create one pending candidate");
 
+  const alertPayload = buildKnowledgeMonitorAlertPayload(persisted, {
+    actor: "test-monitor",
+    trigger: "test",
+    now: new Date("2026-07-02T00:05:00.000Z"),
+  });
+  assert(alertPayload.summary.changed === 1, "alert payload should include changed count");
+  assert(alertPayload.changedSources[0]?.docId === source.docId, "alert payload should include changed source");
+  assert(alertPayload.adminUrl.endsWith("/admin/knowledge"), "alert payload should link to admin knowledge review");
+
+  delete process.env.KNOWLEDGE_MONITOR_ALERT_WEBHOOK_URL;
+  const skippedAlert = await sendKnowledgeMonitorAlert(persisted, {
+    actor: "test-monitor",
+    trigger: "test",
+  });
+  assert(skippedAlert.skippedReason === "not_configured", "missing webhook should skip monitor alert");
+
+  process.env.KNOWLEDGE_MONITOR_ALERT_WEBHOOK_URL = "https://ops.example.test/kaxi-monitor";
+  process.env.KNOWLEDGE_MONITOR_ALERT_SIGNING_SECRET = "monitor-alert-test-secret";
+  let capturedUrl = "";
+  let capturedInit: RequestInit | undefined;
+  const sentAlert = await sendKnowledgeMonitorAlert(persisted, {
+    actor: "test-monitor",
+    trigger: "test",
+    fetchImpl: async (input, init) => {
+      capturedUrl = input;
+      capturedInit = init;
+      return new Response("accepted", { status: 202, statusText: "Accepted" });
+    },
+  });
+  assert(sentAlert.sent === true, "configured webhook should send monitor alert");
+  assert(capturedUrl === process.env.KNOWLEDGE_MONITOR_ALERT_WEBHOOK_URL, "alert should call configured webhook");
+  assert(capturedInit?.method === "POST", "alert webhook should use POST");
+  const capturedHeaders = new Headers(capturedInit.headers as HeadersInit);
+  assert(capturedHeaders.get("x-kaxi-signature")?.startsWith("sha256="), "alert should include HMAC signature");
+  const capturedBody = JSON.parse(String(capturedInit.body));
+  assert(capturedBody.kind === "knowledge_monitor_alert", "alert body should use generic JSON format");
+  assert(capturedBody.changedSources[0]?.candidateDocId === candidateDocId, "alert should include candidate doc id");
+
+  const failedAlert = await sendKnowledgeMonitorAlert(persisted, {
+    actor: "test-monitor",
+    trigger: "test",
+    fetchImpl: async () => new Response("down", { status: 503, statusText: "Service Unavailable" }),
+  });
+  assert(failedAlert.sent === false && failedAlert.status === 503, "alert failure should be reported without throwing");
+  delete process.env.KNOWLEDGE_MONITOR_ALERT_WEBHOOK_URL;
+  delete process.env.KNOWLEDGE_MONITOR_ALERT_SIGNING_SECRET;
+
   const candidate = await db.knowledgeDocument.findUnique({
     where: { docId: candidateDocId },
     include: { chunks: true },
@@ -139,7 +190,7 @@ try {
   assert(afterApproval.some((doc) => doc.id === candidateDocId), "approved candidate should become production searchable");
   assert(!afterApproval.some((doc) => doc.id === source.docId), "superseded source doc must not remain production searchable");
 
-  console.log("PASS knowledge monitor: official diff, pending candidate, approval supersedes previous RAG");
+  console.log("PASS knowledge monitor: official diff, pending candidate, alert webhook, approval supersedes previous RAG");
 } finally {
   await db.$disconnect();
   rmSync(tmpDir, { recursive: true, force: true });
