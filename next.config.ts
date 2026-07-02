@@ -36,12 +36,20 @@ const onnxRuntimeNodeTrace = [
   "./node_modules/onnxruntime-node/bin/napi-v3/linux/arm64/**/*",
 ];
 
+const deploymentCacheTraceExcludes = [
+  "data/model-cache/**/*",
+  "runtime-artifacts/model-cache/**/*",
+];
+
 const nextConfig: NextConfig = {
   env: {
     NEXTAUTH_URL: nextAuthUrl,
     NEXTAUTH_URL_INTERNAL: normalizePublicUrl(process.env.NEXTAUTH_URL_INTERNAL) || nextAuthUrl,
   },
   output: "standalone",
+  outputFileTracingExcludes: {
+    "*": deploymentCacheTraceExcludes,
+  },
   outputFileTracingIncludes: {
     "/api/ai/agent": [...codexCliTrace, ...onnxRuntimeNodeTrace],
     "/api/ai/chat": onnxRuntimeNodeTrace,
