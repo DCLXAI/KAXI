@@ -32,6 +32,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 type ConsultBackend = "remote-bridge" | "codex" | "zai";
+const CONSULT_REMOTE_BRIDGE_MAX_WAIT_MS = 12_000;
 
 interface ExpertAnswerResult {
   answer: string;
@@ -300,8 +301,9 @@ ${context}
         history: [],
         requestIp,
         timeoutMs: Math.min(
-          parsePositiveInt(process.env.AI_CONSULT_REMOTE_BRIDGE_TIMEOUT_MS, 40_000),
-          parsePositiveInt(process.env.CODEX_REMOTE_BRIDGE_TIMEOUT_MS, 55_000)
+          parsePositiveInt(process.env.AI_CONSULT_REMOTE_BRIDGE_TIMEOUT_MS, CONSULT_REMOTE_BRIDGE_MAX_WAIT_MS),
+          parsePositiveInt(process.env.CODEX_REMOTE_BRIDGE_TIMEOUT_MS, CONSULT_REMOTE_BRIDGE_MAX_WAIT_MS),
+          CONSULT_REMOTE_BRIDGE_MAX_WAIT_MS
         ),
       });
       const answer = result.answer.trim();
