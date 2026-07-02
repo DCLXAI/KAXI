@@ -39,6 +39,8 @@ const onnxRuntimeNodeTrace = [
 const deploymentCacheTraceExcludes = [
   "data/model-cache/**/*",
   "runtime-artifacts/model-cache/**/*",
+  "node_modules/@openai/codex-linux-*",
+  "node_modules/@openai/codex-linux-*/**/*",
 ];
 
 const nextConfig: NextConfig = {
