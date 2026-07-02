@@ -13,9 +13,11 @@ jobs:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
-      - name: Skip when Vercel secrets are not configured
+      - name: Require Vercel deployment secrets
         if: ${{ env.VERCEL_TOKEN == '' || env.VERCEL_ORG_ID == '' || env.VERCEL_PROJECT_ID == '' }}
-        run: echo "VERCEL_TOKEN, VERCEL_ORG_ID, and VERCEL_PROJECT_ID are required for production deployment."
+        run: |
+          echo "VERCEL_TOKEN, VERCEL_ORG_ID, and VERCEL_PROJECT_ID are required for production deployment."
+          exit 1
       - uses: actions/checkout@v4
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
       - uses: oven-sh/setup-bun@v2
