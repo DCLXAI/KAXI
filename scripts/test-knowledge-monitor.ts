@@ -221,18 +221,19 @@ try {
   await approveKnowledgeDocument({
     docId: candidateDocId,
     actor: "admin-test",
-    now: new Date("2026-07-02T01:00:00.000Z"),
+    now: new Date("2026-07-02T15:30:00.000Z"),
   });
 
   const baseAfterApproval = await db.knowledgeDocument.findUnique({ where: { docId: source.docId } });
   assert(baseAfterApproval?.supersededBy === candidateDocId, "approving candidate should supersede previous source doc");
 
-  const afterApproval = await listApprovedKnowledgeDocsForRag(new Date("2026-07-02T02:00:00.000Z"));
+  const afterApproval = await listApprovedKnowledgeDocsForRag(new Date("2026-07-02T16:00:00.000Z"));
   const approvedReplacement = afterApproval.find((doc) => doc.id === source.docId);
   assert(approvedReplacement, "approved candidate should publish under the canonical source doc id");
   assert(!afterApproval.some((doc) => doc.id === candidateDocId), "candidate doc id must not leak into production RAG ids");
   assert(!approvedReplacement.title.ko.includes("검토 후보"), "production RAG title must not expose review-candidate prefix");
   assert(approvedReplacement.ragMeta?.doc_id === source.docId, "production RAG metadata must use canonical doc id");
+  assert(approvedReplacement.ragMeta?.last_checked_at === "2026-07-03", "production RAG checked date should use Korea local date");
 
   console.log("PASS knowledge monitor: official diff, pending candidate, alert webhook, approval supersedes previous RAG");
 } finally {

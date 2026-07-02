@@ -107,11 +107,26 @@ const SOURCE_TYPES = new Set<SourceType>([
   "internal_policy",
 ]);
 
+const KOREA_TIME_ZONE = "Asia/Seoul";
+
+function dateInKorea(value: Date): string {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: KOREA_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const part = (type: string) => parts.find((item) => item.type === type)?.value || "00";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
 function toDateOnly(value: Date | string | null | undefined): string | null {
   if (!value) return null;
-  const date = value instanceof Date ? value : new Date(value);
+  if (value instanceof Date) return dateInKorea(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString().slice(0, 10);
+  return dateInKorea(date);
 }
 
 function addDays(date: Date, days: number): Date {
