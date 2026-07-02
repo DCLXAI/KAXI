@@ -262,10 +262,12 @@ export async function POST(req: NextRequest) {
     ledgerContext = { question, leadId, preflight: emptyPreflight(question) };
 
     const configuredBackend = getAgentBackend();
+    const preflightEnabled = process.env.AI_AGENT_PREFLIGHT_ENABLED === "true";
     const shouldPreflight =
-      configuredBackend === "remote-bridge" ||
-      configuredBackend === "codex" ||
-      isRemoteCodexBridgeEnabled();
+      preflightEnabled &&
+      (configuredBackend === "remote-bridge" ||
+        configuredBackend === "codex" ||
+        isRemoteCodexBridgeEnabled());
     let preflight = emptyPreflight(question);
 
     if (shouldPreflight) {

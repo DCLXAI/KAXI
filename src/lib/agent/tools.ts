@@ -250,7 +250,10 @@ const searchKnowledgeTool: Tool = {
   },
   execute: async (args, ctx) => {
     const requestedTopK = args.top_k || 3;
-    const results = await hybridSearch(args.query, { topK: Math.max(requestedTopK, 5) });
+    const results = await hybridSearch(args.query, {
+      topK: Math.max(requestedTopK, 5),
+      useTransformer: process.env.AI_AGENT_USE_TRANSFORMER_RAG === "true",
+    });
     const docs = withImmigrationLegalBasisDocs(
       args.query,
       results.map((r) => r.doc),
