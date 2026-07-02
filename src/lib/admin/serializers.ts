@@ -57,6 +57,11 @@ function parseMetadata(value: string | null): unknown {
   }
 }
 
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
 export function getCaseDueAt(caseItem: CaseWithRelations): Date | null {
   const expiries = caseItem.studentProfile.documents
     .map((doc) => doc.expiresAt)
@@ -271,6 +276,7 @@ export function toAdminKnowledgeItem(document: KnowledgeWithChunks): AdminKnowle
     lastCheckedAt: document.lastCheckedAt.toISOString(),
     checkedBy: document.checkedBy,
     reviewStatus: document.reviewStatus,
+    supersedes: stringArray(document.supersedes),
     supersededBy: document.supersededBy,
     chunkCount: document.chunks.length,
     persisted: true,
@@ -295,6 +301,7 @@ export function staticKnowledgeItems(): AdminKnowledgeItem[] {
       lastCheckedAt: ragMeta.last_checked_at,
       checkedBy: ragMeta.checked_by,
       reviewStatus: sourceMeta.reviewStatus || "approved",
+      supersedes: ragMeta.supersedes,
       supersededBy: ragMeta.superseded_by,
       chunkCount: 0,
       persisted: false,

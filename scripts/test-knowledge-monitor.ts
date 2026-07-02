@@ -133,6 +133,47 @@ try {
     },
   });
 
+  await db.complianceRule.create({
+    data: {
+      code: "monitor-impact-rule",
+      domain: "immigration_law",
+      visaType: "D-2/D-4",
+      ruleType: "source_monitor_impact",
+      status: "ACTIVE",
+      versions: {
+        create: [
+          {
+            version: 1,
+            effectiveFrom: new Date("2026-01-01T00:00:00.000Z"),
+            conditionAst: { op: "always" },
+            outputAst: {
+              riskLevel: "LOW",
+              resultType: "knowledge_monitor",
+              messageKey: "monitor-impact-rule",
+              requiresHumanReview: true,
+            },
+            requiredInputs: ["visa_type"],
+            sourceRefs: [source.docId],
+            fallbackPolicy: "If this source changes, route affected answers to admin review before relying on prior guidance.",
+            reviewStatus: "APPROVED",
+            reviewedBy: "test_agent",
+            reviewedAt: new Date("2026-07-01T00:00:00.000Z"),
+          },
+        ],
+      },
+    },
+  });
+
+  await db.chatLog.create({
+    data: {
+      lang: "ko",
+      question: "monitor impact source question",
+      answer: "answer",
+      source: "rag",
+      retrievedDocs: JSON.stringify({ docIds: [source.docId] }),
+    },
+  });
+
   const fetchImpl = async () =>
     new Response("<html><body><h1>출입국 규정 최신본</h1><p>D-2 D-4 변경 감지 문장</p></body></html>", {
       status: 200,
@@ -160,6 +201,12 @@ try {
   const candidateDocId = persisted.results[0]?.candidateDocId;
   assert(candidateDocId, "changed monitor result should expose candidate doc id");
   assert(persisted.candidatesCreated === 1, "persisted run should create one pending candidate");
+  assert(
+    persisted.results[0]?.diff?.impact.sourceDocIds.includes(source.docId),
+    "monitor diff impact should include source doc id"
+  );
+  assert(persisted.results[0]?.diff?.impact.ruleCount === 1, "monitor diff should include impacted rule count");
+  assert(persisted.results[0]?.diff?.impact.userCount === 1, "monitor diff should include impacted chat log count");
 
   const alertPayload = buildKnowledgeMonitorAlertPayload(persisted, {
     actor: "test-monitor",
@@ -168,6 +215,18 @@ try {
   });
   assert(alertPayload.summary.changed === 1, "alert payload should include changed count");
   assert(alertPayload.changedSources[0]?.docId === source.docId, "alert payload should include changed source");
+  assert(
+    alertPayload.changedSources[0]?.sourceDocIds.includes(source.docId),
+    "alert payload should include impacted source doc ids"
+  );
+  assert(
+    alertPayload.changedSources[0]?.impactedRuleCodes.includes("monitor-impact-rule@v1"),
+    "alert payload should include impacted rule codes"
+  );
+  assert(
+    alertPayload.changedSources[0]?.impactedChatLogIds.length === 1,
+    "alert payload should include impacted chat log ids"
+  );
   assert(alertPayload.adminUrl.endsWith("/admin/knowledge"), "alert payload should link to admin knowledge review");
 
   delete process.env.KNOWLEDGE_MONITOR_ALERT_WEBHOOK_URL;
@@ -198,6 +257,10 @@ try {
   const capturedBody = JSON.parse(String(capturedInit.body));
   assert(capturedBody.kind === "knowledge_monitor_alert", "alert body should use generic JSON format");
   assert(capturedBody.changedSources[0]?.candidateDocId === candidateDocId, "alert should include candidate doc id");
+  assert(
+    capturedBody.changedSources[0]?.impactedRuleCodes.includes("monitor-impact-rule@v1"),
+    "sent alert body should include impacted rule codes"
+  );
 
   const failedAlert = await sendKnowledgeMonitorAlert(persisted, {
     actor: "test-monitor",

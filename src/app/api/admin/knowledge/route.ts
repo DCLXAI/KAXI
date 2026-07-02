@@ -41,6 +41,7 @@ async function withImpact(item: AdminKnowledgeItem): Promise<AdminKnowledgeItem>
       title: item.title,
       sourceUrl: item.sourceUrl,
       topic: item.topic,
+      supersedes: item.supersedes,
     }),
   };
 }

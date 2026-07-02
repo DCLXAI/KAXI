@@ -319,6 +319,16 @@ export function AdminKnowledge() {
                         <td className="py-3 pr-3 text-xs">
                           <div>룰 {doc.impact?.ruleCount ?? 0}개</div>
                           <div className="text-muted-foreground">대화 {doc.impact?.userCount ?? 0}개</div>
+                          {doc.impact?.sourceDocIds.length ? (
+                            <div className="mt-1 max-w-[180px] truncate font-mono text-[11px] text-muted-foreground">
+                              {doc.impact.sourceDocIds.join(", ")}
+                            </div>
+                          ) : null}
+                          {doc.impact?.rules.length ? (
+                            <div className="mt-1 max-w-[180px] truncate text-[11px] text-muted-foreground">
+                              {doc.impact.rules.slice(0, 3).map((rule) => `${rule.code}@v${rule.version}`).join(", ")}
+                            </div>
+                          ) : null}
                           {diff && (
                             <div className={diff.changed ? "mt-1 text-amber-700" : "mt-1 text-emerald-700"}>
                               {diff.changed ? `변경 +${diff.addedChunks}/-${diff.removedChunks}` : "변경 없음"}

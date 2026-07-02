@@ -180,6 +180,23 @@ try {
   });
   assert(impact.ruleCount === 1, `expected one impacted rule, got ${impact.ruleCount}`);
   assert(impact.userCount === 1, `expected one impacted user/chat log, got ${impact.userCount}`);
+  assert(impact.sourceDocIds.includes("phase7-approved-doc"), "impact should expose source doc ids");
+
+  const candidateImpact = await calculateKnowledgeImpact({
+    docId: "phase7-approved-doc__candidate__abc123def456",
+    title: "[검토 후보] Phase 7 approved RAG document",
+    sourceUrl: "https://www.studyinkorea.go.kr/phase7",
+    topic: "visa",
+    supersedes: ["phase7-approved-doc"],
+  });
+  assert(
+    candidateImpact.ruleCount === 1,
+    `expected superseding candidate to keep impacted rule, got ${candidateImpact.ruleCount}`
+  );
+  assert(
+    candidateImpact.userCount === 1,
+    `expected superseding candidate to keep impacted chat log, got ${candidateImpact.userCount}`
+  );
 
   const beforeChunks = await db.knowledgeChunk.count({
     where: { document: { docId: "phase7-approved-doc" } },

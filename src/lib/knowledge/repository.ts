@@ -38,6 +38,7 @@ export interface KnowledgeImpactUser {
 }
 
 export interface KnowledgeImpactSummary {
+  sourceDocIds: string[];
   ruleCount: number;
   userCount: number;
   rules: KnowledgeImpactRule[];
@@ -421,15 +422,28 @@ function candidateFromInput(
   };
 }
 
-function impactTokens(input: { docId: string; title?: string; sourceUrl?: string; topic?: string }): string[] {
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function sourceDocIdsForImpact(input: { docId: string; supersedes?: unknown }): string[] {
+  return uniqueStrings([input.docId, ...asStringArray(input.supersedes)]);
+}
+
+function impactTokens(input: { docId: string; title?: string; sourceUrl?: string; topic?: string; supersedes?: unknown }): string[] {
   const sourceUrl = input.sourceUrl || "";
-  const tokens = new Set<string>([input.docId, input.title || "", sourceUrl, input.topic || ""]);
+  const tokens = new Set<string>([
+    ...sourceDocIdsForImpact(input),
+    input.title || "",
+    sourceUrl,
+    input.topic || "",
+  ]);
   const lowerUrl = sourceUrl.toLowerCase();
   const title = (input.title || "").toLowerCase();
   if (lowerUrl.includes("studyinkorea")) tokens.add("studyinkorea-visa-documents");
   if (lowerUrl.includes("immigration") || lowerUrl.includes("visa.go.kr")) tokens.add("moj-immigration-visa-navigator");
   if (lowerUrl.includes("law.go.kr") || title.includes("행정사법")) tokens.add("admin-scrivener-act");
-  return Array.from(tokens).map((token) => token.trim()).filter((token) => token.length > 1);
+  return uniqueStrings(Array.from(tokens)).filter((token) => token.length > 1);
 }
 
 function sourceRefsFor(version: ComplianceRuleVersionWithRule): string[] {
@@ -446,9 +460,11 @@ export async function calculateKnowledgeImpact(input: {
   title?: string;
   sourceUrl?: string;
   topic?: string;
+  supersedes?: unknown;
 }): Promise<KnowledgeImpactSummary> {
+  const sourceDocIds = sourceDocIdsForImpact(input);
   const tokens = impactTokens(input);
-  if (tokens.length === 0) return { ruleCount: 0, userCount: 0, rules: [], users: [] };
+  if (tokens.length === 0) return { sourceDocIds, ruleCount: 0, userCount: 0, rules: [], users: [] };
 
   const [versions, chatLogs] = await Promise.all([
     db.complianceRuleVersion.findMany({ include: { rule: true }, orderBy: [{ createdAt: "desc" }] }),
@@ -481,6 +497,7 @@ export async function calculateKnowledgeImpact(input: {
   }));
 
   return {
+    sourceDocIds,
     ruleCount: rules.length,
     userCount: users.length,
     rules,
@@ -514,6 +531,7 @@ export async function analyzeKnowledgeDocumentDiff(input: KnowledgeMutationInput
       title: candidate.title,
       sourceUrl: candidate.sourceUrl,
       topic: candidate.topic,
+      supersedes: candidate.supersedes,
     }),
   };
 }

@@ -148,6 +148,7 @@ export interface AdminKnowledgeItem {
   lastCheckedAt: string;
   checkedBy: string;
   reviewStatus: string;
+  supersedes: string[];
   supersededBy: string | null;
   chunkCount: number;
   persisted: boolean;
@@ -156,6 +157,7 @@ export interface AdminKnowledgeItem {
 }
 
 export interface AdminKnowledgeImpact {
+  sourceDocIds: string[];
   ruleCount: number;
   userCount: number;
   rules: Array<{

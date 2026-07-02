@@ -38,8 +38,11 @@ export interface KnowledgeMonitorAlertPayload {
     sourceUrl: string;
     candidateDocId?: string;
     candidatePersisted: boolean;
+    sourceDocIds: string[];
     impactedRules: number;
     impactedUsers: number;
+    impactedRuleCodes: string[];
+    impactedChatLogIds: string[];
   }>;
   failedSources: Array<{
     docId: string;
@@ -92,8 +95,15 @@ export function buildKnowledgeMonitorAlertPayload(
       sourceUrl: result.sourceUrl,
       candidateDocId: result.candidateDocId,
       candidatePersisted: result.candidatePersisted === true,
+      sourceDocIds: result.diff?.impact.sourceDocIds || [result.docId],
       impactedRules: result.diff?.impact.ruleCount || 0,
       impactedUsers: result.diff?.impact.userCount || 0,
+      impactedRuleCodes: (result.diff?.impact.rules || [])
+        .map((rule) => `${rule.code}@v${rule.version}`)
+        .slice(0, 10),
+      impactedChatLogIds: (result.diff?.impact.users || [])
+        .map((user) => user.chatLogId)
+        .slice(0, 10),
     }));
   const failedSources = summary.results
     .filter((result) => result.status === "failed")
@@ -135,7 +145,7 @@ export function buildKnowledgeMonitorAlertPayload(
 function toSlackPayload(payload: KnowledgeMonitorAlertPayload) {
   const changedLines = payload.changedSources
     .slice(0, 6)
-    .map((source) => `• ${source.title} (${source.docId})`)
+    .map((source) => `• ${source.title} (${source.docId}) · 룰 ${source.impactedRules} · 대화 ${source.impactedUsers}`)
     .join("\n");
   const failedLines = payload.failedSources
     .slice(0, 4)
