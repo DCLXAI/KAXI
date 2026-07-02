@@ -11,11 +11,26 @@ const DEFAULT_RUNTIME_ENV_KEYS = [
   "ADMIN_MFA_TOTP_SECRET",
   "ADMIN_PASSWORD_HASH",
   "ADMIN_PASSWORD_PEPPER",
+  "AGENT_BACKEND",
+  "AI_AGENT_CONTEXT_MAX_CHARS",
+  "AI_AGENT_DAILY_QUOTA",
+  "AI_AGENT_GROUNDED_QUESTION_MAX_CHARS",
+  "AI_AGENT_LEDGER_ENABLED",
+  "AI_AGENT_LOGGING_ENABLED",
+  "AI_AGENT_MAX_CHARS",
   "AI_CONSULT_BACKEND",
+  "AI_CONSULT_DAILY_QUOTA",
+  "AI_CONSULT_MAX_CHARS",
+  "AI_CONSULT_RATE_LIMIT",
+  "AI_AGENT_RATE_LIMIT",
   "AI_AGENT_PREFLIGHT_ENABLED",
+  "AI_AGENT_PREFLIGHT_TIMEOUT_MS",
+  "AI_AGENT_TIMEOUT_MS",
   "BLOB_READ_WRITE_TOKEN",
   "CODEX_API_KEY",
+  "CODEX_REMOTE_BRIDGE_ENABLED",
   "CODEX_REMOTE_BRIDGE_TOKEN",
+  "CODEX_REMOTE_BRIDGE_TIMEOUT_MS",
   "CODEX_REMOTE_BRIDGE_URL",
   "CRON_SECRET",
   "DATABASE_AUTH_TOKEN",
@@ -101,7 +116,8 @@ if (!existsSync(ENV_FILE)) {
 const pulledEnv = parseEnv(readFileSync(ENV_FILE, "utf8"));
 const runtimeEnv: Record<string, string> = {};
 for (const key of configuredKeys()) {
-  if (pulledEnv[key]) runtimeEnv[key] = pulledEnv[key];
+  const value = pulledEnv[key] || process.env[key];
+  if (value) runtimeEnv[key] = value;
 }
 
 const configs = listFunctionConfigs(FUNCTIONS_DIR);

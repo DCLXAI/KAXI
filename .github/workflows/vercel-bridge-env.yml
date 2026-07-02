@@ -25,6 +25,14 @@ jobs:
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       CODEX_REMOTE_BRIDGE_TOKEN: ${{ secrets.CODEX_REMOTE_BRIDGE_TOKEN }}
       BRIDGE_URL: ${{ inputs.bridge_url }}
+      CODEX_REMOTE_BRIDGE_URL: ${{ inputs.bridge_url }}
+      CODEX_REMOTE_BRIDGE_TIMEOUT_MS: "55000"
+      AGENT_BACKEND: remote-bridge
+      AI_CONSULT_BACKEND: remote-bridge
+      AI_AGENT_RATE_LIMIT: "0"
+      AI_AGENT_DAILY_QUOTA: "0"
+      AI_CONSULT_RATE_LIMIT: "0"
+      AI_CONSULT_DAILY_QUOTA: "0"
       DEPLOY_AFTER_UPDATE: ${{ inputs.deploy }}
       NEXTAUTH_URL: https://kaxi.vercel.app
       NEXTAUTH_URL_INTERNAL: https://kaxi.vercel.app
@@ -70,9 +78,13 @@ jobs:
 
           update_env "CODEX_REMOTE_BRIDGE_URL" "$BRIDGE_URL"
           update_env "CODEX_REMOTE_BRIDGE_TOKEN" "$CODEX_REMOTE_BRIDGE_TOKEN"
-          update_env "AGENT_BACKEND" "remote-bridge"
-          update_env "AI_CONSULT_BACKEND" "remote-bridge"
-          update_env "CODEX_REMOTE_BRIDGE_TIMEOUT_MS" "55000"
+          update_env "AGENT_BACKEND" "$AGENT_BACKEND"
+          update_env "AI_CONSULT_BACKEND" "$AI_CONSULT_BACKEND"
+          update_env "CODEX_REMOTE_BRIDGE_TIMEOUT_MS" "$CODEX_REMOTE_BRIDGE_TIMEOUT_MS"
+          update_env "AI_AGENT_RATE_LIMIT" "$AI_AGENT_RATE_LIMIT"
+          update_env "AI_AGENT_DAILY_QUOTA" "$AI_AGENT_DAILY_QUOTA"
+          update_env "AI_CONSULT_RATE_LIMIT" "$AI_CONSULT_RATE_LIMIT"
+          update_env "AI_CONSULT_DAILY_QUOTA" "$AI_CONSULT_DAILY_QUOTA"
 
       - name: Pull Vercel production environment
         if: ${{ env.DEPLOY_AFTER_UPDATE == 'true' }}
