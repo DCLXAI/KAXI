@@ -44,4 +44,4 @@ jobs:
         run: bun run scripts/inject-vercel-runtime-env.ts
       - name: Deploy prebuilt output to production
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
-        run: bunx vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+        run: bunx vercel deploy --prebuilt --archive=tgz --prod --token="$VERCEL_TOKEN"
