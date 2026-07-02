@@ -4,6 +4,7 @@
 import { getRagDocumentMetadata, getSourceMetadata, pickLangText } from "../data/knowledge";
 import { recommendPath, type DiagnosisInput } from "../data/diagnosis";
 import { hybridSearch } from "../embeddings/vector-store";
+import { withImmigrationLegalBasisDocs } from "../knowledge/legal-basis";
 import type { Lang } from "../i18n/translations";
 import { findSchoolById, listSchools } from "../schools/repository";
 import { createPartnerRequest } from "../partners/repository";
@@ -248,19 +249,25 @@ const searchKnowledgeTool: Tool = {
     required: ["query"],
   },
   execute: async (args, ctx) => {
-    const results = await hybridSearch(args.query, { topK: args.top_k || 3 });
+    const requestedTopK = args.top_k || 3;
+    const results = await hybridSearch(args.query, { topK: Math.max(requestedTopK, 5) });
+    const docs = withImmigrationLegalBasisDocs(
+      args.query,
+      results.map((r) => r.doc),
+      { maxDocs: Math.max(requestedTopK, 5) }
+    );
     return {
-      result: results.map((r) => ({
-        id: r.doc.id,
-        title: pickLangText(r.doc.title, ctx.lang),
-        content: pickLangText(r.doc.content, ctx.lang),
-        category: r.doc.category,
-        source: r.doc.source,
-        sourceMeta: getSourceMetadata(r.doc.source),
-        ragMeta: getRagDocumentMetadata(r.doc, ctx.lang),
-        score: Number(r.score.toFixed(3)),
+      result: docs.map((doc) => ({
+        id: doc.id,
+        title: pickLangText(doc.title, ctx.lang),
+        content: pickLangText(doc.content, ctx.lang),
+        category: doc.category,
+        source: doc.source,
+        sourceMeta: getSourceMetadata(doc.source),
+        ragMeta: getRagDocumentMetadata(doc, ctx.lang),
+        score: Number((results.find((r) => r.doc.id === doc.id)?.score || 1).toFixed(3)),
       })),
-      summary: `${results.length}개 관련 문서 검색: ${results.map((r) => r.doc.id).join(", ")}`,
+      summary: `${docs.length}개 관련 문서 검색: ${docs.map((doc) => doc.id).join(", ")}`,
     };
   },
 };

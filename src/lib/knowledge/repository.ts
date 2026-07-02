@@ -200,6 +200,7 @@ function splitKnowledgeChunks(content: string, maxChars = 2800): string[] {
 
 function sourceLabelFromUrl(sourceUrl: string, fallback: string): string {
   const url = sourceUrl.toLowerCase();
+  if (url.includes("hikorea.go.kr")) return "하이코리아";
   if (url.includes("studyinkorea")) return "Study in Korea";
   if (url.includes("immigration") || url.includes("visa.go.kr")) return "법무부";
   if (url.includes("moe.go.kr")) return "교육부";
@@ -298,8 +299,13 @@ function staticDocsWithDbOverrides(
 ): KnowledgeDoc[] {
   const rowsByDocId = new Map(rows.map((row) => [row.docId, row]));
   const dbDocs = rows.filter((row) => isApprovedCurrent(row, now)).map(toKnowledgeDocFromDocument);
+  const supersededStaticDocIds = new Set(
+    rows
+      .filter((row) => isApprovedCurrent(row, now))
+      .flatMap((row) => asStringArray(row.supersedes))
+  );
   const staticDocs = getKnowledgeDocsWithMetadata({ referenceDate: now })
-    .filter((doc) => !rowsByDocId.has(doc.id))
+    .filter((doc) => !rowsByDocId.has(doc.id) && !supersededStaticDocIds.has(doc.id))
     .map(({ sourceMeta: _sourceMeta, ...doc }) => doc);
   return [...dbDocs, ...staticDocs];
 }
@@ -344,23 +350,38 @@ function staticDocFor(docId: string): KnowledgeDoc | undefined {
   return KNOWLEDGE_DOCS.find((doc) => doc.id === docId);
 }
 
-function candidateFromInput(input: KnowledgeMutationInput): KnowledgeCandidate {
+function existingDocumentContent(document: KnowledgeDocumentWithChunks | null | undefined): string | undefined {
+  if (!document) return undefined;
+  return document.chunks
+    .slice()
+    .sort((a, b) => a.chunkIndex - b.chunkIndex)
+    .map((chunk) => chunk.content.trim())
+    .filter(Boolean)
+    .join("\n\n") || undefined;
+}
+
+function candidateFromInput(
+  input: KnowledgeMutationInput,
+  existing?: KnowledgeDocumentWithChunks | null
+): KnowledgeCandidate {
   const staticDoc = staticDocFor(input.docId);
   const staticMeta = staticDoc ? getRagDocumentMetadata(staticDoc, "ko") : null;
-  const title = input.title || (staticDoc ? pickLangText(staticDoc.title, "ko") : input.docId);
-  const content = input.content || (staticDoc ? staticDocContent(staticDoc) : title);
+  const title = input.title || existing?.title || (staticDoc ? pickLangText(staticDoc.title, "ko") : input.docId);
+  const content = input.content || existingDocumentContent(existing) || (staticDoc ? staticDocContent(staticDoc) : title);
   return {
     docId: input.docId,
     title,
     content,
-    sourceUrl: input.sourceUrl || staticMeta?.source_url || "",
-    sourceType: normalizeSourceType(input.sourceType || staticMeta?.source_type),
-    language: input.language || staticMeta?.language || "ko",
-    jurisdiction: normalizeJurisdiction(input.jurisdiction || staticMeta?.jurisdiction),
-    topic: normalizeTopic(input.topic || staticDoc?.category || staticMeta?.topic),
-    validFrom: staticMeta?.valid_from ? new Date(staticMeta.valid_from) : input.now || new Date(),
-    supersedes: asStringArray(input.supersedes ?? staticMeta?.supersedes),
-    supersededBy: input.supersededBy ?? staticMeta?.superseded_by ?? null,
+    sourceUrl: input.sourceUrl || existing?.sourceUrl || staticMeta?.source_url || "",
+    sourceType: normalizeSourceType(input.sourceType || existing?.sourceType || staticMeta?.source_type),
+    language: input.language || existing?.language || staticMeta?.language || "ko",
+    jurisdiction: normalizeJurisdiction(input.jurisdiction || existing?.jurisdiction || staticMeta?.jurisdiction),
+    topic: normalizeTopic(input.topic || existing?.topic || staticDoc?.category || staticMeta?.topic),
+    validFrom: staticMeta?.valid_from
+      ? new Date(staticMeta.valid_from)
+      : existing?.validFrom || input.now || new Date(),
+    supersedes: asStringArray(input.supersedes ?? existing?.supersedes ?? staticMeta?.supersedes),
+    supersededBy: input.supersededBy ?? existing?.supersededBy ?? staticMeta?.superseded_by ?? null,
   };
 }
 
@@ -432,13 +453,13 @@ export async function calculateKnowledgeImpact(input: {
 }
 
 export async function analyzeKnowledgeDocumentDiff(input: KnowledgeMutationInput): Promise<KnowledgeDiffSummary> {
-  const candidate = candidateFromInput(input);
-  const candidateChunks = splitKnowledgeChunks(candidate.content);
-  const candidateHashes = new Set(candidateChunks.map(hashText));
   const existing = await db.knowledgeDocument.findUnique({
-    where: { docId: candidate.docId },
+    where: { docId: input.docId },
     include: { chunks: { orderBy: { chunkIndex: "asc" } } },
   });
+  const candidate = candidateFromInput(input, existing);
+  const candidateChunks = splitKnowledgeChunks(candidate.content);
+  const candidateHashes = new Set(candidateChunks.map(hashText));
   const currentHashes = new Set((existing?.chunks || []).map((chunk) => chunk.contentHash));
   const addedChunks = Array.from(candidateHashes).filter((hash) => !currentHashes.has(hash)).length;
   const removedChunks = Array.from(currentHashes).filter((hash) => !candidateHashes.has(hash)).length;
@@ -461,12 +482,90 @@ export async function analyzeKnowledgeDocumentDiff(input: KnowledgeMutationInput
   };
 }
 
+export async function upsertPendingKnowledgeCandidate(input: KnowledgeMutationInput): Promise<{
+  document: KnowledgeDocumentWithChunks;
+  diff: KnowledgeDiffSummary;
+}> {
+  const now = input.now || new Date();
+  const existing = await db.knowledgeDocument.findUnique({
+    where: { docId: input.docId },
+    include: { chunks: { orderBy: { chunkIndex: "asc" } } },
+  });
+  if (existing?.reviewStatus === "APPROVED") {
+    return {
+      document: existing,
+      diff: await analyzeKnowledgeDocumentDiff({ ...input, now }),
+    };
+  }
+  const candidate = candidateFromInput({ ...input, now }, existing);
+  const chunks = splitKnowledgeChunks(candidate.content);
+  const diff = await analyzeKnowledgeDocumentDiff({ ...input, now });
+
+  const document = await db.$transaction(async (tx) => {
+    const saved = await tx.knowledgeDocument.upsert({
+      where: { docId: candidate.docId },
+      update: {
+        title: candidate.title,
+        sourceUrl: candidate.sourceUrl,
+        sourceType: candidate.sourceType,
+        language: candidate.language,
+        jurisdiction: candidate.jurisdiction,
+        topic: candidate.topic,
+        validFrom: candidate.validFrom,
+        validTo: null,
+        lastCheckedAt: now,
+        checkedBy: input.actor,
+        reviewStatus: "PENDING",
+        supersedes: inputJson(candidate.supersedes),
+        supersededBy: candidate.supersededBy,
+      },
+      create: {
+        docId: candidate.docId,
+        title: candidate.title,
+        sourceUrl: candidate.sourceUrl,
+        sourceType: candidate.sourceType,
+        language: candidate.language,
+        jurisdiction: candidate.jurisdiction,
+        topic: candidate.topic,
+        validFrom: candidate.validFrom,
+        validTo: null,
+        lastCheckedAt: now,
+        checkedBy: input.actor,
+        reviewStatus: "PENDING",
+        supersedes: inputJson(candidate.supersedes),
+        supersededBy: candidate.supersededBy,
+      },
+    });
+
+    await tx.knowledgeChunk.deleteMany({ where: { documentId: saved.id } });
+    await tx.knowledgeChunk.createMany({
+      data: chunks.map((content, chunkIndex) => ({
+        documentId: saved.id,
+        chunkIndex,
+        content,
+        contentHash: hashText(content),
+      })),
+    });
+
+    return tx.knowledgeDocument.findUniqueOrThrow({
+      where: { id: saved.id },
+      include: { chunks: { orderBy: { chunkIndex: "asc" } } },
+    });
+  });
+
+  return { document, diff };
+}
+
 export async function approveKnowledgeDocument(input: KnowledgeMutationInput): Promise<{
   document: KnowledgeDocumentWithChunks;
   diff: KnowledgeDiffSummary;
 }> {
   const now = input.now || new Date();
-  const candidate = candidateFromInput({ ...input, now });
+  const existing = await db.knowledgeDocument.findUnique({
+    where: { docId: input.docId },
+    include: { chunks: { orderBy: { chunkIndex: "asc" } } },
+  });
+  const candidate = candidateFromInput({ ...input, now }, existing);
   const chunks = splitKnowledgeChunks(candidate.content);
   const diff = await analyzeKnowledgeDocumentDiff({ ...input, now });
 
@@ -516,6 +615,25 @@ export async function approveKnowledgeDocument(input: KnowledgeMutationInput): P
       })),
     });
 
+    if (candidate.supersedes.length > 0) {
+      const rows = await tx.knowledgeDocument.findMany({
+        where: { NOT: { id: saved.id } },
+        select: { id: true, docId: true, supersedes: true },
+      });
+      const supersededIds = rows
+        .filter((row) =>
+          candidate.supersedes.includes(row.docId) ||
+          asStringArray(row.supersedes).some((docId) => candidate.supersedes.includes(docId))
+        )
+        .map((row) => row.id);
+      if (supersededIds.length > 0) {
+        await tx.knowledgeDocument.updateMany({
+          where: { id: { in: supersededIds } },
+          data: { supersededBy: saved.docId, validTo: now },
+        });
+      }
+    }
+
     return tx.knowledgeDocument.findUniqueOrThrow({
       where: { id: saved.id },
       include: { chunks: { orderBy: { chunkIndex: "asc" } } },
@@ -552,7 +670,11 @@ export async function recheckKnowledgeDocument(input: KnowledgeMutationInput): P
 
 export async function discardKnowledgeDocument(input: KnowledgeMutationInput): Promise<KnowledgeDocumentWithChunks> {
   const now = input.now || new Date();
-  const candidate = candidateFromInput({ ...input, now });
+  const existing = await db.knowledgeDocument.findUnique({
+    where: { docId: input.docId },
+    include: { chunks: { orderBy: { chunkIndex: "asc" } } },
+  });
+  const candidate = candidateFromInput({ ...input, now }, existing);
 
   const document = await db.knowledgeDocument.upsert({
     where: { docId: candidate.docId },

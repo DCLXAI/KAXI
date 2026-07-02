@@ -63,6 +63,44 @@ if (sourceAudit.expiredDocs.length > 0) {
   fail(`RAG docs expired today: ${sourceAudit.expiredDocs.map((doc) => doc.id).join(", ")}`);
 }
 
+const requiredHiKoreaDocs = [
+  "hikorea-integrated-status-manual",
+  "hikorea-d2-d4-d10-e7-f2-f5-requirements",
+  "hikorea-stay-extension",
+  "hikorea-status-change",
+  "hikorea-activity-permit",
+  "hikorea-forms-document-checklist",
+  "hikorea-online-visit-application",
+  "hikorea-fees-processing-authentication",
+  "hikorea-policy-notice-monitor",
+];
+for (const docId of requiredHiKoreaDocs) {
+  const doc = KNOWLEDGE_DOCS.find((item) => item.id === docId);
+  if (!doc) fail(`Required HiKorea RAG doc missing: ${docId}`);
+  const meta = getRagDocumentMetadata(doc, "ko");
+  if (!meta.source_url.includes("hikorea.go.kr")) fail(`${docId} must point to hikorea.go.kr`);
+  if (meta.source_type !== "official_government") fail(`${docId} must use official_government source type`);
+  if (meta.last_checked_at !== "2026-07-02") fail(`${docId} checked date must be 2026-07-02`);
+}
+
+const requiredImmigrationLawDocs = [
+  "immigration-law-interpretation-hierarchy",
+  "immigration-act-stay-status-scope",
+  "immigration-decree-long-term-status-table",
+  "immigration-act-permission-matrix",
+  "immigration-rule-documents-attachments",
+  "immigration-rule-fees",
+  "immigration-law-violation-risk",
+];
+for (const docId of requiredImmigrationLawDocs) {
+  const doc = KNOWLEDGE_DOCS.find((item) => item.id === docId);
+  if (!doc) fail(`Required immigration law RAG doc missing: ${docId}`);
+  const meta = getRagDocumentMetadata(doc, "ko");
+  if (!meta.source_url.includes("law.go.kr")) fail(`${docId} must point to law.go.kr`);
+  if (meta.source_type !== "official_law") fail(`${docId} must use official_law source type`);
+  if (meta.last_checked_at !== "2026-07-02") fail(`${docId} checked date must be 2026-07-02`);
+}
+
 const afterAllReviews = maxReviewAfterDate();
 const futureDocs = getKnowledgeDocsWithMetadata({ referenceDate: afterAllReviews });
 if (futureDocs.length !== 0) {

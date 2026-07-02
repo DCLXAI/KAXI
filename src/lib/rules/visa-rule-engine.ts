@@ -14,6 +14,7 @@ import {
   CORE_DOCUMENTS,
   D2_DOCUMENTS,
   IMMIGRATION_SOURCE,
+  IMMIGRATION_RULE_ATTACHMENTS_SOURCE,
   STUDY_SOURCE,
   TB_REQUIRED_NATIONALITIES,
   addVisaRuleDocument,
@@ -187,7 +188,7 @@ function applyOperation(
         label: "재정능력 증빙",
         required: true,
         note: `${threshold} 기준으로 준비하되, 학교·국적·공관별 추가 기준 확인 필요`,
-        source_refs: [STUDY_SOURCE],
+        source_refs: [IMMIGRATION_RULE_ATTACHMENTS_SOURCE, STUDY_SOURCE],
       });
       return "MEDIUM";
     }
@@ -204,7 +205,7 @@ function applyOperation(
           label: "결핵진단서",
           required: true,
           note: "법무부 지정 병원 발급 및 유효기간 확인 필요",
-          source_refs: [STUDY_SOURCE, IMMIGRATION_SOURCE],
+          source_refs: [IMMIGRATION_RULE_ATTACHMENTS_SOURCE, STUDY_SOURCE, IMMIGRATION_SOURCE],
         });
         return "MEDIUM";
       }

@@ -13,6 +13,7 @@ import { getAgentBackend, runCodexServerless } from "@/lib/codex/serverless";
 import { isRemoteCodexBridgeEnabled, runRemoteCodexBridge } from "@/lib/codex/remote-bridge";
 import { hybridSearch, initVectorStore, initTransformerStore } from "@/lib/embeddings/vector-store";
 import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
+import { withImmigrationLegalBasisDocs } from "@/lib/knowledge/legal-basis";
 import {
   consumeDailyQuota,
   getClientIp,
@@ -117,8 +118,12 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. RAG 검색 (전문 상담은 더 많은 문서 검색)
-    const searchResults = await hybridSearch(question, { topK: 5 });
-    const docs: KnowledgeDoc[] = searchResults.map((r) => r.doc);
+    const searchResults = await hybridSearch(question, { topK: 6 });
+    const docs: KnowledgeDoc[] = withImmigrationLegalBasisDocs(
+      question,
+      searchResults.map((r) => r.doc),
+      { mode, maxDocs: 8 }
+    );
     const sourceNotice = buildRagBasisNotice(lang, docs);
 
     // 3. 행정사 전문 LLM 답변 생성
@@ -237,11 +242,12 @@ ${modeConfig.focus}
    - 구체적 서류 작성 대행 ❌ (불가)
    - 행정기관 제출 대행 ❌ (불가)
    - 이런 경우 "행정사 상담이 필요합니다"라고 명시
-3. **위험 신호 감지**: 허위서류, 불법취업, 비자 보장 약속 등 감지시 즉시 경고
-4. **다국어 답변**: 사용자 언어(${langName})로 답변
-5. **실용적 구조**: 
+3. **법령 우선 해석**: 비자·체류·출입국 답변은 출입국관리법 → 출입국관리법 시행령(체류자격 별표) → 출입국관리법 시행규칙(첨부서류·수수료) → 하이코리아/매뉴얼 순서로 해석. 법령 근거가 검색되지 않으면 확정 답변 금지.
+4. **위험 신호 감지**: 허위서류, 불법취업, 비자 보장 약속 등 감지시 즉시 경고
+5. **다국어 답변**: 사용자 언어(${langName})로 답변
+6. **실용적 구조**:
    - 핵심 답변 (2-3문장)
-   - 관련 법령/규정 근거
+   - 관련 법령/규정 근거 (조문·별표·확인일 먼저)
    - 필요한 경우 단계별 절차
    - 주의사항
    - 출처 표기
@@ -415,6 +421,8 @@ Answer the user's administrative-scrivener consultation question in ${langName}.
 
 Hard rules:
 - Use the official source excerpts below as the factual basis.
+- For immigration, visa, stay-status, document, extension, change, or work-permission questions, cite the legal hierarchy first: Immigration Act, Enforcement Decree status table, Enforcement Rule attachments/fees, then HiKorea/manual operational guidance.
+- If no statute/regulation excerpt is present for a visa or stay-status question, say the legal basis is not confirmed from the provided sources and ask for source verification instead of giving a final legal conclusion.
 - If the excerpts are insufficient, say what is not confirmed and ask for the missing fact.
 - Do not guarantee visa approval or assess a specific person's approval probability.
 - Do not draft legal/administrative documents or claim to submit filings on the user's behalf.

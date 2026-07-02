@@ -79,6 +79,10 @@ for (const rule of VISA_COMPLIANCE_RULE_SEEDS) {
   assert(rule.requiredInputs.length > 0, `${rule.code} missing requiredInputs`);
   assert(Boolean(rule.effectiveFrom), `${rule.code} missing effectiveFrom`);
   assert(rule.sourceRefs.length > 0, `${rule.code} missing sourceRefs`);
+  assert(
+    rule.sourceRefs.some((sourceRef) => sourceRef.startsWith("immigration-")),
+    `${rule.code} must include an immigration law source ref`
+  );
   assert(rule.reviewStatus === "APPROVED", `${rule.code} must be APPROVED`);
   assert(Boolean(rule.fallbackPolicy), `${rule.code} missing fallbackPolicy`);
   assert(rule.outputAst.operations.length > 0, `${rule.code} missing outputAst operations`);

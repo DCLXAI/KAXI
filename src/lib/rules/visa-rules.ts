@@ -56,6 +56,36 @@ export interface VisaRuleEvaluation {
 }
 
 export const VISA_RULE_SOURCE_REFS = {
+  immigrationActStayStatusScope: {
+    id: "immigration-act-stay-status-scope",
+    title: "출입국관리법 제10조·제17조",
+    url: "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=245973",
+    checked_at: "2026-07-02",
+  },
+  immigrationActPermissionMatrix: {
+    id: "immigration-act-permission-matrix",
+    title: "출입국관리법 제18조·제20조·제21조·제24조·제25조·제31조",
+    url: "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=245973",
+    checked_at: "2026-07-02",
+  },
+  immigrationDecreeLongTermStatusTable: {
+    id: "immigration-decree-long-term-status-table",
+    title: "출입국관리법 시행령 제12조·별표 1의2",
+    url: "https://www.law.go.kr/flDownload.do?flNm=%5B%EB%B3%84%ED%91%9C+1%EC%9D%982%5D+%EC%9E%A5%EA%B8%B0%EC%B2%B4%EB%A5%98%EC%9E%90%EA%B2%A9%28%EC%A0%9C12%EC%A1%B0+%EA%B4%80%EB%A0%A8%29%0A&flSeq=53439589",
+    checked_at: "2026-07-02",
+  },
+  immigrationRuleAttachments: {
+    id: "immigration-rule-documents-attachments",
+    title: "출입국관리법 시행규칙 제76조·별표 5·별표 5의2",
+    url: "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=283059",
+    checked_at: "2026-07-02",
+  },
+  immigrationRuleFees: {
+    id: "immigration-rule-fees",
+    title: "출입국관리법 시행규칙 제71조·제72조",
+    url: "https://www.law.go.kr/LSW//lumLsLinkPop.do?chrClsCd=010202&lspttninfSeq=82731",
+    checked_at: "2026-07-02",
+  },
   studyInKoreaVisaDocuments: {
     id: "studyinkorea-visa-documents",
     title: "Study in Korea visa document guidance",
@@ -76,6 +106,11 @@ export const VISA_RULE_SOURCE_REFS = {
   },
 } as const;
 
+export const IMMIGRATION_ACT_STATUS_SOURCE = VISA_RULE_SOURCE_REFS.immigrationActStayStatusScope.id;
+export const IMMIGRATION_ACT_PERMISSION_SOURCE = VISA_RULE_SOURCE_REFS.immigrationActPermissionMatrix.id;
+export const IMMIGRATION_DECREE_STATUS_SOURCE = VISA_RULE_SOURCE_REFS.immigrationDecreeLongTermStatusTable.id;
+export const IMMIGRATION_RULE_ATTACHMENTS_SOURCE = VISA_RULE_SOURCE_REFS.immigrationRuleAttachments.id;
+export const IMMIGRATION_RULE_FEES_SOURCE = VISA_RULE_SOURCE_REFS.immigrationRuleFees.id;
 export const STUDY_SOURCE = VISA_RULE_SOURCE_REFS.studyInKoreaVisaDocuments.id;
 export const IMMIGRATION_SOURCE = VISA_RULE_SOURCE_REFS.immigrationVisaNavigator.id;
 export const ADMIN_SOURCE = VISA_RULE_SOURCE_REFS.administrativeScrivenerAct.id;
@@ -86,7 +121,7 @@ export const VISA_RULES: VisaRuleDefinition[] = [
     title: "Infer D-2/D-4 from study program",
     required_inputs: ["visa_type", "program"],
     effective_from: "2026-01-01",
-    source_refs: [IMMIGRATION_SOURCE],
+    source_refs: [IMMIGRATION_ACT_STATUS_SOURCE, IMMIGRATION_DECREE_STATUS_SOURCE, IMMIGRATION_SOURCE],
     review_status: "approved",
     fallback_policy: "If neither visa_type nor program is known, ask a clarifying question before final checklist generation.",
   },
@@ -95,7 +130,13 @@ export const VISA_RULES: VisaRuleDefinition[] = [
     title: "Core D-2/D-4 document checklist",
     required_inputs: ["visa_type"],
     effective_from: "2026-01-01",
-    source_refs: [STUDY_SOURCE, IMMIGRATION_SOURCE],
+    source_refs: [
+      IMMIGRATION_ACT_STATUS_SOURCE,
+      IMMIGRATION_DECREE_STATUS_SOURCE,
+      IMMIGRATION_RULE_ATTACHMENTS_SOURCE,
+      STUDY_SOURCE,
+      IMMIGRATION_SOURCE,
+    ],
     review_status: "approved",
     fallback_policy: "If visa_type is missing, provide only a high-level checklist and ask whether the user is preparing D-2 or D-4.",
   },
@@ -104,7 +145,7 @@ export const VISA_RULES: VisaRuleDefinition[] = [
     title: "Financial proof note by visa type",
     required_inputs: ["visa_type"],
     effective_from: "2026-01-01",
-    source_refs: [STUDY_SOURCE],
+    source_refs: [IMMIGRATION_RULE_ATTACHMENTS_SOURCE, STUDY_SOURCE],
     review_status: "approved",
     fallback_policy: "If visa_type is missing, state that financial proof differs by program and require embassy/school confirmation.",
   },
@@ -113,7 +154,7 @@ export const VISA_RULES: VisaRuleDefinition[] = [
     title: "TB certificate for designated nationalities",
     required_inputs: ["nationality"],
     effective_from: "2026-01-01",
-    source_refs: [STUDY_SOURCE, IMMIGRATION_SOURCE],
+    source_refs: [IMMIGRATION_RULE_ATTACHMENTS_SOURCE, STUDY_SOURCE, IMMIGRATION_SOURCE],
     review_status: "approved",
     fallback_policy: "If nationality is missing, ask for nationality and warn that some countries require a TB certificate.",
   },
@@ -128,7 +169,7 @@ export const VISA_RULES: VisaRuleDefinition[] = [
       "asks_for_visa_guarantee",
     ],
     effective_from: "2026-01-01",
-    source_refs: [ADMIN_SOURCE, IMMIGRATION_SOURCE],
+    source_refs: [ADMIN_SOURCE, IMMIGRATION_ACT_STATUS_SOURCE, IMMIGRATION_ACT_PERMISSION_SOURCE, IMMIGRATION_SOURCE],
     review_status: "approved",
     fallback_policy: "Refuse fake-document, illegal-work, or guarantee requests; route lawful case-specific filing/refusal issues to a licensed administrative scrivener.",
   },
@@ -140,49 +181,49 @@ export const CORE_DOCUMENTS: VisaRuleDocument[] = [
     label: "여권",
     required: true,
     note: "유효기간 6개월 이상 권장",
-    source_refs: [STUDY_SOURCE],
+    source_refs: [IMMIGRATION_RULE_ATTACHMENTS_SOURCE, STUDY_SOURCE],
   },
   {
     id: "id_photo",
     label: "증명사진",
     required: true,
     note: "최근 6개월 이내 사진. 세부 규격은 관할 공관 확인",
-    source_refs: [STUDY_SOURCE],
+    source_refs: [IMMIGRATION_RULE_ATTACHMENTS_SOURCE, STUDY_SOURCE],
   },
   {
     id: "standard_admission",
     label: "표준입학허가서",
     required: true,
     note: "학교 합격 후 학교가 발급",
-    source_refs: [STUDY_SOURCE],
+    source_refs: [IMMIGRATION_RULE_ATTACHMENTS_SOURCE, STUDY_SOURCE],
   },
   {
     id: "institution_registration",
     label: "교육기관 사업자등록증",
     required: true,
     note: "학교가 제공하는 제출 서류",
-    source_refs: [STUDY_SOURCE],
+    source_refs: [IMMIGRATION_RULE_ATTACHMENTS_SOURCE, STUDY_SOURCE],
   },
   {
     id: "graduation_certificate",
     label: "졸업증명서",
     required: true,
     note: "학력 증빙. 번역·공증 또는 아포스티유 필요 여부는 국가별 확인",
-    source_refs: [STUDY_SOURCE],
+    source_refs: [IMMIGRATION_RULE_ATTACHMENTS_SOURCE, STUDY_SOURCE],
   },
   {
     id: "transcript",
     label: "성적증명서",
     required: true,
     note: "학업 이력 증빙. 번역·공증 또는 아포스티유 필요 여부는 국가별 확인",
-    source_refs: [STUDY_SOURCE],
+    source_refs: [IMMIGRATION_RULE_ATTACHMENTS_SOURCE, STUDY_SOURCE],
   },
   {
     id: "financial_proof",
     label: "재정능력 증빙",
     required: true,
     note: "비자 종류별 기준 금액 및 관할 공관 세부 기준 확인 필요",
-    source_refs: [STUDY_SOURCE],
+    source_refs: [IMMIGRATION_RULE_ATTACHMENTS_SOURCE, STUDY_SOURCE],
   },
 ];
 
@@ -192,14 +233,14 @@ export const D2_DOCUMENTS: VisaRuleDocument[] = [
     label: "TOPIK 또는 한국어/영어 능력 증빙",
     required: true,
     note: "학위과정은 학교·전공별 언어 요건 확인 필요",
-    source_refs: [STUDY_SOURCE, IMMIGRATION_SOURCE],
+    source_refs: [IMMIGRATION_DECREE_STATUS_SOURCE, IMMIGRATION_RULE_ATTACHMENTS_SOURCE, STUDY_SOURCE, IMMIGRATION_SOURCE],
   },
   {
     id: "study_plan",
     label: "유학계획서",
     required: true,
     note: "학교·공관 요구 양식에 맞춰 작성",
-    source_refs: [STUDY_SOURCE],
+    source_refs: [IMMIGRATION_RULE_ATTACHMENTS_SOURCE, STUDY_SOURCE],
   },
 ];
 
@@ -322,7 +363,7 @@ export function evaluateVisaRules(input: VisaRuleInput): VisaRuleEvaluation {
       label: "재정능력 증빙",
       required: true,
       note: `${threshold} 기준으로 준비하되, 학교·국적·공관별 추가 기준 확인 필요`,
-      source_refs: [STUDY_SOURCE],
+      source_refs: [IMMIGRATION_RULE_ATTACHMENTS_SOURCE, STUDY_SOURCE],
     });
   }
 
@@ -338,7 +379,7 @@ export function evaluateVisaRules(input: VisaRuleInput): VisaRuleEvaluation {
       label: "결핵진단서",
       required: true,
       note: "법무부 지정 병원 발급 및 유효기간 확인 필요",
-      source_refs: [STUDY_SOURCE, IMMIGRATION_SOURCE],
+      source_refs: [IMMIGRATION_RULE_ATTACHMENTS_SOURCE, STUDY_SOURCE, IMMIGRATION_SOURCE],
     });
   }
 

@@ -22,7 +22,9 @@
 - `DATA_ENCRYPTION_KEY`, `PII_HASH_SECRET`: Required before production writes. Encrypts contact/free-form question payloads and hashes them for deletion lookup.
 - `PII_ALLOW_UNENCRYPTED_PLAINTEXT`: Local development escape hatch only. Keep `false` in production.
 - `PRIVACY_CHATLOG_RETENTION_DAYS`, `PRIVACY_PARTNER_REQUEST_RETENTION_DAYS`, `PRIVACY_LEAD_RETENTION_DAYS`: Retention windows enforced by `/api/privacy/retention`.
-- `CRON_SECRET`: Required for Vercel Cron to call `/api/privacy/retention`.
+- `CRON_SECRET`: Required for Vercel Cron to call `/api/privacy/retention` and `/api/knowledge/monitor`.
+- `KNOWLEDGE_MONITOR_PERSIST_CANDIDATES`: Optional. Defaults to creating `PENDING` knowledge candidates from official-source changes. Set `false` to make `/api/knowledge/monitor` audit-only.
+- `KNOWLEDGE_MONITOR_SOURCE_IDS`, `KNOWLEDGE_MONITOR_MAX_SOURCES`: Optional controls for limiting the official immigration-law/HiKorea watchlist during incident response or staged rollout.
 - `AGENT_BACKEND`: Agent backend selector. Defaults to `codex`; set `zai` only when explicit Z.ai settings are present.
 - `CODEX_AUTH_MODE`: `auto`, `local`, or `api-key`. `auto` uses the current local Codex CLI login in local dev and API-key mode on Vercel.
 - `CODEX_API_KEY`: Required on Vercel when `AGENT_BACKEND=codex`.
@@ -117,12 +119,15 @@ Visa, immigration, school-accreditation, and cost guidance are time-sensitive.
 4. Production RAG may use a `KnowledgeDocument` only when `reviewStatus=APPROVED`, `validFrom` is active, `validTo` is empty or in the future, `supersededBy` is empty, and at least one `KnowledgeChunk` exists.
 5. School data is served from the `School` table. `src/lib/data/schools.ts` remains a local development seed/fallback only; hosted and production runtimes fail closed instead of silently serving seed data when the table is unavailable or empty.
 6. RAG search and legacy retrieval automatically exclude documents whose source metadata is past `reviewAfter`; DB-backed RAG additionally excludes rejected and superseded documents.
-7. Automated crawling must only calculate diff and impact. It must not write new production chunks or change approval status without an admin approval action.
+7. Automated crawling must only calculate diff and impact, or create non-searchable `PENDING` candidates. It must not write approved production chunks or change approval status without an admin approval action.
 8. Every answer grounded in RAG must show the source label and `lastCheckedAt` basis notice.
 9. Knowledge diff output must include impacted `ComplianceRuleVersion` rows and impacted chat/user records so operators know which rules and prior users may need follow-up after a source change.
 10. Each `School` row must include `sourceUrl`, `verifiedAt`, and `reviewAfter`; public school APIs hide rows past `reviewAfter`.
 11. Admins can inspect expired schools with `includeExpired=true` and reverify a school through `POST /api/schools/:id/review`.
-12. `bun run test:governance` verifies source metadata, school seed metadata, and automatic expiry filtering.
+12. Immigration, visa, and stay-status answers must use a law-first hierarchy: Immigration Act, then Enforcement Decree stay-status tables, then Enforcement Rule attachment/fee rules, then HiKorea/manual operational guidance. HiKorea sources are official operational RAG sources, but they are not the final legal basis when a statute or regulation controls the issue.
+13. HiKorea sources cover the integrated stay-status manual, D-2/D-4/D-10/E-7/F-2/F-5 requirement checks, extension/change/outside-activity procedures, e-application/visit reservation, forms, fees/authentication cautions, and policy-change notices. Treat these as official RAG sources, but still route case-specific filing judgment to 1345, the competent immigration office, or an administrative-scrivener review.
+14. `/api/knowledge/monitor` checks the official watchlist for Immigration Act, Enforcement Decree/Rule, HiKorea manuals/procedures/forms/notices, and the Ministry of Justice immigration portal. Vercel Cron calls it hourly; changed sources become `PENDING` candidates for admin review and approval before production RAG use.
+15. `bun run test:governance` verifies source metadata, required immigration-law RAG coverage, required HiKorea RAG coverage, school seed metadata, and automatic expiry filtering.
 
 ## Admin Access
 
@@ -139,6 +144,7 @@ GitHub Actions restores non-DB runtime artifacts during `bun install --frozen-lo
 `test:rules` verifies the DB-backed D-2/D-4 Compliance Rule Engine, including approved-only execution, effective date windows, required source refs, 20+ golden cases, and `ComplianceEvaluation` persistence.
 `test:quality` validates the multilingual evaluation set in `quality/multilingual-eval-cases.json`, including expected source document, refusal expectation, and cost-format labels.
 `test:rag-ops` verifies Phase 7 RAG operations: approved-only production search, rejected/superseded blocking, answer source/checked-date notices, impact lists for rules/users, and diff-only crawler behavior.
+`test:knowledge-monitor` verifies official-source monitoring, non-searchable pending candidates, and admin approval superseding older RAG documents.
 `test:privacy` verifies consent-gated partner routing, third-party/consignment/overseas consent rows, privacy audit events, deletion/retention consent status changes, PII encryption/redaction behavior, production PII persistence guards, and hosted SQLite write guards.
 `test:agent` verifies Agent status diagnostics, dry-run preflight behavior, and partner-request PII masking.
 `test:admin-dashboard` verifies the Phase 3 admin APIs for cases, case actions, rules, knowledge documents, and audit logs.
