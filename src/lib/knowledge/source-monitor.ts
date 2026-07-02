@@ -50,6 +50,12 @@ const LAW_DECREE_URL = "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=271319";
 const LAW_RULE_URL = "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=283059";
 const LAW_RECENT_PROMULGATION_URL =
   "https://www.law.go.kr/LSW/nwRvsLsPop.do?chrIdx=10&cptOfi=&lsKndCd=&lsNm=%EC%B6%9C%EC%9E%85%EA%B5%AD%EA%B4%80%EB%A6%AC%EB%B2%95&p_epubdt=&p_epubno=&p_spubdt=&p_spubno=&searchType=lsNm&sortIdx=0";
+const LAW_DECREE_SHORT_TERM_STATUS_TABLE_URL =
+  "https://www.law.go.kr/LSW/lsBylInfoPLinkR.do?lsiSeq=271319&lsNm=%EC%B6%9C%EC%9E%85%EA%B5%AD%EA%B4%80%EB%A6%AC%EB%B2%95+%EC%8B%9C%ED%96%89%EB%A0%B9&bylNo=0001&bylBrNo=00&bylCls=BE&bylEfYd=20250601&bylEfYdYn=Y";
+const LAW_DECREE_LONG_TERM_STATUS_TABLE_URL =
+  "https://www.law.go.kr/LSW/lsLawLinkInfo.do?lsJoLnkSeq=1000870036";
+const LAW_DECREE_PERMANENT_RESIDENCE_TABLE_URL =
+  "https://www.law.go.kr/LSW/lsBylInfoPLinkR.do?lsiSeq=271319&lsNm=%EC%B6%9C%EC%9E%85%EA%B5%AD%EA%B4%80%EB%A6%AC%EB%B2%95+%EC%8B%9C%ED%96%89%EB%A0%B9&bylNo=0001&bylBrNo=03&bylCls=BE&bylEfYd=20250601&bylEfYdYn=Y";
 const HIKOREA_HOME_URL = "https://www.hikorea.go.kr/index.html";
 const HIKOREA_STATUS_MANUAL_URL =
   "https://www.hikorea.go.kr/board/BoardNtcDetailR.pt?BBS_GB_CD=BS10&BBS_SEQ=1&NTCCTT_SEQ=1062&page=1";
@@ -139,11 +145,41 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
   {
     docId: "immigration-decree-long-term-status-table",
     title: "출입국관리법 시행령 별표 1의2 장기체류자격",
-    sourceUrl: "https://www.law.go.kr/LSW/lsLawLinkInfo.do?lsJoLnkSeq=1000870036",
+    sourceUrl: LAW_DECREE_LONG_TERM_STATUS_TABLE_URL,
     sourceType: "official_law",
     topic: "legal",
     legalPriority: 2,
     monitorCadence: "daily",
+  },
+  {
+    docId: "immigration-decree-short-term-status-table",
+    title: "출입국관리법 시행령 별표 1 단기체류자격",
+    sourceUrl: LAW_DECREE_SHORT_TERM_STATUS_TABLE_URL,
+    sourceType: "official_law",
+    topic: "legal",
+    legalPriority: 2,
+    monitorCadence: "daily",
+    changeSignals: ["short_term_status", "b1", "b2", "c1", "c3", "c4", "activity_scope"],
+  },
+  {
+    docId: "immigration-decree-permanent-residence-table",
+    title: "출입국관리법 시행령 별표 1의3 영주자격",
+    sourceUrl: LAW_DECREE_PERMANENT_RESIDENCE_TABLE_URL,
+    sourceType: "official_law",
+    topic: "legal",
+    legalPriority: 2,
+    monitorCadence: "daily",
+    changeSignals: ["permanent_residence", "f5", "eligibility_scope", "article_12_2", "deportation_exclusion"],
+  },
+  {
+    docId: "immigration-rule-stay-permission-review-criteria",
+    title: "출입국관리법 시행규칙 제31조의2 체류자격 부여 등 심사기준",
+    sourceUrl: LAW_RULE_URL,
+    sourceType: "official_law",
+    topic: "legal",
+    legalPriority: 3,
+    monitorCadence: "daily",
+    changeSignals: ["review_criteria", "article_9_2", "article_31_2", "status_grant", "status_change", "extension"],
   },
   {
     docId: "immigration-rule-documents-attachments",

@@ -17,6 +17,8 @@ const TEST_QUERIES = [
   { q: "Tôi muốn học tiếng Hàn thì xin visa gì?", expect: "d4-overview" },
   { q: "강남구 외국인등록은 어느 출입국 관할이야?", expect: "moj-office-jurisdiction-seoul-incheon-gyeonggi" },
   { q: "원주 이동출입국사무소 운영 여부는 어디서 확인해?", expect: "moj-mobile-immigration-office" },
+  { q: "C-3 단기방문으로 일해도 돼?", expect: "immigration-decree-short-term-status-table" },
+  { q: "F-5 영주권 기본 법령 요건은 뭐야?", expect: "immigration-decree-permanent-residence-table" },
 ];
 
 async function main() {

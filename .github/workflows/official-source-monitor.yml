@@ -35,9 +35,9 @@ jobs:
       matrix:
         include:
           - batch: law-core
-            source_ids: immigration-law-recent-promulgations,immigration-act-stay-status-scope,immigration-act-permission-matrix,immigration-law-violation-risk,immigration-decree-current-text,immigration-decree-long-term-status-table
+            source_ids: immigration-law-recent-promulgations,immigration-act-stay-status-scope,immigration-act-permission-matrix,immigration-law-violation-risk,immigration-decree-current-text,immigration-decree-long-term-status-table,immigration-decree-short-term-status-table,immigration-decree-permanent-residence-table
           - batch: rule-and-procedure
-            source_ids: immigration-rule-documents-attachments,immigration-rule-fees,hikorea-homepage-urgent-notices,hikorea-integrated-status-manual,hikorea-d2-d4-d10-e7-f2-f5-requirements,hikorea-stay-extension
+            source_ids: immigration-rule-stay-permission-review-criteria,immigration-rule-documents-attachments,immigration-rule-fees,hikorea-homepage-urgent-notices,hikorea-integrated-status-manual,hikorea-d2-d4-d10-e7-f2-f5-requirements,hikorea-stay-extension
           - batch: hikorea-news
             source_ids: hikorea-status-change,hikorea-activity-permit,hikorea-forms-document-checklist,hikorea-online-visit-application,hikorea-policy-notice-monitor,moj-immigration-policy-news
           - batch: moj-policy-notices

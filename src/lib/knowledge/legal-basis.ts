@@ -12,7 +12,10 @@ const BASE_IMMIGRATION_LEGAL_DOC_IDS = [
 
 const IMMIGRATION_RECENT_PROMULGATIONS_DOC_ID = "immigration-law-recent-promulgations";
 const IMMIGRATION_STATUS_DOC_ID = "immigration-decree-long-term-status-table";
+const IMMIGRATION_SHORT_TERM_STATUS_DOC_ID = "immigration-decree-short-term-status-table";
+const IMMIGRATION_PERMANENT_RESIDENCE_DOC_ID = "immigration-decree-permanent-residence-table";
 const IMMIGRATION_PERMISSION_DOC_ID = "immigration-act-permission-matrix";
+const IMMIGRATION_REVIEW_CRITERIA_DOC_ID = "immigration-rule-stay-permission-review-criteria";
 const IMMIGRATION_ATTACHMENTS_DOC_ID = "immigration-rule-documents-attachments";
 const IMMIGRATION_FEES_DOC_ID = "immigration-rule-fees";
 const IMMIGRATION_VIOLATION_DOC_ID = "immigration-law-violation-risk";
@@ -34,11 +37,18 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
   const ids = new Set<string>(BASE_IMMIGRATION_LEGAL_DOC_IDS);
   ids.add(IMMIGRATION_STATUS_DOC_ID);
 
+  if (/단기|단기방문|단기취업|무사증|사증면제|관광|통과|입국|b-?1|b-?2|c-?1|c-?3|c-?4|short.?term|visa.?free|waiver|tourist|transit/.test(text)) {
+    ids.add(IMMIGRATION_SHORT_TERM_STATUS_DOC_ID);
+  }
+  if (/영주|영주권|f-?5|permanent|residence/.test(text)) {
+    ids.add(IMMIGRATION_PERMANENT_RESIDENCE_DOC_ID);
+  }
   if (/최신|최근공포|시행일|시행예정|개정|변경된|바뀐|현행|current|recent|updated|amended|effective date/.test(text)) {
     ids.add(IMMIGRATION_RECENT_PROMULGATIONS_DOC_ID);
   }
   if (/변경|연장|자격외|근무처|외국인등록|등록|신고|취업|일|change|extend|extension|work|registration/.test(text)) {
     ids.add(IMMIGRATION_PERMISSION_DOC_ID);
+    ids.add(IMMIGRATION_REVIEW_CRITERIA_DOC_ID);
   }
   if (/서류|제출|첨부|아포스티유|영사확인|공증|번역|체크리스트|신청|document|apostille|notar/.test(text)) {
     ids.add(IMMIGRATION_ATTACHMENTS_DOC_ID);
