@@ -1,0 +1,87 @@
+name: Official Source Monitor
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      persist_candidates:
+        description: "Create PENDING knowledge candidates when official sources change"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      max_sources:
+        description: "Optional per-batch source limit for incident testing"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: official-source-monitor-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - batch: law-core
+            source_ids: immigration-law-recent-promulgations,immigration-act-stay-status-scope,immigration-act-permission-matrix,immigration-law-violation-risk,immigration-decree-current-text,immigration-decree-long-term-status-table
+          - batch: rule-and-procedure
+            source_ids: immigration-rule-documents-attachments,immigration-rule-fees,hikorea-homepage-urgent-notices,hikorea-integrated-status-manual,hikorea-d2-d4-d10-e7-f2-f5-requirements,hikorea-stay-extension
+          - batch: hikorea-news
+            source_ids: hikorea-status-change,hikorea-activity-permit,hikorea-forms-document-checklist,hikorea-online-visit-application,hikorea-policy-notice-monitor,moj-immigration-policy-news
+    env:
+      KAXI_MONITOR_URL: https://kaxi.vercel.app/api/knowledge/monitor
+      KAXI_ADMIN_API_KEY: ${{ secrets.KAXI_ADMIN_API_KEY }}
+      PERSIST_CANDIDATES: ${{ inputs.persist_candidates || 'true' }}
+      MAX_SOURCES: ${{ inputs.max_sources || '' }}
+      SOURCE_IDS: ${{ matrix.source_ids }}
+    steps:
+      - name: Require monitor admin key
+        if: ${{ env.KAXI_ADMIN_API_KEY == '' }}
+        run: |
+          echo "KAXI_ADMIN_API_KEY secret is required for scheduled official source monitoring."
+          exit 1
+
+      - name: Call KAXI official source monitor
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          body="$(jq -n \
+            --argjson persist "$PERSIST_CANDIDATES" \
+            --arg ids "$SOURCE_IDS" \
+            --arg max "$MAX_SOURCES" \
+            '{
+              persistCandidates: $persist,
+              sourceIds: ($ids | split(",") | map(select(length > 0)))
+            } + if ($max | length) > 0 then { maxSources: ($max | tonumber) } else {} end')"
+
+          response="$(curl --fail-with-body --silent --show-error --max-time 75 \
+            --request POST "$KAXI_MONITOR_URL" \
+            --header "authorization: Bearer $KAXI_ADMIN_API_KEY" \
+            --header "content-type: application/json" \
+            --data "$body")"
+
+          echo "$response" | jq --arg batch "${{ matrix.batch }}" '{
+            batch: $batch,
+            checkedAt,
+            total,
+            changed,
+            unchanged,
+            failed,
+            candidatesCreated,
+            alert,
+            changedDocIds: [.results[] | select(.status == "changed") | .docId],
+            failedDocIds: [.results[] | select(.status == "failed") | .docId]
+          }'

@@ -151,6 +151,23 @@ try {
     assert(monitorPreview.changed === 1, "admin monitor preview should detect source changes");
     assert(monitorPreview.candidatesCreated === 0, "admin monitor preview must not persist candidates");
 
+    const sourceFilteredPreview = await json(
+      await knowledgeMonitorRoute.POST(
+        adminRequest("/api/knowledge/monitor", {
+          method: "POST",
+          body: JSON.stringify({
+            persistCandidates: false,
+            sourceIds: ["hikorea-policy-notice-monitor"],
+          }),
+        })
+      )
+    );
+    assert(sourceFilteredPreview.total === 1, "admin monitor should support sourceIds batch filtering");
+    assert(
+      sourceFilteredPreview.results[0]?.docId === "hikorea-policy-notice-monitor",
+      "admin monitor sourceIds should select the requested source"
+    );
+
     const monitorPersist = await json(
       await knowledgeMonitorRoute.POST(
         adminRequest("/api/knowledge/monitor", {

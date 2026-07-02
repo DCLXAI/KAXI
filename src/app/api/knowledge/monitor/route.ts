@@ -84,12 +84,20 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as {
     persistCandidates?: boolean;
     maxSources?: number;
+    sourceIds?: string[];
   };
 
   const actor = await getAdminContext(req);
+  const requestedSourceIds = Array.isArray(body.sourceIds)
+    ? new Set(body.sourceIds.filter((item): item is string => typeof item === "string" && item.trim().length > 0))
+    : null;
+  const configuredSources = getOfficialKnowledgeSourceWatchlist();
+  const filteredSources = requestedSourceIds
+    ? configuredSources.filter((source) => requestedSourceIds.has(source.docId))
+    : configuredSources;
   const sources = body.maxSources && body.maxSources > 0
-    ? getOfficialKnowledgeSourceWatchlist().slice(0, body.maxSources)
-    : undefined;
+    ? filteredSources.slice(0, body.maxSources)
+    : filteredSources;
   const result = await runOfficialKnowledgeSourceMonitor({
     actor: actor?.actor || "admin",
     persistCandidates: body.persistCandidates === true,
