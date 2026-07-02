@@ -74,6 +74,14 @@ const LAW_ACT_ADDRESS_CHANGE_REPORT_URL =
   "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0036&lsiSeq=272921&urlMode=lsScJoRltInfoR";
 const LAW_ACT_FALSE_APPLICATION_DOCUMENTS_URL =
   "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0026&lsiSeq=272921&urlMode=lsScJoRltInfoR";
+const LAW_ACT_GENERAL_STAY_STATUS_URL =
+  "https://www.law.go.kr/LSW/lsLawLinkInfo.do?chrClsCd=010202&lsJoLnkSeq=1000817596";
+const LAW_ACT_PERMANENT_RESIDENCE_STATUS_URL =
+  "https://www.law.go.kr/LSW/lsLawLinkInfo.do?chrClsCd=010202&lsJoLnkSeq=1000817607";
+const LAW_ACT_MARRIAGE_IMMIGRANT_EXTENSION_SPECIAL_URL =
+  "https://www.law.go.kr/LSW/lsLawLinkInfo.do?chrClsCd=010202&lsJoLnkSeq=1000822759";
+const LAW_ACT_EMERGENCY_EXTENSION_SPECIAL_URL =
+  "https://www.law.go.kr/LSW/lsRvsDocListP.do?chrClsCd=010202&lsId=001707&lsRvsGubun=all";
 const LAW_DECREE_SHORT_TERM_STATUS_TABLE_URL =
   "https://www.law.go.kr/LSW/lsBylInfoPLinkR.do?lsiSeq=271319&lsNm=%EC%B6%9C%EC%9E%85%EA%B5%AD%EA%B4%80%EB%A6%AC%EB%B2%95+%EC%8B%9C%ED%96%89%EB%A0%B9&bylNo=0001&bylBrNo=00&bylCls=BE&bylEfYd=20250601&bylEfYdYn=Y";
 const LAW_DECREE_LONG_TERM_STATUS_TABLE_URL =
@@ -208,6 +216,26 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     changeSignals: ["false_documents", "forged_documents", "application_broker", "permit_application"],
   },
   {
+    docId: "immigration-act-general-stay-status",
+    title: "출입국관리법 제10조의2 일반체류자격",
+    sourceUrl: LAW_ACT_GENERAL_STAY_STATUS_URL,
+    sourceType: "official_law",
+    topic: "legal",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["short_term_status", "long_term_status", "90_days", "activity_scope", "decree_delegation"],
+  },
+  {
+    docId: "immigration-act-permanent-residence-status",
+    title: "출입국관리법 제10조의3 영주자격",
+    sourceUrl: LAW_ACT_PERMANENT_RESIDENCE_STATUS_URL,
+    sourceType: "official_law",
+    topic: "legal",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["permanent_residence", "f5", "conduct", "livelihood", "basic_knowledge", "relaxation"],
+  },
+  {
     docId: "immigration-act-status-grant",
     title: "출입국관리법 제23조 체류자격 부여",
     sourceUrl: LAW_ACT_STATUS_GRANT_URL,
@@ -236,6 +264,26 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     legalPriority: 1,
     monitorCadence: "daily",
     changeSignals: ["stay_extension", "before_expiry", "review_criteria", "overstay"],
+  },
+  {
+    docId: "immigration-act-marriage-immigrant-extension-special",
+    title: "출입국관리법 제25조의2 결혼이민자 등에 대한 특칙",
+    sourceUrl: LAW_ACT_MARRIAGE_IMMIGRANT_EXTENSION_SPECIAL_URL,
+    sourceType: "official_law",
+    topic: "process",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["marriage_immigrant", "domestic_violence", "sexual_violence", "child_abuse", "human_trafficking"],
+  },
+  {
+    docId: "immigration-act-emergency-extension-special",
+    title: "출입국관리법 제25조의5 국가비상사태 등 체류기간 연장 특칙",
+    sourceUrl: LAW_ACT_EMERGENCY_EXTENSION_SPECIAL_URL,
+    sourceType: "official_law",
+    topic: "process",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["national_emergency", "border_closure", "flight_suspension", "extension_by_office", "no_fault_departure_limit"],
   },
   {
     docId: "immigration-act-reentry-permit",

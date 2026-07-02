@@ -15,6 +15,8 @@ const IMMIGRATION_STATUS_DOC_ID = "immigration-decree-long-term-status-table";
 const IMMIGRATION_SHORT_TERM_STATUS_DOC_ID = "immigration-decree-short-term-status-table";
 const IMMIGRATION_PERMANENT_RESIDENCE_DOC_ID = "immigration-decree-permanent-residence-table";
 const IMMIGRATION_PERMISSION_DOC_ID = "immigration-act-permission-matrix";
+const IMMIGRATION_GENERAL_STAY_STATUS_DOC_ID = "immigration-act-general-stay-status";
+const IMMIGRATION_PERMANENT_RESIDENCE_STATUS_DOC_ID = "immigration-act-permanent-residence-status";
 const IMMIGRATION_EMPLOYMENT_RESTRICTION_DOC_ID = "immigration-act-employment-restriction";
 const IMMIGRATION_OUTSIDE_STATUS_ACTIVITY_DOC_ID = "immigration-act-outside-status-activity";
 const IMMIGRATION_WORKPLACE_CHANGE_DOC_ID = "immigration-act-workplace-change-addition";
@@ -23,6 +25,8 @@ const IMMIGRATION_FALSE_APPLICATION_DOCS_ID = "immigration-act-false-application
 const IMMIGRATION_STATUS_GRANT_DOC_ID = "immigration-act-status-grant";
 const IMMIGRATION_STATUS_CHANGE_DOC_ID = "immigration-act-status-change";
 const IMMIGRATION_STAY_EXTENSION_DOC_ID = "immigration-act-stay-extension";
+const IMMIGRATION_MARRIAGE_IMMIGRANT_EXTENSION_SPECIAL_DOC_ID = "immigration-act-marriage-immigrant-extension-special";
+const IMMIGRATION_EMERGENCY_EXTENSION_SPECIAL_DOC_ID = "immigration-act-emergency-extension-special";
 const IMMIGRATION_REENTRY_DOC_ID = "immigration-act-reentry-permit";
 const IMMIGRATION_ALIEN_REGISTRATION_DOC_ID = "immigration-act-alien-registration";
 const IMMIGRATION_REGISTRATION_CHANGE_DOC_ID = "immigration-act-registration-change-report";
@@ -47,12 +51,14 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
 
   const text = `${mode || ""} ${query}`.toLowerCase();
   const ids = new Set<string>(BASE_IMMIGRATION_LEGAL_DOC_IDS);
+  ids.add(IMMIGRATION_GENERAL_STAY_STATUS_DOC_ID);
   ids.add(IMMIGRATION_STATUS_DOC_ID);
 
   if (/단기|단기방문|단기취업|무사증|사증면제|관광|통과|입국|b-?1|b-?2|c-?1|c-?3|c-?4|short.?term|visa.?free|waiver|tourist|transit/.test(text)) {
     ids.add(IMMIGRATION_SHORT_TERM_STATUS_DOC_ID);
   }
   if (/영주|영주권|f-?5|permanent|residence/.test(text)) {
+    ids.add(IMMIGRATION_PERMANENT_RESIDENCE_STATUS_DOC_ID);
     ids.add(IMMIGRATION_PERMANENT_RESIDENCE_DOC_ID);
   }
   if (/최신|최근공포|시행일|시행예정|개정|변경된|바뀐|현행|current|recent|updated|amended|effective date/.test(text)) {
@@ -85,6 +91,12 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
   }
   if (/체류기간\s*연장|체류기간연장|비자\s*연장|연장허가|만료|만료일|extend|extension|stay extension|expiry/.test(text)) {
     ids.add(IMMIGRATION_STAY_EXTENSION_DOC_ID);
+  }
+  if (/결혼이민|가정폭력|성폭력|아동학대|인신매매|피해자|권리구제|marriage immigrant|domestic violence|sexual violence|child abuse|human trafficking|victim/.test(text)) {
+    ids.add(IMMIGRATION_MARRIAGE_IMMIGRANT_EXTENSION_SPECIAL_DOC_ID);
+  }
+  if (/국가비상|비상사태|국경\s*폐쇄|항공기\s*운항\s*중단|항공편\s*(취소|중단)|출국할 수 없|직권\s*연장|emergency|border closure|flight suspension|unable to depart/.test(text)) {
+    ids.add(IMMIGRATION_EMERGENCY_EXTENSION_SPECIAL_DOC_ID);
   }
   if (/재입국|re-?entry|reentry/.test(text)) {
     ids.add(IMMIGRATION_REENTRY_DOC_ID);

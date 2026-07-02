@@ -43,6 +43,8 @@ try {
   const requiredWatchlistIds = [
     "immigration-law-recent-promulgations",
     "immigration-act-stay-status-scope",
+    "immigration-act-general-stay-status",
+    "immigration-act-permanent-residence-status",
     "immigration-act-employment-restriction",
     "immigration-act-outside-status-activity",
     "immigration-act-workplace-change-addition",
@@ -51,6 +53,8 @@ try {
     "immigration-act-status-grant",
     "immigration-act-status-change",
     "immigration-act-stay-extension",
+    "immigration-act-marriage-immigrant-extension-special",
+    "immigration-act-emergency-extension-special",
     "immigration-act-reentry-permit",
     "immigration-act-alien-registration",
     "immigration-act-registration-change-report",
