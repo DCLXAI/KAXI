@@ -295,17 +295,22 @@ ${context}
 
   if (consultBackend === "remote-bridge") {
     try {
-      const result = await runRemoteCodexBridge({
-        question: codexPrompt,
-        lang,
-        history: [],
-        requestIp,
-        timeoutMs: Math.min(
-          parsePositiveInt(process.env.AI_CONSULT_REMOTE_BRIDGE_TIMEOUT_MS, CONSULT_REMOTE_BRIDGE_MAX_WAIT_MS),
-          parsePositiveInt(process.env.CODEX_REMOTE_BRIDGE_TIMEOUT_MS, CONSULT_REMOTE_BRIDGE_MAX_WAIT_MS),
-          CONSULT_REMOTE_BRIDGE_MAX_WAIT_MS
-        ),
-      });
+      const remoteBridgeTimeoutMs = Math.min(
+        parsePositiveInt(process.env.AI_CONSULT_REMOTE_BRIDGE_TIMEOUT_MS, CONSULT_REMOTE_BRIDGE_MAX_WAIT_MS),
+        parsePositiveInt(process.env.CODEX_REMOTE_BRIDGE_TIMEOUT_MS, CONSULT_REMOTE_BRIDGE_MAX_WAIT_MS),
+        CONSULT_REMOTE_BRIDGE_MAX_WAIT_MS
+      );
+      const result = await withTimeout(
+        runRemoteCodexBridge({
+          question: codexPrompt,
+          lang,
+          history: [],
+          requestIp,
+          timeoutMs: remoteBridgeTimeoutMs,
+        }),
+        remoteBridgeTimeoutMs + 500,
+        "Consult remote Codex bridge"
+      );
       const answer = result.answer.trim();
       if (!answer) throw new Error("Remote Codex bridge returned an empty answer");
       return {
@@ -319,6 +324,16 @@ ${context}
       };
     } catch (e) {
       console.warn("[Expert Codex bridge skipped]", e instanceof Error ? e.message : e);
+      return buildOfficialSummaryExpertResult({
+        question,
+        docs,
+        lang,
+        sourceNotice,
+        disclaimer,
+        suggestedFollowups,
+        needsHumanExpert,
+        temporaryModelFailure: false,
+      });
     }
   }
 
@@ -367,31 +382,61 @@ ${context}
     } else {
       console.error("[Expert LLM error]", e);
     }
-    // 폴백: 검색된 문서를 직접 조합
-    const fallback = docs.length > 0
-      ? buildOfficialSummaryFallback(question, docs, lang, sourceNotice)
-      : {
-          ko: "관련 공식 문서를 충분히 찾지 못했습니다. 비자·체류, 서류, 거절 대응, 유학원 운영 중 어느 영역인지 조금 더 구체적으로 알려주세요. 개별 사례의 판단·서류 작성·제출 대행은 행정사 상담을 권장합니다.",
-          vi: "Chưa tìm thấy đủ tài liệu chính thức liên quan. Hãy cho biết rõ hơn về visa/lưu trú, hồ sơ, kháng từ chối, hoặc vận hành tư vấn du học. Trường hợp cá nhân nên tư vấn luật sư hành chính.",
-          mn: "Холбогдох албан эх сурвалж хангалттай олдсонгүй. Виз/байршил, баримт бичиг, татгалзлын хариу, эсвэл сургалтын зөвлөгөөний үйл ажиллагааны аль хэсэг болохыг тодруулна уу. Тусгай тохиолдолд мэргэжлийн зөвлөгөө авна уу.",
-          en: "I could not find enough relevant official source material. Please specify whether this is about visa/stay, documents, refusal response, or study-agency operations. Individual case decisions and filing work should go through an administrative scrivener.",
-        }[lang];
-
-    return {
-      answer: fallback,
-      disclaimer: configurationFallback
-        ? disclaimer
-        : {
-            ko: "⚠️ 생성 모델 응답에 실패해 검색된 공식 문서를 직접 요약했습니다. 개별 사례 판단은 행정사 상담을 권장합니다.",
-            vi: "⚠️ Lỗi phản hồi mô hình, đang tóm tắt trực tiếp tài liệu chính thức đã tìm được. Trường hợp cá nhân nên tư vấn chuyên gia hành chính.",
-            mn: "⚠️ Загварын хариу амжилтгүй болсон тул олдсон албан эх сурвалжийг шууд хураангуйллаа. Тусгай тохиолдолд мэргэжлийн зөвлөгөө авна уу.",
-            en: "⚠️ Model response failed, so I summarized the retrieved official source material directly. Individual cases should be reviewed by an administrative scrivener.",
-          }[lang],
+    return buildOfficialSummaryExpertResult({
+      question,
+      docs,
+      lang,
+      sourceNotice,
+      disclaimer,
       suggestedFollowups,
       needsHumanExpert,
-      backend: "official-summary",
-    };
+      temporaryModelFailure: !configurationFallback,
+    });
   }
+}
+
+function buildOfficialSummaryExpertResult({
+  question,
+  docs,
+  lang,
+  sourceNotice,
+  disclaimer,
+  suggestedFollowups,
+  needsHumanExpert,
+  temporaryModelFailure,
+}: {
+  question: string;
+  docs: KnowledgeDoc[];
+  lang: Lang;
+  sourceNotice: string;
+  disclaimer: string;
+  suggestedFollowups: string[];
+  needsHumanExpert: boolean;
+  temporaryModelFailure: boolean;
+}): ExpertAnswerResult {
+  const answer = docs.length > 0
+    ? buildOfficialSummaryFallback(question, docs, lang, sourceNotice)
+    : {
+        ko: "관련 공식 문서를 충분히 찾지 못했습니다. 비자·체류, 서류, 거절 대응, 유학원 운영 중 어느 영역인지 조금 더 구체적으로 알려주세요. 개별 사례의 판단·서류 작성·제출 대행은 행정사 상담을 권장합니다.",
+        vi: "Chưa tìm thấy đủ tài liệu chính thức liên quan. Hãy cho biết rõ hơn về visa/lưu trú, hồ sơ, kháng từ chối, hoặc vận hành tư vấn du học. Trường hợp cá nhân nên tư vấn luật sư hành chính.",
+        mn: "Холбогдох албан эх сурвалж хангалттай олдсонгүй. Виз/байршил, баримт бичиг, татгалзлын хариу, эсвэл сургалтын зөвлөгөөний үйл ажиллагааны аль хэсэг болохыг тодруулна уу. Тусгай тохиолдолд мэргэжлийн зөвлөгөө авна уу.",
+        en: "I could not find enough relevant official source material. Please specify whether this is about visa/stay, documents, refusal response, or study-agency operations. Individual case decisions and filing work should go through an administrative scrivener.",
+      }[lang];
+
+  return {
+    answer,
+    disclaimer: temporaryModelFailure
+      ? {
+          ko: "⚠️ 생성 모델 응답에 실패해 검색된 공식 문서를 직접 요약했습니다. 개별 사례 판단은 행정사 상담을 권장합니다.",
+          vi: "⚠️ Lỗi phản hồi mô hình, đang tóm tắt trực tiếp tài liệu chính thức đã tìm được. Trường hợp cá nhân nên tư vấn chuyên gia hành chính.",
+          mn: "⚠️ Загварын хариу амжилтгүй болсон тул олдсон албан эх сурвалжийг шууд хураангуйллаа. Тусгай тохиолдолд мэргэжлийн зөвлөгөө авна уу.",
+          en: "⚠️ Model response failed, so I summarized the retrieved official source material directly. Individual cases should be reviewed by an administrative scrivener.",
+        }[lang]
+      : disclaimer,
+    suggestedFollowups,
+    needsHumanExpert,
+    backend: "official-summary",
+  };
 }
 
 function asksForFreshness(question: string): boolean {
