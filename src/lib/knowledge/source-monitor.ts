@@ -50,6 +50,12 @@ const LAW_DECREE_URL = "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=271319";
 const LAW_RULE_URL = "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=283059";
 const LAW_RECENT_PROMULGATION_URL =
   "https://www.law.go.kr/LSW/nwRvsLsPop.do?chrIdx=10&cptOfi=&lsKndCd=&lsNm=%EC%B6%9C%EC%9E%85%EA%B5%AD%EA%B4%80%EB%A6%AC%EB%B2%95&p_epubdt=&p_epubno=&p_spubdt=&p_spubno=&searchType=lsNm&sortIdx=0";
+const LAW_ACT_STATUS_GRANT_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0023&lsiSeq=272921&urlMode=lsScJoRltInfoR";
+const LAW_ACT_STATUS_CHANGE_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0024&lsiSeq=272921&urlMode=lsScJoRltInfoR";
+const LAW_ACT_STAY_EXTENSION_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0025&lsiSeq=272921&urlMode=lsScJoRltInfoR";
 const LAW_ACT_REENTRY_PERMIT_URL =
   "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0030&lsiSeq=272921&urlMode=lsScJoRltInfoR";
 const LAW_ACT_ALIEN_REGISTRATION_URL =
@@ -140,6 +146,36 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     topic: "warning",
     legalPriority: 1,
     monitorCadence: "daily",
+  },
+  {
+    docId: "immigration-act-status-grant",
+    title: "출입국관리법 제23조 체류자격 부여",
+    sourceUrl: LAW_ACT_STATUS_GRANT_URL,
+    sourceType: "official_law",
+    topic: "legal",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["status_grant", "birth_in_korea", "nationality_loss", "90_days", "60_days"],
+  },
+  {
+    docId: "immigration-act-status-change",
+    title: "출입국관리법 제24조 체류자격 변경허가",
+    sourceUrl: LAW_ACT_STATUS_CHANGE_URL,
+    sourceType: "official_law",
+    topic: "process",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["status_change", "prior_permission", "30_days", "review_criteria"],
+  },
+  {
+    docId: "immigration-act-stay-extension",
+    title: "출입국관리법 제25조 체류기간 연장허가",
+    sourceUrl: LAW_ACT_STAY_EXTENSION_URL,
+    sourceType: "official_law",
+    topic: "process",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["stay_extension", "before_expiry", "review_criteria", "overstay"],
   },
   {
     docId: "immigration-act-reentry-permit",

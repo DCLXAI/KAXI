@@ -15,6 +15,9 @@ const IMMIGRATION_STATUS_DOC_ID = "immigration-decree-long-term-status-table";
 const IMMIGRATION_SHORT_TERM_STATUS_DOC_ID = "immigration-decree-short-term-status-table";
 const IMMIGRATION_PERMANENT_RESIDENCE_DOC_ID = "immigration-decree-permanent-residence-table";
 const IMMIGRATION_PERMISSION_DOC_ID = "immigration-act-permission-matrix";
+const IMMIGRATION_STATUS_GRANT_DOC_ID = "immigration-act-status-grant";
+const IMMIGRATION_STATUS_CHANGE_DOC_ID = "immigration-act-status-change";
+const IMMIGRATION_STAY_EXTENSION_DOC_ID = "immigration-act-stay-extension";
 const IMMIGRATION_REENTRY_DOC_ID = "immigration-act-reentry-permit";
 const IMMIGRATION_ALIEN_REGISTRATION_DOC_ID = "immigration-act-alien-registration";
 const IMMIGRATION_REGISTRATION_CHANGE_DOC_ID = "immigration-act-registration-change-report";
@@ -53,6 +56,15 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
   if (/변경|연장|자격외|근무처|외국인등록|등록|신고|취업|일|change|extend|extension|work|registration/.test(text)) {
     ids.add(IMMIGRATION_PERMISSION_DOC_ID);
     ids.add(IMMIGRATION_REVIEW_CRITERIA_DOC_ID);
+  }
+  if (/체류자격\s*부여|체류자격부여|출생|태어난|국적\s*(상실|이탈)|status grant|born in korea|loss of nationality/.test(text)) {
+    ids.add(IMMIGRATION_STATUS_GRANT_DOC_ID);
+  }
+  if (/체류자격\s*변경|체류자격변경|비자\s*변경|d-?4\s*(에서|to)\s*d-?2|change of status|status change/.test(text)) {
+    ids.add(IMMIGRATION_STATUS_CHANGE_DOC_ID);
+  }
+  if (/체류기간\s*연장|체류기간연장|비자\s*연장|연장허가|만료|만료일|extend|extension|stay extension|expiry/.test(text)) {
+    ids.add(IMMIGRATION_STAY_EXTENSION_DOC_ID);
   }
   if (/재입국|re-?entry|reentry/.test(text)) {
     ids.add(IMMIGRATION_REENTRY_DOC_ID);

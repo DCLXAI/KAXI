@@ -36,6 +36,8 @@ jobs:
         include:
           - batch: law-core
             source_ids: immigration-law-recent-promulgations,immigration-act-stay-status-scope,immigration-act-permission-matrix,immigration-law-violation-risk,immigration-decree-current-text,immigration-decree-long-term-status-table,immigration-decree-short-term-status-table,immigration-decree-permanent-residence-table
+          - batch: law-stay-permissions
+            source_ids: immigration-act-status-grant,immigration-act-status-change,immigration-act-stay-extension
           - batch: law-stay-duties
             source_ids: immigration-act-reentry-permit,immigration-act-alien-registration,immigration-act-registration-change-report,immigration-act-address-change-report
           - batch: rule-and-procedure
