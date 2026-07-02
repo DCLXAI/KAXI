@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   buildRagBasisNotice,
+  getEffectiveSourceMetadata,
   getRagDocumentMetadata,
-  getSourceMetadata,
   pickLangText,
   type KnowledgeDoc,
 } from "@/lib/data/knowledge";
@@ -171,7 +171,7 @@ export async function POST(req: NextRequest) {
         title: pickLangText(d.title, lang),
         category: d.category,
         source: d.source,
-        sourceMeta: getSourceMetadata(d.source),
+        sourceMeta: getEffectiveSourceMetadata(d, lang),
         ragMeta: getRagDocumentMetadata(d, lang),
       })),
       suggestedFollowups: result.suggestedFollowups,

@@ -1,7 +1,7 @@
 // 에이전트 도구 정의 — AI가 호출할 수 있는 함수들
 // 각 도구는 name, description, parameters, execute 함수로 구성
 
-import { getRagDocumentMetadata, getSourceMetadata, pickLangText } from "../data/knowledge";
+import { getEffectiveSourceMetadata, getRagDocumentMetadata, pickLangText } from "../data/knowledge";
 import { recommendPath, type DiagnosisInput } from "../data/diagnosis";
 import { hybridSearch } from "../embeddings/vector-store";
 import { withImmigrationLegalBasisDocs } from "../knowledge/legal-basis";
@@ -263,7 +263,7 @@ const searchKnowledgeTool: Tool = {
         content: pickLangText(doc.content, ctx.lang),
         category: doc.category,
         source: doc.source,
-        sourceMeta: getSourceMetadata(doc.source),
+        sourceMeta: getEffectiveSourceMetadata(doc, ctx.lang),
         ragMeta: getRagDocumentMetadata(doc, ctx.lang),
         score: Number((results.find((r) => r.doc.id === doc.id)?.score || 1).toFixed(3)),
       })),

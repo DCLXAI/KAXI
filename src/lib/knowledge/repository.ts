@@ -214,15 +214,32 @@ function sourceOwner(sourceType: SourceType): "official" | "internal" {
   return sourceType.startsWith("official_") ? "official" : "internal";
 }
 
+const MONITOR_CANDIDATE_SUFFIX_RE = /__candidate__[a-f0-9]{12,}$/i;
+const REVIEW_CANDIDATE_TITLE_RE = /^\s*\[검토 후보\]\s*/;
+
+function publicDocIdForDocument(document: KnowledgeDocumentWithChunks): string {
+  const supersedes = asStringArray(document.supersedes);
+  if (MONITOR_CANDIDATE_SUFFIX_RE.test(document.docId) && supersedes.length > 0) {
+    return supersedes[0];
+  }
+  return document.docId.replace(MONITOR_CANDIDATE_SUFFIX_RE, "");
+}
+
+function publicTitleForDocument(document: KnowledgeDocumentWithChunks): string {
+  return document.title.replace(REVIEW_CANDIDATE_TITLE_RE, "").trim() || document.title;
+}
+
 export function toRagMetadataFromDocument(
   document: KnowledgeDocumentWithChunks,
   lang: Lang = "ko"
 ): RagDocumentMetadata {
   const topic = normalizeTopic(document.topic);
   const sourceType = normalizeSourceType(document.sourceType);
+  const docId = publicDocIdForDocument(document);
+  const supersedes = asStringArray(document.supersedes).filter((item) => item !== docId);
   return {
-    doc_id: document.docId,
-    title: document.title,
+    doc_id: docId,
+    title: publicTitleForDocument(document),
     source_url: document.sourceUrl,
     source_type: sourceType,
     language: lang,
@@ -233,7 +250,7 @@ export function toRagMetadataFromDocument(
     last_checked_at: toDateOnly(document.lastCheckedAt) || "1970-01-01",
     checked_by: document.checkedBy,
     review_status: normalizeReviewStatus(document.reviewStatus),
-    supersedes: asStringArray(document.supersedes),
+    supersedes,
     superseded_by: document.supersededBy,
     review_after: reviewAfterDate(document.lastCheckedAt),
     source_label: sourceLabelFromUrl(document.sourceUrl, document.title),
@@ -250,14 +267,18 @@ export function toKnowledgeDocFromDocument(document: KnowledgeDocumentWithChunks
       .filter(Boolean)
       .join("\n\n") || document.title;
   const topic = normalizeTopic(document.topic);
+  const publicDocId = publicDocIdForDocument(document);
+  const publicTitle = publicTitleForDocument(document);
   return {
-    id: document.docId,
+    id: publicDocId,
     category: topic,
-    title: sameLangText(document.title),
+    title: sameLangText(publicTitle),
     keywords: Array.from(
       new Set(
         [
+          publicDocId,
           document.docId,
+          publicTitle,
           document.title,
           document.topic,
           document.sourceType,

@@ -507,6 +507,25 @@ export function getRagDocumentMetadata(doc: KnowledgeDoc, lang: Lang): RagDocume
   };
 }
 
+export function getEffectiveSourceMetadata(doc: KnowledgeDoc, lang: Lang): ResolvedSourceMetadata {
+  const meta = getRagDocumentMetadata(doc, lang);
+  return {
+    label: meta.source_label,
+    url: meta.source_url,
+    verifiedAt: meta.last_checked_at,
+    reviewAfter: meta.review_after,
+    owner: meta.owner,
+    sourceType: meta.source_type,
+    jurisdiction: meta.jurisdiction,
+    validFrom: meta.valid_from,
+    validTo: meta.valid_to,
+    checkedBy: meta.checked_by,
+    reviewStatus: meta.review_status,
+    supersedes: meta.supersedes,
+    supersededBy: meta.superseded_by,
+  };
+}
+
 function compactSourceLabel(label: string): string {
   if (/hikorea|하이코리아/i.test(label)) return "하이코리아";
   if (/study in korea|한국유학종합시스템/i.test(label)) return "Study in Korea";
