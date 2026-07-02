@@ -40,7 +40,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
         with:
-          bun-version: latest
+          bun-version: 1.3.5
       - name: Install dependencies
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
         run: bun install --frozen-lockfile
