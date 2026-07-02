@@ -406,6 +406,9 @@ function officialSummaryDocScore(question: string, doc: KnowledgeDoc, lang: Lang
   const words = q.split(/\s+/).filter((word) => word.length > 1);
 
   let score = 0;
+  const wantsDocuments = /서류|제출|첨부|체크리스트|신청|document|checklist|forms|hồ sơ/i.test(question);
+  const wantsExtension = /연장|체류기간|extend|extension|gia hạn/i.test(question);
+  const wantsFreshness = asksForFreshness(question);
 
   for (const word of words) {
     if (haystack.includes(word)) score += 0.75;
@@ -415,11 +418,17 @@ function officialSummaryDocScore(question: string, doc: KnowledgeDoc, lang: Lang
     if (q.includes(visaType) && haystack.includes(visaType)) score += 6;
   }
 
-  if (/서류|제출|첨부|체크리스트|신청|document|checklist|forms|hồ sơ/i.test(question)) {
+  if (wantsDocuments) {
     if (/서류|첨부|체크리스트|통합신청서|documents|attachments|forms|checklist/i.test(haystack)) score += 7;
+    if (doc.id === "immigration-rule-documents-attachments") score += 20;
+    if (doc.id === "hikorea-forms-document-checklist") score += 16;
+    if (doc.id === "visa-documents") score += 14;
   }
-  if (/연장|체류기간|extend|extension|gia hạn/i.test(question)) {
+  if (wantsExtension) {
     if (/연장|체류기간|허가|permission|extension|stay-extension/i.test(haystack)) score += 6;
+    if (doc.id === "hikorea-stay-extension") score += 18;
+    if (doc.id === "immigration-act-permission-matrix") score += 14;
+    if (doc.id === "immigration-rule-documents-attachments") score += 8;
   }
   if (/변경|전환|change|transfer/i.test(question)) {
     if (/변경|전환|change|transfer|permission/i.test(haystack)) score += 5;
@@ -429,8 +438,9 @@ function officialSummaryDocScore(question: string, doc: KnowledgeDoc, lang: Lang
   }
 
   if (doc.id === "immigration-law-recent-promulgations") {
-    score += asksForFreshness(question) ? 6 : -8;
+    score += wantsFreshness ? 6 : -8;
   }
+  if (!wantsFreshness && /최신 본문 감시|최근공포|시행일자 감시/.test(pickLangText(doc.title, "ko"))) score -= 8;
   if (doc.id === "immigration-law-interpretation-hierarchy") score += 1;
 
   return score;
