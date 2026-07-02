@@ -28,6 +28,7 @@ import { isPiiEncryptionConfigured } from "@/lib/privacy/pii";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+const AGENT_REMOTE_BRIDGE_MAX_WAIT_MS = 12_000;
 
 function emptyPreflight(question: string): AgentPreflightResult {
   return {
@@ -285,13 +286,21 @@ export async function POST(req: NextRequest) {
 
     if (configuredBackend === "remote-bridge" || isRemoteCodexBridgeEnabled()) {
       try {
-        const result = await runRemoteCodexBridge({
-          question: preflight.groundedQuestion,
-          lang,
-          history,
-          requestIp: getClientIp(req),
-          timeoutMs: parsePositiveInt(process.env.CODEX_REMOTE_BRIDGE_TIMEOUT_MS, 55_000),
-        });
+        const remoteBridgeTimeoutMs = Math.min(
+          parsePositiveInt(process.env.CODEX_REMOTE_BRIDGE_TIMEOUT_MS, AGENT_REMOTE_BRIDGE_MAX_WAIT_MS),
+          AGENT_REMOTE_BRIDGE_MAX_WAIT_MS
+        );
+        const result = await withTimeout(
+          runRemoteCodexBridge({
+            question: preflight.groundedQuestion,
+            lang,
+            history,
+            requestIp: getClientIp(req),
+            timeoutMs: remoteBridgeTimeoutMs,
+          }),
+          remoteBridgeTimeoutMs + 500,
+          "Agent remote Codex bridge"
+        );
         const steps = [...preflight.steps, ...result.steps];
         const toolResults = [...preflight.toolResults, ...result.toolResults];
         await persistAgentLog({
