@@ -120,6 +120,12 @@ const requiredMojPolicyDocs = [
   "moj-k-eta-scam-warning",
   "moj-e-arrival-card",
   "moj-e-arrival-card-notice",
+  "moj-office-jurisdiction-seoul-incheon-gyeonggi",
+  "moj-office-jurisdiction-busan-gyeongnam",
+  "moj-office-jurisdiction-gwangju-jeolla-jeju",
+  "moj-office-jurisdiction-daegu-gyeongbuk-gangwon",
+  "moj-office-jurisdiction-daejeon-chungcheong",
+  "moj-mobile-immigration-office",
 ];
 for (const docId of requiredMojPolicyDocs) {
   const doc = KNOWLEDGE_DOCS.find((item) => item.id === docId);

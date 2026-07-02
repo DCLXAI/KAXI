@@ -15,6 +15,8 @@ const TEST_QUERIES = [
   { q: "허위 잔고증명 쓰면 어떻게 되나요", expect: "fake-documents-warning" },
   { q: "I want to study Korean language, what visa?", expect: "d4-overview" },
   { q: "Tôi muốn học tiếng Hàn thì xin visa gì?", expect: "d4-overview" },
+  { q: "강남구 외국인등록은 어느 출입국 관할이야?", expect: "moj-office-jurisdiction-seoul-incheon-gyeonggi" },
+  { q: "원주 이동출입국사무소 운영 여부는 어디서 확인해?", expect: "moj-mobile-immigration-office" },
 ];
 
 async function main() {

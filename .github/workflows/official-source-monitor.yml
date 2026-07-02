@@ -48,6 +48,8 @@ jobs:
             source_ids: moj-stay-management-policy,moj-tax-health-arrears-extension-restriction,moj-social-integration-program-kiip
           - batch: moj-entry-procedure
             source_ids: moj-k-eta-entry-authorization,moj-k-eta-scam-warning,moj-e-arrival-card,moj-e-arrival-card-notice
+          - batch: moj-office-jurisdiction
+            source_ids: moj-office-jurisdiction-seoul-incheon-gyeonggi,moj-office-jurisdiction-busan-gyeongnam,moj-office-jurisdiction-gwangju-jeolla-jeju,moj-office-jurisdiction-daegu-gyeongbuk-gangwon,moj-office-jurisdiction-daejeon-chungcheong,moj-mobile-immigration-office
           - batch: study-visa-portal
             source_ids: accredited-university,visa-portal-visa-types
     env:

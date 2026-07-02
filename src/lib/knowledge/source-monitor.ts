@@ -73,6 +73,18 @@ const MOJ_K_ETA_SCAM_WARNING_URL = "https://www.immigration.go.kr/bbs/immigratio
 const MOJ_E_ARRIVAL_CARD_URL = "https://www.immigration.go.kr/immigration/3509/subview.do";
 const MOJ_E_ARRIVAL_NOTICE_URL =
   "https://www.immigration.go.kr/bbs/immigration/224/592036/artclView.do?layout=unknown";
+const MOJ_OFFICE_JURISDICTION_SEOUL_INCHEON_GYEONGGI_URL =
+  "https://www.immigration.go.kr/immigration/2057/subview.do";
+const MOJ_OFFICE_JURISDICTION_BUSAN_GYEONGNAM_URL =
+  "https://www.immigration.go.kr/immigration/2058/subview.do";
+const MOJ_OFFICE_JURISDICTION_GWANGJU_JEOLLA_JEJU_URL =
+  "https://www.immigration.go.kr/immigration/2059/subview.do";
+const MOJ_OFFICE_JURISDICTION_DAEGU_GYEONGBUK_GANGWON_URL =
+  "https://www.immigration.go.kr/immigration/2060/subview.do";
+const MOJ_OFFICE_JURISDICTION_DAEJEON_CHUNGCHEONG_URL =
+  "https://www.immigration.go.kr/immigration/2061/subview.do";
+const MOJ_MOBILE_IMMIGRATION_OFFICE_URL =
+  "https://www.immigration.go.kr/immigration/2344/subview.do";
 const STUDY_IN_KOREA_CERTIFIED_UNIVERSITY_URL =
   "https://studyinkorea.go.kr/ko/plan/certifiedUniversity.do";
 const VISA_PORTAL_VISA_TYPES_URL = "https://www.visa.go.kr/openPage.do?LANG_TYPE=EN&MENU_ID=10102";
@@ -383,6 +395,66 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     legalPriority: 4,
     monitorCadence: "daily",
     changeSignals: ["effective_date", "submission_window", "exemptions", "group_submission", "paper_card_transition"],
+  },
+  {
+    docId: "moj-office-jurisdiction-seoul-incheon-gyeonggi",
+    title: "법무부 소속기관 관할구역 서울·인천·경기",
+    sourceUrl: MOJ_OFFICE_JURISDICTION_SEOUL_INCHEON_GYEONGGI_URL,
+    sourceType: "official_government",
+    topic: "process",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["office_jurisdiction", "visit_reservation", "address", "phone", "service_scope", "regional_office"],
+  },
+  {
+    docId: "moj-office-jurisdiction-busan-gyeongnam",
+    title: "법무부 소속기관 관할구역 부산·경남",
+    sourceUrl: MOJ_OFFICE_JURISDICTION_BUSAN_GYEONGNAM_URL,
+    sourceType: "official_government",
+    topic: "process",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["office_jurisdiction", "service_scope", "airport_office", "address", "phone", "regional_office"],
+  },
+  {
+    docId: "moj-office-jurisdiction-gwangju-jeolla-jeju",
+    title: "법무부 소속기관 관할구역 광주·전라·제주",
+    sourceUrl: MOJ_OFFICE_JURISDICTION_GWANGJU_JEOLLA_JEJU_URL,
+    sourceType: "official_government",
+    topic: "process",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["office_jurisdiction", "service_scope", "branch_office", "address", "phone", "regional_office"],
+  },
+  {
+    docId: "moj-office-jurisdiction-daegu-gyeongbuk-gangwon",
+    title: "법무부 소속기관 관할구역 대구·경북·강원",
+    sourceUrl: MOJ_OFFICE_JURISDICTION_DAEGU_GYEONGBUK_GANGWON_URL,
+    sourceType: "official_government",
+    topic: "process",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["office_jurisdiction", "service_scope", "branch_office", "address", "phone", "regional_office"],
+  },
+  {
+    docId: "moj-office-jurisdiction-daejeon-chungcheong",
+    title: "법무부 소속기관 관할구역 대전·충청",
+    sourceUrl: MOJ_OFFICE_JURISDICTION_DAEJEON_CHUNGCHEONG_URL,
+    sourceType: "official_government",
+    topic: "process",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["office_jurisdiction", "service_scope", "branch_office", "address", "phone", "regional_office"],
+  },
+  {
+    docId: "moj-mobile-immigration-office",
+    title: "법무부 이동출입국사무소 운영 안내",
+    sourceUrl: MOJ_MOBILE_IMMIGRATION_OFFICE_URL,
+    sourceType: "official_government",
+    topic: "process",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["mobile_office", "operation_notice", "download", "competent_office", "schedule", "service_location"],
   },
   {
     docId: "accredited-university",
