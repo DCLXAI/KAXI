@@ -28,7 +28,7 @@ jobs:
       CODEX_REMOTE_BRIDGE_URL: ${{ inputs.bridge_url }}
       CODEX_REMOTE_BRIDGE_TIMEOUT_MS: "55000"
       AGENT_BACKEND: remote-bridge
-      AI_CONSULT_BACKEND: remote-bridge
+      AI_CONSULT_BACKEND: zai
       AI_AGENT_RATE_LIMIT: "0"
       AI_AGENT_DAILY_QUOTA: "0"
       AI_CONSULT_RATE_LIMIT: "0"
