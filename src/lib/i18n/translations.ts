@@ -193,6 +193,14 @@ export const t = {
 
 export type TranslationKey = keyof typeof t;
 
+export function isTranslationKey(value: string): value is TranslationKey {
+  return value in t;
+}
+
+export function translationKey(value: string, fallback: TranslationKey): TranslationKey {
+  return isTranslationKey(value) ? value : fallback;
+}
+
 export function tr(key: TranslationKey, lang: Lang): string {
   const entry = t[key];
   return (entry as Record<Lang, string>)[lang] ?? entry.en;

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useCostStore, useLangStore } from "@/store/kbridge";
-import { tr } from "@/lib/i18n/translations";
+import { tr, translationKey } from "@/lib/i18n/translations";
 import type { School } from "@/lib/data/schools";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -188,7 +188,7 @@ export function CostCalculator() {
             {COST_ITEMS.map((item) => (
               <div key={item} className="grid grid-cols-12 gap-2 items-center py-1">
                 <div className="col-span-6 flex items-center gap-1.5 text-sm">
-                  {tr(item as any, lang)}
+                  {tr(translationKey(item, "cost_item_application"), lang)}
                   {PLATFORM_FEE_ITEMS.has(item) && (
                     <Badge variant="outline" className="text-[10px] px-1 py-0">
                       {lang === "ko" ? "명확" : "clear"}

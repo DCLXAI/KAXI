@@ -15,6 +15,13 @@ const guardedFiles = [
   "src/lib/privacy/serializers.ts",
 ];
 
+const uiTranslationFiles = [
+  "src/components/kbridge/Admin.tsx",
+  "src/components/kbridge/CostCalculator.tsx",
+  "src/components/kbridge/Diagnosis.tsx",
+  "src/components/kbridge/Partners.tsx",
+];
+
 const violations: string[] = [];
 
 for (const file of guardedFiles) {
@@ -27,6 +34,16 @@ for (const file of guardedFiles) {
   }
   if (/messages:\s*messages\s+as\s+any/.test(content)) {
     violations.push(`${file}: Z.ai messages must use typed ChatMessage arrays`);
+  }
+}
+
+for (const file of uiTranslationFiles) {
+  const content = readFileSync(file, "utf8");
+  if (/tr\([^;\n]*\bas\s+any\b/.test(content)) {
+    violations.push(`${file}: dynamic translation keys must use translationKey()/isTranslationKey(), not tr(... as any)`);
+  }
+  if (/\bas\s+any\b/.test(content)) {
+    violations.push(`${file}: avoid broad UI casts; use typed unions or runtime guards`);
   }
 }
 

@@ -265,6 +265,25 @@ try {
   for (const secret of ["test-admin-key", process.env.ADMIN_API_KEY]) {
     assert(!serializedOps.includes(String(secret)), "admin ops diagnostics must not leak admin secrets");
   }
+  const opsAudit = await db.adminAuditLog.findFirst({
+    where: { action: "admin.ops.read", targetType: "AdminOps", targetId: "ai.backend_policy" },
+    orderBy: { createdAt: "desc" },
+  });
+  assert(opsAudit, "admin ops diagnostics read should create an audit log");
+  assert(opsAudit.actor === "admin-api-key", "admin ops audit should include the admin actor");
+  const opsAuditMetadata = JSON.parse(opsAudit.metadata || "{}") as Record<string, unknown>;
+  assert(
+    opsAuditMetadata.agentBackend === ops.aiBackend.agent.backend,
+    "admin ops audit should record selected agent backend"
+  );
+  assert(
+    opsAuditMetadata.consultBackend === ops.aiBackend.consult.backend,
+    "admin ops audit should record selected consult backend"
+  );
+  const serializedOpsAudit = JSON.stringify(opsAuditMetadata);
+  for (const secret of ["test-admin-key", process.env.ADMIN_API_KEY]) {
+    assert(!serializedOpsAudit.includes(String(secret)), "admin ops audit metadata must not leak admin secrets");
+  }
 
   console.log("PASS admin dashboard API: cases, actions, rules, knowledge, audit, ops");
 } finally {

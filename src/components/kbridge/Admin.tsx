@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useLangStore, useLeadStore } from "@/store/kbridge";
-import { tr } from "@/lib/i18n/translations";
+import { tr, translationKey } from "@/lib/i18n/translations";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -274,7 +274,7 @@ export function Admin() {
                 {lang === "ko" ? "주요 경로" : lang === "vi" ? "Lộ trình chính" : lang === "mn" ? "Гол маршрут" : "Top path"}
               </div>
               <div className="text-base font-bold mt-1 truncate">
-                {stats.byPath.length > 0 ? tr(stats.byPath[0].pathKey as any, lang) : "—"}
+                {stats.byPath.length > 0 ? tr(translationKey(stats.byPath[0].pathKey, "goal_language"), lang) : "—"}
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">
                 {stats.byPath.length > 0 ? `${stats.byPath[0]._count} ${lang === "ko" ? "건" : "leads"}` : ""}
@@ -354,8 +354,8 @@ export function Admin() {
                       <td className="py-2 pr-2">
                         <Badge variant="outline">{l.nationality.toUpperCase()}</Badge>
                       </td>
-                      <td className="py-2 pr-2 text-xs">{tr(`goal_${l.goal}` as any, lang)}</td>
-                      <td className="py-2 pr-2 text-xs">{tr(l.pathKey as any, lang)}</td>
+                      <td className="py-2 pr-2 text-xs">{tr(translationKey(`goal_${l.goal}`, "goal_unsure"), lang)}</td>
+                      <td className="py-2 pr-2 text-xs">{tr(translationKey(l.pathKey, "goal_language"), lang)}</td>
                       <td className="py-2 pr-2 font-mono text-xs">{l.budget.toLocaleString()}₩</td>
                       <td className="py-2 pr-2">
                         {l.usingBroker ? (
@@ -400,11 +400,11 @@ export function Admin() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <div className="text-xs text-muted-foreground">{tr("diagnose_q_goal", lang)}</div>
-                  <div className="font-medium">{tr(`goal_${sel.goal}` as any, lang)}</div>
+                  <div className="font-medium">{tr(translationKey(`goal_${sel.goal}`, "goal_unsure"), lang)}</div>
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">{tr("result_recommended", lang)}</div>
-                  <div className="font-medium">{tr(sel.pathKey as any, lang)}</div>
+                  <div className="font-medium">{tr(translationKey(sel.pathKey, "goal_language"), lang)}</div>
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">{tr("diagnose_q_budget", lang)}</div>
@@ -423,7 +423,7 @@ export function Admin() {
                   <div className="text-xs text-muted-foreground mb-1">{tr("result_required_docs", lang)}</div>
                   <div className="flex flex-wrap gap-1">
                     {sel.requiredDocs.map((k) => (
-                      <Badge key={k} variant="outline" className="text-xs">{tr(k as any, lang)}</Badge>
+                      <Badge key={k} variant="outline" className="text-xs">{tr(translationKey(k, "docs_doc_passport"), lang)}</Badge>
                     ))}
                   </div>
                 </div>
@@ -446,7 +446,7 @@ export function Admin() {
                   <div className="flex flex-wrap gap-1">
                     {sel.partnerRequests.map((p) => (
                       <Badge key={p.id} variant="outline" className="text-xs">
-                        {tr(`partner_${p.partnerType}` as any, lang)} · {p.status}
+                        {tr(translationKey(`partner_${p.partnerType}`, "partner_admin"), lang)} · {p.status}
                       </Badge>
                     ))}
                   </div>

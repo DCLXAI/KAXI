@@ -11,6 +11,10 @@ function fail(message: string): never {
   process.exit(1);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
 async function testPiiRedactionWithoutKey() {
   delete process.env.DATA_ENCRYPTION_KEY;
   delete process.env.PII_ALLOW_UNENCRYPTED_PLAINTEXT;
@@ -138,9 +142,9 @@ async function testConsentThirdPartyFlow() {
       where: { userId: consentUser.id, status: "GRANTED" },
       orderBy: { scope: "asc" },
     });
-    const scopes = grantedConsents.map((item) => item.scope).sort();
+    const scopes = grantedConsents.map((item) => String(item.scope)).sort();
     for (const scope of ["OVERSEAS_TRANSFER", "PROCESSING_CONSIGNMENT", "THIRD_PARTY_PROVISION"]) {
-      if (!scopes.includes(scope as any)) fail(`missing granted consent scope: ${scope}`);
+      if (!scopes.includes(scope)) fail(`missing granted consent scope: ${scope}`);
     }
 
     const consentAudit = await db.auditEvent.findFirst({
@@ -228,12 +232,12 @@ async function testProductionPiiPersistenceRequiresEncryption() {
     if (!canPersistPiiValue("")) fail("empty PII value should be persistable");
 
     const { createPartnerRequest } = await import("../src/lib/partners/repository");
-    const request = await createPartnerRequest({
+    const request: unknown = await createPartnerRequest({
       leadId: "local-privacy-test",
       partnerType: "admin",
       question: "call me at user@example.com",
     });
-    if ((request as any).persisted !== false) {
+    if (!isRecord(request) || request.persisted !== false) {
       fail("partner request should not persist production PII without encryption");
     }
     if (JSON.stringify(request).includes("user@example.com")) {

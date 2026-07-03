@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useLangStore, useLeadStore, usePartnerStore } from "@/store/kbridge";
-import { tr, type Lang } from "@/lib/i18n/translations";
+import { tr, translationKey, type Lang, type TranslationKey } from "@/lib/i18n/translations";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +16,7 @@ import { Scale, Languages, BookOpen, School, Home, CheckCircle2, Ban, Loader2, S
 interface PartnerType {
   key: string;
   icon: typeof Scale;
-  titleKey: string;
+  titleKey: TranslationKey;
   desc: {
     ko: string;
     vi: string;
@@ -218,7 +218,7 @@ export function Partners() {
                     <Icon className="h-5 w-5 text-primary" />
                   </div>
                   <div className="flex-1">
-                    <CardTitle className="text-base">{tr(p.titleKey as any, lang)}</CardTitle>
+                    <CardTitle className="text-base">{tr(p.titleKey, lang)}</CardTitle>
                   </div>
                 </div>
                 <CardDescription className="text-sm leading-relaxed mt-2">
@@ -245,7 +245,7 @@ export function Partners() {
           <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <CardHeader>
               <CardTitle className="text-lg">
-                {tr("partner_request", lang)} - {tr(`partner_${open}` as any, lang)}
+                {tr("partner_request", lang)} - {tr(translationKey(`partner_${open}`, "partner_admin"), lang)}
               </CardTitle>
               <CardDescription>
                 {lang === "ko" && "담당자가 24시간 내 연락드립니다 (데모: 실제 전송 안 됨)"}

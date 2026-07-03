@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useLangStore, useLeadStore } from "@/store/kbridge";
-import { tr, type TranslationKey } from "@/lib/i18n/translations";
+import { tr, translationKey } from "@/lib/i18n/translations";
 import { recommendPath, type DiagnosisInput, pickLang } from "@/lib/data/diagnosis";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,10 +20,6 @@ const GOAL_VALUES = ["language", "degree", "transfer", "career", "unsure"] as co
 
 function isOneOf<T extends string>(value: string, values: readonly T[]): value is T {
   return values.includes(value as T);
-}
-
-function asTranslationKey(value: string): TranslationKey {
-  return value as TranslationKey;
 }
 
 export function Diagnosis({ onNavigate }: { onNavigate: (v: string) => void }) {
@@ -74,7 +70,7 @@ export function Diagnosis({ onNavigate }: { onNavigate: (v: string) => void }) {
     }
   };
 
-  const pathLabel = tr(asTranslationKey(result?.pathKey ?? "goal_language"), lang);
+  const pathLabel = tr(translationKey(result?.pathKey ?? "goal_language", "goal_language"), lang);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 space-y-6">
@@ -312,7 +308,7 @@ export function Diagnosis({ onNavigate }: { onNavigate: (v: string) => void }) {
             <CardContent>
               <div className="flex flex-wrap gap-2">
                 {result.requiredDocs.map((k) => (
-                  <Badge key={k} variant="outline">{tr(asTranslationKey(k), lang)}</Badge>
+                  <Badge key={k} variant="outline">{tr(translationKey(k, "docs_doc_passport"), lang)}</Badge>
                 ))}
               </div>
             </CardContent>
