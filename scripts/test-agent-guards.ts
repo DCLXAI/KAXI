@@ -418,7 +418,12 @@ async function testConsultRouteUsesRemoteCodexBridge() {
     if (String(body.disclaimer).includes("외부 LLM 없이")) {
       fail(`consult route should not expose external LLM configuration fallback: ${JSON.stringify(body)}`);
     }
-    if (!seenBody.includes("administrative-scrivener consultation")) {
+    const payload = JSON.parse(seenBody);
+    const prompt = String(payload.question || "");
+    if (payload.promptMode !== "raw") {
+      fail(`consult bridge payload should request raw Codex prompt mode, got ${seenBody}`);
+    }
+    if (!prompt.includes("Role: KAXI") || !prompt.includes("Base the answer only on the official excerpts")) {
       fail(`consult bridge payload should include consult guardrails, got ${seenBody}`);
     }
   } finally {

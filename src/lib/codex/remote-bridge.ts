@@ -6,6 +6,7 @@ export interface RemoteCodexBridgeOptions {
   history?: { role: string; content: string }[];
   timeoutMs: number;
   requestIp?: string;
+  promptMode?: "public-agent" | "raw";
 }
 
 export interface RemoteCodexBridgeResult {
@@ -33,6 +34,7 @@ export async function runRemoteCodexBridge({
   history,
   timeoutMs,
   requestIp,
+  promptMode,
 }: RemoteCodexBridgeOptions): Promise<RemoteCodexBridgeResult> {
   const url = getRemoteBridgeUrl();
   if (!url) throw new Error("CODEX_REMOTE_BRIDGE_URL is not configured");
@@ -54,7 +56,7 @@ export async function runRemoteCodexBridge({
         ...(token ? { "x-kaxi-codex-bridge-token": token } : {}),
         ...(requestIp ? { "x-forwarded-for": requestIp } : {}),
       },
-      body: JSON.stringify({ question, lang, history }),
+      body: JSON.stringify({ question, lang, history, promptMode }),
     });
 
     const text = await res.text();

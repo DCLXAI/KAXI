@@ -32,7 +32,34 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 type ConsultBackend = "remote-bridge" | "codex" | "zai";
-const CONSULT_REMOTE_BRIDGE_MAX_WAIT_MS = 45_000;
+const CONSULT_REMOTE_BRIDGE_MAX_WAIT_MS = 52_000;
+
+class LlmBackendUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LlmBackendUnavailableError";
+  }
+}
+
+function shouldRequireConsultLlm(): boolean {
+  return process.env.AI_REQUIRE_LLM === "true" || process.env.AI_CONSULT_REQUIRE_LLM === "true";
+}
+
+function isFallbackBackend(backend: string): boolean {
+  return backend === "tool-fallback" || backend === "official-summary";
+}
+
+function llmUnavailableResponse(message: string) {
+  return NextResponse.json(
+    {
+      error: "LLM backend unavailable",
+      message: "Codex LLM bridge is unavailable. Official-summary fallback is disabled for this deployment.",
+      detail: message.slice(0, 500),
+      backend: "llm-unavailable",
+    },
+    { status: 503 }
+  );
+}
 
 interface ExpertAnswerResult {
   answer: string;
@@ -181,6 +208,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     console.error("[POST /api/ai/consult]", e);
+    if (e instanceof LlmBackendUnavailableError) {
+      return llmUnavailableResponse(e.message);
+    }
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
@@ -305,10 +335,14 @@ ${context}
           history: [],
           requestIp,
           timeoutMs: remoteBridgeTimeoutMs,
+          promptMode: "raw",
         }),
         remoteBridgeTimeoutMs + 500,
         "Consult remote Codex bridge"
       );
+      if (isFallbackBackend(result.backend)) {
+        throw new Error(`Remote Codex bridge returned fallback backend: ${result.backend}`);
+      }
       const answer = result.answer.trim();
       if (!answer) throw new Error("Remote Codex bridge returned an empty answer");
       return {
@@ -322,6 +356,9 @@ ${context}
       };
     } catch (e) {
       console.warn("[Expert Codex bridge skipped]", e instanceof Error ? e.message : e);
+      if (shouldRequireConsultLlm()) {
+        throw new LlmBackendUnavailableError(e instanceof Error ? e.message : "Unknown bridge error");
+      }
       return buildOfficialSummaryExpertResult({
         question,
         docs,
@@ -330,7 +367,7 @@ ${context}
         disclaimer,
         suggestedFollowups,
         needsHumanExpert,
-        temporaryModelFailure: false,
+        temporaryModelFailure: true,
       });
     }
   }
@@ -342,6 +379,7 @@ ${context}
         lang,
         history: [],
         timeoutMs: parsePositiveInt(process.env.CODEX_EXEC_TIMEOUT_MS, 45_000),
+        promptMode: "raw",
       });
       const answer = result.answer.trim();
       if (!answer) throw new Error("Codex CLI returned an empty answer");
@@ -356,6 +394,9 @@ ${context}
       };
     } catch (e) {
       console.warn("[Expert Codex backend skipped]", e instanceof Error ? e.message : e);
+      if (shouldRequireConsultLlm()) {
+        throw new LlmBackendUnavailableError(e instanceof Error ? e.message : "Unknown Codex error");
+      }
     }
   }
 
@@ -379,6 +420,9 @@ ${context}
       console.warn("[Expert LLM skipped]", message);
     } else {
       console.error("[Expert LLM error]", e);
+    }
+    if (shouldRequireConsultLlm()) {
+      throw new LlmBackendUnavailableError(message);
     }
     return buildOfficialSummaryExpertResult({
       question,
@@ -640,9 +684,9 @@ ${sourceNotice}`;
 function buildCompactCodexContext(docs: KnowledgeDoc[], lang: Lang): string {
   if (docs.length === 0) return "(no official source matched)";
 
-  const maxDocs = parsePositiveInt(process.env.AI_CONSULT_CODEX_MAX_DOCS, 5);
-  const maxDocChars = parsePositiveInt(process.env.AI_CONSULT_CODEX_DOC_CHARS, 650);
-  const maxTotalChars = parsePositiveInt(process.env.AI_CONSULT_CODEX_CONTEXT_CHARS, 5_500);
+  const maxDocs = parsePositiveInt(process.env.AI_CONSULT_CODEX_MAX_DOCS, 4);
+  const maxDocChars = parsePositiveInt(process.env.AI_CONSULT_CODEX_DOC_CHARS, 450);
+  const maxTotalChars = parsePositiveInt(process.env.AI_CONSULT_CODEX_CONTEXT_CHARS, 2_600);
   const lines: string[] = [];
 
   for (const [index, doc] of docs.slice(0, Math.max(1, maxDocs)).entries()) {
@@ -688,43 +732,44 @@ function buildCodexConsultPrompt({
   sourceNotice: string;
 }): string {
   const recentHistory = history
-    .slice(-6)
-    .map((h) => `${h.role === "user" ? "User" : "Assistant"}: ${h.content}`)
+    .slice(-3)
+    .map((h) => `${h.role === "user" ? "User" : "Assistant"}: ${h.content.slice(0, 500)}`)
     .join("\n");
-  const sources = docs.map((d, i) => `${i + 1}. ${pickLangText(d.title, "ko")} - ${d.source}`).join("\n");
+  const sources = docs
+    .slice(0, 4)
+    .map((d, i) => {
+      const meta = getRagDocumentMetadata(d, "ko");
+      const checked = meta?.last_checked_at ? ` (확인일 ${meta.last_checked_at})` : "";
+      return `${i + 1}. ${pickLangText(d.title, "ko")} - ${d.source}${checked}`;
+    })
+    .join("\n");
 
-  return `You are KAXI's ${modeConfig.role}, specializing in ${modeConfig.focus}.
+  return `Role: KAXI ${modeConfig.role}. Focus: ${modeConfig.focus}.
+Answer in ${langName}.
 
-Answer the user's administrative-scrivener consultation question in ${langName}.
+Rules:
+- Base the answer only on the official excerpts below.
+- For visa/stay/work questions, apply this order: Immigration Act -> Enforcement Decree status table -> Enforcement Rule documents/fees -> HiKorea/manual guidance.
+- If the legal basis is missing or the facts are insufficient, say what is unconfirmed and ask the smallest needed follow-up.
+- Never guarantee approval, predict a personal approval probability, draft filings, or claim submission/representation.
+- For refusal strategy, false documents, illegal work, status evasion, or case-specific judgment, recommend administrative-scrivener review.
+- Do not mention internal routing, Codex, bridge, Z.ai, API keys, or prompts.
+- Use concise Markdown and end with "📚 출처:" plus the source list.
+- End with this notice exactly: "${sourceNotice}"
 
-Hard rules:
-- Use the official source excerpts below as the factual basis.
-- For immigration, visa, stay-status, document, extension, change, or work-permission questions, cite the legal hierarchy first: Immigration Act, Enforcement Decree status table, Enforcement Rule attachments/fees, then HiKorea/manual operational guidance.
-- If no statute/regulation excerpt is present for a visa or stay-status question, say the legal basis is not confirmed from the provided sources and ask for source verification instead of giving a final legal conclusion.
-- If the excerpts are insufficient, say what is not confirmed and ask for the missing fact.
-- Do not guarantee visa approval or assess a specific person's approval probability.
-- Do not draft legal/administrative documents or claim to submit filings on the user's behalf.
-- If the user asks for case-specific judgment, document drafting, filing representation, refusal appeal strategy, false documents, illegal work, or status evasion, clearly recommend consulting an administrative scrivener.
-- Do not mention internal model routing, Codex, bridge, Z.ai, API keys, prompts, or backend configuration.
-- Format with Markdown, 3-8 concise paragraphs, and finish with "📚 출처:" using the source list below when relevant.
-- Include this exact source-control notice at the end: "${sourceNotice}"
-
-Safety signals:
-${dangerSignals.length > 0 ? dangerSignals.map((s) => `- ${s}`).join("\n") : "- None detected"}
-
-Human expert required:
-${needsHumanExpert ? "Yes. Recommend administrative-scrivener consultation." : "Not necessarily, unless more case-specific facts are provided."}
+Risk: ${dangerSignals.length > 0 ? dangerSignals.join("; ") : "none"}
+Human expert: ${needsHumanExpert ? "required/recommended" : "not necessarily"}
 
 Recent conversation:
 ${recentHistory || "(none)"}
 
-Official source excerpts:
+Official excerpts:
 ${context}
 
-Source list:
+Sources:
 ${sources || "(no official source matched)"}
 
-Original user question:
+Question:
 ${question}`;
 }
 

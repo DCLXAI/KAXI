@@ -264,23 +264,28 @@ Use Vercel as the server-side proxy:
 AGENT_BACKEND=remote-bridge
 CODEX_REMOTE_BRIDGE_URL=https://<tunnel-host>/api/ai/agent
 CODEX_REMOTE_BRIDGE_TOKEN=<same-secret-as-CODEX_BRIDGE_TOKEN-on-the-Mac>
-CODEX_REMOTE_BRIDGE_TIMEOUT_MS=55000
+CODEX_REMOTE_BRIDGE_TIMEOUT_MS=52000
 # Optional. If unset, /consult follows AGENT_BACKEND=remote-bridge automatically.
 AI_CONSULT_BACKEND=remote-bridge
+AI_CONSULT_REMOTE_BRIDGE_TIMEOUT_MS=52000
+AI_REQUIRE_LLM=true
 ```
 
 On the Mac:
 
 ```bash
 export CODEX_BRIDGE_TOKEN=<long-random-secret>
+export CODEX_BRIDGE_ENABLE_TOOL_FALLBACK=false
+export CODEX_EXEC_TIMEOUT_MS=52000
 bun run codex:bridge
 ```
 
 Then expose `http://127.0.0.1:8787` through a tunnel such as Cloudflare Tunnel, ngrok, or Tailscale Funnel.
 The tunnel URL goes only into Vercel server environment variables as `CODEX_REMOTE_BRIDGE_URL`.
 The public frontend continues calling `/api/ai/agent` and `/api/ai/consult`, and Vercel forwards LLM-bound requests to the Mac bridge with the secret token.
-When the remote bridge is unavailable, `/api/ai/agent` returns a built-in `tool-fallback` answer instead of surfacing a 502 to public users.
-When the Consult bridge is unavailable, `/api/ai/consult` falls back to a direct official-source summary with the normal administrative-scrivener disclaimer.
+Set `AI_REQUIRE_LLM=true` in production when public answers must come from Codex CLI.
+With that setting, bridge failures return `503 LLM backend unavailable` instead of being disguised as built-in tool answers.
+If you intentionally want degraded service, set `AI_REQUIRE_LLM=false`; `/api/ai/agent` can fall back to built-in tools and `/api/ai/consult` can summarize retrieved official sources.
 
 Minimum safety rules:
 
@@ -288,7 +293,8 @@ Minimum safety rules:
 2. For public stress testing, set `CODEX_BRIDGE_RATE_LIMIT=0`, `AI_AGENT_RATE_LIMIT=0`, `AI_AGENT_DAILY_QUOTA=0`, `AI_CONSULT_RATE_LIMIT=0`, and `AI_CONSULT_DAILY_QUOTA=0`.
 3. Keep Codex sandbox `read-only` and `CODEX_USE_USER_CONFIG=false`.
 4. Do not run the bridge from a directory containing private files that external prompts should never inspect.
-5. Turn off the tunnel when public testing is over.
+5. Keep `CODEX_BRIDGE_ENABLE_TOOL_FALLBACK=false` for production so bridge timeouts are visible and can be fixed.
+6. Turn off the tunnel when public testing is over.
 
 `/api/codex/exec` remains guarded by `requireAdmin` for direct admin-only tests.
 For `/api/ai/agent`, set `CODEX_AGENT_REQUIRE_ADMIN=true` if Codex should be private/internal only.

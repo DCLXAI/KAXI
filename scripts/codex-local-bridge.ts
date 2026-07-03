@@ -12,6 +12,7 @@ const MAX_QUESTION_CHARS = Number(process.env.CODEX_BRIDGE_MAX_CHARS || 4_000);
 const RATE_LIMIT = parseLimit(process.env.CODEX_BRIDGE_RATE_LIMIT, 6);
 const RATE_WINDOW_MS = 60_000;
 const REQUIRED_TOKEN = process.env.CODEX_BRIDGE_TOKEN?.trim();
+const ENABLE_TOOL_FALLBACK = process.env.CODEX_BRIDGE_ENABLE_TOOL_FALLBACK === "true";
 const PREVENT_SLEEP = process.env.CODEX_BRIDGE_PREVENT_SLEEP === "true" ||
   process.argv.includes("--prevent-sleep");
 
@@ -143,6 +144,10 @@ function parseHistory(value: unknown): { role: string; content: string }[] {
     .filter((item): item is { role: string; content: string } => Boolean(item));
 }
 
+function parsePromptMode(value: unknown): "public-agent" | "raw" {
+  return value === "raw" ? "raw" : "public-agent";
+}
+
 const server = createServer(async (req, res) => {
   if (!applyCors(req, res)) {
     json(res, 403, { error: "Origin is not allowed" });
@@ -185,6 +190,7 @@ const server = createServer(async (req, res) => {
 
   let question = "";
   let lang: Lang = "ko";
+  let promptMode: "public-agent" | "raw" = "public-agent";
 
   try {
     const rawBody = await readBody(req);
@@ -200,11 +206,13 @@ const server = createServer(async (req, res) => {
     }
 
     lang = parseLang(body.lang);
+    promptMode = parsePromptMode(body.promptMode);
     const result = await runCodexServerless({
       question,
       lang,
       history: parseHistory(body.history),
       timeoutMs: Number(process.env.CODEX_EXEC_TIMEOUT_MS || 60_000),
+      promptMode,
     });
 
     json(res, 200, {
@@ -227,6 +235,14 @@ const server = createServer(async (req, res) => {
     console.error("[codex-local-bridge]", message);
     if (!question) {
       json(res, 502, { error: message });
+      return;
+    }
+    if (!ENABLE_TOOL_FALLBACK) {
+      json(res, 502, {
+        error: message,
+        backend: "codex-cli-local-bridge",
+        fallbackDisabled: true,
+      });
       return;
     }
 

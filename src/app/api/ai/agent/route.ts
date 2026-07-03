@@ -28,7 +28,27 @@ import { isPiiEncryptionConfigured } from "@/lib/privacy/pii";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-const AGENT_REMOTE_BRIDGE_MAX_WAIT_MS = 12_000;
+const AGENT_REMOTE_BRIDGE_MAX_WAIT_MS = 52_000;
+
+function shouldRequireAgentLlm(): boolean {
+  return process.env.AI_REQUIRE_LLM === "true" || process.env.AI_AGENT_REQUIRE_LLM === "true";
+}
+
+function isFallbackBackend(backend: string): boolean {
+  return backend === "tool-fallback" || backend === "official-summary";
+}
+
+function llmUnavailableResponse(message: string) {
+  return NextResponse.json(
+    {
+      error: "LLM backend unavailable",
+      message: "Codex LLM bridge is unavailable. Built-in tool fallback is disabled for this deployment.",
+      detail: message.slice(0, 500),
+      backend: "llm-unavailable",
+    },
+    { status: 503 }
+  );
+}
 
 function emptyPreflight(question: string): AgentPreflightResult {
   return {
@@ -303,6 +323,9 @@ export async function POST(req: NextRequest) {
           remoteBridgeTimeoutMs + 500,
           "Agent remote Codex bridge"
         );
+        if (isFallbackBackend(result.backend)) {
+          throw new Error(`Remote Codex bridge returned fallback backend: ${result.backend}`);
+        }
         const steps = [...preflight.steps, ...result.steps];
         const toolResults = [...preflight.toolResults, ...result.toolResults];
         await persistAgentLog({
@@ -352,6 +375,23 @@ export async function POST(req: NextRequest) {
           bridgeErr instanceof Error ? bridgeErr.message : bridgeErr
         );
         if (configuredBackend === "remote-bridge") {
+          if (shouldRequireAgentLlm()) {
+            await persistAgentLedger({
+              req,
+              leadId,
+              question,
+              backend: "llm-unavailable",
+              durationMs: Date.now() - requestStartedAt,
+              success: false,
+              errorType: "remote_bridge_unavailable",
+              errorMessage: bridgeErr instanceof Error ? bridgeErr.message : "Unknown bridge error",
+              preflight,
+              toolCount: preflight.toolResults.length,
+            });
+            return llmUnavailableResponse(
+              bridgeErr instanceof Error ? bridgeErr.message : "Unknown bridge error"
+            );
+          }
           const fallback = await runFallbackAgent(question, lang, ctx);
           await persistAgentLog({
             lang,
@@ -466,6 +506,21 @@ export async function POST(req: NextRequest) {
           "[Codex backend fallback]",
           codexErr instanceof Error ? codexErr.message : codexErr
         );
+        if (shouldRequireAgentLlm()) {
+          await persistAgentLedger({
+            req,
+            leadId,
+            question,
+            backend: "llm-unavailable",
+            durationMs: Date.now() - requestStartedAt,
+            success: false,
+            errorType: "codex_backend_unavailable",
+            errorMessage: codexErr instanceof Error ? codexErr.message : "Unknown Codex error",
+            preflight,
+            toolCount: preflight.toolResults.length,
+          });
+          return llmUnavailableResponse(codexErr instanceof Error ? codexErr.message : "Unknown Codex error");
+        }
         const fallback = await runFallbackAgent(question, lang, ctx);
         await persistAgentLog({
           lang,
@@ -511,6 +566,21 @@ export async function POST(req: NextRequest) {
     }
 
     if (configuredBackend === "tool-fallback") {
+      if (shouldRequireAgentLlm()) {
+        await persistAgentLedger({
+          req,
+          leadId,
+          question,
+          backend: "llm-unavailable",
+          durationMs: Date.now() - requestStartedAt,
+          success: false,
+          errorType: "tool_fallback_configured",
+          errorMessage: "AGENT_BACKEND=tool-fallback while AI_REQUIRE_LLM=true",
+          preflight,
+          toolCount: preflight.toolResults.length,
+        });
+        return llmUnavailableResponse("AGENT_BACKEND=tool-fallback while AI_REQUIRE_LLM=true");
+      }
       const fallback = await runFallbackAgent(question, lang, ctx);
       await persistAgentLog({
         lang,
@@ -571,6 +641,21 @@ export async function POST(req: NextRequest) {
         "[Agent backend fallback]",
         agentErr instanceof Error ? agentErr.message : agentErr
       );
+      if (shouldRequireAgentLlm()) {
+        await persistAgentLedger({
+          req,
+          leadId,
+          question,
+          backend: "llm-unavailable",
+          durationMs: Date.now() - requestStartedAt,
+          success: false,
+          errorType: "zai_backend_unavailable",
+          errorMessage: agentErr instanceof Error ? agentErr.message : "Unknown Agent backend error",
+          preflight,
+          toolCount: preflight.toolResults.length,
+        });
+        return llmUnavailableResponse(agentErr instanceof Error ? agentErr.message : "Unknown Agent backend error");
+      }
       backend = "tool-fallback";
       result = await runFallbackAgent(question, lang, ctx);
       await persistAgentLedger({

@@ -13,6 +13,7 @@ interface CodexExecOptions {
   lang?: Lang;
   history?: { role: string; content: string }[];
   timeoutMs: number;
+  promptMode?: "public-agent" | "raw";
 }
 
 export interface CodexExecResult {
@@ -108,7 +109,14 @@ function runCommand(
   });
 }
 
-function buildPrompt({ question, lang, history = [] }: Omit<CodexExecOptions, "timeoutMs">): string {
+function buildPrompt({
+  question,
+  lang,
+  history = [],
+  promptMode = "public-agent",
+}: Omit<CodexExecOptions, "timeoutMs">): string {
+  if (promptMode === "raw") return question;
+
   const recentHistory = history
     .slice(-4)
     .map((item) => `${item.role === "user" ? "User" : "Assistant"}: ${item.content}`)
@@ -176,6 +184,7 @@ export async function runCodexServerless({
   lang,
   history,
   timeoutMs,
+  promptMode,
 }: CodexExecOptions): Promise<CodexExecResult> {
   const mode = getCodexRunMode();
   const apiKey = process.env.CODEX_API_KEY || process.env.OPENAI_API_KEY;
@@ -188,7 +197,7 @@ export async function runCodexServerless({
   const outputFile = join("/tmp", `codex-output-${runId}.txt`);
   await mkdir(codexHome, { recursive: true });
 
-  const prompt = buildPrompt({ question, lang, history });
+  const prompt = buildPrompt({ question, lang, history, promptMode });
   const command = mode === "local-auth" ? process.env.CODEX_CLI_PATH?.trim() || "codex" : process.execPath;
   const execArgs = [
     "exec",
