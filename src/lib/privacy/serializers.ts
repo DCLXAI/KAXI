@@ -1,10 +1,22 @@
 import { readPiiField } from "@/lib/privacy/pii";
 
-type AnyRecord = Record<string, any>;
-
 export interface PiiResponseOptions {
   revealPii?: boolean;
 }
+
+type PartnerRequestResponseRecord = object & {
+  question?: string | null;
+  questionCiphertext?: string | null;
+  questionHash?: unknown;
+  lead?: LeadResponseRecord | null;
+};
+
+type LeadResponseRecord = object & {
+  contact?: string | null;
+  contactCiphertext?: string | null;
+  contactHash?: unknown;
+  partnerRequests?: unknown;
+};
 
 function displayPii(
   plaintext: string | null | undefined,
@@ -14,8 +26,8 @@ function displayPii(
   return options.revealPii ? readPiiField(plaintext, ciphertext) : plaintext || null;
 }
 
-export function serializePartnerRequestForResponse(
-  request: AnyRecord | null | undefined,
+export function serializePartnerRequestForResponse<T extends PartnerRequestResponseRecord>(
+  request: T | null | undefined,
   options: PiiResponseOptions = {}
 ) {
   if (!request) return request;
@@ -33,8 +45,8 @@ export function serializePartnerRequestForResponse(
   };
 }
 
-export function serializeLeadForResponse(
-  lead: AnyRecord | null | undefined,
+export function serializeLeadForResponse<T extends LeadResponseRecord>(
+  lead: T | null | undefined,
   options: PiiResponseOptions = {}
 ) {
   if (!lead) return lead;
@@ -49,7 +61,11 @@ export function serializeLeadForResponse(
     ...safeLead,
     contact: displayPii(lead.contact, lead.contactCiphertext, options),
     partnerRequests: Array.isArray(partnerRequests)
-      ? partnerRequests.map((request) => serializePartnerRequestForResponse(request, options))
+      ? partnerRequests.map((request) =>
+          typeof request === "object" && request
+            ? serializePartnerRequestForResponse(request, options)
+            : request
+        )
       : partnerRequests,
   };
 }

@@ -1,6 +1,7 @@
 import { canWriteRuntimeDatabase, db } from "@/lib/db";
 import { parsePositiveInt } from "@/lib/api/security";
 import { canPersistPiiValue, preparePiiField, retentionUntil } from "@/lib/privacy/pii";
+import type { PartnerRequest } from "@prisma/client";
 import {
   ensurePartnerRoutingConsentForLead,
   recordPrivacyProcessingEvent,
@@ -15,6 +16,25 @@ export interface CreatePartnerRequestInput {
   consent?: PartnerRoutingConsentInput | null;
   auditContext?: PrivacyAuditContext;
 }
+
+export interface UnpersistedPartnerRequest {
+  id: string;
+  createdAt: Date;
+  leadId: string;
+  partnerType: string;
+  question: string | null;
+  questionCiphertext: string | null;
+  questionHash: string | null;
+  questionRedacted: boolean;
+  retentionUntil: null;
+  deleteRequestedAt: null;
+  deletedAt: null;
+  status: "unpersisted";
+  persisted: false;
+  reason: string;
+}
+
+export type PartnerRequestResult = PartnerRequest | UnpersistedPartnerRequest;
 
 const PARTNER_TYPES = new Set(["admin", "translation", "academy", "admission", "settlement"]);
 
@@ -40,7 +60,11 @@ async function createAnonymousLead() {
   });
 }
 
-export async function createPartnerRequest(input: CreatePartnerRequestInput) {
+export function isUnpersistedPartnerRequest(request: PartnerRequestResult): request is UnpersistedPartnerRequest {
+  return "persisted" in request && request.persisted === false;
+}
+
+export async function createPartnerRequest(input: CreatePartnerRequestInput): Promise<PartnerRequestResult> {
   const partnerType = String(input.partnerType || "").trim();
   if (!PARTNER_TYPES.has(partnerType)) throw new Error("Invalid partner type");
 

@@ -11,7 +11,7 @@ import {
 import type { Lang } from "@/lib/i18n/translations";
 import { findFAQ, AI_DEFAULT_REPLY } from "@/lib/data/faq";
 import { db } from "@/lib/db";
-import { createZaiClient, isZaiConfigurationError } from "@/lib/ai/zai";
+import { generateZaiChatText, isZaiConfigurationError, type ZaiChatMessage } from "@/lib/ai/zai";
 import { hybridSearch, initVectorStore, initTransformerStore, getStoreStats } from "@/lib/embeddings/vector-store";
 import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
 import {
@@ -201,8 +201,6 @@ async function generateWithLLM(
   history: { role: string; content: string }[]
 ): Promise<string | null> {
   try {
-    const zai = await createZaiClient("chat");
-
     const langName = { ko: "Korean", vi: "Vietnamese", mn: "Mongolian", en: "English" }[lang];
 
     const sourceNotice = buildRagBasisNotice(lang, docs);
@@ -238,24 +236,21 @@ async function generateWithLLM(
 컨텍스트 문서 (Vector Search + Keyword Match로 검색됨):
 ${context}`;
 
-    const messages = [
-      { role: "assistant", content: systemPrompt },
+    const messages: ZaiChatMessage[] = [
+      { role: "system", content: systemPrompt },
       ...history.slice(-4).map((h) => ({
-        role: h.role === "user" ? "user" : "assistant",
+        role: h.role === "user" ? ("user" as const) : ("assistant" as const),
         content: h.content,
       })),
       { role: "user", content: question },
     ];
 
-    const completion = await zai.chat.completions.create({
-      messages: messages as any,
+    return await generateZaiChatText("chat", {
+      messages,
       thinking: { type: "disabled" },
       temperature: 0.3,
       max_tokens: 600,
     });
-
-    const content = completion.choices?.[0]?.message?.content;
-    return content || null;
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     if (isZaiConfigurationError(e)) {

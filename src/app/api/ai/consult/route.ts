@@ -8,7 +8,7 @@ import {
 } from "@/lib/data/knowledge";
 import type { Lang } from "@/lib/i18n/translations";
 import { db } from "@/lib/db";
-import { createZaiClient, isZaiConfigurationError } from "@/lib/ai/zai";
+import { generateZaiChatText, isZaiConfigurationError, type ZaiChatMessage } from "@/lib/ai/zai";
 import { getConsultBackend, shouldRequireConsultLlm, type ConsultBackend } from "@/lib/ai/backend-selector";
 import { runCodexServerless } from "@/lib/codex/serverless";
 import { runRemoteCodexBridge } from "@/lib/codex/remote-bridge";
@@ -292,10 +292,10 @@ ${context}
 - 답변 마지막에는 다음 출처 기준 문장을 그대로 포함: "${buildRagBasisNotice(lang, docs)}"
 - ${needsHumanExpert ? "⚠️ 이 사례는 반드시 행정사 상담이 필요합니다. 답변 끝에 권유하세요." : ""}`;
 
-  const messages = [
-    { role: "assistant", content: systemPrompt },
+  const messages: ZaiChatMessage[] = [
+    { role: "system", content: systemPrompt },
     ...history.slice(-6).map((h) => ({
-      role: h.role === "user" ? "user" : "assistant",
+      role: h.role === "user" ? ("user" as const) : ("assistant" as const),
       content: h.content,
     })),
     { role: "user", content: question },
@@ -397,16 +397,12 @@ ${context}
   }
 
   try {
-    const zai = await createZaiClient("expert consult");
-
-    const completion = await zai.chat.completions.create({
-      messages: messages as any,
+    const answer = await generateZaiChatText("expert consult", {
+      messages,
       thinking: { type: "disabled" },
       temperature: 0.2, // 더 낮은 온도로 정확성 향상
       max_tokens: 1500,
-    });
-
-    const answer = completion.choices?.[0]?.message?.content || "";
+    }) || "";
 
     return { answer, disclaimer, suggestedFollowups, needsHumanExpert, backend: "zai" };
   } catch (e) {

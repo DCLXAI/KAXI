@@ -4,7 +4,7 @@
 
 import { TOOL_MAP, getToolsDescription, parseToolCall, sanitizeToolArgsForDisplay, type ToolArgs, type ToolResult, type ToolContext } from "./tools";
 import type { Lang } from "../i18n/translations";
-import { createZaiClient } from "../ai/zai";
+import { completeZaiChatText, createZaiClient, type ZaiChatMessage } from "../ai/zai";
 
 export interface AgentStep {
   type: "thinking" | "tool_call" | "tool_result" | "final_answer" | "error";
@@ -20,11 +20,6 @@ export interface AgentResponse {
   toolResults: ToolResult[];
   iterations: number;
 }
-
-type AgentChatMessage = {
-  role: "assistant" | "user" | "system";
-  content: string;
-};
 
 const MAX_ITERATIONS = 5;
 
@@ -126,8 +121,8 @@ ${getToolsDescription()}
 - 사용자 ID: ${ctx.leadId || "익명"}`;
 
   // 메시지 히스토리 구성
-  const messages: AgentChatMessage[] = [
-    { role: "assistant", content: systemPrompt },
+  const messages: ZaiChatMessage[] = [
+    { role: "system", content: systemPrompt },
     ...history.slice(-4).map((h) => ({
       role: h.role === "user" ? ("user" as const) : ("assistant" as const),
       content: h.content,
@@ -145,14 +140,12 @@ ${getToolsDescription()}
     iteration++;
 
     try {
-      const completion = await zai.chat.completions.create({
+      const content = await completeZaiChatText(zai, {
         messages,
         thinking: { type: "disabled" },
         temperature: 0.2,
         max_tokens: 1200,
-      });
-
-      const content = completion.choices?.[0]?.message?.content || "";
+      }) || "";
 
       // 도구 호출인지 확인
       const toolCall = parseToolCall(content);

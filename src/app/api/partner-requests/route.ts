@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getClientIp, jsonError, rateLimit, requireAdmin } from "@/lib/api/security";
-import { createPartnerRequest } from "@/lib/partners/repository";
+import { createPartnerRequest, isUnpersistedPartnerRequest } from "@/lib/partners/repository";
 import { ConsentRequiredError } from "@/lib/privacy/consent";
 import { serializePartnerRequestForResponse } from "@/lib/privacy/serializers";
 
@@ -29,10 +29,11 @@ export async function POST(req: NextRequest) {
         userAgent: req.headers.get("user-agent"),
       },
     });
+    const persisted = !isUnpersistedPartnerRequest(request);
 
     return NextResponse.json(
-      { request: serializePartnerRequestForResponse(request), persisted: (request as any).persisted !== false },
-      { status: (request as any).persisted === false ? 202 : 201 }
+      { request: serializePartnerRequestForResponse(request), persisted },
+      { status: persisted ? 201 : 202 }
     );
   } catch (e) {
     if (e instanceof ConsentRequiredError) {
