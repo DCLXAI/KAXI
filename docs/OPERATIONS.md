@@ -201,6 +201,39 @@ The app routes `/api/ai/agent` to Codex CLI by default (`AGENT_BACKEND=codex`).
 Set `AGENT_BACKEND=zai` only if the deployment explicitly configures `ZAI_ENABLED=true` with `ZAI_CONFIG_PATH` or another SDK-supported credential path.
 If Codex credentials are missing or a Codex run fails, `/api/ai/agent` falls back to the built-in tool engine instead of returning 500.
 
+### AI Backend Decision Table
+
+The runtime selector in `src/lib/ai/backend-selector.ts` is the single policy source for Agent, Consult, `/api/ai/agent` status, and `/api/readiness`.
+It returns safe `decisionTable` entries so operators can see which branch selected the backend without exposing secrets.
+
+Agent backend selection:
+
+| priority | condition | selected backend | note |
+| --- | --- | --- | --- |
+| 1 | `AGENT_BACKEND=zai` | `zai` | Requires explicit Z.ai configuration for LLM readiness. |
+| 2 | `AGENT_BACKEND=tool-fallback` | `tool-fallback` | Built-in KAXI tools only; strict LLM mode will report unavailable. |
+| 3 | `AGENT_BACKEND=remote-bridge` | `remote-bridge` | Uses the server-side Codex bridge and requires an LLM by default. |
+| 4 | unset or unsupported value | `codex` | Unsupported values are ignored but surfaced in diagnostics. |
+
+Consult backend selection:
+
+| priority | condition | selected backend | note |
+| --- | --- | --- | --- |
+| 1 | `AI_CONSULT_BACKEND=remote-bridge` or `codex` | configured value | Explicit Consult override wins. |
+| 2 | Agent selected `remote-bridge`, or `CODEX_REMOTE_BRIDGE_URL` is enabled | `remote-bridge` | Keeps `/consult` aligned with public Agent bridge deployments. |
+| 3 | `AI_CONSULT_BACKEND=zai` | `zai` | Explicit Z.ai Consult override. |
+| 4 | Agent selected `codex` and Codex is usable by API key, serverless flag, or local runtime | `codex` | Local development can use the current Codex CLI login. |
+| 5 | otherwise | `zai` | Safe fallback target; readiness warns if Z.ai is not configured and fallback is not strict. |
+
+Strict LLM requirement:
+
+| feature | fallback-allow override | strict signals |
+| --- | --- | --- |
+| Agent | `AI_ALLOW_LLM_FALLBACK=true` or `AI_AGENT_ALLOW_TOOL_FALLBACK=true` | `AI_REQUIRE_LLM=true`, `AI_AGENT_REQUIRE_LLM=true`, or selected `remote-bridge` |
+| Consult | `AI_ALLOW_LLM_FALLBACK=true` or `AI_CONSULT_ALLOW_OFFICIAL_SUMMARY_FALLBACK=true` | `AI_REQUIRE_LLM=true`, `AI_CONSULT_REQUIRE_LLM=true`, or selected `remote-bridge` |
+
+Inspect `GET /api/ai/agent` `backendPolicy.agent.decisionTable` and `backendPolicy.consult.decisionTable` first when the site says it is using built-in fallback or an unexpected backend.
+
 Local development can reuse the Codex CLI login already present on the developer machine:
 
 ```bash

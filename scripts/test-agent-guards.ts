@@ -6,6 +6,8 @@ import { runFallbackAgent } from "../src/lib/agent/fallback";
 import { buildAgentMeta } from "../src/lib/agent/meta";
 import { analyzeAgentIntent, type AgentMissingSlot } from "../src/lib/agent/planner";
 import {
+  explainAgentBackendDecision,
+  explainConsultBackendDecision,
   getAgentBackend,
   getAiBackendDiagnostics,
   getConsultBackend,
@@ -85,10 +87,30 @@ function testBackendSelectorContracts() {
     ) {
       fail(`remote bridge diagnostics should show strict configured bridge: ${JSON.stringify(remoteDiagnostics)}`);
     }
+    if (
+      !remoteDiagnostics.agent.decisionTable.some(
+        (item) => item.code === "agent.backend.explicit_remote_bridge" && item.outcome === "selected"
+      ) ||
+      !remoteDiagnostics.agent.decisionTable.some(
+        (item) => item.code === "agent.require.strict_llm" && item.outcome === "selected"
+      )
+    ) {
+      fail(`agent diagnostics should expose selected bridge decision path: ${JSON.stringify(remoteDiagnostics.agent)}`);
+    }
+    if (
+      !remoteDiagnostics.consult.decisionTable.some(
+        (item) => item.code === "consult.backend.inherit_remote_bridge" && item.outcome === "selected"
+      )
+    ) {
+      fail(`consult diagnostics should expose inherited bridge decision path: ${JSON.stringify(remoteDiagnostics.consult)}`);
+    }
 
     process.env.AI_ALLOW_LLM_FALLBACK = " true ";
     if (shouldRequireAgentLlm()) fail("global LLM fallback flag should disable strict agent LLM requirement");
     if (shouldRequireConsultLlm()) fail("global LLM fallback flag should disable strict consult LLM requirement");
+    if (explainAgentBackendDecision().requireLlm || explainConsultBackendDecision().requireLlm) {
+      fail("decision explanations should mirror LLM fallback requirement policy");
+    }
 
     Object.assign(process.env, {
       VERCEL: "1",
@@ -108,9 +130,41 @@ function testBackendSelectorContracts() {
     if (!hostedDiagnostics.warnings.some((item) => item.toLowerCase().includes("codex")) || hostedDiagnostics.issues.length !== 0) {
       fail(`hosted fallback diagnostics should warn, not fail strict readiness: ${JSON.stringify(hostedDiagnostics)}`);
     }
+    if (
+      !hostedDiagnostics.consult.decisionTable.some(
+        (item) => item.code === "consult.backend.default_zai" && item.outcome === "selected"
+      )
+    ) {
+      fail(`hosted consult diagnostics should expose default Z.ai decision: ${JSON.stringify(hostedDiagnostics.consult)}`);
+    }
 
     process.env.CODEX_SERVERLESS_ENABLED = " true ";
     if (getConsultBackend() !== "codex") fail("explicit CODEX_SERVERLESS_ENABLED=true should route consult to Codex");
+
+    Object.assign(process.env, {
+      VERCEL: "",
+      VERCEL_ENV: "",
+      AGENT_BACKEND: "nonsense",
+      AI_CONSULT_BACKEND: "mystery",
+      CODEX_SERVERLESS_ENABLED: "",
+      CODEX_REMOTE_BRIDGE_URL: "",
+      CODEX_REMOTE_BRIDGE_ENABLED: "true",
+      AI_ALLOW_LLM_FALLBACK: "true",
+    });
+    const unsupportedDiagnostics = getAiBackendDiagnostics();
+    if (
+      unsupportedDiagnostics.agent.configuredValue !== "unsupported" ||
+      unsupportedDiagnostics.consult.configuredValue !== "unsupported" ||
+      unsupportedDiagnostics.agent.backend !== "codex"
+    ) {
+      fail(`unsupported backend values should be visible but ignored safely: ${JSON.stringify(unsupportedDiagnostics)}`);
+    }
+    if (
+      !unsupportedDiagnostics.agent.decisionTable.some((item) => item.code === "agent.backend.unsupported_ignored") ||
+      !unsupportedDiagnostics.consult.decisionTable.some((item) => item.code === "consult.backend.unsupported_ignored")
+    ) {
+      fail(`unsupported backend decisions should be represented in diagnostics: ${JSON.stringify(unsupportedDiagnostics)}`);
+    }
   } finally {
     restoreEnv(snapshot);
   }
