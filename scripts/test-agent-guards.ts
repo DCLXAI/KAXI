@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import { readFileSync } from "node:fs";
 import { runAgentPreflight } from "../src/lib/agent/preflight";
 import { runFallbackAgent } from "../src/lib/agent/fallback";
 import { buildAgentMeta } from "../src/lib/agent/meta";
@@ -24,6 +25,37 @@ function restoreEnv(snapshot: NodeJS.ProcessEnv) {
     if (!(key in snapshot)) delete process.env[key];
   }
   Object.assign(process.env, snapshot);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function resultHasStatus(item: { result: unknown }, status: string): boolean {
+  return isRecord(item.result) && item.result.status === status;
+}
+
+function testAgentToolTypeBoundaries() {
+  const files = [
+    "src/lib/agent/tools.ts",
+    "src/lib/agent/agent.ts",
+    "src/lib/agent/preflight.ts",
+    "src/lib/agent/fallback.ts",
+    "src/components/kbridge/Agent.tsx",
+  ];
+  const forbidden = [
+    /Record<string,\s*any>/,
+    /result:\s*any/,
+    /args:\s*Record<string,\s*any>/,
+    /\sas\s+any/,
+    /catch\s*\([^)]*:\s*any\)/,
+  ];
+
+  for (const file of files) {
+    const content = readFileSync(file, "utf8");
+    const hit = forbidden.find((pattern) => pattern.test(content));
+    if (hit) fail(`${file} should keep agent tool boundaries typed as unknown, matched ${hit}`);
+  }
 }
 
 function testBackendSelectorContracts() {
@@ -83,7 +115,7 @@ async function testPartnerToolDryRun() {
   );
 
   const serialized = JSON.stringify({ result, summary });
-  if (result.status !== "draft" || result.persisted !== false) {
+  if (!isRecord(result) || result.status !== "draft" || result.persisted !== false) {
     fail(`dry-run partner request must stay draft, got ${serialized}`);
   }
   if (serialized.includes("user@example.com")) {
@@ -105,7 +137,7 @@ async function testPreflightDoesNotPersistPartnerRequest() {
   if (after !== before) {
     fail(`preflight persisted partner request: before=${before}, after=${after}`);
   }
-  if (!result.toolResults.some((item) => item.tool === "request_partner" && item.result?.status === "draft")) {
+  if (!result.toolResults.some((item) => item.tool === "request_partner" && resultHasStatus(item, "draft"))) {
     fail("preflight partner tool should return a draft request");
   }
   if (serialized.includes("user@example.com")) {
@@ -193,7 +225,7 @@ async function testSchoolToolFiltersByName() {
   if (!Array.isArray(result) || result.length === 0) {
     fail(`school name filter should return matches: ${summary}`);
   }
-  if (!result.every((school: any) => String(school.name || "").includes("연세대학교"))) {
+  if (!result.every((school) => isRecord(school) && String(school.name || "").includes("연세대학교"))) {
     fail(`school name filter returned unrelated schools: ${JSON.stringify(result)}`);
   }
 }
@@ -239,7 +271,7 @@ async function testFallbackPartnerRequestStaysDraft() {
   if (after !== before) {
     fail(`fallback persisted partner request: before=${before}, after=${after}`);
   }
-  if (!result.toolResults.some((item) => item.tool === "request_partner" && item.result?.status === "draft")) {
+  if (!result.toolResults.some((item) => item.tool === "request_partner" && resultHasStatus(item, "draft"))) {
     fail(`fallback partner request should stay draft: ${serialized}`);
   }
   if (serialized.includes("user@example.com")) {
@@ -592,6 +624,7 @@ function testVercelModelCacheDefaultsToTmp() {
   }
 }
 
+testAgentToolTypeBoundaries();
 testBackendSelectorContracts();
 await testPartnerToolDryRun();
 await testPreflightDoesNotPersistPartnerRequest();

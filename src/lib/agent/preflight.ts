@@ -20,6 +20,24 @@ function truncate(value: string, max: number): string {
   return value.length > max ? `${value.slice(0, max)}\n...[truncated]` : value;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function recordArray(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.map(asRecord).filter((item): item is Record<string, unknown> => Boolean(item)) : [];
+}
+
+function textField(record: Record<string, unknown>, key: string, fallback = ""): string {
+  const value = record[key];
+  return typeof value === "string" ? value : fallback;
+}
+
+function numberField(record: Record<string, unknown>, key: string, fallback = 0): number {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
 async function runTool(
   toolName: string,
   args: Record<string, unknown>,
@@ -70,36 +88,44 @@ function summarizeToolResult(item: ToolResult, lang: Lang): string[] {
   const lines: string[] = [`### ${item.tool}`, `Summary: ${item.summary}`];
 
   if (item.tool === "search_schools" && Array.isArray(item.result)) {
-    for (const school of item.result.slice(0, 5)) {
+    for (const school of recordArray(item.result).slice(0, 5)) {
       lines.push(
-        `- ${school.name} | region=${school.region} | program=${school.program} | tuition=${Number(school.tuition).toLocaleString()} KRW/semester | accreditation=${school.accreditation} | id=${school.id} | official=${school.officialUrl || "n/a"}`
+        `- ${textField(school, "name")} | region=${textField(school, "region")} | program=${textField(school, "program")} | tuition=${numberField(school, "tuition").toLocaleString()} KRW/semester | accreditation=${textField(school, "accreditation")} | id=${textField(school, "id")} | official=${textField(school, "officialUrl", "n/a") || "n/a"}`
       );
     }
   } else if (item.tool === "calculate_cost" && item.result) {
-    lines.push(`- school=${item.result.school}`);
-    lines.push(`- total=${Number(item.result.total).toLocaleString()} KRW`);
-    if (item.result.items) lines.push(`- items=${JSON.stringify(item.result.items)}`);
-    if (item.result.warning) lines.push(`- warning=${item.result.warning}`);
-  } else if (item.tool === "get_documents" && item.result?.documents) {
-    lines.push(`- visa_type=${item.result.visa_type}`);
+    const result = asRecord(item.result);
+    if (!result) return lines;
+    lines.push(`- school=${textField(result, "school")}`);
+    lines.push(`- total=${numberField(result, "total").toLocaleString()} KRW`);
+    if (result.items) lines.push(`- items=${JSON.stringify(result.items)}`);
+    if (result.warning) lines.push(`- warning=${String(result.warning)}`);
+  } else if (item.tool === "get_documents" && item.result) {
+    const result = asRecord(item.result);
+    if (!result) return lines;
+    lines.push(`- visa_type=${textField(result, "visa_type")}`);
     lines.push(
-      ...item.result.documents
+      ...recordArray(result.documents)
         .slice(0, 10)
-        .map((doc: { doc: string; note: string }) => `- ${doc.doc}: ${doc.note}`)
+        .map((doc) => `- ${textField(doc, "doc")}: ${textField(doc, "note")}`)
     );
   } else if (item.tool === "search_knowledge" && Array.isArray(item.result)) {
-    for (const [index, doc] of item.result.slice(0, 4).entries()) {
-      lines.push(`- [${index + 1}] ${doc.title} (${doc.category}) score=${doc.score}`);
-      lines.push(`  Source: ${doc.sourceMeta?.label || doc.source} <${doc.sourceMeta?.url || ""}>`);
-      if (doc.ragMeta?.last_checked_at) {
-        lines.push(`  Checked: ${doc.ragMeta.last_checked_at}, status=${doc.ragMeta.review_status}`);
+    for (const [index, doc] of recordArray(item.result).slice(0, 4).entries()) {
+      const sourceMeta = asRecord(doc.sourceMeta);
+      const ragMeta = asRecord(doc.ragMeta);
+      lines.push(`- [${index + 1}] ${textField(doc, "title")} (${textField(doc, "category")}) score=${numberField(doc, "score", 1)}`);
+      lines.push(`  Source: ${textField(sourceMeta || {}, "label") || textField(doc, "source")} <${textField(sourceMeta || {}, "url")}>`);
+      if (typeof ragMeta?.last_checked_at === "string") {
+        lines.push(`  Checked: ${ragMeta.last_checked_at}, status=${String(ragMeta.review_status || "")}`);
       }
-      lines.push(`  ${truncate(String(doc.content), lang === "ko" ? 260 : 220)}`);
+      lines.push(`  ${truncate(textField(doc, "content"), lang === "ko" ? 260 : 220)}`);
     }
   } else if (item.tool === "request_partner" && item.result) {
-    lines.push(`- partner_type=${item.result.partner_type}`);
-    lines.push(`- status=${item.result.status}`);
-    lines.push(`- eta=${item.result.eta}`);
+    const result = asRecord(item.result);
+    if (!result) return lines;
+    lines.push(`- partner_type=${textField(result, "partner_type")}`);
+    lines.push(`- status=${textField(result, "status")}`);
+    lines.push(`- eta=${textField(result, "eta")}`);
   }
 
   return lines;
@@ -176,13 +202,15 @@ export async function runAgentPreflight(
     if (planned.tool === "search_schools") {
       schoolsResult = await runTool(planned.tool, planned.args, preflightCtx, steps, toolResults);
 
-      if (analysis.cost && Array.isArray(schoolsResult?.result)) {
-        for (const school of schoolsResult.result.slice(0, 3)) {
-          if (!school?.id) continue;
+      const schools = recordArray(schoolsResult?.result);
+      if (analysis.cost && schools.length > 0) {
+        for (const school of schools.slice(0, 3)) {
+          const schoolId = textField(school, "id");
+          if (!schoolId) continue;
           await runTool(
             "calculate_cost",
             {
-              school_id: school.id,
+              school_id: schoolId,
               include_dormitory: true,
               broker_quote: analysis.budget,
             },

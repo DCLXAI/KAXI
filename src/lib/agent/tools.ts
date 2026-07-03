@@ -12,10 +12,13 @@ import { redactSensitiveText } from "../privacy/pii";
 import { evaluateVisaRulesWithDbFallback } from "../rules/visa-rule-engine";
 
 // 도구 호출 결과 (UI에서 시각화)
+export type ToolArgs = Record<string, unknown>;
+export type ToolResultPayload = unknown;
+
 export interface ToolResult {
   tool: string;
-  args: Record<string, any>;
-  result: any;
+  args: ToolArgs;
+  result: ToolResultPayload;
   summary: string; // UI에 표시용 요약
   success: boolean;
 }
@@ -29,7 +32,7 @@ export interface Tool {
     properties: Record<string, { type: string; description: string; enum?: string[] }>;
     required: string[];
   };
-  execute: (args: Record<string, any>, ctx: ToolContext) => Promise<{ result: any; summary: string }>;
+  execute: (args: ToolArgs, ctx: ToolContext) => Promise<{ result: ToolResultPayload; summary: string }>;
 }
 
 export interface ToolContext {
@@ -38,7 +41,57 @@ export interface ToolContext {
   dryRun?: boolean;
 }
 
-export function sanitizeToolArgsForDisplay(args: Record<string, any>): Record<string, any> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function stringArg(args: ToolArgs, key: string, fallback = ""): string {
+  const value = args[key];
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function numberArg(args: ToolArgs, key: string, fallback = 0): number {
+  const value = args[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/[,\s]/g, ""));
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
+}
+
+function optionalNumberArg(args: ToolArgs, key: string): number | undefined {
+  const value = args[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.replace(/[,\s]/g, ""));
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+function booleanArg(args: ToolArgs, key: string, fallback = false): boolean {
+  const value = args[key];
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "yes", "1", "y"].includes(normalized)) return true;
+    if (["false", "no", "0", "n"].includes(normalized)) return false;
+  }
+  return fallback;
+}
+
+function enumArg<const Values extends readonly string[]>(
+  args: ToolArgs,
+  key: string,
+  values: Values,
+  fallback: Values[number]
+): Values[number] {
+  const value = stringArg(args, key);
+  return values.includes(value as Values[number]) ? (value as Values[number]) : fallback;
+}
+
+export function sanitizeToolArgsForDisplay(args: ToolArgs): ToolArgs {
   return Object.fromEntries(
     Object.entries(args || {}).map(([key, value]) => {
       if (typeof value === "string") return [key, redactSensitiveText(value).slice(0, 500)];
@@ -85,13 +138,19 @@ const searchSchoolsTool: Tool = {
     required: [],
   },
   execute: async (args) => {
+    const region = enumArg(args, "region", ["all", "seoul", "gyeonggi", "busan", "daegu", "gwangju", "other"] as const, "all");
+    const program = enumArg(args, "program", ["all", "language", "college", "university", "graduate", "vocational"] as const, "all");
+    const accreditation = enumArg(args, "accreditation", ["all", "accredited", "standard", "caution"] as const, "all");
+    const maxTuition = optionalNumberArg(args, "max_tuition");
+    const schoolName = stringArg(args, "school_name");
+    const limit = Math.max(1, Math.min(10, Math.round(numberArg(args, "limit", 5))));
     const schools = (await listSchools({
-      region: args.region || "all",
-      program: args.program || "all",
-      accreditation: args.accreditation || "all",
-      maxTuition: args.max_tuition,
-      query: typeof args.school_name === "string" ? args.school_name : undefined,
-    })).slice(0, args.limit || 5);
+      region,
+      program,
+      accreditation,
+      maxTuition,
+      query: schoolName || undefined,
+    })).slice(0, limit);
 
     return {
       result: schools.map((s) => ({
@@ -108,7 +167,7 @@ const searchSchoolsTool: Tool = {
         verifiedAt: s.verifiedAt,
         reviewAfter: s.reviewAfter,
       })),
-      summary: `${schools.length}개 학교 검색됨${args.school_name ? ` (학교명: ${args.school_name})` : ""}${args.region ? ` (지역: ${args.region})` : ""}${args.max_tuition ? ` (학비 ≤ ${args.max_tuition.toLocaleString()}₩)` : ""}`,
+      summary: `${schools.length}개 학교 검색됨${schoolName ? ` (학교명: ${schoolName})` : ""}${region !== "all" ? ` (지역: ${region})` : ""}${maxTuition ? ` (학비 ≤ ${maxTuition.toLocaleString()}₩)` : ""}`,
     };
   },
 };
@@ -136,12 +195,13 @@ const calculateCostTool: Tool = {
     required: ["school_id"],
   },
   execute: async (args) => {
-    const school = await findSchoolById(args.school_id);
+    const schoolId = stringArg(args, "school_id");
+    const school = await findSchoolById(schoolId);
     if (!school) {
-      return { result: null, summary: `학교 ID '${args.school_id}'를 찾을 수 없음` };
+      return { result: null, summary: `학교 ID '${schoolId}'를 찾을 수 없음` };
     }
 
-    const includeDorm = args.include_dormitory !== false;
+    const includeDorm = booleanArg(args, "include_dormitory", true);
     const items = {
       application_fee: 80000,
       tuition: school.tuitionPerSemester,
@@ -155,7 +215,7 @@ const calculateCostTool: Tool = {
       partner_fee: 99000,
     };
     const total = Object.values(items).reduce((a, b) => a + b, 0);
-    const brokerTotal = args.broker_quote || 0;
+    const brokerTotal = numberArg(args, "broker_quote", 0);
     const diff = brokerTotal - total;
     const diffPct = brokerTotal > 0 ? Math.round((diff / total) * 100) : 0;
 
@@ -195,9 +255,11 @@ const getDocumentsTool: Tool = {
     required: ["visa_type"],
   },
   execute: async (args) => {
+    const visaType = enumArg(args, "visa_type", ["D-2", "D-4"] as const, "D-2");
+    const nationality = stringArg(args, "nationality");
     const evaluation = await evaluateVisaRulesWithDbFallback({
-      visa_type: args.visa_type,
-      nationality: args.nationality,
+      visa_type: visaType,
+      nationality: nationality || undefined,
     });
     const docs = evaluation.documents.map((doc) => ({
       id: doc.id,
@@ -209,8 +271,8 @@ const getDocumentsTool: Tool = {
 
     return {
       result: {
-        visa_type: evaluation.visa_type || args.visa_type,
-        nationality: args.nationality,
+        visa_type: evaluation.visa_type || visaType,
+        nationality: nationality || undefined,
         documents: docs,
         rule_meta: {
           required_inputs: evaluation.required_inputs,
@@ -225,7 +287,7 @@ const getDocumentsTool: Tool = {
           blocked_reasons: evaluation.blocked_reasons,
         },
       },
-      summary: `${evaluation.visa_type || args.visa_type || "D-2/D-4"} 비자 서류 ${docs.length}종${args.nationality ? ` (국적: ${String(args.nationality).toUpperCase()})` : ""}`,
+      summary: `${evaluation.visa_type || visaType || "D-2/D-4"} 비자 서류 ${docs.length}종${nationality ? ` (국적: ${nationality.toUpperCase()})` : ""}`,
     };
   },
 };
@@ -249,13 +311,14 @@ const searchKnowledgeTool: Tool = {
     required: ["query"],
   },
   execute: async (args, ctx) => {
-    const requestedTopK = args.top_k || 3;
-    const results = await hybridSearch(args.query, {
+    const query = stringArg(args, "query");
+    const requestedTopK = Math.max(1, Math.min(10, Math.round(numberArg(args, "top_k", 3))));
+    const results = await hybridSearch(query, {
       topK: Math.max(requestedTopK, 5),
       useTransformer: process.env.AI_AGENT_USE_TRANSFORMER_RAG === "true",
     });
     const docs = withImmigrationLegalBasisDocs(
-      args.query,
+      query,
       results.map((r) => r.doc),
       { maxDocs: Math.max(requestedTopK, 5) }
     );
@@ -295,17 +358,25 @@ const diagnosePathTool: Tool = {
     required: ["education", "korean_level", "goal"],
   },
   execute: async (args) => {
+    const nationality = stringArg(args, "nationality", "vn");
+    const education = enumArg(args, "education", ["highschool", "college", "university", "master"] as const, "highschool");
+    const koreanLevel = enumArg(args, "korean_level", ["none", "topik1", "topik2", "topik3"] as const, "none");
+    const goal = enumArg(args, "goal", ["language", "degree", "transfer", "career", "unsure"] as const, "unsure");
+    const budget = numberArg(args, "budget", 10_000_000);
+    const usingBroker = booleanArg(args, "using_broker", false);
+    const brokerCost = numberArg(args, "broker_cost", 0);
+    const hasHistory = booleanArg(args, "has_history", false);
     const input: DiagnosisInput = {
-      nationality: args.nationality || "vn",
-      age: String(args.age || 20),
-      education: args.education,
-      korean: args.korean_level,
-      goal: args.goal,
-      budget: args.budget || 10000000,
+      nationality,
+      age: String(numberArg(args, "age", 20)),
+      education,
+      korean: koreanLevel,
+      goal,
+      budget,
       region: "any",
-      usingBroker: args.using_broker || false,
-      brokerCost: args.broker_cost || 0,
-      hasHistory: args.has_history || false,
+      usingBroker,
+      brokerCost,
+      hasHistory,
     };
     const rec = recommendPath(input);
     return {
@@ -339,8 +410,8 @@ const requestPartnerTool: Tool = {
     required: ["partner_type", "question"],
   },
   execute: async (args, ctx) => {
-    const partnerType = String(args.partner_type || "").trim();
-    const question = String(args.question || "").slice(0, 1000);
+    const partnerType = enumArg(args, "partner_type", ["admin", "translation", "academy", "admission", "settlement"] as const, "admin");
+    const question = stringArg(args, "question").slice(0, 1000);
     const safeQuestion = redactSensitiveText(question).slice(0, 500);
 
     if (ctx.dryRun) {
@@ -411,14 +482,18 @@ Required: ${t.parameters.required.length > 0 ? t.parameters.required.join(", ") 
 }
 
 // 도구 호출 파싱 (LLM 응답에서 JSON 추출)
-export function parseToolCall(content: string): { tool: string; args: Record<string, any> } | null {
+function normalizeToolArgs(value: unknown): ToolArgs {
+  return isRecord(value) ? value : {};
+}
+
+export function parseToolCall(content: string): { tool: string; args: ToolArgs } | null {
   // 패턴 1: ```json ... ``` 블록
   const codeBlockMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
   if (codeBlockMatch) {
     try {
-      const parsed = JSON.parse(codeBlockMatch[1]);
-      if (parsed.tool && TOOL_MAP[parsed.tool]) {
-        return { tool: parsed.tool, args: parsed.args || parsed.arguments || {} };
+      const parsed: unknown = JSON.parse(codeBlockMatch[1]);
+      if (isRecord(parsed) && typeof parsed.tool === "string" && TOOL_MAP[parsed.tool]) {
+        return { tool: parsed.tool, args: normalizeToolArgs(parsed.args || parsed.arguments) };
       }
     } catch {}
   }
@@ -427,9 +502,9 @@ export function parseToolCall(content: string): { tool: string; args: Record<str
   const jsonMatch = content.match(/\{\s*"tool"\s*:\s*"([^"]+)"[\s\S]*?\}/);
   if (jsonMatch) {
     try {
-      const parsed = JSON.parse(jsonMatch[0]);
-      if (TOOL_MAP[parsed.tool]) {
-        return { tool: parsed.tool, args: parsed.args || parsed.arguments || {} };
+      const parsed: unknown = JSON.parse(jsonMatch[0]);
+      if (isRecord(parsed) && typeof parsed.tool === "string" && TOOL_MAP[parsed.tool]) {
+        return { tool: parsed.tool, args: normalizeToolArgs(parsed.args || parsed.arguments) };
       }
     } catch {}
   }

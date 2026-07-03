@@ -2,14 +2,14 @@
 // 사용자 질문 → LLM 추론 → 도구 호출 → 결과 → 다시 추론 → ... → 최종 답변
 // 최대 5회 반복 (무한 루프 방지)
 
-import { TOOL_MAP, getToolsDescription, parseToolCall, sanitizeToolArgsForDisplay, type ToolResult, type ToolContext } from "./tools";
+import { TOOL_MAP, getToolsDescription, parseToolCall, sanitizeToolArgsForDisplay, type ToolArgs, type ToolResult, type ToolContext } from "./tools";
 import type { Lang } from "../i18n/translations";
 import { createZaiClient } from "../ai/zai";
 
 export interface AgentStep {
   type: "thinking" | "tool_call" | "tool_result" | "final_answer" | "error";
   content: string;
-  toolCall?: { tool: string; args: Record<string, any> };
+  toolCall?: { tool: string; args: ToolArgs };
   toolResult?: ToolResult;
   timestamp: number;
 }
@@ -21,6 +21,11 @@ export interface AgentResponse {
   iterations: number;
 }
 
+type AgentChatMessage = {
+  role: "assistant" | "user" | "system";
+  content: string;
+};
+
 const MAX_ITERATIONS = 5;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -29,6 +34,10 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function textValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Unknown error";
 }
 
 function buildToolCitationHint(
@@ -117,10 +126,10 @@ ${getToolsDescription()}
 - 사용자 ID: ${ctx.leadId || "익명"}`;
 
   // 메시지 히스토리 구성
-  const messages: { role: string; content: string }[] = [
+  const messages: AgentChatMessage[] = [
     { role: "assistant", content: systemPrompt },
     ...history.slice(-4).map((h) => ({
-      role: h.role === "user" ? "user" : "assistant",
+      role: h.role === "user" ? ("user" as const) : ("assistant" as const),
       content: h.content,
     })),
     { role: "user", content: question },
@@ -137,7 +146,7 @@ ${getToolsDescription()}
 
     try {
       const completion = await zai.chat.completions.create({
-        messages: messages as any,
+        messages,
         thinking: { type: "disabled" },
         temperature: 0.2,
         max_tokens: 1200,
@@ -189,8 +198,8 @@ ${getToolsDescription()}
           });
 
           continue;
-        } catch (e: any) {
-          const errMsg = e.message || "Unknown error";
+        } catch (e) {
+          const errMsg = errorMessage(e);
           steps.push({
             type: "error",
             content: `도구 실행 오류: ${errMsg}`,
@@ -214,11 +223,12 @@ ${getToolsDescription()}
         timestamp: Date.now(),
       });
       break;
-    } catch (e: any) {
+    } catch (e) {
       console.error("[Agent iteration error]", e);
+      const errMsg = errorMessage(e);
       steps.push({
         type: "error",
-        content: `LLM 오류: ${e.message}`,
+        content: `LLM 오류: ${errMsg}`,
         timestamp: Date.now(),
       });
       finalAnswer = lang === "ko"

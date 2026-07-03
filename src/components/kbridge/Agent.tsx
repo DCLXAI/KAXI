@@ -43,8 +43,8 @@ import { motion, AnimatePresence } from "framer-motion";
 
 interface ToolResult {
   tool: string;
-  args: Record<string, any>;
-  result: any;
+  args: Record<string, unknown>;
+  result: unknown;
   summary: string;
   success: boolean;
 }
@@ -52,7 +52,7 @@ interface ToolResult {
 interface AgentStep {
   type: "thinking" | "tool_call" | "tool_result" | "final_answer" | "error";
   content: string;
-  toolCall?: { tool: string; args: Record<string, any> };
+  toolCall?: { tool: string; args: Record<string, unknown> };
   toolResult?: ToolResult;
   timestamp: number;
 }

@@ -3,6 +3,24 @@ import type { AgentResponse, AgentStep } from "@/lib/agent/agent";
 import { analyzeAgentIntent, type AgentIntentAnalysis, type AgentMissingSlot } from "@/lib/agent/planner";
 import { sanitizeToolArgsForDisplay, TOOL_MAP, type ToolContext, type ToolResult } from "@/lib/agent/tools";
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function recordArray(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.map(asRecord).filter((item): item is Record<string, unknown> => Boolean(item)) : [];
+}
+
+function textField(record: Record<string, unknown>, key: string, fallback = ""): string {
+  const value = record[key];
+  return typeof value === "string" ? value : fallback;
+}
+
+function numberField(record: Record<string, unknown>, key: string, fallback = 0): number {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
 async function runTool(
   toolName: string,
   args: Record<string, unknown>,
@@ -104,54 +122,62 @@ function formatFallbackAnswer(
     if (item.tool === "search_schools" && Array.isArray(item.result)) {
       lines.push("");
       lines.push(isKo ? "추천 학교:" : "School matches:");
-      for (const school of item.result.slice(0, 5)) {
+      for (const school of recordArray(item.result).slice(0, 5)) {
         const citation = `[${citationIndex++}]`;
         lines.push(
-          `- ${school.name}: ${school.region}, ${school.program}, ${Number(school.tuition).toLocaleString()} KRW/semester, ${school.accreditation} ${citation}`
+          `- ${textField(school, "name")}: ${textField(school, "region")}, ${textField(school, "program")}, ${numberField(school, "tuition").toLocaleString()} KRW/semester, ${textField(school, "accreditation")} ${citation}`
         );
       }
     }
 
     if (item.tool === "calculate_cost" && item.result) {
+      const result = asRecord(item.result);
+      if (!result) continue;
       lines.push("");
       lines.push(isKo ? "비용 계산:" : "Cost estimate:");
       lines.push(`- ${item.summary}`);
-      lines.push(`- ${isKo ? "플랫폼 예상 총액" : "Estimated total"}: ${Number(item.result.total).toLocaleString()} KRW`);
-      if (item.result.warning) lines.push(`- ${item.result.warning}`);
+      lines.push(`- ${isKo ? "플랫폼 예상 총액" : "Estimated total"}: ${numberField(result, "total").toLocaleString()} KRW`);
+      if (result.warning) lines.push(`- ${String(result.warning)}`);
     }
 
-    if (item.tool === "get_documents" && item.result?.documents) {
+    if (item.tool === "get_documents" && item.result) {
+      const result = asRecord(item.result);
+      if (!result) continue;
       lines.push("");
-      lines.push(`${item.result.visa_type} ${isKo ? "필수 서류:" : "documents:"}`);
-      for (const doc of item.result.documents.slice(0, 10)) {
-        lines.push(`- ${doc.doc}: ${doc.note}`);
+      lines.push(`${textField(result, "visa_type")} ${isKo ? "필수 서류:" : "documents:"}`);
+      for (const doc of recordArray(result.documents).slice(0, 10)) {
+        lines.push(`- ${textField(doc, "doc")}: ${textField(doc, "note")}`);
       }
     }
 
     if (item.tool === "search_knowledge" && Array.isArray(item.result)) {
       lines.push("");
       lines.push(isKo ? "공식 정보 검색 결과:" : "Knowledge results:");
-      for (const doc of item.result.slice(0, 3)) {
+      for (const doc of recordArray(item.result).slice(0, 3)) {
+        const sourceMeta = asRecord(doc.sourceMeta);
+        const ragMeta = asRecord(doc.ragMeta);
         const citation = `[${citationIndex++}]`;
-        lines.push(`- ${doc.title}: ${String(doc.content).slice(0, 180)}... ${citation}`);
-        if (doc.sourceMeta?.url) lines.push(`  Source: ${doc.sourceMeta.url}`);
-        if (doc.ragMeta?.last_checked_at) {
-          lines.push(`  Checked: ${doc.ragMeta.last_checked_at}, status=${doc.ragMeta.review_status}`);
+        lines.push(`- ${textField(doc, "title")}: ${textField(doc, "content").slice(0, 180)}... ${citation}`);
+        if (typeof sourceMeta?.url === "string") lines.push(`  Source: ${sourceMeta.url}`);
+        if (typeof ragMeta?.last_checked_at === "string") {
+          lines.push(`  Checked: ${ragMeta.last_checked_at}, status=${String(ragMeta.review_status || "")}`);
         }
       }
     }
 
     if (item.tool === "diagnose_path" && item.result) {
+      const result = asRecord(item.result);
+      if (!result) continue;
       lines.push("");
       lines.push(isKo ? "맞춤 경로 진단:" : "Personalized path:");
-      lines.push(`- ${isKo ? "추천 경로" : "Recommended path"}: ${item.result.path}`);
-      lines.push(`- ${isKo ? "준비 기간" : "Preparation time"}: ${item.result.prep_time}`);
-      lines.push(`- ${isKo ? "예상 비용" : "Estimated cost"}: ${Number(item.result.estimated_cost).toLocaleString()} KRW`);
-      for (const action of (item.result.next_actions || []).slice(0, 4)) {
-        lines.push(`- ${action}`);
+      lines.push(`- ${isKo ? "추천 경로" : "Recommended path"}: ${textField(result, "path")}`);
+      lines.push(`- ${isKo ? "준비 기간" : "Preparation time"}: ${textField(result, "prep_time")}`);
+      lines.push(`- ${isKo ? "예상 비용" : "Estimated cost"}: ${numberField(result, "estimated_cost").toLocaleString()} KRW`);
+      for (const action of Array.isArray(result.next_actions) ? result.next_actions.slice(0, 4) : []) {
+        lines.push(`- ${String(action)}`);
       }
-      for (const warning of (item.result.warnings || []).slice(0, 2)) {
-        lines.push(`- ${warning}`);
+      for (const warning of Array.isArray(result.warnings) ? result.warnings.slice(0, 2) : []) {
+        lines.push(`- ${String(warning)}`);
       }
     }
 
@@ -211,13 +237,15 @@ export async function runFallbackAgent(
     if (planned.tool === "search_schools") {
       const schools = await runTool(planned.tool, planned.args, toolCtx, steps, toolResults);
 
-      if (analysis.cost && Array.isArray(schools?.result)) {
-        for (const school of schools.result.slice(0, 3)) {
-          if (!school?.id) continue;
+      const schoolResults = recordArray(schools?.result);
+      if (analysis.cost && schoolResults.length > 0) {
+        for (const school of schoolResults.slice(0, 3)) {
+          const schoolId = textField(school, "id");
+          if (!schoolId) continue;
           await runTool(
             "calculate_cost",
             {
-              school_id: school.id,
+              school_id: schoolId,
               include_dormitory: true,
               broker_quote: analysis.budget,
             },
