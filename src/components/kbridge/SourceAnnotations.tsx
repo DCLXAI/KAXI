@@ -33,6 +33,9 @@ function sourceKind(source: SourceAnnotation, lang: Lang): string {
   if (source.kind === "school") return lang === "ko" ? "학교" : "School";
   if (source.kind === "internal" || source.owner === "internal") return "KAXI";
   if (source.sourceType?.includes("law")) return lang === "ko" ? "법령" : "Law";
+  if (source.sourceType?.includes("government") || source.owner === "government") {
+    return lang === "ko" ? "정부 공식" : "Gov";
+  }
   return lang === "ko" ? "공식" : "Official";
 }
 
@@ -44,6 +47,16 @@ function checkedText(source: SourceAnnotation, lang: Lang): string | null {
     return [checked ? `확인일 ${checked}` : null, status ? `검수 ${status}` : null].filter(Boolean).join(" · ");
   }
   return [checked ? `checked ${checked}` : null, status ? `review ${status}` : null].filter(Boolean).join(" · ");
+}
+
+function reviewAfterText(source: SourceAnnotation, lang: Lang): string | null {
+  if (!source.reviewAfter) return null;
+  return lang === "ko" ? `재검토 ${source.reviewAfter}` : `review after ${source.reviewAfter}`;
+}
+
+function sourceTypeText(source: SourceAnnotation): string | null {
+  if (!source.sourceType) return null;
+  return source.sourceType.replace(/_/g, " ");
 }
 
 function visibleSourceList(sources: SourceAnnotation[] | undefined, max: number): SourceAnnotation[] {
@@ -95,13 +108,14 @@ export function SourceAnnotations({
     <div className="mt-4 border-t pt-3">
       <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-normal text-muted-foreground">
         <BookOpen className="h-3 w-3" />
-        {title || (lang === "ko" ? "답변 근거 주석" : "Answer citations")}
+        {title || (lang === "ko" ? "출처 링크와 답변 근거" : "Source links and answer basis")}
       </div>
 
       <div className="mb-3 flex flex-wrap gap-1.5">
         {visibleSources.map((source, index) => {
           const url = source.url && !source.url.startsWith("internal://") ? source.url : null;
           const label = `[${index + 1}] ${source.title}`;
+          const kind = sourceKind(source, lang);
           const className =
             "inline-flex max-w-full items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-xs hover:bg-muted";
           const content = (
@@ -110,6 +124,7 @@ export function SourceAnnotations({
                 [{index + 1}]
               </span>
               <span className="max-w-[220px] truncate">{source.title}</span>
+              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">{kind}</span>
               <span className="text-muted-foreground">{hostFromUrl(url)}</span>
               {url && <ExternalLink className="h-3 w-3" />}
             </>
@@ -131,6 +146,8 @@ export function SourceAnnotations({
         {visibleSources.map((source, index) => {
           const url = source.url && !source.url.startsWith("internal://") ? source.url : null;
           const checked = checkedText(source, lang);
+          const reviewAfter = reviewAfterText(source, lang);
+          const sourceType = sourceTypeText(source);
           const basis = source.basis || source.excerpt;
           const showExcerpt = source.excerpt && source.excerpt !== basis;
 
@@ -161,6 +178,18 @@ export function SourceAnnotations({
                 </span>
               </div>
 
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span className="rounded bg-background px-1.5 py-0.5">{hostFromUrl(url)}</span>
+                {sourceType && <span className="rounded bg-background px-1.5 py-0.5">{sourceType}</span>}
+                {reviewAfter && <span className="rounded bg-background px-1.5 py-0.5">{reviewAfter}</span>}
+                {url && (
+                  <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded bg-background px-1.5 py-0.5 hover:underline">
+                    {lang === "ko" ? "원문" : "Source"}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </div>
+
               {basis && (
                 <div className="mt-2 rounded border-l-2 border-primary/30 bg-background/70 px-2 py-1.5 leading-relaxed">
                   <span className="font-medium">{lang === "ko" ? "답변 근거: " : "Answer basis: "}</span>
@@ -170,7 +199,7 @@ export function SourceAnnotations({
 
               {showExcerpt && (
                 <div className="mt-2 rounded bg-background/60 px-2 py-1.5 leading-relaxed text-muted-foreground">
-                  <span className="font-medium">{lang === "ko" ? "원문 요약: " : "Source excerpt: "}</span>
+                  <span className="font-medium">{lang === "ko" ? "근거 발췌: " : "Source excerpt: "}</span>
                   {source.excerpt}
                 </div>
               )}

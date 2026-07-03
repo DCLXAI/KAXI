@@ -120,3 +120,33 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  .kaxi-cited-answer a[href^="#"][title] {
+    display: inline-flex;
+    min-width: 1.15rem;
+    height: 1.15rem;
+    align-items: center;
+    justify-content: center;
+    margin-inline: 0.08rem;
+    border: 1px solid color-mix(in oklch, var(--primary) 24%, transparent);
+    border-radius: 999px;
+    background: color-mix(in oklch, var(--primary) 9%, transparent);
+    color: var(--primary);
+    font-size: 0.68em;
+    font-weight: 700;
+    line-height: 1;
+    text-decoration: none;
+    vertical-align: super;
+  }
+
+  .kaxi-cited-answer a[href^="#"][title]:hover {
+    background: color-mix(in oklch, var(--primary) 16%, transparent);
+    text-decoration: none;
+  }
+
+  .kaxi-cited-answer a[href^="#"][title]:focus-visible {
+    outline: 2px solid color-mix(in oklch, var(--primary) 60%, transparent);
+    outline-offset: 2px;
+  }
+}

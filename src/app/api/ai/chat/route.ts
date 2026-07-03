@@ -106,16 +106,11 @@ export async function POST(req: NextRequest) {
         }
       } catch (llmErr) {
         console.error("[LLM Error]", llmErr);
+        const top = docs[0];
         if (faq) {
-          answer = faq[lang] + "\n\n📚 " + pickLangText(docs[0].content, lang);
+          answer = buildCitedFallbackAnswer(faq[lang], top, lang);
         } else {
-          const top = docs[0];
-          answer =
-            pickLangText(top.title, lang) +
-            "\n\n" +
-            pickLangText(top.content, lang) +
-            "\n\n📚 출처: " +
-            top.source;
+          answer = buildCitedFallbackAnswer(null, top, lang);
         }
       }
     } else if (faq) {
@@ -182,6 +177,21 @@ export async function GET(req: NextRequest) {
   initVectorStore();
   // transformer는 lazy load — 별도 요청시에만 초기화
   return NextResponse.json(getStoreStats());
+}
+
+function buildCitedFallbackAnswer(baseAnswer: string | null, doc: KnowledgeDoc, lang: Lang): string {
+  const title = pickLangText(doc.title, lang);
+  const meta = getRagDocumentMetadata(doc, lang);
+  const excerpt = compactKnowledgeExcerpt(doc, lang, 700);
+  const sourceHeading = lang === "ko" ? "📚 출처:" : "📚 Sources:";
+  const basisHeading = lang === "ko" ? "공식 근거 요약" : "Official-source basis";
+  const sourceUrl = meta.source_url ? ` <${meta.source_url}>` : "";
+  const sections = baseAnswer?.trim() ? [`${baseAnswer.trim()} [1]`] : [];
+
+  sections.push(`### ${basisHeading}\n\n${excerpt} [1]`);
+  sections.push(`${sourceHeading}\n- [1] ${title} — ${doc.source}${sourceUrl}`);
+
+  return sections.join("\n\n");
 }
 
 async function generateWithLLM(
