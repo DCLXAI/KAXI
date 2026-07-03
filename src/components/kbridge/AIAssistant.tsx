@@ -7,13 +7,63 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Bot, Send, X, Sparkles, AlertCircle, Loader2, BookOpen } from "lucide-react";
+import { MessageResponse } from "@/components/ai-elements/message";
+import {
+  SourceAnnotations,
+  linkCitationMarkers,
+  type SourceAnnotation,
+} from "@/components/kbridge/SourceAnnotations";
+import { Bot, Send, X, Sparkles, AlertCircle, Loader2 } from "lucide-react";
 
 interface Msg {
   role: "user" | "ai";
   text: string;
-  source?: "rule" | "rag";
-  retrievedDocs?: { id: string; title: string; source: string; category: string }[];
+  source?: "rule" | "rag" | "hybrid";
+  sourceNotice?: string;
+  retrievedDocs?: RetrievedDoc[];
+}
+
+interface RetrievedDoc {
+  id: string;
+  title: string;
+  source: string;
+  category: string;
+  excerpt?: string;
+  basis?: string;
+  sourceMeta?: {
+    label?: string;
+    url?: string;
+    verifiedAt?: string;
+    reviewAfter?: string;
+    owner?: string;
+    sourceType?: string;
+    reviewStatus?: string;
+    checkedBy?: string;
+  };
+  ragMeta?: {
+    last_checked_at?: string;
+    review_status?: string;
+    checked_by?: string;
+  };
+}
+
+function sourceAnnotationsFromDocs(docs?: RetrievedDoc[]): SourceAnnotation[] {
+  return (docs || []).map((doc): SourceAnnotation => ({
+    id: doc.id,
+    title: doc.title,
+    label: doc.sourceMeta?.label || doc.source,
+    source: doc.source,
+    url: doc.sourceMeta?.url || null,
+    kind: doc.sourceMeta?.owner === "internal" ? "internal" : "knowledge",
+    owner: doc.sourceMeta?.owner,
+    verifiedAt: doc.sourceMeta?.verifiedAt || doc.ragMeta?.last_checked_at,
+    reviewAfter: doc.sourceMeta?.reviewAfter,
+    sourceType: doc.sourceMeta?.sourceType,
+    reviewStatus: doc.sourceMeta?.reviewStatus || doc.ragMeta?.review_status,
+    checkedBy: doc.sourceMeta?.checkedBy || doc.ragMeta?.checked_by,
+    basis: doc.basis,
+    excerpt: doc.excerpt,
+  }));
 }
 
 function AIAssistantPanel({ lang }: { lang: Lang }) {
@@ -67,6 +117,7 @@ function AIAssistantPanel({ lang }: { lang: Lang }) {
           role: "ai",
           text: data.answer,
           source: data.source,
+          sourceNotice: data.sourceNotice,
           retrievedDocs: data.retrievedDocs,
         },
       ]);
@@ -133,45 +184,55 @@ function AIAssistantPanel({ lang }: { lang: Lang }) {
 
           {/* 메시지 영역 */}
           <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-[240px] max-h-[400px]">
-            {msgs.map((m, i) => (
-              <div
-                key={i}
-                className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-              >
+            {msgs.map((m, i) => {
+              const sources = sourceAnnotationsFromDocs(m.retrievedDocs);
+              const citationPrefix = `floating-ai-message-${i}`;
+              return (
                 <div
-                  className={`max-w-[88%] rounded-lg px-3 py-2 text-sm space-y-2 ${
-                    m.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted"
-                  }`}
+                  key={i}
+                  className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
                 >
-                  <div className="whitespace-pre-wrap">{m.text}</div>
-
-                  {/* 검색된 문서 출처 */}
-                  {m.retrievedDocs && m.retrievedDocs.length > 0 && (
-                    <div className="pt-2 border-t border-border/40 space-y-1">
-                      <div className="text-[10px] text-muted-foreground flex items-center gap-1">
-                        <BookOpen className="h-2.5 w-2.5" />
-                        {lang === "ko" ? "참고 문서" : lang === "vi" ? "Tài liệu" : lang === "mn" ? "Баримт" : "Sources"}
-                      </div>
-                      {m.retrievedDocs.map((d, j) => (
-                        <div key={j} className="text-[10px] text-muted-foreground/80 pl-3 border-l">
-                          {d.title}
-                          <span className="block text-[9px] opacity-70">{d.source}</span>
+                  <div
+                    className={`max-w-[88%] rounded-lg px-3 py-2 text-sm space-y-2 ${
+                      m.role === "user"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted"
+                    }`}
+                  >
+                    {m.role === "ai" ? (
+                      <>
+                        <div className="text-sm leading-relaxed">
+                          <MessageResponse>
+                            {linkCitationMarkers(m.text, sources, citationPrefix, 4)}
+                          </MessageResponse>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                        {m.sourceNotice && !m.text.includes(m.sourceNotice) && (
+                          <div className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1.5 text-[10px] leading-relaxed text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
+                            {m.sourceNotice}
+                          </div>
+                        )}
+                        <SourceAnnotations
+                          sources={sources}
+                          lang={lang}
+                          max={4}
+                          title={lang === "ko" ? "출처 및 답변 근거" : "Sources and basis"}
+                          idPrefix={citationPrefix}
+                        />
+                      </>
+                    ) : (
+                      <div className="whitespace-pre-wrap">{m.text}</div>
+                    )}
 
-                  {/* 출처 배지 */}
-                  {m.source && (
-                    <div className="text-[10px] text-muted-foreground/60">
-                      {m.source === "rag" ? "🤖 RAG+LLM" : "📋 Rule-based"}
-                    </div>
-                  )}
+                    {/* 출처 배지 */}
+                    {m.source && (
+                      <div className="text-[10px] text-muted-foreground/60">
+                        {m.source === "rule" ? "Rule-based" : "RAG+LLM"}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {loading && (
               <div className="flex justify-start">
                 <div className="bg-muted rounded-lg px-3 py-2 flex items-center gap-2 text-sm">

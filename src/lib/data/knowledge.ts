@@ -1129,6 +1129,19 @@ export function buildRagBasisNotice(lang: Lang, docs: KnowledgeDoc[]): string {
   return buildRagBasisNoticeFromMetadata(lang, docs.map((doc) => getRagDocumentMetadata(doc, lang)));
 }
 
+export function compactKnowledgeExcerpt(doc: KnowledgeDoc, lang: Lang, max = 260): string {
+  const text = pickLangText(doc.content, lang).replace(/\s+/g, " ").trim();
+  return text.length > max ? `${text.slice(0, max)}...` : text;
+}
+
+export function buildKnowledgeAnswerBasis(doc: KnowledgeDoc, lang: Lang): string {
+  const meta = getRagDocumentMetadata(doc, lang);
+  const excerpt = compactKnowledgeExcerpt(doc, lang, 220);
+  const checked =
+    lang === "ko" ? `확인일 ${meta.last_checked_at}` : `checked ${meta.last_checked_at}`;
+  return `${excerpt} (${checked})`;
+}
+
 export function getKnowledgeDocsWithMetadata(
   options: { includeExpired?: boolean; referenceDate?: Date } = {}
 ): KnowledgeDocWithMetadata[] {

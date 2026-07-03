@@ -3,6 +3,11 @@ import {
   sourceAnnotationDomId,
   type SourceAnnotation,
 } from "../src/components/kbridge/SourceAnnotations";
+import {
+  buildKnowledgeAnswerBasis,
+  compactKnowledgeExcerpt,
+  KNOWLEDGE_DOCS,
+} from "../src/lib/data/knowledge";
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -46,5 +51,11 @@ assert(
   sourceAnnotationDomId("consult message:0", 1) === "consult-message-0-source-2",
   "source DOM id should be stable and safe"
 );
+
+const doc = KNOWLEDGE_DOCS[0];
+const excerpt = compactKnowledgeExcerpt(doc, "ko", 80);
+const basis = buildKnowledgeAnswerBasis(doc, "ko");
+assert(excerpt.length <= 83, `knowledge excerpt should respect max length: ${excerpt.length}`);
+assert(basis.includes("확인일"), `answer basis should include checked date: ${basis}`);
 
 console.log("PASS source citation links");

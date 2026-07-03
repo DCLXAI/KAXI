@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  buildKnowledgeAnswerBasis,
   buildRagBasisNotice,
+  compactKnowledgeExcerpt,
   getEffectiveSourceMetadata,
   getRagDocumentMetadata,
   pickLangText,
@@ -159,6 +161,8 @@ export async function POST(req: NextRequest) {
         source: d.source,
         sourceMeta: getEffectiveSourceMetadata(d, lang),
         ragMeta: getRagDocumentMetadata(d, lang),
+        basis: buildKnowledgeAnswerBasis(d, lang),
+        excerpt: compactKnowledgeExcerpt(d, lang),
       })),
       sourceNotice,
       searchMeta,
@@ -195,7 +199,15 @@ async function generateWithLLM(
     const context = docs
       .map((d, i) => {
         const ragMeta = getRagDocumentMetadata(d, lang);
-        return `[문서 ${i + 1}] ${pickLangText(d.title, lang)}\n${pickLangText(d.content, lang)}\n출처: ${d.source}\n확인일: ${ragMeta.last_checked_at}\n검수자: ${ragMeta.checked_by}\n검수상태: ${ragMeta.review_status}`;
+        return [
+          `[문서 ${i + 1}] ${pickLangText(d.title, lang)}`,
+          `주석 번호: [${i + 1}]`,
+          `출처: ${d.source} <${ragMeta.source_url}>`,
+          `확인일: ${ragMeta.last_checked_at}`,
+          `검수자: ${ragMeta.checked_by}`,
+          `검수상태: ${ragMeta.review_status}`,
+          pickLangText(d.content, lang),
+        ].join("\n");
       })
       .join("\n\n---\n\n");
 
@@ -208,8 +220,10 @@ async function generateWithLLM(
 4. 비자·체류자격 개별 판단은 행정사 상담을 권유하세요.
 5. 비용 관련 질문은 항목별로 분해해서 설명하세요.
 6. 답변은 간결하고 실용적으로 (3~5문장 이내).
-7. 출처를 답변 끝에 표기하세요.
-8. 답변 마지막에는 다음 출처 기준 문장을 그대로 포함하세요: "${sourceNotice}"
+7. 사실·법령·요건·절차·비용·서류를 단정하는 문장 뒤에는 반드시 [1], [2]처럼 근거 주석을 붙이세요.
+8. 주석 번호는 컨텍스트 문서의 [문서 N] 번호와 일치해야 합니다. 근거가 없으면 확정하지 말고 확인 필요라고 말하세요.
+9. 출처를 답변 끝에 "📚 출처:" 로 표기하세요.
+10. 답변 마지막에는 다음 출처 기준 문장을 그대로 포함하세요: "${sourceNotice}"
 
 컨텍스트 문서 (Vector Search + Keyword Match로 검색됨):
 ${context}`;
