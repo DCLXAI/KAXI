@@ -2,6 +2,7 @@ import type { AgentStep } from "@/lib/agent/agent";
 import { analyzeAgentIntent, type AgentIntentAnalysis } from "@/lib/agent/planner";
 import { sanitizeToolArgsForDisplay, TOOL_MAP, type ToolContext, type ToolResult } from "@/lib/agent/tools";
 import type { Lang } from "@/lib/i18n/translations";
+import { isEnvFalse } from "@/lib/env";
 import { redactSensitiveText } from "@/lib/privacy/pii";
 
 export interface AgentPreflightResult {
@@ -156,7 +157,7 @@ export async function runAgentPreflight(
   lang: Lang,
   ctx: ToolContext
 ): Promise<AgentPreflightResult> {
-  if (process.env.AI_AGENT_PREFLIGHT_ENABLED === "false") {
+  if (isEnvFalse(process.env.AI_AGENT_PREFLIGHT_ENABLED)) {
     return { enabled: false, groundedQuestion: question, groundingContext: "", steps: [], toolResults: [] };
   }
 

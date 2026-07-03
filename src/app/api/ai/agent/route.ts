@@ -25,6 +25,7 @@ import {
 } from "@/lib/api/security";
 import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
 import { isPiiEncryptionConfigured } from "@/lib/privacy/pii";
+import { isEnvFalse, isEnvTrue } from "@/lib/env";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -32,15 +33,15 @@ const AGENT_REMOTE_BRIDGE_MAX_WAIT_MS = 52_000;
 
 function shouldRequireAgentLlm(configuredBackend = getAgentBackend()): boolean {
   if (
-    process.env.AI_ALLOW_LLM_FALLBACK === "true" ||
-    process.env.AI_AGENT_ALLOW_TOOL_FALLBACK === "true"
+    isEnvTrue(process.env.AI_ALLOW_LLM_FALLBACK) ||
+    isEnvTrue(process.env.AI_AGENT_ALLOW_TOOL_FALLBACK)
   ) {
     return false;
   }
 
   return (
-    process.env.AI_REQUIRE_LLM === "true" ||
-    process.env.AI_AGENT_REQUIRE_LLM === "true" ||
+    isEnvTrue(process.env.AI_REQUIRE_LLM) ||
+    isEnvTrue(process.env.AI_AGENT_REQUIRE_LLM) ||
     configuredBackend === "remote-bridge"
   );
 }
@@ -72,12 +73,12 @@ function emptyPreflight(question: string): AgentPreflightResult {
 }
 
 function shouldPersistAgentLog(): boolean {
-  if (process.env.AI_AGENT_LOGGING_ENABLED === "false") return false;
+  if (isEnvFalse(process.env.AI_AGENT_LOGGING_ENABLED)) return false;
   return canWriteRuntimeDatabase();
 }
 
 function shouldPersistAgentLedger(): boolean {
-  if (process.env.AI_AGENT_LEDGER_ENABLED === "false") return false;
+  if (isEnvFalse(process.env.AI_AGENT_LEDGER_ENABLED)) return false;
   return canWriteRuntimeDatabase();
 }
 
@@ -237,7 +238,7 @@ export async function GET() {
       configured: Boolean(process.env.CODEX_REMOTE_BRIDGE_URL?.trim()),
     },
     preflight: {
-      enabled: process.env.AI_AGENT_PREFLIGHT_ENABLED === "true",
+      enabled: isEnvTrue(process.env.AI_AGENT_PREFLIGHT_ENABLED),
       timeoutMs: parsePositiveInt(process.env.AI_AGENT_PREFLIGHT_TIMEOUT_MS, 12_000),
     },
     limits: {
@@ -293,7 +294,7 @@ export async function POST(req: NextRequest) {
     ledgerContext = { question, leadId, preflight: emptyPreflight(question) };
 
     const configuredBackend = getAgentBackend();
-    const preflightEnabled = process.env.AI_AGENT_PREFLIGHT_ENABLED === "true";
+    const preflightEnabled = isEnvTrue(process.env.AI_AGENT_PREFLIGHT_ENABLED);
     const shouldPreflight =
       preflightEnabled &&
       (configuredBackend === "remote-bridge" ||

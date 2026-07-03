@@ -14,6 +14,7 @@ import { isRemoteCodexBridgeEnabled, runRemoteCodexBridge } from "@/lib/codex/re
 import { hybridSearch, initVectorStore } from "@/lib/embeddings/vector-store";
 import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
 import { withImmigrationLegalBasisDocs } from "@/lib/knowledge/legal-basis";
+import { isEnvTrue } from "@/lib/env";
 import {
   consumeDailyQuota,
   getClientIp,
@@ -43,15 +44,15 @@ class LlmBackendUnavailableError extends Error {
 
 function shouldRequireConsultLlm(consultBackend?: ConsultBackend): boolean {
   if (
-    process.env.AI_ALLOW_LLM_FALLBACK === "true" ||
-    process.env.AI_CONSULT_ALLOW_OFFICIAL_SUMMARY_FALLBACK === "true"
+    isEnvTrue(process.env.AI_ALLOW_LLM_FALLBACK) ||
+    isEnvTrue(process.env.AI_CONSULT_ALLOW_OFFICIAL_SUMMARY_FALLBACK)
   ) {
     return false;
   }
 
   return (
-    process.env.AI_REQUIRE_LLM === "true" ||
-    process.env.AI_CONSULT_REQUIRE_LLM === "true" ||
+    isEnvTrue(process.env.AI_REQUIRE_LLM) ||
+    isEnvTrue(process.env.AI_CONSULT_REQUIRE_LLM) ||
     consultBackend === "remote-bridge"
   );
 }
