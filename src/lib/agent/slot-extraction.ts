@@ -76,10 +76,20 @@ export function detectSchoolName(text: string): string | undefined {
   const koreanName = text.match(/([가-힣A-Za-z0-9·.'\-\s]{2,40}(?:전문대학교|대학교|대학원|어학당|한국어교육센터|국제어학원))/);
   if (koreanName?.[1]) {
     const value = koreanName[1].trim();
-    if (!/인증대학|희망\s*대학|어떤\s*대학/.test(value)) return value;
+    if (!isGenericSchoolNameCandidate(value)) return value;
   }
 
   return undefined;
+}
+
+function isGenericSchoolNameCandidate(value: string): boolean {
+  if (/인증대학|희망\s*대학|어떤\s*대학/.test(value)) return true;
+
+  const hasSpecificInstitutionSuffix = /(?:전문대학교|대학교|대학원|한국어교육센터|국제어학원)$/.test(value);
+  if (hasSpecificInstitutionSuffix) return false;
+
+  if (/^(?:서울|경기|부산|대구|광주)\s*(?:어학당|대학)$/.test(value)) return true;
+  return /(?:학생|예산|추천|찾아|비자|서류|비용|조건|베트남|몽골|중국|우즈벡|d-2|d-4)/i.test(value);
 }
 
 export function detectRegion(text: string): string {

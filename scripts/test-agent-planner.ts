@@ -63,6 +63,17 @@ function testSchoolAndCostIntent() {
   expectNoMissingSlots(result.missingSlots, ["region", "program", "budget"], result);
 }
 
+function testGenericSchoolConditionsAreNotSchoolNames() {
+  const result = analyzeAgentIntent("베트남 학생 D-4 서울 어학당 500만원 예산으로 추천하고 서류도 알려줘", "ko");
+  const schoolSearch = result.plan.find((item) => item.tool === "search_schools");
+
+  assert(result.schoolName === undefined, `generic conditions should not become schoolName: ${JSON.stringify(result)}`);
+  assert(schoolSearch?.args.school_name === undefined, `school_name arg should stay empty for generic conditions: ${JSON.stringify(result)}`);
+  assert(result.region === "seoul", `region should still be extracted: ${JSON.stringify(result)}`);
+  assert(result.program === "language", `program should still be extracted: ${JSON.stringify(result)}`);
+  assert(result.nationality === "vn", `nationality should still be extracted: ${JSON.stringify(result)}`);
+}
+
 function testVisaDocumentIntent() {
   const result = analyzeAgentIntent("베트남 학생 D-2 체류기간 연장 서류와 수수료 근거 알려줘", "ko");
   const tools = result.plan.map((item) => item.tool);
@@ -123,6 +134,7 @@ function testExactSchoolRefinement() {
 
 testBudgetParsing();
 testSchoolAndCostIntent();
+testGenericSchoolConditionsAreNotSchoolNames();
 testVisaDocumentIntent();
 testPartnerAndSafetyIntent();
 testDiagnosisSlotFilling();
