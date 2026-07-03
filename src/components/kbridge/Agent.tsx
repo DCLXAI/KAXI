@@ -111,6 +111,7 @@ interface AgentSource {
   sourceType?: string;
   reviewStatus?: string;
   checkedBy?: string;
+  basis?: string;
   excerpt?: string;
 }
 
@@ -931,7 +932,7 @@ export function Agent() {
                     )}
                     <div className="text-sm leading-relaxed">
                       <MessageResponse>
-                        {linkCitationMarkers(m.text, agentSourceAnnotations(m), `agent-message-${i}`, 6)}
+                        {linkCitationMarkers(m.text, agentSourceAnnotations(m), `agent-message-${i}`, 8)}
                       </MessageResponse>
                     </div>
                     {m.meta?.safetyFlags && m.meta.safetyFlags.length > 0 && (
@@ -1064,7 +1065,7 @@ export function Agent() {
                     <SourceAnnotations
                       sources={agentSourceAnnotations(m)}
                       lang={lang}
-                      max={6}
+                      max={8}
                       idPrefix={`agent-message-${i}`}
                     />
                     {m.meta?.suggestions && m.meta.suggestions.length > 0 && (

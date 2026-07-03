@@ -64,6 +64,7 @@ interface RetrievedDoc {
     review_status?: string;
     checked_by?: string;
   };
+  basis?: string;
 }
 
 function sourceAnnotationsFromDocs(docs?: RetrievedDoc[]): SourceAnnotation[] {
@@ -80,6 +81,7 @@ function sourceAnnotationsFromDocs(docs?: RetrievedDoc[]): SourceAnnotation[] {
     sourceType: doc.sourceMeta?.sourceType,
     reviewStatus: doc.sourceMeta?.reviewStatus || doc.ragMeta?.review_status,
     checkedBy: doc.sourceMeta?.checkedBy || doc.ragMeta?.checked_by,
+    basis: doc.basis,
     excerpt: doc.excerpt,
   }));
 }

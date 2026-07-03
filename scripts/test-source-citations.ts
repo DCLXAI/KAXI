@@ -19,6 +19,7 @@ const sources: SourceAnnotation[] = [
     title: "출입국관리법",
     url: "https://www.law.go.kr",
     verifiedAt: "2026-07-02",
+    basis: "체류자격과 신고 의무의 법령 근거",
   },
   {
     id: "hikorea",
@@ -36,7 +37,7 @@ const linked = linkCitationMarkers(
 );
 
 assert(
-  linked.includes("[1](#consult-message-0-source-1)[2](#consult-message-0-source-2)"),
+  linked.includes('[1](#consult-message-0-source-1 "출입국관리법")[2](#consult-message-0-source-2 "하이코리아 체류 안내")'),
   `citation markers should link to source cards: ${linked}`
 );
 assert(linked.includes("없는 출처 [3]"), `out-of-range citation should remain plain text: ${linked}`);

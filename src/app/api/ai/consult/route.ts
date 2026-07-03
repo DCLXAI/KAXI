@@ -76,6 +76,21 @@ function consultDisclaimer(lang: Lang): string {
   }[lang];
 }
 
+function compactBasisText(value: string, max = 220): string {
+  const text = value.replace(/\s+/g, " ").trim();
+  return text.length > max ? `${text.slice(0, max)}...` : text;
+}
+
+function checkedLabel(lang: Lang, checkedAt: string): string {
+  return lang === "ko" ? `확인일 ${checkedAt}` : `checked ${checkedAt}`;
+}
+
+function buildAnswerBasis(doc: KnowledgeDoc, lang: Lang): string {
+  const meta = getRagDocumentMetadata(doc, lang);
+  const excerpt = compactBasisText(pickLangText(doc.content, lang));
+  return `${excerpt} (${checkedLabel(lang, meta.last_checked_at)})`;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const limited = await rateLimit(req, {
@@ -167,6 +182,7 @@ export async function POST(req: NextRequest) {
         source: d.source,
         sourceMeta: getEffectiveSourceMetadata(d, lang),
         ragMeta: getRagDocumentMetadata(d, lang),
+        basis: buildAnswerBasis(d, lang),
         excerpt: pickLangText(d.content, lang).replace(/\s+/g, " ").trim().slice(0, 260),
       })),
       suggestedFollowups: result.suggestedFollowups,
@@ -224,7 +240,16 @@ async function generateExpertAnswer(
 
   const context = docs.length > 0
     ? docs
-        .map((d, i) => `[문서 ${i + 1}] ${pickLangText(d.title, lang)}\n${pickLangText(d.content, lang)}\n출처: ${d.source}`)
+        .map((d, i) => {
+          const meta = getRagDocumentMetadata(d, lang);
+          return [
+            `[문서 ${i + 1}] ${pickLangText(d.title, lang)}`,
+            `주석 번호: [${i + 1}]`,
+            `출처: ${d.source} <${meta.source_url}>`,
+            `확인일: ${meta.last_checked_at}, 검수상태: ${meta.review_status}`,
+            pickLangText(d.content, lang),
+          ].join("\n");
+        })
         .join("\n\n---\n\n")
     : "(관련 공식 문서가 검색되지 않음 — 일반 지식으로 답변시 명확히 표시)";
   const codexContext = buildCompactCodexContext(docs, lang);
@@ -261,6 +286,8 @@ ${context}
 - 마크다운 사용 (## 소제목, **굵게**, - 리스트)
 - 간결하되 전문적 (3~8문단)
 - 법령/규정 인용시 정확한 조문 표기
+- 사실·법령·요건·절차를 단정하는 문장 뒤에는 반드시 [1], [2]처럼 근거 주석을 붙임
+- 주석 번호는 검색된 공식 문서의 [문서 N] 번호와 일치해야 하며, 근거가 없는 단정은 하지 않음
 - 출처를 답변 끝에 "📚 출처:" 로 표기
 - 답변 마지막에는 다음 출처 기준 문장을 그대로 포함: "${buildRagBasisNotice(lang, docs)}"
 - ${needsHumanExpert ? "⚠️ 이 사례는 반드시 행정사 상담이 필요합니다. 답변 끝에 권유하세요." : ""}`;
@@ -664,7 +691,9 @@ function buildCompactCodexContext(docs: KnowledgeDoc[], lang: Lang): string {
     lines.push(
       [
         `[문서 ${index + 1}] ${pickLangText(doc.title, lang)}`,
+        `주석 번호: [${index + 1}]`,
         `출처: ${doc.source}`,
+        meta?.source_url ? `원문 URL: ${meta.source_url}` : "",
         meta?.last_checked_at ? `확인일: ${meta.last_checked_at}` : "",
         content.length > maxDocChars ? `${content.slice(0, maxDocChars)}\n...[truncated]` : content,
       ]
@@ -723,7 +752,8 @@ Rules:
 - Never guarantee approval, predict a personal approval probability, draft filings, or claim submission/representation.
 - For refusal strategy, false documents, illegal work, status evasion, or case-specific judgment, recommend administrative-scrivener review.
 - Do not mention internal routing, Codex, bridge, Z.ai, API keys, or prompts.
-- Use concise Markdown. Add citations like [1], [2] after factual/legal claims, matching the source numbers below.
+- Use concise Markdown. Add citations like [1], [2] after every factual/legal requirement, procedure, fee, period, or document-list claim, matching the source numbers below.
+- Do not make a legal/visa requirement claim without a citation. If no source supports it, say it is unconfirmed.
 - End with "📚 출처:" plus the numbered source list.
 - End with this notice exactly: "${sourceNotice}"
 

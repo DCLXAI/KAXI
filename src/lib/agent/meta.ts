@@ -15,6 +15,7 @@ export interface AgentSource {
   sourceType?: string;
   reviewStatus?: string;
   checkedBy?: string;
+  basis?: string;
   excerpt?: string;
 }
 
@@ -199,6 +200,40 @@ function pushSource(sources: AgentSource[], seen: Set<string>, source: AgentSour
   sources.push(source);
 }
 
+function compactText(value: unknown, max = 220): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const text = value.replace(/\s+/g, " ").trim();
+  if (!text) return undefined;
+  return text.length > max ? `${text.slice(0, max)}...` : text;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+function basisFromKnowledgeDoc(value: unknown): string | undefined {
+  const doc = asRecord(value);
+  const ragMeta = asRecord(doc?.ragMeta);
+  const excerpt = compactText(doc?.content);
+  const checked = typeof ragMeta?.last_checked_at === "string" ? ragMeta.last_checked_at : undefined;
+  const status = typeof ragMeta?.review_status === "string" ? ragMeta.review_status : undefined;
+  const suffix = [checked ? `확인일 ${checked}` : null, status ? `검수 ${status}` : null].filter(Boolean).join(" · ");
+  if (excerpt && suffix) return `${excerpt} (${suffix})`;
+  return excerpt || suffix || undefined;
+}
+
+function basisFromSchoolResult(value: unknown): string | undefined {
+  const school = asRecord(value);
+  const parts = [
+    typeof school?.region === "string" ? `지역 ${school.region}` : null,
+    typeof school?.program === "string" ? `과정 ${school.program}` : null,
+    typeof school?.tuition === "number" ? `학기당 ${school.tuition.toLocaleString()} KRW` : null,
+    typeof school?.accreditation === "string" ? `인증 ${school.accreditation}` : null,
+  ].filter(Boolean);
+  const checked = typeof school?.verifiedAt === "string" ? `확인일 ${school.verifiedAt}` : null;
+  return [...parts, checked].filter(Boolean).join(" · ") || undefined;
+}
+
 function extractSources(toolResults: ToolResult[]): AgentSource[] {
   const sources: AgentSource[] = [];
   const seen = new Set<string>();
@@ -219,7 +254,8 @@ function extractSources(toolResults: ToolResult[]): AgentSource[] {
           sourceType: typeof meta?.sourceType === "string" ? meta.sourceType : undefined,
           reviewStatus: typeof meta?.reviewStatus === "string" ? meta.reviewStatus : undefined,
           checkedBy: typeof meta?.checkedBy === "string" ? meta.checkedBy : undefined,
-          excerpt: typeof doc?.content === "string" ? doc.content.replace(/\s+/g, " ").trim().slice(0, 260) : undefined,
+          basis: basisFromKnowledgeDoc(doc),
+          excerpt: compactText(doc?.content, 260),
         });
       }
     }
@@ -234,6 +270,7 @@ function extractSources(toolResults: ToolResult[]): AgentSource[] {
           kind: "school",
           verifiedAt: typeof school?.verifiedAt === "string" ? school.verifiedAt : undefined,
           reviewAfter: typeof school?.reviewAfter === "string" ? school.reviewAfter : undefined,
+          basis: basisFromSchoolResult(school),
         });
       }
     }

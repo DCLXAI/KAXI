@@ -16,6 +16,7 @@ export interface SourceAnnotation {
   sourceType?: string;
   reviewStatus?: string;
   checkedBy?: string;
+  basis?: string;
   excerpt?: string;
 }
 
@@ -54,6 +55,10 @@ export function sourceAnnotationDomId(idPrefix: string, index: number): string {
   return `${safePrefix}-source-${index + 1}`;
 }
 
+function markdownTitle(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').slice(0, 120);
+}
+
 export function linkCitationMarkers(
   markdown: string,
   sources: SourceAnnotation[] | undefined,
@@ -66,7 +71,7 @@ export function linkCitationMarkers(
   return markdown.replace(/\[(\d{1,2})\](?!\()/g, (match, rawIndex: string) => {
     const index = Number(rawIndex);
     if (!Number.isInteger(index) || index < 1 || index > visibleSources.length) return match;
-    return `[${index}](#${sourceAnnotationDomId(idPrefix, index - 1)})`;
+    return `[${index}](#${sourceAnnotationDomId(idPrefix, index - 1)} "${markdownTitle(visibleSources[index - 1].title)}")`;
   });
 }
 
@@ -126,6 +131,8 @@ export function SourceAnnotations({
         {visibleSources.map((source, index) => {
           const url = source.url && !source.url.startsWith("internal://") ? source.url : null;
           const checked = checkedText(source, lang);
+          const basis = source.basis || source.excerpt;
+          const showExcerpt = source.excerpt && source.excerpt !== basis;
 
           return (
             <div
@@ -154,9 +161,16 @@ export function SourceAnnotations({
                 </span>
               </div>
 
-              {source.excerpt && (
+              {basis && (
                 <div className="mt-2 rounded border-l-2 border-primary/30 bg-background/70 px-2 py-1.5 leading-relaxed">
-                  {lang === "ko" ? "근거: " : "Basis: "}
+                  <span className="font-medium">{lang === "ko" ? "답변 근거: " : "Answer basis: "}</span>
+                  {basis}
+                </div>
+              )}
+
+              {showExcerpt && (
+                <div className="mt-2 rounded bg-background/60 px-2 py-1.5 leading-relaxed text-muted-foreground">
+                  <span className="font-medium">{lang === "ko" ? "원문 요약: " : "Source excerpt: "}</span>
                   {source.excerpt}
                 </div>
               )}

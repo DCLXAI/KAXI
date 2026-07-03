@@ -23,6 +23,51 @@ export interface AgentResponse {
 
 const MAX_ITERATIONS = 5;
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+function textValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function buildToolCitationHint(
+  toolName: string,
+  result: unknown,
+  sourceOffset: number
+): { hint: string; count: number } {
+  if (!Array.isArray(result)) return { hint: "", count: 0 };
+
+  const rows: string[] = [];
+  for (const raw of result.slice(0, Math.max(0, 8 - sourceOffset))) {
+    const item = asRecord(raw);
+    if (!item) continue;
+
+    if (toolName === "search_knowledge") {
+      const meta = asRecord(item.sourceMeta);
+      const ragMeta = asRecord(item.ragMeta);
+      const title = textValue(item.title) || "공식 문서";
+      const url = textValue(meta?.url);
+      const checked = textValue(ragMeta?.last_checked_at);
+      rows.push(`[${sourceOffset + rows.length + 1}] ${title}${url ? ` - ${url}` : ""}${checked ? ` (확인일 ${checked})` : ""}`);
+    }
+
+    if (toolName === "search_schools") {
+      const name = textValue(item.name) || "학교";
+      const url = textValue(item.sourceUrl) || textValue(item.officialUrl);
+      const checked = textValue(item.verifiedAt);
+      rows.push(`[${sourceOffset + rows.length + 1}] ${name}${url ? ` - ${url}` : ""}${checked ? ` (확인일 ${checked})` : ""}`);
+    }
+  }
+
+  if (rows.length === 0) return { hint: "", count: 0 };
+
+  return {
+    count: rows.length,
+    hint: `\n\nCitation sources for the final answer:\n${rows.join("\n")}\nUse these exact numeric citations after factual claims based on this tool result.`,
+  };
+}
+
 export async function runAgent(
   question: string,
   lang: Lang,
@@ -60,11 +105,12 @@ ${getToolsDescription()}
 6. 전문가 연결 → 사용자가 명시적으로 상담 접수/연결을 요청한 경우에만 request_partner 호출
 7. 위험 신호 (허위서류, 불법취업, 비자보장) 감지시 경고
 8. 최종 답변은 간결하고 실용적으로 (마크다운 사용)
-9. 출처 표기 (📚 출처: ...). 비자/체류 질문에서 법령 근거가 없으면 확정 답변하지 말고 확인 필요성을 먼저 안내
+9. 사실·법령·요건·절차·학교 정보 문장 뒤에는 도구 결과의 citation 번호([1], [2]...)를 붙이고, 출처 표기 (📚 출처: ...)를 포함
 10. 도구는 한 번에 하나씩만 호출
 11. 사용자가 상담 접수 의사를 밝히지 않았다면 request_partner를 호출하지 말고, 필요한 정보와 확인 질문만 안내
 12. request_partner는 상담 요청 초안만 만들며, 실제 접수에는 사용자 확인과 운영 접수 절차가 필요함을 안내
 13. 하이코리아·비자포털 안내는 운영 보조 근거이며, 법령과 충돌하거나 최신성이 불명확하면 법령과 관할 출입국외국인관서 확인을 우선
+14. 근거가 없는 요건 단정은 하지 말고 "공식 근거 확인 필요"라고 말함
 
 ## 현재 컨텍스트
 - 언어: ${lang}
@@ -84,6 +130,7 @@ ${getToolsDescription()}
 
   let iteration = 0;
   let finalAnswer = "";
+  let citationSourceCount = 0;
 
   while (iteration < MAX_ITERATIONS) {
     iteration++;
@@ -124,6 +171,8 @@ ${getToolsDescription()}
             success: true,
           };
           toolResults.push(toolResult);
+          const citationHint = buildToolCitationHint(toolCall.tool, result, citationSourceCount);
+          citationSourceCount += citationHint.count;
 
           steps.push({
             type: "tool_result",
@@ -136,7 +185,7 @@ ${getToolsDescription()}
           messages.push({ role: "assistant", content });
           messages.push({
             role: "user",
-            content: `[도구 결과: ${toolCall.tool}]\n${JSON.stringify(result, null, 2)}\n\n이제 이 결과를 활용하여 사용자 질문에 답변하거나, 추가 도구가 필요하면 호출하세요. 최종 답변시에는 JSON 없이 일반 텍스트로 답변하세요.`,
+            content: `[도구 결과: ${toolCall.tool}]\n${JSON.stringify(result, null, 2)}${citationHint.hint}\n\n이제 이 결과를 활용하여 사용자 질문에 답변하거나, 추가 도구가 필요하면 호출하세요. 최종 답변시에는 JSON 없이 일반 텍스트로 답변하고, 사실/법령/학교 정보에는 citation 번호를 붙이세요.`,
           });
 
           continue;

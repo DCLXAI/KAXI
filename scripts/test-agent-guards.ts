@@ -247,6 +247,21 @@ async function testFallbackPartnerRequestStaysDraft() {
   }
 }
 
+async function testFallbackAnswerIncludesCitationMarkers() {
+  const result = await runFallbackAgent(
+    "서울 어학당 500만원 예산으로 추천해줘",
+    "ko",
+    { lang: "ko", leadId: "local-agent-guard" }
+  );
+
+  if (!result.toolResults.some((item) => item.tool === "search_schools")) {
+    fail(`fallback citation test expected school search: ${JSON.stringify(result)}`);
+  }
+  if (!/\[\d+\]/.test(result.answer)) {
+    fail(`fallback answer should include citation markers: ${result.answer}`);
+  }
+}
+
 async function testAgentStatusRoute() {
   const route = await import("../src/app/api/ai/agent/route");
   const res = await route.GET();
@@ -389,6 +404,9 @@ async function testConsultOfficialSummaryPrioritizesQuestionDocuments() {
     if (!/서류|첨부|체류기간 연장|제출/.test(answer)) {
       fail(`consult official summary should prioritize document/extension sources: ${answer.slice(0, 600)}`);
     }
+    if (!body.retrievedDocs?.[0]?.basis || !body.retrievedDocs?.[0]?.sourceMeta?.url) {
+      fail(`consult response should expose source basis and URL annotations: ${JSON.stringify(body).slice(0, 1200)}`);
+    }
     if (/^## 출입국관리법 최근공포/.test(answer.trim())) {
       fail(`consult official summary should not lead with recent promulgation monitor: ${answer.slice(0, 600)}`);
     }
@@ -502,12 +520,18 @@ function testAgentMetaDoesNotEchoPii() {
             title: "비자 신청 필수 서류",
             category: "documents",
             source: "Study in Korea",
+            content: "비자 신청에는 사증발급신청서, 여권, 표준입학허가서 등 공식 제출서류 확인이 필요합니다.",
             sourceMeta: {
               label: "Study in Korea",
               url: "https://www.studyinkorea.go.kr",
               owner: "official",
               verifiedAt: "2026-06-30",
               reviewAfter: "2026-09-30",
+            },
+            ragMeta: {
+              doc_id: "visa-documents",
+              last_checked_at: "2026-06-30",
+              review_status: "approved",
             },
           },
         ],
@@ -520,6 +544,9 @@ function testAgentMetaDoesNotEchoPii() {
 
   if (meta.sources.length !== 1 || meta.sources[0].url !== "https://www.studyinkorea.go.kr") {
     fail(`agent meta source extraction failed: ${serialized}`);
+  }
+  if (!meta.sources[0].basis?.includes("확인일 2026-06-30")) {
+    fail(`agent meta source should include answer basis: ${serialized}`);
   }
   if (meta.quality.officialSourceCount !== 1 || !meta.plan.includes("공식 정보 검색")) {
     fail(`agent meta quality/plan incomplete: ${serialized}`);
@@ -575,6 +602,7 @@ await testSchoolToolFiltersByName();
 await testPreflightUsesDiagnosisPlanner();
 await testPreflightCarriesPlannerContext();
 await testFallbackPartnerRequestStaysDraft();
+await testFallbackAnswerIncludesCitationMarkers();
 await testAgentStatusRoute();
 await testRemoteBridgeFailureFallsBackToTools();
 await testConsultRouteDoesNotRequireSharedLimiterWhenDisabled();

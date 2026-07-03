@@ -92,6 +92,7 @@ function formatFallbackAnswer(
 ): string {
   const lines: string[] = [];
   const isKo = lang === "ko";
+  let citationIndex = 1;
 
   lines.push(
     isKo
@@ -104,8 +105,9 @@ function formatFallbackAnswer(
       lines.push("");
       lines.push(isKo ? "추천 학교:" : "School matches:");
       for (const school of item.result.slice(0, 5)) {
+        const citation = `[${citationIndex++}]`;
         lines.push(
-          `- ${school.name}: ${school.region}, ${school.program}, ${Number(school.tuition).toLocaleString()} KRW/semester, ${school.accreditation}`
+          `- ${school.name}: ${school.region}, ${school.program}, ${Number(school.tuition).toLocaleString()} KRW/semester, ${school.accreditation} ${citation}`
         );
       }
     }
@@ -130,7 +132,8 @@ function formatFallbackAnswer(
       lines.push("");
       lines.push(isKo ? "공식 정보 검색 결과:" : "Knowledge results:");
       for (const doc of item.result.slice(0, 3)) {
-        lines.push(`- ${doc.title}: ${String(doc.content).slice(0, 180)}...`);
+        const citation = `[${citationIndex++}]`;
+        lines.push(`- ${doc.title}: ${String(doc.content).slice(0, 180)}... ${citation}`);
         if (doc.sourceMeta?.url) lines.push(`  Source: ${doc.sourceMeta.url}`);
         if (doc.ragMeta?.last_checked_at) {
           lines.push(`  Checked: ${doc.ragMeta.last_checked_at}, status=${doc.ragMeta.review_status}`);
