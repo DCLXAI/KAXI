@@ -7,6 +7,7 @@ import { buildAgentMeta } from "../src/lib/agent/meta";
 import { analyzeAgentIntent, type AgentMissingSlot } from "../src/lib/agent/planner";
 import {
   getAgentBackend,
+  getAiBackendDiagnostics,
   getConsultBackend,
   shouldRequireAgentLlm,
   shouldRequireConsultLlm,
@@ -75,6 +76,15 @@ function testBackendSelectorContracts() {
     if (getConsultBackend() !== "remote-bridge") fail("consult backend selector should inherit remote bridge");
     if (!shouldRequireAgentLlm()) fail("remote bridge agent should require LLM by default");
     if (!shouldRequireConsultLlm()) fail("remote bridge consult should require LLM by default");
+    const remoteDiagnostics = getAiBackendDiagnostics();
+    if (
+      remoteDiagnostics.agent.backend !== "remote-bridge" ||
+      !remoteDiagnostics.agent.requireLlm ||
+      !remoteDiagnostics.remoteBridge.configured ||
+      remoteDiagnostics.issues.length !== 0
+    ) {
+      fail(`remote bridge diagnostics should show strict configured bridge: ${JSON.stringify(remoteDiagnostics)}`);
+    }
 
     process.env.AI_ALLOW_LLM_FALLBACK = " true ";
     if (shouldRequireAgentLlm()) fail("global LLM fallback flag should disable strict agent LLM requirement");
@@ -94,6 +104,10 @@ function testBackendSelectorContracts() {
     delete process.env.AI_CONSULT_BACKEND;
 
     if (getConsultBackend() !== "zai") fail("hosted consult without Codex config should route to zAI");
+    const hostedDiagnostics = getAiBackendDiagnostics();
+    if (!hostedDiagnostics.warnings.some((item) => item.toLowerCase().includes("codex")) || hostedDiagnostics.issues.length !== 0) {
+      fail(`hosted fallback diagnostics should warn, not fail strict readiness: ${JSON.stringify(hostedDiagnostics)}`);
+    }
 
     process.env.CODEX_SERVERLESS_ENABLED = " true ";
     if (getConsultBackend() !== "codex") fail("explicit CODEX_SERVERLESS_ENABLED=true should route consult to Codex");
@@ -315,6 +329,9 @@ async function testAgentStatusRoute() {
     const body = await res.json();
     if (!body.backend || !body.preflight || !body.limits || !body.remoteBridge?.stats) {
       fail(`agent status shape incomplete: ${JSON.stringify(body)}`);
+    }
+    if (!body.backendPolicy?.agent || !body.backendPolicy?.consult || !body.backendPolicy?.fallbackPolicy) {
+      fail(`agent status should expose backend policy diagnostics: ${JSON.stringify(body)}`);
     }
     if (!body.remoteBridge.tokenConfigured || body.remoteBridge.timeoutMs !== 12345) {
       fail(`agent status should expose safe bridge configuration flags: ${JSON.stringify(body.remoteBridge)}`);

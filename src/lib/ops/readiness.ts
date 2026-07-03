@@ -1,4 +1,5 @@
 import { checkRuntimeDatabaseConnectivity, getRuntimeDatabaseInfo } from "@/lib/db";
+import { getAiBackendDiagnostics } from "@/lib/ai/backend-selector";
 import { getKnowledgeSourceAudit } from "@/lib/data/knowledge";
 import { getDocumentUploadSigningSecret } from "@/lib/documents/crypto";
 import { getDocumentStorageInfo } from "@/lib/documents/storage";
@@ -87,6 +88,7 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
   const schoolAudit = await getSchoolSourceAudit();
   const privacyReadiness = getPrivacyRuntimeReadiness(env);
   const embeddingStats = getStoreStats();
+  const aiBackendDiagnostics = getAiBackendDiagnostics(env);
 
   const managedDatabase = databaseInfo.sharedWritable && databaseConnectivity.ok;
   const postgresqlOperationalUrl = databaseInfo.kind === "postgresql" && databaseInfo.postgresqlConfigured;
@@ -235,6 +237,28 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
         transformerRuntime: embeddingStats.transformerRuntime,
       },
       "warning"
+    ),
+    check(
+      "ai.backend_policy",
+      "AI backend policy",
+      aiBackendDiagnostics.issues.length === 0,
+      aiBackendDiagnostics.issues.length === 0
+        ? "AI backend selection is observable and does not have strict blocking configuration issues."
+        : aiBackendDiagnostics.issues.join(" "),
+      {
+        runtime: aiBackendDiagnostics.runtime,
+        agent: aiBackendDiagnostics.agent,
+        consult: aiBackendDiagnostics.consult,
+        codex: aiBackendDiagnostics.codex,
+        remoteBridge: aiBackendDiagnostics.remoteBridge,
+        zai: aiBackendDiagnostics.zai,
+        fallbackPolicy: aiBackendDiagnostics.fallbackPolicy,
+        warningCount: aiBackendDiagnostics.warnings.length,
+        issueCount: aiBackendDiagnostics.issues.length,
+      },
+      production && (aiBackendDiagnostics.agent.requireLlm || aiBackendDiagnostics.consult.requireLlm)
+        ? "required"
+        : "warning"
     ),
     check(
       "rate_limit.shared",

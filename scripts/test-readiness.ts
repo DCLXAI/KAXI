@@ -64,6 +64,7 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
       "privacy.retention",
       "documents.upload_workspace",
       "embeddings.cache",
+      "ai.backend_policy",
       "rate_limit.shared",
       "admin.session_hash",
       "admin.mfa_role",
@@ -80,6 +81,9 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
     if (byKey.get("admin.mfa_role")?.ok) fail("missing MFA should not pass admin MFA check");
     if (byKey.get("embeddings.cache")?.severity !== "warning") {
       fail(`embedding cache readiness should be warning severity: ${JSON.stringify(byKey.get("embeddings.cache"))}`);
+    }
+    if (!byKey.get("ai.backend_policy")?.metadata) {
+      fail(`AI backend readiness should expose safe backend metadata: ${JSON.stringify(byKey.get("ai.backend_policy"))}`);
     }
     const embeddingSerialized = JSON.stringify(byKey.get("embeddings.cache"));
     if (embeddingSerialized.includes(process.cwd()) || (process.env.HOME && embeddingSerialized.includes(process.env.HOME))) {

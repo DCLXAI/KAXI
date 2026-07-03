@@ -11,7 +11,7 @@ import {
   runCodexServerless,
   shouldRequireAdminForCodexAgent,
 } from "@/lib/codex/serverless";
-import { getAgentBackend, shouldRequireAgentLlm } from "@/lib/ai/backend-selector";
+import { getAgentBackend, getAiBackendDiagnostics, shouldRequireAgentLlm } from "@/lib/ai/backend-selector";
 import {
   getRemoteCodexBridgeDiagnostics,
   isRemoteCodexBridgeEnabled,
@@ -181,9 +181,10 @@ async function persistAgentLedger({
 }
 
 export async function GET() {
-  const backend = getAgentBackend();
-  const hostedRuntime = process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV);
-  const codexApiKeyConfigured = Boolean(process.env.CODEX_API_KEY || process.env.OPENAI_API_KEY);
+  const backendPolicy = getAiBackendDiagnostics();
+  const backend = backendPolicy.agent.backend;
+  const hostedRuntime = backendPolicy.runtime.hosted;
+  const codexApiKeyConfigured = backendPolicy.codex.apiKeyConfigured;
   let codexMode: string | null = null;
   let codexReady = true;
   let codexIssue: string | null = null;
@@ -240,6 +241,7 @@ export async function GET() {
       ledger: shouldPersistAgentLedger(),
       piiEncryption: isPiiEncryptionConfigured(),
     },
+    backendPolicy,
   });
 }
 

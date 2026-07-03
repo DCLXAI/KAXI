@@ -239,7 +239,8 @@ The bridge listens on `http://127.0.0.1:8787` by default.
 The deployed Agent UI does not auto-probe localhost. Set `NEXT_PUBLIC_CODEX_BRIDGE_URL` or the browser override below only for trusted owner sessions that should call the local bridge directly.
 If the bridge is reachable, chat requests go to the local Codex CLI and return `backend: "codex-cli-local-bridge"`.
 If it is not reachable or a bridge request fails, the UI falls back to `/api/ai/agent` on Vercel.
-`GET /api/ai/agent` returns safe diagnostics for backend readiness, bridge configuration, preflight, limits, and persistence without exposing secrets. The `remoteBridge` block intentionally exposes only a redacted endpoint (`protocol://host/path`), token-present boolean, timeout, and in-process attempt/success/failure counters.
+`GET /api/ai/agent` returns safe diagnostics for backend readiness, bridge configuration, preflight, limits, persistence, and the shared `backendPolicy` decision without exposing secrets. The `remoteBridge` block intentionally exposes only a redacted endpoint (`protocol://host/path`), token-present boolean, timeout, and in-process attempt/success/failure counters.
+`GET /api/readiness` also includes `ai.backend_policy`, using the same backend selector diagnostics so operators can see whether Agent/Consult are using Codex, Z.ai, remote bridge, or fallback and whether strict LLM mode has blocking configuration issues.
 
 Check the local bridge directly:
 
