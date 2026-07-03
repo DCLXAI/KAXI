@@ -46,16 +46,22 @@ const TEST_QUERIES = [
   { q: "출국할 때 외국인등록증을 반납해야 해?", expect: "immigration-act-arc-return-duty" },
   { q: "외국인등록 때 지문이나 얼굴 생체정보 제공을 거부하면 연장이 안 될 수 있어?", expect: "immigration-act-biometric-information-duty" },
   { q: "무허가취업이나 허위서류가 강제퇴거 사유가 될 수 있어?", expect: "immigration-act-deportation-grounds" },
+  { q: "출입국에서 보호명령서 없이 긴급보호하면 48시간 안에 명령서를 받아야 해?", expect: "immigration-act-detention-order" },
   { q: "강제퇴거명령서를 받으면 이의신청은 7일 안에 해야 해?", expect: "immigration-act-deportation-objection" },
   { q: "강제퇴거명령 후 보호소에 얼마나 보호될 수 있어?", expect: "immigration-act-deportation-detention" },
+  { q: "보호소에서 보호 일시해제를 신청하면 보증금이나 정기보고 조건이 붙을 수 있어?", expect: "immigration-act-detention-temporary-release" },
   { q: "출국권고를 받고도 안 나가면 출국명령이나 강제퇴거로 갈 수 있어?", expect: "immigration-act-departure-recommendation-order" },
+  { q: "거짓으로 비자 연장허가를 받으면 체류허가가 취소되고 7일 전 출석통지를 받아야 해?", expect: "immigration-act-permit-cancellation-change" },
   { q: "재입국허가 기간 안에 못 들어가면 어떻게 해?", expect: "immigration-act-reentry-permit" },
 ];
 
 const LEGAL_BASIS_ORDER_QUERIES = [
+  { q: "출입국에서 보호명령서 없이 긴급보호하면 48시간 안에 명령서를 받아야 해?", mode: "appeal", expectFirst: "immigration-act-detention-order" },
   { q: "강제퇴거명령서를 받으면 이의신청은 7일 안에 해야 해?", mode: "appeal", expectFirst: "immigration-act-deportation-objection" },
   { q: "강제퇴거명령 후 보호소에 얼마나 보호될 수 있어?", mode: "appeal", expectFirst: "immigration-act-deportation-detention" },
+  { q: "보호소에서 보호 일시해제를 신청하면 보증금이나 정기보고 조건이 붙을 수 있어?", mode: "appeal", expectFirst: "immigration-act-detention-temporary-release" },
   { q: "출국권고를 받고도 안 나가면 출국명령이나 강제퇴거로 갈 수 있어?", mode: "appeal", expectFirst: "immigration-act-departure-recommendation-order" },
+  { q: "거짓으로 비자 연장허가를 받으면 체류허가가 취소되고 7일 전 출석통지를 받아야 해?", mode: "visa", expectFirst: "immigration-act-permit-cancellation-change" },
 ];
 
 async function main() {

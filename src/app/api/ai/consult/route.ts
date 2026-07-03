@@ -464,8 +464,11 @@ function officialSummaryDocScore(question: string, doc: KnowledgeDoc, lang: Lang
   const asksDepartureOrder = /출국권고|출국명령|자진출국|출국기한|departure recommendation|departure order|voluntary departure/i.test(question);
   const asksDepartureInspection = /출국심사|출국\s*심사|출국.*여권|공항.*출국|항만.*출국|departure inspection|depart.*passport|valid passport.*departure/i.test(question);
   const asksDepartureSuspension = /출국정지|출국\s*정지|출국금지|출국\s*금지|출국.*(막|못|불가).*(수사|재판|세금|체납|벌금|범죄)|departure suspension|departure ban|cannot depart.*(criminal|investigation|tax|fine)/i.test(question);
+  const asksPermitCancellation = /허가취소|허가\s*취소|허가변경|허가\s*변경|체류허가.*취소|사증.*취소|신원보증.*철회|허가조건.*위반|출석통지|7일\s*전.*통지|의견진술|permit cancellation|permission change|seven-day notice|opinion hearing/i.test(question);
+  const asksDetentionOrder = /보호명령서|보호명령|긴급보호|48시간|도주\s*우려|보호의\s*필요성|detention order|protection order|emergency protection|48 hours|risk of flight/i.test(question);
   const asksDeportationObjection = /강제퇴거.*이의|퇴거.*이의|이의신청|강제퇴거명령서.*7일|7일.*강제퇴거|deportation objection|removal objection|object.*deportation/i.test(question);
   const asksDeportationDetention = /보호소|보호시설|외국인보호|보호기간|강제퇴거.*보호|2개월|9개월|20개월|immigration detention|deportation detention|protection facility|detention period/i.test(question);
+  const asksDetentionTemporaryRelease = /보호\s*일시해제|보호의\s*일시해제|일시해제|보증금|2천만원|정기\s*보고|신원보증인|temporary release|release from detention|bond|20 million won|regular reporting/i.test(question);
   const asksEmployerReport = /고용주|사업주|사용자|해고|퇴직|사직|소재불명|고용계약.*변경|계약.*변경|employer report|employer reporting|dismissal|resignation|employment contract change|unable to locate|disappearance/i.test(question);
   const asksStudentManagement = /유학생.*(휴학|제적|미등록|행방불명|학적|학교.*신고)|학적변동|학적\s*변동|유학생정보시스템|학교.*(휴학|제적|미등록|행방불명|신고)|school reporting|student status change|leave of absence|removal from register|training discontinuation|student disappearance/i.test(question);
   const asksArcReturn = /외국인등록증.*(반납|반환|회수)|등록증.*(반납|반환|회수)|출국.*등록증|arc return|alien registration card.*return|registration card.*return/i.test(question);
@@ -525,7 +528,11 @@ function officialSummaryDocScore(question: string, doc: KnowledgeDoc, lang: Lang
   }
   if (asksDeportation) {
     const asksSpecificDeportationProcedure =
-      asksDepartureOrder || asksDeportationObjection || asksDeportationDetention;
+      asksDepartureOrder ||
+      asksDetentionOrder ||
+      asksDeportationObjection ||
+      asksDeportationDetention ||
+      asksDetentionTemporaryRelease;
     if (doc.id === "immigration-act-deportation-grounds") score += asksSpecificDeportationProcedure ? 8 : 32;
     if (doc.id === "immigration-law-violation-risk") score += asksSpecificDeportationProcedure ? 4 : 10;
   }
@@ -541,6 +548,15 @@ function officialSummaryDocScore(question: string, doc: KnowledgeDoc, lang: Lang
     if (doc.id === "immigration-act-departure-suspension") score += 32;
     if (doc.id === "immigration-act-departure-inspection") score += 8;
   }
+  if (asksPermitCancellation) {
+    if (doc.id === "immigration-act-permit-cancellation-change") score += 64;
+    if (doc.id === "immigration-act-false-application-documents") score += 8;
+    if (doc.id === "immigration-act-permission-matrix") score += 6;
+  }
+  if (asksDetentionOrder) {
+    if (doc.id === "immigration-act-detention-order") score += 64;
+    if (doc.id === "immigration-act-deportation-grounds") score += 6;
+  }
   if (asksDeportationObjection) {
     if (doc.id === "immigration-act-deportation-objection") score += 64;
     if (doc.id === "immigration-act-deportation-grounds") score += 4;
@@ -549,6 +565,10 @@ function officialSummaryDocScore(question: string, doc: KnowledgeDoc, lang: Lang
     if (doc.id === "immigration-act-deportation-detention") score += 64;
     if (doc.id === "immigration-act-deportation-objection") score += 6;
     if (doc.id === "immigration-act-deportation-grounds") score += 4;
+  }
+  if (asksDetentionTemporaryRelease) {
+    if (doc.id === "immigration-act-detention-temporary-release") score += 64;
+    if (doc.id === "immigration-act-deportation-detention") score += 8;
   }
   if (asksEmployerReport) {
     if (doc.id === "immigration-act-employer-reporting-duty") score += 32;

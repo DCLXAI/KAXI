@@ -42,9 +42,12 @@ const IMMIGRATION_ADDRESS_CHANGE_DOC_ID = "immigration-act-address-change-report
 const IMMIGRATION_ARC_RETURN_DUTY_DOC_ID = "immigration-act-arc-return-duty";
 const IMMIGRATION_BIOMETRIC_INFORMATION_DUTY_DOC_ID = "immigration-act-biometric-information-duty";
 const IMMIGRATION_DEPORTATION_GROUNDS_DOC_ID = "immigration-act-deportation-grounds";
+const IMMIGRATION_DETENTION_ORDER_DOC_ID = "immigration-act-detention-order";
 const IMMIGRATION_DEPORTATION_OBJECTION_DOC_ID = "immigration-act-deportation-objection";
 const IMMIGRATION_DEPORTATION_DETENTION_DOC_ID = "immigration-act-deportation-detention";
+const IMMIGRATION_DETENTION_TEMPORARY_RELEASE_DOC_ID = "immigration-act-detention-temporary-release";
 const IMMIGRATION_DEPARTURE_RECOMMENDATION_ORDER_DOC_ID = "immigration-act-departure-recommendation-order";
+const IMMIGRATION_PERMIT_CANCELLATION_CHANGE_DOC_ID = "immigration-act-permit-cancellation-change";
 const IMMIGRATION_REVIEW_CRITERIA_DOC_ID = "immigration-rule-stay-permission-review-criteria";
 const IMMIGRATION_ATTACHMENTS_DOC_ID = "immigration-rule-documents-attachments";
 const IMMIGRATION_FEES_DOC_ID = "immigration-rule-fees";
@@ -57,7 +60,7 @@ function stripSourceMeta(doc: KnowledgeDocWithMetadata): KnowledgeDoc {
 
 export function isImmigrationStayQuestion(query: string, mode?: string): boolean {
   const text = `${mode || ""} ${query}`.toLowerCase();
-  return /비자|사증|입국|출국|여권|초청|체류|출입국|외국인등록|등록증|생체정보|지문|유학|학적|어학|연수|구직|특정활동|거주|영주|취업|고용|고용주|근무처|아르바이트|시간제|불법취업|강제퇴거|퇴거|추방|보호소|보호시설|d-?2|d-?4|d-?10|e-?7|f-?2|f-?5|visa|passport|entry|departure|inviter|sponsor|immigration|stay status|sojourn|employment|employer|workplace|biometric|fingerprint|deportation|detention|part-?time/.test(text);
+  return /비자|사증|입국|출국|여권|초청|체류|출입국|외국인등록|등록증|생체정보|지문|유학|학적|어학|연수|구직|특정활동|거주|영주|취업|고용|고용주|근무처|아르바이트|시간제|불법취업|강제퇴거|퇴거|추방|보호소|보호시설|보호명령|긴급보호|일시해제|허가취소|허가\s*취소|허가변경|출석통지|d-?2|d-?4|d-?10|e-?7|f-?2|f-?5|visa|passport|entry|departure|inviter|sponsor|immigration|stay status|sojourn|employment|employer|workplace|biometric|fingerprint|deportation|detention|temporary release|permit cancellation|part-?time/.test(text);
 }
 
 export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string): string[] {
@@ -131,6 +134,12 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
   if (/허위|위조|변조|거짓|브로커|알선|fake|forged|false application|broker/.test(text)) {
     ids.add(IMMIGRATION_FALSE_APPLICATION_DOCS_ID);
   }
+  if (/허가취소|허가\s*취소|허가변경|허가\s*변경|체류허가.*취소|사증.*취소|신원보증.*철회|허가조건.*위반|출석통지|7일\s*전.*통지|의견진술|permit cancellation|permission change|seven-day notice|opinion hearing/.test(text)) {
+    priorityIds.unshift(IMMIGRATION_PERMIT_CANCELLATION_CHANGE_DOC_ID);
+    ids.add(IMMIGRATION_PERMIT_CANCELLATION_CHANGE_DOC_ID);
+    ids.add(IMMIGRATION_FALSE_APPLICATION_DOCS_ID);
+    ids.add(IMMIGRATION_PERMISSION_DOC_ID);
+  }
   if (/체류자격\s*부여|체류자격부여|출생|태어난|국적\s*(상실|이탈)|status grant|born in korea|loss of nationality/.test(text)) {
     ids.add(IMMIGRATION_STATUS_GRANT_DOC_ID);
   }
@@ -197,6 +206,11 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
     ids.add(IMMIGRATION_DEPORTATION_GROUNDS_DOC_ID);
     ids.add(IMMIGRATION_DEPARTURE_RECOMMENDATION_ORDER_DOC_ID);
   }
+  if (/보호명령서|보호명령|긴급보호|48시간|도주\s*우려|보호의\s*필요성|detention order|protection order|emergency protection|48 hours|risk of flight/.test(text)) {
+    priorityIds.unshift(IMMIGRATION_DETENTION_ORDER_DOC_ID);
+    ids.add(IMMIGRATION_DETENTION_ORDER_DOC_ID);
+    ids.add(IMMIGRATION_DEPORTATION_GROUNDS_DOC_ID);
+  }
   if (/강제퇴거.*이의|퇴거.*이의|이의신청|강제퇴거명령서.*7일|7일.*강제퇴거|deportation objection|removal objection|object.*deportation/.test(text)) {
     priorityIds.unshift(IMMIGRATION_DEPORTATION_OBJECTION_DOC_ID);
     priorityIds.push(IMMIGRATION_DEPORTATION_GROUNDS_DOC_ID);
@@ -208,6 +222,11 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
     priorityIds.push(IMMIGRATION_DEPORTATION_GROUNDS_DOC_ID);
     ids.add(IMMIGRATION_DEPORTATION_DETENTION_DOC_ID);
     ids.add(IMMIGRATION_DEPORTATION_GROUNDS_DOC_ID);
+  }
+  if (/보호\s*일시해제|보호의\s*일시해제|일시해제|보증금|2천만원|정기\s*보고|신원보증인|temporary release|release from detention|bond|20 million won|regular reporting/.test(text)) {
+    priorityIds.unshift(IMMIGRATION_DETENTION_TEMPORARY_RELEASE_DOC_ID);
+    ids.add(IMMIGRATION_DETENTION_TEMPORARY_RELEASE_DOC_ID);
+    ids.add(IMMIGRATION_DEPORTATION_DETENTION_DOC_ID);
   }
   if (/불법|허위|위조|무허가|강제퇴거|입국금지|overstay|fake|illegal|deport/.test(text)) {
     ids.add(IMMIGRATION_PERMISSION_DOC_ID);

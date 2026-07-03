@@ -101,11 +101,17 @@ const LAW_ACT_DEPARTURE_SUSPENSION_URL =
   "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0029&lsiSeq=272921&urlMode=lsScJoRltInfoR";
 const LAW_ACT_DEPORTATION_GROUNDS_URL =
   "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0046&lsiSeq=272921&urlMode=lsScJoRltInfoR";
+const LAW_ACT_DETENTION_ORDER_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0051&lsiSeq=272921&urlMode=lsScJoRltInfoR";
 const LAW_ACT_DEPORTATION_OBJECTION_URL =
   "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0060&lsiSeq=272921&urlMode=lsScJoRltInfoR";
 const LAW_ACT_DEPORTATION_DETENTION_URL =
   "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0063&lsiSeq=272921&urlMode=lsScJoRltInfoR";
+const LAW_ACT_DETENTION_TEMPORARY_RELEASE_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0065&lsiSeq=272921&urlMode=lsScJoRltInfoR";
 const LAW_ACT_DEPARTURE_RECOMMENDATION_ORDER_URL = LAW_ACT_URL;
+const LAW_ACT_PERMIT_CANCELLATION_CHANGE_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0089&lsiSeq=272921&urlMode=lsScJoRltInfoR";
 const LAW_DECREE_SHORT_TERM_STATUS_TABLE_URL =
   "https://www.law.go.kr/LSW/lsBylInfoPLinkR.do?lsiSeq=271319&lsNm=%EC%B6%9C%EC%9E%85%EA%B5%AD%EA%B4%80%EB%A6%AC%EB%B2%95+%EC%8B%9C%ED%96%89%EB%A0%B9&bylNo=0001&bylBrNo=00&bylCls=BE&bylEfYd=20250601&bylEfYdYn=Y";
 const LAW_DECREE_LONG_TERM_STATUS_TABLE_URL =
@@ -502,6 +508,16 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     changeSignals: ["deportation", "removal", "unauthorized_work", "false_documents", "alien_registration_violation", "f5_exception"],
   },
   {
+    docId: "immigration-act-detention-order",
+    title: "출입국관리법 제51조 보호명령서·긴급보호",
+    sourceUrl: LAW_ACT_DETENTION_ORDER_URL,
+    sourceType: "official_law",
+    topic: "warning",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["protection_order", "emergency_protection", "48_hours", "risk_of_flight", "release_if_no_order"],
+  },
+  {
     docId: "immigration-act-deportation-objection",
     title: "출입국관리법 제60조 강제퇴거명령 이의신청",
     sourceUrl: LAW_ACT_DEPORTATION_OBJECTION_URL,
@@ -522,6 +538,16 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     changeSignals: ["deportation_detention", "protection_facility", "2_months", "9_months", "20_months", "foreigners_protection_committee"],
   },
   {
+    docId: "immigration-act-detention-temporary-release",
+    title: "출입국관리법 제65조 보호의 일시해제",
+    sourceUrl: LAW_ACT_DETENTION_TEMPORARY_RELEASE_URL,
+    sourceType: "official_law",
+    topic: "warning",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["temporary_release", "bond", "20_million_won", "residence_restriction", "regular_reporting", "foreigners_protection_committee"],
+  },
+  {
     docId: "immigration-act-departure-recommendation-order",
     title: "출입국관리법 제67조·제68조 출국권고·출국명령",
     sourceUrl: LAW_ACT_DEPARTURE_RECOMMENDATION_ORDER_URL,
@@ -530,6 +556,16 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     legalPriority: 1,
     monitorCadence: "daily",
     changeSignals: ["departure_recommendation", "departure_order", "departure_deadline", "performance_bond", "deportation_order"],
+  },
+  {
+    docId: "immigration-act-permit-cancellation-change",
+    title: "출입국관리법 제89조 각종 허가 등의 취소·변경",
+    sourceUrl: LAW_ACT_PERMIT_CANCELLATION_CHANGE_URL,
+    sourceType: "official_law",
+    topic: "warning",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["permit_cancellation", "permission_change", "guarantor_withdrawal", "false_permission", "7_day_notice", "opinion_hearing"],
   },
   {
     docId: "immigration-decree-current-text",
