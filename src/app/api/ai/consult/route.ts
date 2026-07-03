@@ -9,12 +9,12 @@ import {
 import type { Lang } from "@/lib/i18n/translations";
 import { db } from "@/lib/db";
 import { createZaiClient, isZaiConfigurationError } from "@/lib/ai/zai";
-import { getAgentBackend, runCodexServerless } from "@/lib/codex/serverless";
-import { isRemoteCodexBridgeEnabled, runRemoteCodexBridge } from "@/lib/codex/remote-bridge";
+import { getConsultBackend, shouldRequireConsultLlm, type ConsultBackend } from "@/lib/ai/backend-selector";
+import { runCodexServerless } from "@/lib/codex/serverless";
+import { runRemoteCodexBridge } from "@/lib/codex/remote-bridge";
 import { hybridSearch, initVectorStore } from "@/lib/embeddings/vector-store";
 import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
 import { withImmigrationLegalBasisDocs } from "@/lib/knowledge/legal-basis";
-import { isEnvTrue } from "@/lib/env";
 import {
   consumeDailyQuota,
   getClientIp,
@@ -32,7 +32,6 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-type ConsultBackend = "remote-bridge" | "codex" | "zai";
 const CONSULT_REMOTE_BRIDGE_MAX_WAIT_MS = 52_000;
 
 class LlmBackendUnavailableError extends Error {
@@ -40,21 +39,6 @@ class LlmBackendUnavailableError extends Error {
     super(message);
     this.name = "LlmBackendUnavailableError";
   }
-}
-
-function shouldRequireConsultLlm(consultBackend?: ConsultBackend): boolean {
-  if (
-    isEnvTrue(process.env.AI_ALLOW_LLM_FALLBACK) ||
-    isEnvTrue(process.env.AI_CONSULT_ALLOW_OFFICIAL_SUMMARY_FALLBACK)
-  ) {
-    return false;
-  }
-
-  return (
-    isEnvTrue(process.env.AI_REQUIRE_LLM) ||
-    isEnvTrue(process.env.AI_CONSULT_REQUIRE_LLM) ||
-    consultBackend === "remote-bridge"
-  );
 }
 
 function isFallbackBackend(backend: string): boolean {
@@ -81,34 +65,6 @@ interface ExpertAnswerResult {
   backend: string;
   codexMode?: string;
   durationMs?: number;
-}
-
-function getConsultBackend(): ConsultBackend {
-  const configured = process.env.AI_CONSULT_BACKEND?.trim().toLowerCase();
-  if (configured === "remote-bridge" || configured === "codex") {
-    return configured;
-  }
-
-  const agentBackend = getAgentBackend();
-  if (agentBackend === "remote-bridge" || isRemoteCodexBridgeEnabled()) {
-    return "remote-bridge";
-  }
-
-  if (configured === "zai") {
-    return "zai";
-  }
-
-  const hostedRuntime = process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV);
-  const codexConfigured =
-    Boolean(process.env.CODEX_API_KEY || process.env.OPENAI_API_KEY) ||
-    process.env.CODEX_SERVERLESS_ENABLED === "true" ||
-    !hostedRuntime;
-
-  if (agentBackend === "codex" && codexConfigured) {
-    return "codex";
-  }
-
-  return "zai";
 }
 
 function consultDisclaimer(lang: Lang): string {

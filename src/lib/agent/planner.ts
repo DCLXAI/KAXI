@@ -59,7 +59,14 @@ function includesAny(text: string, words: string[]): boolean {
 }
 
 function parseNumber(raw: string): number {
-  return Number(raw.replace(",", "."));
+  const value = raw.trim();
+  if (/^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/.test(value)) {
+    return Number(value.replace(/,/g, ""));
+  }
+  if (/^\d+,\d{1,2}$/.test(value)) {
+    return Number(value.replace(",", "."));
+  }
+  return Number(value.replace(/,/g, ""));
 }
 
 export function parseKrwBudget(text: string): number | undefined {
@@ -73,8 +80,8 @@ export function parseKrwBudget(text: string): number | undefined {
   const millionWon = normalized.match(/(\d+(?:[.,]\d+)?)\s*(?:m|million|mil|triệu|trieu|сая)\s*(?:krw|won|원|вон)?/i);
   if (millionWon) return Math.round(parseNumber(millionWon[1]) * 1_000_000);
 
-  const rawWon = normalized.match(/(\d{6,})\s*(?:krw|won|원|вон)?/i);
-  if (rawWon) return Number(rawWon[1]);
+  const rawWon = normalized.match(/(\d{1,3}(?:,\d{3})+|\d{6,})\s*(?:krw|won|원|вон)?/i);
+  if (rawWon) return Number(rawWon[1].replace(/,/g, ""));
 
   return undefined;
 }

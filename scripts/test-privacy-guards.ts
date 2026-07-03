@@ -247,6 +247,29 @@ async function testProductionPiiPersistenceRequiresEncryption() {
   }
 }
 
+async function testProductionPlaintextOverrideCannotLeak() {
+  const snapshot = { ...process.env };
+  try {
+    Object.assign(process.env, {
+      NODE_ENV: "production",
+      VERCEL_ENV: "production",
+      PII_ALLOW_UNENCRYPTED_PLAINTEXT: " true ",
+    });
+    delete process.env.DATA_ENCRYPTION_KEY;
+
+    const protectedField = preparePiiField("call me at user@example.com", { kind: "text" });
+    if (protectedField.plaintext !== "[redacted-unencrypted]") {
+      fail(`production plaintext override leaked text: ${protectedField.plaintext}`);
+    }
+    if (protectedField.ciphertext) fail("ciphertext should not exist without DATA_ENCRYPTION_KEY");
+  } finally {
+    for (const key of Object.keys(process.env)) {
+      if (!(key in snapshot)) delete process.env[key];
+    }
+    Object.assign(process.env, snapshot);
+  }
+}
+
 async function testPiiResponseSerializersDoNotExposeSecrets() {
   const snapshot = { ...process.env };
   try {
@@ -366,6 +389,7 @@ await testConsentThirdPartyFlow();
 await testPiiRedactionWithoutKey();
 await testPiiRoundTripWithKey();
 await testProductionPiiPersistenceRequiresEncryption();
+await testProductionPlaintextOverrideCannotLeak();
 await testPiiResponseSerializersDoNotExposeSecrets();
 await testHostedSqliteGuards();
 console.log("PASS privacy guards");

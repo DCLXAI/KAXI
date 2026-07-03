@@ -1,4 +1,5 @@
 import type { Lang } from "@/lib/i18n/translations";
+import { isEnvFalse } from "@/lib/env";
 
 export interface RemoteCodexBridgeOptions {
   question: string;
@@ -24,7 +25,7 @@ function getRemoteBridgeUrl(): string {
 }
 
 export function isRemoteCodexBridgeEnabled(): boolean {
-  if (process.env.CODEX_REMOTE_BRIDGE_ENABLED === "false") return false;
+  if (isEnvFalse(process.env.CODEX_REMOTE_BRIDGE_ENABLED)) return false;
   return Boolean(getRemoteBridgeUrl());
 }
 

@@ -2,6 +2,7 @@ import { checkRuntimeDatabaseConnectivity, getRuntimeDatabaseInfo } from "@/lib/
 import { getKnowledgeSourceAudit } from "@/lib/data/knowledge";
 import { getDocumentUploadSigningSecret } from "@/lib/documents/crypto";
 import { getDocumentStorageInfo } from "@/lib/documents/storage";
+import { getPrivacyRuntimeReadiness } from "@/lib/privacy/config";
 import { getSchoolSourceAudit } from "@/lib/schools/repository";
 
 export type ReadinessStatus = "ready" | "degraded";
@@ -57,6 +58,7 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
   const rateLimitBackend = (env.RATE_LIMIT_BACKEND || "auto").trim().toLowerCase();
   const sourceAudit = getKnowledgeSourceAudit();
   const schoolAudit = await getSchoolSourceAudit();
+  const privacyReadiness = getPrivacyRuntimeReadiness(env);
 
   const managedDatabase = databaseInfo.sharedWritable && databaseConnectivity.ok;
   const postgresqlOperationalUrl = databaseInfo.kind === "postgresql" && databaseInfo.postgresqlConfigured;
@@ -142,11 +144,22 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
     check(
       "privacy.encryption",
       "PII encryption and lookup secrets",
-      configured(env.DATA_ENCRYPTION_KEY) && configured(env.PII_HASH_SECRET),
-      "DATA_ENCRYPTION_KEY and PII_HASH_SECRET must be configured before production writes.",
+      privacyReadiness.encryptionOk,
+      privacyReadiness.encryptionOk
+        ? "DATA_ENCRYPTION_KEY and PII_HASH_SECRET are strong, non-placeholder, and separate."
+        : "DATA_ENCRYPTION_KEY and PII_HASH_SECRET must be strong, non-placeholder, and separate before production writes.",
+      privacyReadiness.metadata
+    ),
+    check(
+      "privacy.plaintext_override",
+      "PII plaintext override",
+      privacyReadiness.plaintextOverrideOk,
+      privacyReadiness.plaintextOverrideOk
+        ? "PII_ALLOW_UNENCRYPTED_PLAINTEXT is not enabled in production."
+        : "PII_ALLOW_UNENCRYPTED_PLAINTEXT must not be enabled in production.",
       {
-        dataEncryptionKeyConfigured: configured(env.DATA_ENCRYPTION_KEY),
-        piiHashSecretConfigured: configured(env.PII_HASH_SECRET),
+        production,
+        unencryptedPlaintextAllowed: privacyReadiness.unencryptedPlaintextAllowed,
       }
     ),
     check(

@@ -60,6 +60,7 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
       "database.postgresql_operational",
       "database.managed_writable",
       "privacy.encryption",
+      "privacy.plaintext_override",
       "privacy.retention",
       "documents.upload_workspace",
       "rate_limit.shared",
@@ -73,8 +74,58 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
     if (byKey.get("database.postgresql_operational")?.ok) fail("file SQLite should not pass PostgreSQL operational check");
     if (byKey.get("database.managed_writable")?.ok) fail("file SQLite should not pass managed DB check");
     if (byKey.get("privacy.encryption")?.ok) fail("missing PII secrets should not pass encryption check");
+    if (!byKey.get("privacy.plaintext_override")?.ok) fail("missing plaintext override should pass plaintext override check");
     if (byKey.get("documents.upload_workspace")?.ok) fail("hosted local document storage should not pass upload workspace check");
     if (byKey.get("admin.mfa_role")?.ok) fail("missing MFA should not pass admin MFA check");
+  } finally {
+    restoreEnv(snapshot);
+  }
+}
+
+async function testProductionReadinessRejectsWeakPrivacyConfig() {
+  const snapshot = { ...process.env };
+  try {
+    Object.assign(process.env, {
+      NODE_ENV: "production",
+      VERCEL_ENV: "production",
+      VERCEL: "1",
+      DATABASE_URL: "file:./db/custom.db",
+      DATA_ENCRYPTION_KEY: "short",
+      PII_HASH_SECRET: "short",
+      PII_ALLOW_UNENCRYPTED_PLAINTEXT: " true ",
+      RATE_LIMIT_BACKEND: "auto",
+    });
+
+    let payload = await getReadinessPayload();
+    let byKey = new Map(payload.checks.map((item) => [item.key, item]));
+    const weakPrivacy = byKey.get("privacy.encryption");
+    const plaintextOverride = byKey.get("privacy.plaintext_override");
+
+    if (!weakPrivacy || weakPrivacy.ok) {
+      fail(`weak PII secrets should fail readiness: ${JSON.stringify(weakPrivacy)}`);
+    }
+    if (weakPrivacy.metadata?.dataEncryptionKeyStrong !== false || weakPrivacy.metadata?.piiHashSecretStrong !== false) {
+      fail(`weak PII metadata should report strength failure: ${JSON.stringify(weakPrivacy)}`);
+    }
+    if (!plaintextOverride || plaintextOverride.ok) {
+      fail(`production plaintext override should fail readiness: ${JSON.stringify(plaintextOverride)}`);
+    }
+
+    process.env.DATA_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    process.env.PII_HASH_SECRET = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+    process.env.PII_ALLOW_UNENCRYPTED_PLAINTEXT = "false";
+
+    payload = await getReadinessPayload();
+    byKey = new Map(payload.checks.map((item) => [item.key, item]));
+    const strongPrivacy = byKey.get("privacy.encryption");
+    const closedPlaintextOverride = byKey.get("privacy.plaintext_override");
+
+    if (!strongPrivacy?.ok) {
+      fail(`strong, separate PII secrets should pass privacy check: ${JSON.stringify(strongPrivacy)}`);
+    }
+    if (!closedPlaintextOverride?.ok) {
+      fail(`disabled plaintext override should pass privacy check: ${JSON.stringify(closedPlaintextOverride)}`);
+    }
   } finally {
     restoreEnv(snapshot);
   }
@@ -299,6 +350,7 @@ async function testAuthSessionFailsClosedWhenAdminConfigMissing() {
 }
 
 await testProductionReadinessFlagsMissingOpsConfig();
+await testProductionReadinessRejectsWeakPrivacyConfig();
 testDatabaseRuntimeInfo();
 await testProductionRateLimitFailsClosedWithoutSharedBackend();
 await testReadinessFailsMissingRagMetadata();

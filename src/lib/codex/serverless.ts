@@ -4,6 +4,8 @@ import { mkdir, readFile, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { getAgentBackend, isCodexServerlessEnabled, isHostedRuntime } from "@/lib/ai/backend-selector";
+import { isEnvTrue } from "@/lib/env";
 import type { Lang } from "@/lib/i18n/translations";
 
 const require = createRequire(import.meta.url);
@@ -140,25 +142,10 @@ User request:
 ${question}`;
 }
 
-export function isCodexServerlessEnabled(): boolean {
-  if (process.env.CODEX_SERVERLESS_ENABLED === "false") return false;
-  return getAgentBackend() === "codex" || process.env.CODEX_SERVERLESS_ENABLED === "true";
-}
-
-export function getAgentBackend(): "codex" | "zai" | "tool-fallback" | "remote-bridge" {
-  const configured = process.env.AGENT_BACKEND?.trim().toLowerCase();
-  if (configured === "zai") return "zai";
-  if (configured === "tool-fallback") return "tool-fallback";
-  if (configured === "remote-bridge") return "remote-bridge";
-  return "codex";
-}
+export { getAgentBackend, isCodexServerlessEnabled };
 
 export function shouldRequireAdminForCodexAgent(): boolean {
-  return process.env.CODEX_AGENT_REQUIRE_ADMIN === "true";
-}
-
-function isHostedRuntime(): boolean {
-  return process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV);
+  return isEnvTrue(process.env.CODEX_AGENT_REQUIRE_ADMIN);
 }
 
 function getLocalCodexHome(): string {

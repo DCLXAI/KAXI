@@ -4,6 +4,12 @@ import { runAgentPreflight } from "../src/lib/agent/preflight";
 import { runFallbackAgent } from "../src/lib/agent/fallback";
 import { buildAgentMeta } from "../src/lib/agent/meta";
 import { analyzeAgentIntent, type AgentMissingSlot } from "../src/lib/agent/planner";
+import {
+  getAgentBackend,
+  getConsultBackend,
+  shouldRequireAgentLlm,
+  shouldRequireConsultLlm,
+} from "../src/lib/ai/backend-selector";
 import { resolveModelCacheDir } from "../src/lib/embeddings/transformer-embedder";
 import { TOOL_MAP } from "../src/lib/agent/tools";
 import { NextRequest } from "next/server";
@@ -18,6 +24,50 @@ function restoreEnv(snapshot: NodeJS.ProcessEnv) {
     if (!(key in snapshot)) delete process.env[key];
   }
   Object.assign(process.env, snapshot);
+}
+
+function testBackendSelectorContracts() {
+  const snapshot = { ...process.env };
+  try {
+    Object.assign(process.env, {
+      AGENT_BACKEND: "remote-bridge",
+      CODEX_REMOTE_BRIDGE_URL: "https://bridge.example.invalid/api/ai/agent",
+      CODEX_REMOTE_BRIDGE_ENABLED: "true",
+      AI_AGENT_ALLOW_TOOL_FALLBACK: "false",
+      AI_CONSULT_ALLOW_OFFICIAL_SUMMARY_FALLBACK: "false",
+    });
+    delete process.env.AI_ALLOW_LLM_FALLBACK;
+    delete process.env.AI_CONSULT_BACKEND;
+
+    if (getAgentBackend() !== "remote-bridge") fail("agent backend selector should honor remote-bridge");
+    if (getConsultBackend() !== "remote-bridge") fail("consult backend selector should inherit remote bridge");
+    if (!shouldRequireAgentLlm()) fail("remote bridge agent should require LLM by default");
+    if (!shouldRequireConsultLlm()) fail("remote bridge consult should require LLM by default");
+
+    process.env.AI_ALLOW_LLM_FALLBACK = " true ";
+    if (shouldRequireAgentLlm()) fail("global LLM fallback flag should disable strict agent LLM requirement");
+    if (shouldRequireConsultLlm()) fail("global LLM fallback flag should disable strict consult LLM requirement");
+
+    Object.assign(process.env, {
+      VERCEL: "1",
+      VERCEL_ENV: "production",
+      AGENT_BACKEND: "codex",
+      CODEX_SERVERLESS_ENABLED: " false ",
+      CODEX_REMOTE_BRIDGE_URL: "",
+      CODEX_REMOTE_BRIDGE_ENABLED: "false",
+      AI_ALLOW_LLM_FALLBACK: "",
+    });
+    delete process.env.CODEX_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.AI_CONSULT_BACKEND;
+
+    if (getConsultBackend() !== "zai") fail("hosted consult without Codex config should route to zAI");
+
+    process.env.CODEX_SERVERLESS_ENABLED = " true ";
+    if (getConsultBackend() !== "codex") fail("explicit CODEX_SERVERLESS_ENABLED=true should route consult to Codex");
+  } finally {
+    restoreEnv(snapshot);
+  }
 }
 
 async function testPartnerToolDryRun() {
@@ -515,6 +565,7 @@ function testVercelModelCacheDefaultsToTmp() {
   }
 }
 
+testBackendSelectorContracts();
 await testPartnerToolDryRun();
 await testPreflightDoesNotPersistPartnerRequest();
 testPlannerUnderstandsMultilingualRequests();

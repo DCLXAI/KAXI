@@ -7,11 +7,11 @@ import type { ToolContext } from "@/lib/agent/tools";
 import { buildAgentMeta } from "@/lib/agent/meta";
 import { runAgentPreflight, type AgentPreflightResult } from "@/lib/agent/preflight";
 import {
-  getAgentBackend,
   getCodexRunMode,
   runCodexServerless,
   shouldRequireAdminForCodexAgent,
 } from "@/lib/codex/serverless";
+import { getAgentBackend, shouldRequireAgentLlm } from "@/lib/ai/backend-selector";
 import { isRemoteCodexBridgeEnabled, runRemoteCodexBridge } from "@/lib/codex/remote-bridge";
 import {
   consumeDailyQuota,
@@ -30,21 +30,6 @@ import { isEnvFalse, isEnvTrue } from "@/lib/env";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 const AGENT_REMOTE_BRIDGE_MAX_WAIT_MS = 52_000;
-
-function shouldRequireAgentLlm(configuredBackend = getAgentBackend()): boolean {
-  if (
-    isEnvTrue(process.env.AI_ALLOW_LLM_FALLBACK) ||
-    isEnvTrue(process.env.AI_AGENT_ALLOW_TOOL_FALLBACK)
-  ) {
-    return false;
-  }
-
-  return (
-    isEnvTrue(process.env.AI_REQUIRE_LLM) ||
-    isEnvTrue(process.env.AI_AGENT_REQUIRE_LLM) ||
-    configuredBackend === "remote-bridge"
-  );
-}
 
 function isFallbackBackend(backend: string): boolean {
   return backend === "tool-fallback" || backend === "official-summary";

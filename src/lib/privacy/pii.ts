@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from "crypto";
+import { isEnvTrue } from "@/lib/env";
 
 const VERSION = "v1";
 
@@ -43,7 +44,7 @@ export function canPersistPiiValue(value: string | null | undefined): boolean {
 }
 
 function canStoreUnencryptedPlaintext(): boolean {
-  return process.env.PII_ALLOW_UNENCRYPTED_PLAINTEXT === "true" && process.env.NODE_ENV !== "production";
+  return isEnvTrue(process.env.PII_ALLOW_UNENCRYPTED_PLAINTEXT) && !requiresPiiEncryption();
 }
 
 export function hashPii(value: string | null | undefined): string | null {
