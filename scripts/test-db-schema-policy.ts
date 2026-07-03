@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
+import { spawnSync } from "child_process";
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -13,6 +14,26 @@ function assert(condition: unknown, message: string) {
 
 const root = process.cwd();
 const schema = readFileSync(join(root, "prisma", "schema.prisma"), "utf8");
+
+function validatePrismaSchema(schemaPath: string, databaseUrl: string): void {
+  const result = spawnSync("bunx", ["prisma", "validate", "--schema", schemaPath], {
+    cwd: root,
+    env: { ...process.env, DATABASE_URL: databaseUrl },
+    encoding: "utf8",
+  });
+
+  if (result.status !== 0) {
+    fail(
+      [
+        `Prisma schema validation failed for ${schemaPath}`,
+        result.stdout.trim(),
+        result.stderr.trim(),
+      ]
+        .filter(Boolean)
+        .join("\n")
+    );
+  }
+}
 
 function normalizePrismaLine(line: string): string {
   return line.trim().replace(/\s+/g, " ");
@@ -147,6 +168,8 @@ assert(existsSync(postgresSchema), "missing PostgreSQL Prisma schema");
 const postgresSchemaText = readFileSync(postgresSchema, "utf8");
 assert(postgresSchemaText.includes('provider = "postgresql"'), "PostgreSQL schema must use provider postgresql");
 assert(!postgresSchemaText.includes('provider = "sqlite"'), "PostgreSQL schema must not use sqlite provider");
+validatePrismaSchema(join(root, "prisma", "schema.prisma"), "file:./schema-policy-validate.db");
+validatePrismaSchema(postgresSchema, "postgresql://schema_policy:schema_policy@localhost:5432/kaxi_schema_policy?schema=public");
 assertBlockParity("enum", schema, postgresSchemaText);
 assertBlockParity("model", schema, postgresSchemaText);
 
@@ -158,4 +181,4 @@ for (const model of requiredModels) {
 assert(postgresSql.includes("CREATE TYPE \"OrgType\""), "PostgreSQL migration should create enum types");
 assert(postgresSql.includes("JSONB"), "PostgreSQL migration should use JSONB for structured fields");
 
-console.log(`PASS DB schema policy: ${requiredModels.length} domain models, dual schemas, and migrations verified`);
+console.log(`PASS DB schema policy: ${requiredModels.length} domain models, Prisma validation, dual schemas, and migrations verified`);

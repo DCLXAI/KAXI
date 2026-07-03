@@ -142,7 +142,7 @@ Production/hosted admin login fails closed unless `NEXTAUTH_SECRET`, `ADMIN_EMAI
 ## CI Quality Gates
 
 GitHub Actions restores non-DB runtime artifacts during `bun install --frozen-lockfile`, prepares the local test DB from Prisma migrations and seed scripts, then runs typecheck, lint, `test:schema`, `test:vector`, `test:rules`, `test:quality`, `test:governance`, `test:rag-ops`, `test:knowledge-monitor`, `test:privacy`, `test:agent`, `test:planner`, `test:citations`, `test:school-data`, admin/document/readiness checks, and production build.
-`test:schema` verifies the Phase 1 domain models, SQLite-compatible migration replay, PostgreSQL operational migration DDL, and enum/model parity between `prisma/schema.prisma` and `prisma/postgres/schema.prisma` so dual-schema drift is caught in CI.
+`test:schema` verifies the Phase 1 domain models, Prisma engine validation for both SQLite and PostgreSQL schemas, SQLite-compatible migration replay, PostgreSQL operational migration DDL, and enum/model parity between `prisma/schema.prisma` and `prisma/postgres/schema.prisma` so dual-schema drift is caught in CI.
 `test:vector` verifies the restored model/vector cache can retrieve expected KAXI source documents.
 `/api/readiness` includes `embeddings.cache` as a warning-level check. It reports only safe diagnostics such as cache location class (`project-data`, `serverless-tmp`, or `custom`), cache existence, vector-cache entry count, transformer load state, and coverage; it does not expose absolute local paths.
 `test:rules` verifies the DB-backed D-2/D-4 Compliance Rule Engine, including approved-only execution, effective date windows, required source refs, 20+ golden cases, and `ComplianceEvaluation` persistence.
