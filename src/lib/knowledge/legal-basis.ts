@@ -189,17 +189,23 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
     ids.add(IMMIGRATION_FEES_DOC_ID);
   }
   if (/강제퇴거|퇴거명령|추방|출국명령|출국권고|자진출국|출국기한|이행보증금|removal|deportation|departure order|departure recommendation|voluntary departure/.test(text)) {
-    priorityIds.push(IMMIGRATION_DEPORTATION_GROUNDS_DOC_ID, IMMIGRATION_DEPARTURE_RECOMMENDATION_ORDER_DOC_ID);
+    if (/출국명령|출국권고|자진출국|출국기한|이행보증금|departure order|departure recommendation|voluntary departure/.test(text)) {
+      priorityIds.push(IMMIGRATION_DEPARTURE_RECOMMENDATION_ORDER_DOC_ID, IMMIGRATION_DEPORTATION_GROUNDS_DOC_ID);
+    } else {
+      priorityIds.push(IMMIGRATION_DEPORTATION_GROUNDS_DOC_ID, IMMIGRATION_DEPARTURE_RECOMMENDATION_ORDER_DOC_ID);
+    }
     ids.add(IMMIGRATION_DEPORTATION_GROUNDS_DOC_ID);
     ids.add(IMMIGRATION_DEPARTURE_RECOMMENDATION_ORDER_DOC_ID);
   }
   if (/강제퇴거.*이의|퇴거.*이의|이의신청|강제퇴거명령서.*7일|7일.*강제퇴거|deportation objection|removal objection|object.*deportation/.test(text)) {
-    priorityIds.push(IMMIGRATION_DEPORTATION_OBJECTION_DOC_ID, IMMIGRATION_DEPORTATION_GROUNDS_DOC_ID);
+    priorityIds.unshift(IMMIGRATION_DEPORTATION_OBJECTION_DOC_ID);
+    priorityIds.push(IMMIGRATION_DEPORTATION_GROUNDS_DOC_ID);
     ids.add(IMMIGRATION_DEPORTATION_OBJECTION_DOC_ID);
     ids.add(IMMIGRATION_DEPORTATION_GROUNDS_DOC_ID);
   }
   if (/보호소|보호시설|외국인보호|보호기간|강제퇴거.*보호|2개월|9개월|20개월|immigration detention|deportation detention|protection facility|detention period/.test(text)) {
-    priorityIds.push(IMMIGRATION_DEPORTATION_DETENTION_DOC_ID, IMMIGRATION_DEPORTATION_GROUNDS_DOC_ID);
+    priorityIds.unshift(IMMIGRATION_DEPORTATION_DETENTION_DOC_ID);
+    priorityIds.push(IMMIGRATION_DEPORTATION_GROUNDS_DOC_ID);
     ids.add(IMMIGRATION_DEPORTATION_DETENTION_DOC_ID);
     ids.add(IMMIGRATION_DEPORTATION_GROUNDS_DOC_ID);
   }

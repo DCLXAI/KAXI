@@ -4,6 +4,7 @@
 import { join } from "path";
 import { getKnowledgeDocsWithMetadata } from "../src/lib/data/knowledge";
 import { getStoreStats, hybridSearch, initVectorStore } from "../src/lib/embeddings/vector-store";
+import { withImmigrationLegalBasisDocs } from "../src/lib/knowledge/legal-basis";
 
 if (!process.env.DATABASE_URL || process.env.DATABASE_URL.includes("/home/z/")) {
   process.env.DATABASE_URL = `file:${join(process.cwd(), "db", "custom.db")}`;
@@ -51,6 +52,12 @@ const TEST_QUERIES = [
   { q: "재입국허가 기간 안에 못 들어가면 어떻게 해?", expect: "immigration-act-reentry-permit" },
 ];
 
+const LEGAL_BASIS_ORDER_QUERIES = [
+  { q: "강제퇴거명령서를 받으면 이의신청은 7일 안에 해야 해?", mode: "appeal", expectFirst: "immigration-act-deportation-objection" },
+  { q: "강제퇴거명령 후 보호소에 얼마나 보호될 수 있어?", mode: "appeal", expectFirst: "immigration-act-deportation-detention" },
+  { q: "출국권고를 받고도 안 나가면 출국명령이나 강제퇴거로 갈 수 있어?", mode: "appeal", expectFirst: "immigration-act-departure-recommendation-order" },
+];
+
 async function main() {
   console.log("=".repeat(80));
   console.log("KAXI - Vector Search smoke test");
@@ -82,7 +89,25 @@ async function main() {
   }
 
   console.log(`\nResult: ${pass}/${TEST_QUERIES.length} expected docs found`);
-  if (pass < TEST_QUERIES.length) process.exitCode = 1;
+  let orderPass = 0;
+  for (const test of LEGAL_BASIS_ORDER_QUERIES) {
+    const results = await hybridSearch(test.q, { topK: 6 });
+    const docs = withImmigrationLegalBasisDocs(
+      test.q,
+      results.map((result) => result.doc),
+      { mode: test.mode, maxDocs: 8 }
+    );
+    const first = docs[0]?.id || "(none)";
+    const ok = first === test.expectFirst;
+    if (ok) orderPass++;
+
+    console.log(`\n[${ok ? "PASS" : "WARN"}] legal basis first: ${test.q}`);
+    console.log(`Expected first: ${test.expectFirst}`);
+    console.log(`Actual first: ${first}`);
+  }
+
+  console.log(`\nLegal basis order: ${orderPass}/${LEGAL_BASIS_ORDER_QUERIES.length} first-doc checks passed`);
+  if (pass < TEST_QUERIES.length || orderPass < LEGAL_BASIS_ORDER_QUERIES.length) process.exitCode = 1;
 }
 
 main().catch((error) => {
