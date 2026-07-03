@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MessageResponse } from "@/components/ai-elements/message";
+import { SourceAnnotations } from "@/components/kbridge/SourceAnnotations";
 import {
   ArrowUp,
   Loader2,
@@ -33,7 +34,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Brain,
-  ExternalLink,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -107,6 +107,7 @@ interface AgentSource {
   sourceType?: string;
   reviewStatus?: string;
   checkedBy?: string;
+  excerpt?: string;
 }
 
 interface AgentSuggestion {
@@ -242,22 +243,6 @@ function statusDotClass(status: AgentStatus | null, bridgeState: BridgeState): s
   if (bridgeState === "reachable") return "bg-green-500";
   if (!status) return "bg-muted-foreground";
   return status.ok ? "bg-green-500" : "bg-amber-500";
-}
-
-function sourceHost(url: string | null): string {
-  if (!url) return "KAXI";
-  if (url.startsWith("internal://")) return "KAXI";
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return "source";
-  }
-}
-
-function sourceKindLabel(source: AgentSource, lang: Lang): string {
-  if (source.kind === "school") return lang === "ko" ? "학교" : "School";
-  if (source.kind === "internal") return "KAXI";
-  return lang === "ko" ? "공식" : "Official";
 }
 
 const EXAMPLE_PROMPTS: Record<Lang, string[]> = {
@@ -1066,46 +1051,7 @@ export function Agent() {
                         </div>
                       );
                     })()}
-                    {m.meta?.sources && m.meta.sources.length > 0 && (
-                      <div className="mt-4 border-t pt-3">
-                        <div className="mb-2 text-[11px] font-medium uppercase tracking-normal text-muted-foreground">
-                          {lang === "ko" ? "참조 출처" : "Sources"}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {m.meta.sources.slice(0, 6).map((source) => {
-                            const content = (
-                              <>
-                                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                                  {sourceKindLabel(source, lang)}
-                                </span>
-                                <span className="max-w-[220px] truncate">{source.title}</span>
-                                <span className="text-muted-foreground">{sourceHost(source.url)}</span>
-                                {source.url && !source.url.startsWith("internal://") && <ExternalLink className="h-3 w-3" />}
-                              </>
-                            );
-
-                            return source.url && !source.url.startsWith("internal://") ? (
-                              <a
-                                key={`${source.kind}-${source.id}-${source.url}`}
-                                href={source.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-xs hover:bg-muted"
-                              >
-                                {content}
-                              </a>
-                            ) : (
-                              <span
-                                key={`${source.kind}-${source.id}-${source.label}`}
-                                className="inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-xs"
-                              >
-                                {content}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
+                    <SourceAnnotations sources={m.meta?.sources} lang={lang} max={6} />
                     {m.meta?.suggestions && m.meta.suggestions.length > 0 && (
                       <div className="mt-4 border-t pt-3">
                         <div className="mb-2 text-[11px] font-medium uppercase tracking-normal text-muted-foreground">

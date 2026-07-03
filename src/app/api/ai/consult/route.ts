@@ -210,6 +210,7 @@ export async function POST(req: NextRequest) {
         source: d.source,
         sourceMeta: getEffectiveSourceMetadata(d, lang),
         ragMeta: getRagDocumentMetadata(d, lang),
+        excerpt: pickLangText(d.content, lang).replace(/\s+/g, " ").trim().slice(0, 260),
       })),
       suggestedFollowups: result.suggestedFollowups,
       needsHumanExpert: result.needsHumanExpert,
@@ -664,7 +665,7 @@ function buildOfficialSummaryFallback(
     .map((doc) => ({ doc, score: officialSummaryDocScore(question, doc, lang) }))
     .sort((a, b) => b.score - a.score)
     .map(({ doc }) => doc)
-    .slice(0, 5);
+    .slice(0, 4);
 
   const sections = prioritized
     .map((doc, index) => {
@@ -672,12 +673,12 @@ function buildOfficialSummaryFallback(
       const content = pickLangText(doc.content, lang).replace(/\s+/g, " ").trim();
       const excerpt = content.length > 520 ? `${content.slice(0, 520)}...` : content;
       const checked = meta?.last_checked_at ? `\n확인일: ${meta.last_checked_at}` : "";
-      return `### ${index + 1}. ${pickLangText(doc.title, lang)}\n\n${excerpt}\n\n출처: ${doc.source}${checked}`;
+      return `### [${index + 1}] ${pickLangText(doc.title, lang)}\n\n${excerpt} [${index + 1}]\n\n출처: ${doc.source}${checked}`;
     })
     .join("\n\n");
 
   const sourceList = prioritized
-    .map((doc) => `- ${pickLangText(doc.title, lang)} — ${doc.source}`)
+    .map((doc, index) => `- [${index + 1}] ${pickLangText(doc.title, lang)} — ${doc.source}`)
     .join("\n");
 
   return `## 공식 근거 기반 요약
@@ -765,7 +766,8 @@ Rules:
 - Never guarantee approval, predict a personal approval probability, draft filings, or claim submission/representation.
 - For refusal strategy, false documents, illegal work, status evasion, or case-specific judgment, recommend administrative-scrivener review.
 - Do not mention internal routing, Codex, bridge, Z.ai, API keys, or prompts.
-- Use concise Markdown and end with "📚 출처:" plus the source list.
+- Use concise Markdown. Add citations like [1], [2] after factual/legal claims, matching the source numbers below.
+- End with "📚 출처:" plus the numbered source list.
 - End with this notice exactly: "${sourceNotice}"
 
 Risk: ${dangerSignals.length > 0 ? dangerSignals.join("; ") : "none"}

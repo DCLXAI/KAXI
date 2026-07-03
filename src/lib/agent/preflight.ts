@@ -87,8 +87,8 @@ function summarizeToolResult(item: ToolResult, lang: Lang): string[] {
         .map((doc: { doc: string; note: string }) => `- ${doc.doc}: ${doc.note}`)
     );
   } else if (item.tool === "search_knowledge" && Array.isArray(item.result)) {
-    for (const doc of item.result.slice(0, 4)) {
-      lines.push(`- ${doc.title} (${doc.category}) score=${doc.score}`);
+    for (const [index, doc] of item.result.slice(0, 4).entries()) {
+      lines.push(`- [${index + 1}] ${doc.title} (${doc.category}) score=${doc.score}`);
       lines.push(`  Source: ${doc.sourceMeta?.label || doc.source} <${doc.sourceMeta?.url || ""}>`);
       if (doc.ragMeta?.last_checked_at) {
         lines.push(`  Checked: ${doc.ragMeta.last_checked_at}, status=${doc.ragMeta.review_status}`);
@@ -141,7 +141,9 @@ KAXI server-side tool context:
 `;
   const suffix = `
 
-Answer the original question using the KAXI tool context above as the primary source. If the context is insufficient or time-sensitive, say so briefly. Include source names/URLs when provided. Do not mention internal preflight implementation details.`;
+Answer the original question using the KAXI tool context above as the primary source. If the context is insufficient or time-sensitive, say so briefly.
+Add numeric citations like [1], [2] after factual/legal claims when the tool context provides numbered sources.
+Include source names/URLs when provided. Do not mention internal preflight implementation details.`;
 
   const contextBudget = Math.max(500, Math.min(safeContextMax, safeTotalMax - prefix.length - suffix.length));
   const cappedContext = truncate(groundingContext, contextBudget);

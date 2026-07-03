@@ -15,6 +15,7 @@ export interface AgentSource {
   sourceType?: string;
   reviewStatus?: string;
   checkedBy?: string;
+  excerpt?: string;
 }
 
 export interface AgentSuggestion {
@@ -218,6 +219,7 @@ function extractSources(toolResults: ToolResult[]): AgentSource[] {
           sourceType: typeof meta?.sourceType === "string" ? meta.sourceType : undefined,
           reviewStatus: typeof meta?.reviewStatus === "string" ? meta.reviewStatus : undefined,
           checkedBy: typeof meta?.checkedBy === "string" ? meta.checkedBy : undefined,
+          excerpt: typeof doc?.content === "string" ? doc.content.replace(/\s+/g, " ").trim().slice(0, 260) : undefined,
         });
       }
     }

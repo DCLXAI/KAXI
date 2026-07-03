@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { MessageResponse } from "@/components/ai-elements/message";
+import { SourceAnnotations, type SourceAnnotation } from "@/components/kbridge/SourceAnnotations";
 import {
   Select,
   SelectContent,
@@ -20,7 +22,6 @@ import {
   Loader2,
   Scale,
   Sparkles,
-  BookOpen,
   ShieldAlert,
   ArrowRight,
   RefreshCw,
@@ -31,9 +32,34 @@ interface Msg {
   role: "user" | "ai";
   text: string;
   disclaimer?: string;
-  retrievedDocs?: { id: string; title: string; category: string; source: string }[];
+  retrievedDocs?: RetrievedDoc[];
   suggestedFollowups?: string[];
   needsHumanExpert?: boolean;
+  backend?: string;
+  codexMode?: string;
+}
+
+interface RetrievedDoc {
+  id: string;
+  title: string;
+  category: string;
+  source: string;
+  excerpt?: string;
+  sourceMeta?: {
+    label?: string;
+    url?: string;
+    verifiedAt?: string;
+    reviewAfter?: string;
+    owner?: string;
+    sourceType?: string;
+    reviewStatus?: string;
+    checkedBy?: string;
+  };
+  ragMeta?: {
+    last_checked_at?: string;
+    review_status?: string;
+    checked_by?: string;
+  };
 }
 
 type ConsultMode = "general" | "visa" | "documents" | "appeal" | "business";
@@ -128,6 +154,8 @@ export function Consult() {
           retrievedDocs: data.retrievedDocs,
           suggestedFollowups: data.suggestedFollowups,
           needsHumanExpert: data.needsHumanExpert,
+          backend: data.backend,
+          codexMode: data.codexMode,
         },
       ]);
     } catch (e) {
@@ -333,26 +361,30 @@ export function Consult() {
                         </Badge>
                       )}
                     </div>
-                    <div className="prose prose-sm max-w-none text-sm leading-relaxed whitespace-pre-wrap">
-                      {m.text}
+                    <div className="text-sm leading-relaxed">
+                      <MessageResponse>{m.text}</MessageResponse>
                     </div>
-                  </div>
 
-                  {/* 검색된 문서 */}
-                  {m.retrievedDocs && m.retrievedDocs.length > 0 && (
-                    <div className="ml-2 pl-3 border-l-2 border-muted space-y-1.5">
-                      <div className="text-[10px] text-muted-foreground flex items-center gap-1">
-                        <BookOpen className="h-2.5 w-2.5" />
-                        {lang === "ko" ? "참고한 공식 문서" : lang === "vi" ? "Tài liệu tham khảo" : lang === "mn" ? "Баримт" : "Sources"}
-                      </div>
-                      {m.retrievedDocs.map((d, j) => (
-                        <div key={j} className="text-xs text-muted-foreground">
-                          <span className="font-medium">·</span> {d.title}
-                          <span className="block text-[10px] opacity-70 ml-2">{d.source}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                    <SourceAnnotations
+                      sources={m.retrievedDocs?.map((doc): SourceAnnotation => ({
+                        id: doc.id,
+                        title: doc.title,
+                        label: doc.sourceMeta?.label || doc.source,
+                        source: doc.source,
+                        url: doc.sourceMeta?.url || null,
+                        kind: doc.sourceMeta?.owner === "internal" ? "internal" : "knowledge",
+                        owner: doc.sourceMeta?.owner,
+                        verifiedAt: doc.sourceMeta?.verifiedAt || doc.ragMeta?.last_checked_at,
+                        reviewAfter: doc.sourceMeta?.reviewAfter,
+                        sourceType: doc.sourceMeta?.sourceType,
+                        reviewStatus: doc.sourceMeta?.reviewStatus || doc.ragMeta?.review_status,
+                        checkedBy: doc.sourceMeta?.checkedBy || doc.ragMeta?.checked_by,
+                        excerpt: doc.excerpt,
+                      }))}
+                      lang={lang}
+                      max={4}
+                    />
+                  </div>
 
                   {/* 면책 고지 */}
                   {m.disclaimer && (
