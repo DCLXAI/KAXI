@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
 
     const body = (await req.json()) as SchoolMutationInput;
     const data = normalizeSchoolPayload(body || {}, "create");
-    const school = await db.school.create({ data: data as any });
+    const school = await db.school.create({ data });
     const actor = await getAdminContext(req);
     await recordRequestAudit(req, {
       actor: actor?.actor || "unknown",

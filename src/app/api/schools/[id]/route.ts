@@ -41,7 +41,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     const { id } = await context.params;
     const body = (await req.json()) as SchoolMutationInput;
     const data = normalizeSchoolPayload(body || {}, "update");
-    const school = await db.school.update({ where: { id }, data: data as any });
+    const school = await db.school.update({ where: { id }, data });
     const actor = await getAdminContext(req);
     await recordRequestAudit(req, {
       actor: actor?.actor || "unknown",

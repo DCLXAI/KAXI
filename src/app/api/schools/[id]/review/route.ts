@@ -28,7 +28,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
       verifiedAt,
       reviewAfter,
     }, "update");
-    const school = await db.school.update({ where: { id }, data: data as any });
+    const school = await db.school.update({ where: { id }, data });
     const actor = await getAdminContext(req);
     await recordRequestAudit(req, {
       actor: actor?.actor || "unknown",

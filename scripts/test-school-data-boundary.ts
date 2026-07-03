@@ -25,6 +25,7 @@ function walk(dir: string): string[] {
 
 const publicRuntimeRoots = ["src/app", "src/components"];
 const violations: string[] = [];
+const mutationTypeViolations: string[] = [];
 
 for (const root of publicRuntimeRoots) {
   for (const file of walk(root)) {
@@ -42,6 +43,25 @@ if (violations.length > 0) {
       "public app/components must not import runtime school seed data directly.",
       "Use /api/schools or src/lib/schools/repository instead.",
       ...violations,
+    ].join("\n")
+  );
+}
+
+for (const file of [
+  "src/lib/schools/repository.ts",
+  "src/app/api/schools/route.ts",
+  "src/app/api/schools/[id]/route.ts",
+  "src/app/api/schools/[id]/review/route.ts",
+]) {
+  const content = readFileSync(file, "utf8");
+  if (/\bas\s+any\b/.test(content)) mutationTypeViolations.push(file);
+}
+
+if (mutationTypeViolations.length > 0) {
+  fail(
+    [
+      "school mutation paths must keep Prisma inputs typed; avoid `as any` casts.",
+      ...mutationTypeViolations,
     ].join("\n")
   );
 }

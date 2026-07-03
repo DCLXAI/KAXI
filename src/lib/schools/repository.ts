@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import type { Prisma } from "@prisma/client";
 import {
   DEFAULT_SCHOOL_REVIEW_AFTER,
   DEFAULT_SCHOOL_VERIFIED_AT,
@@ -12,6 +13,7 @@ import {
 } from "@/lib/data/schools";
 
 type LangKey = "ko" | "vi" | "mn" | "en";
+type SchoolMutationData = Partial<Prisma.SchoolCreateInput & Prisma.SchoolUpdateInput>;
 
 export interface SchoolFilters {
   region?: string;
@@ -44,6 +46,7 @@ export interface SchoolMutationInput {
 const REGIONS = new Set(["seoul", "gyeonggi", "busan", "daegu", "gwangju", "other"]);
 const PROGRAMS = new Set<Program>(["language", "college", "university", "graduate", "vocational"]);
 const ACCREDITATIONS = new Set<Accreditation>(["accredited", "standard", "caution"]);
+const LANGS = ["ko", "vi", "mn", "en"] as const;
 
 export class SchoolOperationalDatabaseError extends Error {
   constructor(message: string) {
@@ -86,6 +89,35 @@ function parseIntake(value: string): string[] {
   } catch {
     return [];
   }
+}
+
+function setLocalizedSchoolField(
+  data: SchoolMutationData,
+  field: "name" | "notes",
+  lang: LangKey,
+  value: string
+) {
+  if (field === "name") {
+    if (lang === "ko") data.nameKo = value;
+    if (lang === "vi") data.nameVi = value;
+    if (lang === "mn") data.nameMn = value;
+    if (lang === "en") data.nameEn = value;
+    return;
+  }
+
+  if (lang === "ko") data.notesKo = value;
+  if (lang === "vi") data.notesVi = value;
+  if (lang === "mn") data.notesMn = value;
+  if (lang === "en") data.notesEn = value;
+}
+
+function setNullableSchoolNumber(
+  data: SchoolMutationData,
+  field: "dormitoryCost" | "topikLevel",
+  value: number | null
+) {
+  if (field === "dormitoryCost") data.dormitoryCost = value;
+  else data.topikLevel = value;
 }
 
 function mapDbSchool(school: {
@@ -170,8 +202,8 @@ function matchesSchoolQuery(school: School, normalizedQuery: string): boolean {
   return haystack.includes(normalizedQuery);
 }
 
-function buildWhere(filters: SchoolFilters) {
-  const where: Record<string, unknown> = {};
+function buildWhere(filters: SchoolFilters): Prisma.SchoolWhereInput {
+  const where: Prisma.SchoolWhereInput = {};
   if (filters.region && filters.region !== "all") where.region = filters.region;
   if (filters.program && filters.program !== "all") where.program = filters.program;
   if (filters.accreditation && filters.accreditation !== "all") {
@@ -233,11 +265,13 @@ export async function findSchoolById(
   return staticSchools(options).find((school) => school.id === id) || null;
 }
 
+export function normalizeSchoolPayload(input: SchoolMutationInput, mode: "create"): Prisma.SchoolCreateInput;
+export function normalizeSchoolPayload(input: SchoolMutationInput, mode: "update"): Prisma.SchoolUpdateInput;
 export function normalizeSchoolPayload(
   input: SchoolMutationInput,
   mode: "create" | "update"
-): Record<string, unknown> {
-  const data: Record<string, unknown> = {};
+): Prisma.SchoolCreateInput | Prisma.SchoolUpdateInput {
+  const data: SchoolMutationData = {};
   const requireValue = (value: unknown, label: string) => {
     if (value === undefined || value === null || String(value).trim() === "") {
       throw new Error(`Missing required field: ${label}`);
@@ -249,18 +283,24 @@ export function normalizeSchoolPayload(
 
   const name = input.name || {};
   const notes = input.notes || {};
-  for (const lang of ["ko", "vi", "mn", "en"] as const) {
+  for (const lang of LANGS) {
     const nameValue = name[lang];
     const noteValue = notes[lang];
     if (mode === "create" || nameValue !== undefined) {
-      data[`name${lang.toUpperCase().slice(0, 1)}${lang.slice(1)}`] = String(
-        mode === "create" ? requireValue(nameValue, `name.${lang}`) : nameValue
-      ).trim();
+      setLocalizedSchoolField(
+        data,
+        "name",
+        lang,
+        String(mode === "create" ? requireValue(nameValue, `name.${lang}`) : nameValue).trim()
+      );
     }
     if (mode === "create" || noteValue !== undefined) {
-      data[`notes${lang.toUpperCase().slice(0, 1)}${lang.slice(1)}`] = String(
-        mode === "create" ? requireValue(noteValue, `notes.${lang}`) : noteValue
-      ).trim();
+      setLocalizedSchoolField(
+        data,
+        "notes",
+        lang,
+        String(mode === "create" ? requireValue(noteValue, `notes.${lang}`) : noteValue).trim()
+      );
     }
   }
 
@@ -296,11 +336,11 @@ export function normalizeSchoolPayload(
     if (mode === "create" || input[field] !== undefined) {
       const raw = input[field];
       if (raw === null || raw === undefined) {
-        data[field] = null;
+        setNullableSchoolNumber(data, field, null);
         continue;
       }
       const value = Number(raw);
-      data[field] = Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
+      setNullableSchoolNumber(data, field, Number.isFinite(value) && value >= 0 ? Math.round(value) : null);
     }
   }
 
@@ -340,7 +380,9 @@ export function normalizeSchoolPayload(
     data.reviewAfter = reviewAfter;
   }
 
-  return data;
+  return mode === "create"
+    ? data as Prisma.SchoolCreateInput
+    : data as Prisma.SchoolUpdateInput;
 }
 
 export async function getSchoolSourceAudit(referenceDate: Date = new Date()) {
