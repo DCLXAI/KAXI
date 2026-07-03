@@ -39,7 +39,7 @@ jobs:
           - batch: law-visa-entry
             source_ids: immigration-act-visa-passport-requirement,immigration-act-visa-issuance-certificate
           - batch: law-entry-removal
-            source_ids: immigration-act-entry-ban,immigration-act-entry-inspection,immigration-act-deportation-grounds,immigration-act-departure-recommendation-order
+            source_ids: immigration-act-entry-ban,immigration-act-entry-inspection,immigration-act-departure-inspection,immigration-act-departure-suspension,immigration-act-deportation-grounds,immigration-act-deportation-objection,immigration-act-deportation-detention,immigration-act-departure-recommendation-order
           - batch: law-work-permissions
             source_ids: immigration-act-employment-restriction,immigration-act-employer-reporting-duty,immigration-act-student-management-reporting,immigration-act-outside-status-activity,immigration-act-workplace-change-addition,immigration-act-activity-scope-restriction,immigration-act-false-application-documents
           - batch: law-stay-permissions

@@ -95,8 +95,16 @@ const LAW_ACT_MARRIAGE_IMMIGRANT_EXTENSION_SPECIAL_URL =
   "https://www.law.go.kr/LSW/lsLawLinkInfo.do?chrClsCd=010202&lsJoLnkSeq=1000822759";
 const LAW_ACT_EMERGENCY_EXTENSION_SPECIAL_URL =
   "https://www.law.go.kr/LSW/lsRvsDocListP.do?chrClsCd=010202&lsId=001707&lsRvsGubun=all";
+const LAW_ACT_DEPARTURE_INSPECTION_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0028&lsiSeq=272921&urlMode=lsScJoRltInfoR";
+const LAW_ACT_DEPARTURE_SUSPENSION_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0029&lsiSeq=272921&urlMode=lsScJoRltInfoR";
 const LAW_ACT_DEPORTATION_GROUNDS_URL =
   "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0046&lsiSeq=272921&urlMode=lsScJoRltInfoR";
+const LAW_ACT_DEPORTATION_OBJECTION_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0060&lsiSeq=272921&urlMode=lsScJoRltInfoR";
+const LAW_ACT_DEPORTATION_DETENTION_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0063&lsiSeq=272921&urlMode=lsScJoRltInfoR";
 const LAW_ACT_DEPARTURE_RECOMMENDATION_ORDER_URL = LAW_ACT_URL;
 const LAW_DECREE_SHORT_TERM_STATUS_TABLE_URL =
   "https://www.law.go.kr/LSW/lsBylInfoPLinkR.do?lsiSeq=271319&lsNm=%EC%B6%9C%EC%9E%85%EA%B5%AD%EA%B4%80%EB%A6%AC%EB%B2%95+%EC%8B%9C%ED%96%89%EB%A0%B9&bylNo=0001&bylBrNo=00&bylCls=BE&bylEfYd=20250601&bylEfYdYn=Y";
@@ -397,6 +405,26 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     changeSignals: ["national_emergency", "border_closure", "flight_suspension", "extension_by_office", "no_fault_departure_limit"],
   },
   {
+    docId: "immigration-act-departure-inspection",
+    title: "출입국관리법 제28조 출국심사",
+    sourceUrl: LAW_ACT_DEPARTURE_INSPECTION_URL,
+    sourceType: "official_law",
+    topic: "process",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["departure_inspection", "valid_passport", "forged_passport", "biometric_departure", "departure_port"],
+  },
+  {
+    docId: "immigration-act-departure-suspension",
+    title: "출입국관리법 제29조 외국인 출국의 정지",
+    sourceUrl: LAW_ACT_DEPARTURE_SUSPENSION_URL,
+    sourceType: "official_law",
+    topic: "warning",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["departure_suspension", "departure_ban", "objection", "criminal_case", "tax_arrears"],
+  },
+  {
     docId: "immigration-act-reentry-permit",
     title: "출입국관리법 제30조 재입국허가",
     sourceUrl: LAW_ACT_REENTRY_PERMIT_URL,
@@ -472,6 +500,26 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     legalPriority: 1,
     monitorCadence: "daily",
     changeSignals: ["deportation", "removal", "unauthorized_work", "false_documents", "alien_registration_violation", "f5_exception"],
+  },
+  {
+    docId: "immigration-act-deportation-objection",
+    title: "출입국관리법 제60조 강제퇴거명령 이의신청",
+    sourceUrl: LAW_ACT_DEPORTATION_OBJECTION_URL,
+    sourceType: "official_law",
+    topic: "warning",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["deportation_objection", "7_days", "minister_of_justice", "release_from_detention", "investigation_records"],
+  },
+  {
+    docId: "immigration-act-deportation-detention",
+    title: "출입국관리법 제63조 강제퇴거명령을 받은 사람의 보호",
+    sourceUrl: LAW_ACT_DEPORTATION_DETENTION_URL,
+    sourceType: "official_law",
+    topic: "warning",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["deportation_detention", "protection_facility", "2_months", "9_months", "20_months", "foreigners_protection_committee"],
   },
   {
     docId: "immigration-act-departure-recommendation-order",

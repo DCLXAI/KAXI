@@ -462,6 +462,10 @@ function officialSummaryDocScore(question: string, doc: KnowledgeDoc, lang: Lang
   const asksEntryBan = /입국금지|입국\s*거부|입국불허|entry ban|refusal of entry|denied entry|inadmissible/i.test(question);
   const asksDeportation = /강제퇴거|퇴거명령|추방|deportation|removal/i.test(question);
   const asksDepartureOrder = /출국권고|출국명령|자진출국|출국기한|departure recommendation|departure order|voluntary departure/i.test(question);
+  const asksDepartureInspection = /출국심사|출국\s*심사|출국.*여권|공항.*출국|항만.*출국|departure inspection|depart.*passport|valid passport.*departure/i.test(question);
+  const asksDepartureSuspension = /출국정지|출국\s*정지|출국금지|출국\s*금지|출국.*(막|못|불가).*(수사|재판|세금|체납|벌금|범죄)|departure suspension|departure ban|cannot depart.*(criminal|investigation|tax|fine)/i.test(question);
+  const asksDeportationObjection = /강제퇴거.*이의|퇴거.*이의|이의신청|강제퇴거명령서.*7일|7일.*강제퇴거|deportation objection|removal objection|object.*deportation/i.test(question);
+  const asksDeportationDetention = /보호소|보호시설|외국인보호|보호기간|강제퇴거.*보호|2개월|9개월|20개월|immigration detention|deportation detention|protection facility|detention period/i.test(question);
   const asksEmployerReport = /고용주|사업주|사용자|해고|퇴직|사직|소재불명|고용계약.*변경|계약.*변경|employer report|employer reporting|dismissal|resignation|employment contract change|unable to locate|disappearance/i.test(question);
   const asksStudentManagement = /유학생.*(휴학|제적|미등록|행방불명|학적|학교.*신고)|학적변동|학적\s*변동|유학생정보시스템|학교.*(휴학|제적|미등록|행방불명|신고)|school reporting|student status change|leave of absence|removal from register|training discontinuation|student disappearance/i.test(question);
   const asksArcReturn = /외국인등록증.*(반납|반환|회수)|등록증.*(반납|반환|회수)|출국.*등록증|arc return|alien registration card.*return|registration card.*return/i.test(question);
@@ -526,6 +530,23 @@ function officialSummaryDocScore(question: string, doc: KnowledgeDoc, lang: Lang
   if (asksDepartureOrder) {
     if (doc.id === "immigration-act-departure-recommendation-order") score += 32;
     if (doc.id === "immigration-act-deportation-grounds") score += 14;
+  }
+  if (asksDepartureInspection) {
+    if (doc.id === "immigration-act-departure-inspection") score += 32;
+    if (doc.id === "immigration-act-arc-return-duty") score += 8;
+  }
+  if (asksDepartureSuspension) {
+    if (doc.id === "immigration-act-departure-suspension") score += 32;
+    if (doc.id === "immigration-act-departure-inspection") score += 8;
+  }
+  if (asksDeportationObjection) {
+    if (doc.id === "immigration-act-deportation-objection") score += 34;
+    if (doc.id === "immigration-act-deportation-grounds") score += 12;
+  }
+  if (asksDeportationDetention) {
+    if (doc.id === "immigration-act-deportation-detention") score += 34;
+    if (doc.id === "immigration-act-deportation-objection") score += 8;
+    if (doc.id === "immigration-act-deportation-grounds") score += 8;
   }
   if (asksEmployerReport) {
     if (doc.id === "immigration-act-employer-reporting-duty") score += 32;
