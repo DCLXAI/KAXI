@@ -138,6 +138,16 @@ interface AgentMeta {
   intentEvidence?: {
     detectedSignals: string[];
     resolvedSlots: { slot: string; value: string | number | boolean }[];
+    structuredSlots?: {
+      slot: string;
+      status: "resolved" | "defaulted" | "missing";
+      source: "explicit" | "inferred" | "default";
+      value?: string | number | boolean;
+      missingSlot?: string;
+      requiredFor: string[];
+      reason?: string;
+    }[];
+    slotRequirements?: { slot: string; requiredFor: string[]; reason: string }[];
     planReasons: string[];
     confidenceDrivers: string[];
   };

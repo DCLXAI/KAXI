@@ -27,6 +27,12 @@ function walk(dir: string): string[] {
 const publicRuntimeRoots = ["src/app", "src/components"];
 const violations: string[] = [];
 const mutationTypeViolations: string[] = [];
+const runtimeSeedImportViolations: string[] = [];
+const allowedRuntimeSeedImports = new Set([
+  "src/lib/schools/repository.ts",
+  "scripts/seed-schools.ts",
+  "scripts/audit-data-governance.ts",
+]);
 
 for (const root of publicRuntimeRoots) {
   for (const file of walk(root)) {
@@ -48,6 +54,28 @@ if (violations.length > 0) {
   );
 }
 
+for (const root of ["src", "scripts"]) {
+  for (const file of walk(root)) {
+    const normalized = file.replace(/\\/g, "/");
+    const content = readFileSync(file, "utf8");
+    const imports = content.matchAll(/import\s+(?!type\b)[^;]*from\s+["'][^"']*lib\/data\/schools["'];?/g);
+    for (const match of imports) {
+      if (!allowedRuntimeSeedImports.has(normalized)) {
+        runtimeSeedImportViolations.push(`${normalized}: ${match[0]}`);
+      }
+    }
+  }
+}
+
+if (runtimeSeedImportViolations.length > 0) {
+  fail(
+    [
+      "runtime imports of the school seed are restricted to repository local fallback and seed/governance scripts.",
+      ...runtimeSeedImportViolations,
+    ].join("\n")
+  );
+}
+
 for (const file of [
   "src/lib/schools/repository.ts",
   "src/app/api/schools/route.ts",
@@ -65,6 +93,37 @@ if (mutationTypeViolations.length > 0) {
       ...mutationTypeViolations,
     ].join("\n")
   );
+}
+
+function testSchoolDataStrategyDocs() {
+  const strategy = readFileSync("docs/SCHOOL_DATA_STRATEGY.md", "utf8");
+  const operations = readFileSync("docs/OPERATIONS.md", "utf8");
+  const requiredPhrases = [
+    "The operational source of truth for school data is the `School` table.",
+    "`src/lib/data/schools.ts` is retained only as:",
+    "Hosted preview and production runtimes must fail closed",
+    "Allowed runtime seed consumers:",
+    "`GET /api/schools` returns provenance fields:",
+  ];
+
+  for (const phrase of requiredPhrases) {
+    if (!strategy.includes(phrase)) {
+      fail(`school data strategy doc is missing required policy phrase: ${phrase}`);
+    }
+  }
+  if (!operations.includes("docs/SCHOOL_DATA_STRATEGY.md")) {
+    fail("operations policy must link to docs/SCHOOL_DATA_STRATEGY.md");
+  }
+
+  for (const schemaFile of ["prisma/schema.prisma", "prisma/postgres/schema.prisma"]) {
+    const schema = readFileSync(schemaFile, "utf8");
+    if (schema.includes("현재는 src/lib/data/schools.ts 사용")) {
+      fail(`${schemaFile} still describes schools.ts as the current runtime source`);
+    }
+    if (!schema.includes("Operational source of truth for school data")) {
+      fail(`${schemaFile} should document School table as the operational source of truth`);
+    }
+  }
 }
 
 async function testSchoolApiExposesProvenance() {
@@ -89,6 +148,7 @@ async function testSchoolApiExposesProvenance() {
   }
 }
 
+testSchoolDataStrategyDocs();
 await testSchoolApiExposesProvenance();
 
 console.log("PASS school data boundary");

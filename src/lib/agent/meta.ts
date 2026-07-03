@@ -39,7 +39,15 @@ export interface AgentMeta {
   suggestions: AgentSuggestion[];
   safetyFlags: string[];
   sourceNotice?: string;
-  intentEvidence: Pick<AgentIntentEvidence, "detectedSignals" | "resolvedSlots" | "planReasons" | "confidenceDrivers">;
+  intentEvidence: Pick<
+    AgentIntentEvidence,
+    | "detectedSignals"
+    | "resolvedSlots"
+    | "structuredSlots"
+    | "slotRequirements"
+    | "planReasons"
+    | "confidenceDrivers"
+  >;
   quality: {
     backend: string;
     grounded: boolean;
@@ -367,6 +375,8 @@ export function buildAgentMeta({
     intentEvidence: {
       detectedSignals: analysis.evidence.detectedSignals,
       resolvedSlots: analysis.evidence.resolvedSlots,
+      structuredSlots: analysis.evidence.structuredSlots,
+      slotRequirements: analysis.evidence.slotRequirements,
       planReasons: analysis.evidence.planReasons,
       confidenceDrivers: analysis.evidence.confidenceDrivers,
     },

@@ -142,6 +142,13 @@ function summarizePlannerContext(analysis: AgentIntentAnalysis): string[] {
         : "none"
     }`,
     `Missing slots: ${analysis.missingSlots.length > 0 ? analysis.missingSlots.join(", ") : "none"}`,
+    `Slot requirements: ${
+      analysis.slotRequirements.length > 0
+        ? analysis.slotRequirements
+            .map((item) => `${item.slot}->${item.requiredFor.join("+")}:${item.reason}`)
+            .join(", ")
+        : "none"
+    }`,
     `Confidence drivers: ${analysis.evidence.confidenceDrivers.join(", ")}`,
   ];
 

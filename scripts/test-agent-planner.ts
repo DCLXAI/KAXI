@@ -66,6 +66,12 @@ function testSchoolAndCostIntent() {
     `budget evidence missing: ${JSON.stringify(result)}`
   );
   assert(
+    result.structuredSlots.some(
+      (slot) => slot.slot === "budget" && slot.status === "resolved" && slot.source === "explicit"
+    ),
+    `structured budget slot missing: ${JSON.stringify(result.structuredSlots)}`
+  );
+  assert(
     result.evidence.confidenceDrivers.includes("slots_complete"),
     `confidence evidence should show complete slots: ${JSON.stringify(result)}`
   );
@@ -147,6 +153,52 @@ function testExactSchoolRefinement() {
   expectNoMissingSlots(result.missingSlots, ["region", "program", "budget"], result);
 }
 
+function testStructuredSlotRequirements() {
+  const vague = analyzeAgentIntent("비자 서류랑 학교 추천해줘", "ko");
+
+  assert(
+    vague.structuredSlots.some(
+      (slot) =>
+        slot.slot === "region" &&
+        slot.status === "missing" &&
+        slot.missingSlot === "region" &&
+        slot.requiredFor.includes("search_schools")
+    ),
+    `structured region requirement missing: ${JSON.stringify(vague.structuredSlots)}`
+  );
+  assert(
+    vague.structuredSlots.some(
+      (slot) =>
+        slot.slot === "visaType" &&
+        slot.status === "missing" &&
+        slot.value === "D-4" &&
+        slot.requiredFor.includes("get_documents")
+    ),
+    `structured visa requirement should preserve default value while marking missing: ${JSON.stringify(vague.structuredSlots)}`
+  );
+  assert(
+    vague.slotRequirements.some(
+      (requirement) =>
+        requirement.slot === "nationality" &&
+        requirement.requiredFor.includes("get_documents") &&
+        requirement.reason === "visa_or_diagnosis_request_without_nationality"
+    ),
+    `slot requirements should explain why nationality is needed: ${JSON.stringify(vague.slotRequirements)}`
+  );
+  assert(
+    vague.evidence.slotRequirements.length === vague.slotRequirements.length &&
+      vague.evidence.structuredSlots.length === vague.structuredSlots.length,
+    `evidence should mirror structured slot registry output: ${JSON.stringify(vague.evidence)}`
+  );
+
+  const exactSchool = analyzeAgentIntent("학교명: 연세대학교 예산 500만원으로 비용 계산해줘", "ko");
+  assert(
+    exactSchool.structuredSlots.some((slot) => slot.slot === "schoolName" && slot.status === "resolved"),
+    `exact school name should be a resolved structured slot: ${JSON.stringify(exactSchool.structuredSlots)}`
+  );
+  expectNoMissingSlots(exactSchool.missingSlots, ["region", "program", "budget"], exactSchool);
+}
+
 function testMultilingualIntentCorpus() {
   const greeting = analyzeAgentIntent("xin chào", "vi");
   assert(greeting.smallTalk, `Vietnamese greeting should be small talk: ${JSON.stringify(greeting)}`);
@@ -191,5 +243,6 @@ testVisaDocumentIntent();
 testPartnerAndSafetyIntent();
 testDiagnosisSlotFilling();
 testExactSchoolRefinement();
+testStructuredSlotRequirements();
 testMultilingualIntentCorpus();
 console.log("PASS agent planner regressions");

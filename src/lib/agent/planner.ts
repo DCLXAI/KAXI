@@ -36,19 +36,6 @@ export interface PlannedToolCall {
 export type AgentIntentConfidence = "low" | "medium" | "high";
 export type AgentIntentSignalName = keyof AgentIntentSignals;
 
-export interface AgentResolvedSlot {
-  slot: string;
-  value: string | number | boolean;
-}
-
-export interface AgentIntentEvidence {
-  detectedSignals: AgentIntentSignalName[];
-  resolvedSlots: AgentResolvedSlot[];
-  missingSlots: AgentMissingSlot[];
-  planReasons: string[];
-  confidenceDrivers: string[];
-}
-
 export type AgentMissingSlot =
   | "region"
   | "program"
@@ -58,6 +45,55 @@ export type AgentMissingSlot =
   | "education"
   | "korean_level"
   | "goal";
+
+export type AgentSlotName =
+  | "budget"
+  | "schoolName"
+  | "region"
+  | "program"
+  | "accreditation"
+  | "visaType"
+  | "nationality"
+  | "partnerType"
+  | "education"
+  | "koreanLevel"
+  | "goal"
+  | "usingBroker"
+  | "hasHistory";
+
+export type AgentSlotStatus = "resolved" | "defaulted" | "missing";
+export type AgentSlotSource = "explicit" | "inferred" | "default";
+
+export interface AgentStructuredSlot {
+  slot: AgentSlotName;
+  status: AgentSlotStatus;
+  source: AgentSlotSource;
+  value?: string | number | boolean;
+  missingSlot?: AgentMissingSlot;
+  requiredFor: PlannedToolName[];
+  reason?: string;
+}
+
+export interface AgentSlotRequirement {
+  slot: AgentMissingSlot;
+  requiredFor: PlannedToolName[];
+  reason: string;
+}
+
+export interface AgentResolvedSlot {
+  slot: string;
+  value: string | number | boolean;
+}
+
+export interface AgentIntentEvidence {
+  detectedSignals: AgentIntentSignalName[];
+  resolvedSlots: AgentResolvedSlot[];
+  structuredSlots: AgentStructuredSlot[];
+  missingSlots: AgentMissingSlot[];
+  slotRequirements: AgentSlotRequirement[];
+  planReasons: string[];
+  confidenceDrivers: string[];
+}
 
 export interface AgentIntentAnalysis {
   text: string;
@@ -83,12 +119,147 @@ export interface AgentIntentAnalysis {
   usingBroker: boolean;
   hasHistory: boolean;
   confidence: AgentIntentConfidence;
+  structuredSlots: AgentStructuredSlot[];
   missingSlots: AgentMissingSlot[];
+  slotRequirements: AgentSlotRequirement[];
   evidence: AgentIntentEvidence;
   plan: PlannedToolCall[];
 }
 
-function buildToolPlan(question: string, slots: ReturnType<typeof extractAgentSlots>): PlannedToolCall[] {
+type ExtractedAgentSlots = ReturnType<typeof extractAgentSlots>;
+
+interface PlannerSlotDefinition {
+  slot: AgentSlotName;
+  missingSlot?: AgentMissingSlot;
+  getValue: (slots: ExtractedAgentSlots) => string | number | boolean | undefined;
+  isResolved: (slots: ExtractedAgentSlots) => boolean;
+  isExplicit?: (slots: ExtractedAgentSlots) => boolean;
+  isMissing?: (slots: ExtractedAgentSlots) => boolean;
+  requiredFor?: (slots: ExtractedAgentSlots) => PlannedToolName[];
+  missingReason?: string;
+}
+
+function compactTools(tools: Array<PlannedToolName | false>): PlannedToolName[] {
+  return tools.filter((tool): tool is PlannedToolName => Boolean(tool));
+}
+
+const SLOT_DEFINITIONS: PlannerSlotDefinition[] = [
+  {
+    slot: "budget",
+    missingSlot: "budget",
+    getValue: (slots) => slots.budget,
+    isResolved: (slots) => Boolean(slots.budget),
+    isExplicit: (slots) => Boolean(slots.budget),
+    isMissing: (slots) => slots.signals.budgetSignal && !slots.budget,
+    requiredFor: () => ["search_schools", "calculate_cost"],
+    missingReason: "budget_signal_without_amount",
+  },
+  {
+    slot: "schoolName",
+    getValue: (slots) => slots.schoolName,
+    isResolved: (slots) => Boolean(slots.schoolName),
+    isExplicit: (slots) => Boolean(slots.schoolName),
+  },
+  {
+    slot: "region",
+    missingSlot: "region",
+    getValue: (slots) => slots.region,
+    isResolved: (slots) => slots.region !== "all",
+    isExplicit: (slots) => slots.region !== "all",
+    isMissing: (slots) => (slots.signals.school || slots.signals.cost) && !slots.schoolName && slots.region === "all",
+    requiredFor: () => ["search_schools"],
+    missingReason: "school_or_cost_request_without_region",
+  },
+  {
+    slot: "program",
+    missingSlot: "program",
+    getValue: (slots) => slots.program,
+    isResolved: (slots) => slots.program !== "all",
+    isExplicit: (slots) => slots.program !== "all",
+    isMissing: (slots) => slots.signals.school && !slots.schoolName && slots.program === "all",
+    requiredFor: () => ["search_schools"],
+    missingReason: "school_request_without_program",
+  },
+  {
+    slot: "accreditation",
+    getValue: (slots) => slots.accreditation,
+    isResolved: (slots) => slots.accreditation !== "all",
+    isExplicit: (slots) => slots.accreditation !== "all",
+  },
+  {
+    slot: "visaType",
+    missingSlot: "visa_type",
+    getValue: (slots) => slots.visaType,
+    isResolved: (slots) => slots.signals.explicitVisaType,
+    isExplicit: (slots) => slots.signals.explicitVisaType,
+    isMissing: (slots) => slots.signals.documents && !slots.signals.explicitVisaType,
+    requiredFor: () => ["get_documents"],
+    missingReason: "document_request_without_explicit_visa_type",
+  },
+  {
+    slot: "nationality",
+    missingSlot: "nationality",
+    getValue: (slots) => slots.nationality,
+    isResolved: (slots) => slots.nationality !== "other",
+    isExplicit: (slots) => slots.nationality !== "other",
+    isMissing: (slots) => (slots.signals.documents || slots.signals.diagnosis) && slots.nationality === "other",
+    requiredFor: (slots) => compactTools([
+      slots.signals.documents && "get_documents",
+      slots.signals.diagnosis && "diagnose_path",
+    ]),
+    missingReason: "visa_or_diagnosis_request_without_nationality",
+  },
+  {
+    slot: "partnerType",
+    getValue: (slots) => slots.partnerType,
+    isResolved: (slots) => slots.signals.partner,
+    isExplicit: (slots) => slots.signals.partner,
+  },
+  {
+    slot: "education",
+    missingSlot: "education",
+    getValue: (slots) => slots.education,
+    isResolved: (slots) => slots.signals.educationSignal,
+    isExplicit: (slots) => slots.signals.educationSignal,
+    isMissing: (slots) => slots.signals.diagnosis && !slots.signals.educationSignal,
+    requiredFor: () => ["diagnose_path"],
+    missingReason: "diagnosis_request_without_education",
+  },
+  {
+    slot: "koreanLevel",
+    missingSlot: "korean_level",
+    getValue: (slots) => slots.koreanLevel,
+    isResolved: (slots) => slots.signals.koreanLevelSignal,
+    isExplicit: (slots) => slots.signals.koreanLevelSignal,
+    isMissing: (slots) => slots.signals.diagnosis && !slots.signals.koreanLevelSignal,
+    requiredFor: () => ["diagnose_path"],
+    missingReason: "diagnosis_request_without_korean_level",
+  },
+  {
+    slot: "goal",
+    missingSlot: "goal",
+    getValue: (slots) => slots.goal,
+    isResolved: (slots) => slots.signals.goalSignal && slots.goal !== "unsure",
+    isExplicit: (slots) => slots.signals.goalSignal && slots.goal !== "unsure",
+    isMissing: (slots) => slots.signals.diagnosis && !slots.signals.goalSignal,
+    requiredFor: () => ["diagnose_path"],
+    missingReason: "diagnosis_request_without_goal",
+  },
+  {
+    slot: "usingBroker",
+    getValue: (slots) => slots.usingBroker,
+    isResolved: (slots) => slots.usingBroker,
+    isExplicit: (slots) => slots.usingBroker,
+  },
+  {
+    slot: "hasHistory",
+    getValue: (slots) => slots.hasHistory,
+    isResolved: (slots) => slots.hasHistory,
+    isExplicit: (slots) => slots.hasHistory,
+  },
+];
+
+function buildToolPlan(question: string, slots: ExtractedAgentSlots): PlannedToolCall[] {
   const {
     budget,
     schoolName,
@@ -168,24 +339,50 @@ function buildToolPlan(question: string, slots: ReturnType<typeof extractAgentSl
   return plan;
 }
 
-function detectMissingSlots(slots: ReturnType<typeof extractAgentSlots>): AgentMissingSlot[] {
-  const { budget, schoolName, region, program, nationality, signals } = slots;
+function buildStructuredSlots(slots: ExtractedAgentSlots): AgentStructuredSlot[] {
+  return SLOT_DEFINITIONS.map((definition) => {
+    const missing = Boolean(definition.isMissing?.(slots));
+    const resolved = definition.isResolved(slots);
+    const explicit = Boolean(definition.isExplicit?.(slots));
+    const requiredFor = missing ? definition.requiredFor?.(slots) || [] : [];
+    const value = definition.getValue(slots);
+    const status: AgentSlotStatus = missing ? "missing" : resolved ? "resolved" : "defaulted";
+    const source: AgentSlotSource = explicit ? "explicit" : resolved ? "inferred" : "default";
+
+    return {
+      slot: definition.slot,
+      status,
+      source,
+      value,
+      missingSlot: missing ? definition.missingSlot : undefined,
+      requiredFor,
+      reason: missing ? definition.missingReason : undefined,
+    };
+  });
+}
+
+function buildSlotRequirements(structuredSlots: AgentStructuredSlot[]): AgentSlotRequirement[] {
+  return structuredSlots
+    .filter((slot): slot is AgentStructuredSlot & { missingSlot: AgentMissingSlot; reason: string } =>
+      slot.status === "missing" && Boolean(slot.missingSlot) && Boolean(slot.reason)
+    )
+    .map((slot) => ({
+      slot: slot.missingSlot,
+      requiredFor: slot.requiredFor,
+      reason: slot.reason,
+    }));
+}
+
+function detectMissingSlots(structuredSlots: AgentStructuredSlot[]): AgentMissingSlot[] {
   const missingSlots = new Set<AgentMissingSlot>();
-
-  if ((signals.school || signals.cost) && !schoolName && region === "all") missingSlots.add("region");
-  if (signals.school && !schoolName && program === "all") missingSlots.add("program");
-  if (signals.budgetSignal && !budget) missingSlots.add("budget");
-  if (signals.documents && !signals.explicitVisaType) missingSlots.add("visa_type");
-  if ((signals.documents || signals.diagnosis) && nationality === "other") missingSlots.add("nationality");
-  if (signals.diagnosis && !signals.educationSignal) missingSlots.add("education");
-  if (signals.diagnosis && !signals.koreanLevelSignal) missingSlots.add("korean_level");
-  if (signals.diagnosis && !signals.goalSignal) missingSlots.add("goal");
-
+  for (const slot of structuredSlots) {
+    if (slot.status === "missing" && slot.missingSlot) missingSlots.add(slot.missingSlot);
+  }
   return Array.from(missingSlots);
 }
 
 function confidenceFor(
-  slots: ReturnType<typeof extractAgentSlots>,
+  slots: ExtractedAgentSlots,
   plan: PlannedToolCall[],
   missingSlots: AgentMissingSlot[]
 ): AgentIntentConfidence {
@@ -199,26 +396,14 @@ function detectedSignals(signals: AgentIntentSignals): AgentIntentSignalName[] {
   return (Object.keys(signals) as AgentIntentSignalName[]).filter((key) => signals[key]);
 }
 
-function resolvedSlots(slots: ReturnType<typeof extractAgentSlots>): AgentResolvedSlot[] {
-  const resolved: AgentResolvedSlot[] = [];
-  if (slots.budget) resolved.push({ slot: "budget", value: slots.budget });
-  if (slots.schoolName) resolved.push({ slot: "schoolName", value: slots.schoolName });
-  if (slots.region !== "all") resolved.push({ slot: "region", value: slots.region });
-  if (slots.program !== "all") resolved.push({ slot: "program", value: slots.program });
-  if (slots.accreditation !== "all") resolved.push({ slot: "accreditation", value: slots.accreditation });
-  if (slots.signals.explicitVisaType) resolved.push({ slot: "visaType", value: slots.visaType });
-  if (slots.nationality !== "other") resolved.push({ slot: "nationality", value: slots.nationality });
-  if (slots.signals.partner) resolved.push({ slot: "partnerType", value: slots.partnerType });
-  if (slots.signals.educationSignal) resolved.push({ slot: "education", value: slots.education });
-  if (slots.signals.koreanLevelSignal) resolved.push({ slot: "koreanLevel", value: slots.koreanLevel });
-  if (slots.signals.goalSignal && slots.goal !== "unsure") resolved.push({ slot: "goal", value: slots.goal });
-  if (slots.usingBroker) resolved.push({ slot: "usingBroker", value: true });
-  if (slots.hasHistory) resolved.push({ slot: "hasHistory", value: true });
-  return resolved;
+function resolvedSlots(structuredSlots: AgentStructuredSlot[]): AgentResolvedSlot[] {
+  return structuredSlots
+    .filter((slot) => slot.status === "resolved" && slot.value !== undefined)
+    .map((slot) => ({ slot: slot.slot, value: slot.value as string | number | boolean }));
 }
 
 function confidenceDrivers(
-  slots: ReturnType<typeof extractAgentSlots>,
+  slots: ExtractedAgentSlots,
   plan: PlannedToolCall[],
   missingSlots: AgentMissingSlot[]
 ): string[] {
@@ -231,14 +416,17 @@ function confidenceDrivers(
 }
 
 function buildIntentEvidence(
-  slots: ReturnType<typeof extractAgentSlots>,
+  slots: ExtractedAgentSlots,
   plan: PlannedToolCall[],
+  structuredSlots: AgentStructuredSlot[],
   missingSlots: AgentMissingSlot[]
 ): AgentIntentEvidence {
   return {
     detectedSignals: detectedSignals(slots.signals),
-    resolvedSlots: resolvedSlots(slots),
+    resolvedSlots: resolvedSlots(structuredSlots),
+    structuredSlots,
     missingSlots,
+    slotRequirements: buildSlotRequirements(structuredSlots),
     planReasons: plan.map((item) => item.reason),
     confidenceDrivers: confidenceDrivers(slots, plan, missingSlots),
   };
@@ -248,9 +436,11 @@ export function analyzeAgentIntent(question: string, lang?: Lang): AgentIntentAn
   void lang;
   const slots = extractAgentSlots(question);
   const plan = buildToolPlan(question, slots);
-  const missingSlots = detectMissingSlots(slots);
+  const structuredSlots = buildStructuredSlots(slots);
+  const missingSlots = detectMissingSlots(structuredSlots);
+  const slotRequirements = buildSlotRequirements(structuredSlots);
   const confidence = confidenceFor(slots, plan, missingSlots);
-  const evidence = buildIntentEvidence(slots, plan, missingSlots);
+  const evidence = buildIntentEvidence(slots, plan, structuredSlots, missingSlots);
   const { signals } = slots;
 
   return {
@@ -277,7 +467,9 @@ export function analyzeAgentIntent(question: string, lang?: Lang): AgentIntentAn
     usingBroker: slots.usingBroker,
     hasHistory: slots.hasHistory,
     confidence,
+    structuredSlots,
     missingSlots,
+    slotRequirements,
     evidence,
     plan,
   };

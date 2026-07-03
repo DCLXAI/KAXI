@@ -326,7 +326,7 @@ model PartnerRequest {
 }
 
 // 학교 데이터 (수동 시드 — 운영시 관리자 페이지에서 편집)
-// 현재는 src/lib/data/schools.ts 사용하지만, 운영 확장용으로 스키마만 정의
+// Operational source of truth for school data. src/lib/data/schools.ts is a local seed/fallback fixture only.
 model School {
   id                  String   @id
   createdAt           DateTime @default(now())
