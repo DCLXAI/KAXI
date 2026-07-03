@@ -27,8 +27,14 @@ export type VisaComplianceOutputOperation =
   | { op: "infer_visa_type_from_program" }
   | { op: "add_core_documents" }
   | { op: "add_financial_proof" }
+  | { op: "add_ongoing_financial_proof" }
   | { op: "add_tuberculosis_document" }
-  | { op: "apply_safety_escalation" };
+  | { op: "apply_safety_escalation" }
+  | { op: "add_language_proof" }
+  | { op: "add_insurance_proof" }
+  | { op: "add_vn_mn_d2_scrutiny" }
+  | { op: "add_vocational_d2_proof" }
+  | { op: "add_d4_to_d2_transfer_docs" };
 
 export interface ComplianceOutputAst {
   riskLevel: ComplianceRiskLevel;

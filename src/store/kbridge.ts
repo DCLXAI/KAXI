@@ -4,6 +4,8 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Lang } from "@/lib/i18n/translations";
 import type { DiagnosisInput, PathRecommendation } from "@/lib/data/diagnosis";
+import type { School } from "@/lib/data/schools";
+import { calculateReadinessScore } from "@/lib/data/readiness";
 
 // --- 언어 설정 (클라이언트 persist) ---
 interface LangState {
@@ -51,9 +53,27 @@ interface LeadState {
   leads: Lead[];
   loading: boolean;
   savingDiagnosis: boolean;
+  selectedSchoolsForReadiness: School[];
   saveDiagnosis: (nickname: string, input: DiagnosisInput, recommendation: PathRecommendation) => Promise<string | null>;
   fetchLeads: (adminKey?: string) => Promise<void>;
   clearCurrent: () => void;
+  toggleSchoolForReadiness: (school: School) => void;
+  clearSelectedSchoolsForReadiness: () => void;
+  // Recompute readiness using currently selected schools' accreditations
+  recomputeReadinessWithSelectedSchools: () => void;
+  updateCurrentDiagnosisRecommendation: (input: DiagnosisInput, recommendation: PathRecommendation) => void;
+}
+
+function complianceSignalsFromRecommendation(recommendation: PathRecommendation) {
+  return recommendation.compliance
+    ? {
+        sourceRefs: recommendation.compliance.sourceRefs,
+        blockedReasons: recommendation.compliance.blockedReasons,
+        partnerEscalationReasons: recommendation.compliance.partnerEscalationReasons,
+        warnings: recommendation.compliance.warnings,
+        missingInputs: recommendation.compliance.missingInputs,
+      }
+    : null;
 }
 
 export const useLeadStore = create<LeadState>()((set, get) => ({
@@ -62,6 +82,7 @@ export const useLeadStore = create<LeadState>()((set, get) => ({
   leads: [],
   loading: false,
   savingDiagnosis: false,
+  selectedSchoolsForReadiness: [],
 
   saveDiagnosis: async (nickname, input, recommendation) => {
     set({ savingDiagnosis: true });
@@ -149,6 +170,46 @@ export const useLeadStore = create<LeadState>()((set, get) => ({
   },
 
   clearCurrent: () => set({ currentDiagnosis: null, currentLeadId: null }),
+
+  toggleSchoolForReadiness: (school) => {
+    const current = get().selectedSchoolsForReadiness;
+    const exists = current.some((s) => s.id === school.id);
+    const next = exists
+      ? current.filter((s) => s.id !== school.id)
+      : [...current, school];
+    set({ selectedSchoolsForReadiness: next });
+    get().recomputeReadinessWithSelectedSchools();
+  },
+
+  clearSelectedSchoolsForReadiness: () => {
+    set({ selectedSchoolsForReadiness: [] });
+    get().recomputeReadinessWithSelectedSchools();
+  },
+
+  recomputeReadinessWithSelectedSchools: () => {
+    const diag = get().currentDiagnosis;
+    if (!diag) return;
+    const accs = get().selectedSchoolsForReadiness.map((s) => s.accreditation);
+    const readiness = calculateReadinessScore({
+      input: diag.input,
+      complianceSignals: complianceSignalsFromRecommendation(diag.recommendation),
+      selectedSchoolAccreditations: accs,
+    });
+    set({
+      currentDiagnosis: {
+        ...diag,
+        recommendation: {
+          ...diag.recommendation,
+          readiness,
+        },
+      },
+    });
+  },
+
+  updateCurrentDiagnosisRecommendation: (input, recommendation) => {
+    set({ currentDiagnosis: { input, recommendation } });
+    get().recomputeReadinessWithSelectedSchools();
+  },
 }));
 
 // --- 파트너 요청 (서버 동기화) ---

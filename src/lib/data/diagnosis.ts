@@ -1,6 +1,7 @@
 // 경로 진단 추천 로직
 import type { Lang } from "../i18n/translations";
 import type { VisaRuleEvaluation } from "../rules/visa-rules";
+import { calculateReadinessScore, type CalculateReadinessInput, type ReadinessScore } from "./readiness";
 
 export type DiagnosisVisaType = "D-2" | "D-4" | "D-10";
 
@@ -55,6 +56,7 @@ export interface PathRecommendation {
     partnerEscalationReasons: string[];
     blockedReasons: string[];
   };
+  readiness?: ReadinessScore;
 }
 
 type LocalizedText = { ko: string; vi: string; mn: string; en: string };
@@ -243,6 +245,44 @@ const DIAGNOSIS_RULES: DiagnosisRule[] = [
       en: "The D-10 job-seeking/startup path is not yet executable in the KAXI compliance rule engine. Use law/HiKorea RAG only for general principles, and route current status, expiry, job-seeking, or startup eligibility facts to administrative-scrivener review.",
     }),
   },
+  {
+    id: "rule:combined-low-korean-high-budget-risk",
+    applies: (input, profile) =>
+      profile.visaType === "D-2" &&
+      hasLowKorean(input) &&
+      input.budget > 0 &&
+      input.budget < 10000000,
+    riskDelta: 2,
+    warning: () => ({
+      ko: "D-2 과정에서 한국어 수준이 낮고 예산도 부족한 경우 준비 리스크가 크게 증가합니다. 어학당 선행이나 재정 증빙 보강을 권장합니다.",
+      vi: "D-2 với tiếng Hàn thấp và ngân sách hạn chế làm tăng rủi ro đáng kể. Nên học ngôn ngữ trước hoặc bổ sung chứng minh tài chính.",
+      mn: "D-2 дээр солонгос хэлний түвшин бага, төсөв хүрэлцээгүй тохиолдолд бэлтгэлийн эрсдэл их нэмэгдэнэ. Хэлний курс эсвэл санхүүгийн баталгаа нэмэхийг зөвлөж байна.",
+      en: "Low Korean + insufficient budget for D-2 significantly increases prep risk. Consider language program first or strengthen financial proof.",
+    }),
+  },
+  {
+    id: "rule:language-proficiency-degree",
+    applies: (input, profile) =>
+      profile.visaType === "D-2" && (input.goal === "degree" || input.goal === "transfer") && hasLowKorean(input),
+    riskDelta: 1,
+    warning: () => ({
+      ko: "D-2 학위 과정은 TOPIK 또는 영어 증빙이 필수입니다. 낮은 한국어 수준 시 추가 준비 기간 필요.",
+      vi: "Chương trình D-2 yêu cầu chứng minh năng lực ngôn ngữ. Trình độ thấp cần thời gian chuẩn bị thêm.",
+      mn: "D-2 бакалавр хөтөлбөрт TOPIK эсвэл англи хэлний баталгаа шаардлагатай. Түвшин бага бол нэмэлт бэлтгэл хугацаа хэрэгтэй.",
+      en: "D-2 degree requires TOPIK/English proof. Low Korean level requires extra prep time.",
+    }),
+  },
+  {
+    id: "rule:health-insurance-reminder",
+    applies: () => true,
+    riskDelta: 0,
+    warning: () => ({
+      ko: "한국 유학 시 국민건강보험 또는 동등 보험 가입이 의무입니다. 등록 후 즉시 확인하세요.",
+      vi: "Du học Hàn Quốc yêu cầu bảo hiểm y tế quốc gia hoặc tương đương. Đăng ký ngay sau khi nhập học.",
+      mn: "Солонгос суралцахад үндэсний эрүүл мэндийн даатгал эсвэл түүнтэй тэнцэх даатгал заавал байх ёстой.",
+      en: "National Health Insurance or equivalent is mandatory for study in Korea. Verify immediately after registration.",
+    }),
+  },
 ];
 
 function unique<T>(items: T[]): T[] {
@@ -270,7 +310,7 @@ function confidenceFor(
 function complianceRiskFloor(evaluation?: VisaRuleEvaluation | null): number {
   if (!evaluation) return 0;
   if (evaluation.blocked_reasons.length > 0) return 3;
-  if (evaluation.partner_escalation_reasons.length > 0) return 2;
+  if (evaluation.partner_escalation_reasons.length > 0) return 3;
   if (evaluation.warnings.length > 0 || evaluation.missing_inputs.length > 0) return 1;
   return 0;
 }
@@ -332,7 +372,10 @@ function complianceCoverage(
 
 export function recommendPath(
   input: DiagnosisInput,
-  options: { visaRuleEvaluation?: VisaRuleEvaluation | null } = {}
+  options: {
+    visaRuleEvaluation?: VisaRuleEvaluation | null;
+    selectedSchoolAccreditations?: ("accredited" | "standard" | "caution")[];
+  } = {}
 ): PathRecommendation {
   const profile = selectPathProfile(input);
   const estimatedCost = roundTo(profile.baseCost * regionCostMultiplier(input.region), 100_000);
@@ -393,6 +436,12 @@ export function recommendPath(
     riskScore = Math.max(riskScore, complianceRiskFloor(visaRuleEvaluation));
   }
 
+  const readiness = calculateReadinessScore({
+    input,
+    visaRuleEvaluation,
+    selectedSchoolAccreditations: options.selectedSchoolAccreditations,
+  });
+
   return {
     pathKey: profile.pathKey,
     visaType: profile.visaType,
@@ -412,6 +461,7 @@ export function recommendPath(
     sourceRefs: unique(sourceRefs),
     complianceCoverage: complianceCoverage(profile.visaType, visaRuleEvaluation),
     compliance: complianceRecommendation(visaRuleEvaluation),
+    readiness,
   };
 }
 

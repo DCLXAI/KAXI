@@ -91,6 +91,48 @@ export const VISA_COMPLIANCE_RULE_SEEDS: VisaComplianceRuleSeed[] = [
     requiresHumanReview: true,
     operations: [{ op: "apply_safety_escalation" }],
   }),
+  seed("language-proficiency-for-degree", "language_proof", {
+    riskLevel: "MEDIUM",
+    resultType: "document_required",
+    messageKey: "language_proficiency_for_degree",
+    requiresHumanReview: false,
+    operations: [{ op: "add_language_proof" }],
+  }),
+  seed("ongoing-financial-maintenance", "financial_ongoing", {
+    riskLevel: "MEDIUM",
+    resultType: "document_required",
+    messageKey: "ongoing_financial_maintenance",
+    requiresHumanReview: false,
+    operations: [{ op: "add_ongoing_financial_proof" }],
+  }),
+  seed("health-insurance-mandatory", "insurance_requirement", {
+    riskLevel: "LOW",
+    resultType: "document_required",
+    messageKey: "health_insurance_mandatory",
+    requiresHumanReview: false,
+    operations: [{ op: "add_insurance_proof" }],
+  }),
+  seed("nationality-vn-mn-d2-scrutiny", "nationality_scrutiny", {
+    riskLevel: "MEDIUM",
+    resultType: "document_required",
+    messageKey: "nationality_vn_mn_d2_scrutiny",
+    requiresHumanReview: false,
+    operations: [{ op: "add_vn_mn_d2_scrutiny" }],
+  }),
+  seed("program-vocational-d2-requirements", "vocational_requirements", {
+    riskLevel: "MEDIUM",
+    resultType: "document_required",
+    messageKey: "program_vocational_d2_requirements",
+    requiresHumanReview: false,
+    operations: [{ op: "add_vocational_d2_proof" }],
+  }),
+  seed("d4-to-d2-transfer-path", "transfer_requirements", {
+    riskLevel: "HIGH",
+    resultType: "human_review_required",
+    messageKey: "d4_to_d2_transfer_path",
+    requiresHumanReview: true,
+    operations: [{ op: "add_d4_to_d2_transfer_docs" }],
+  }),
 ];
 
 export const VISA_COMPLIANCE_RULE_ORDER = VISA_COMPLIANCE_RULE_SEEDS.map((rule) => rule.code);

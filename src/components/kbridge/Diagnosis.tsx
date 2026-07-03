@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLangStore, useLeadStore } from "@/store/kbridge";
 import { tr, translationKey } from "@/lib/i18n/translations";
 import { recommendPath, type DiagnosisInput, pickLang } from "@/lib/data/diagnosis";
+import { ReadinessScoreCard } from "./ReadinessScoreCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,7 +25,7 @@ function isOneOf<T extends string>(value: string, values: readonly T[]): value i
 
 export function Diagnosis({ onNavigate }: { onNavigate: (v: string) => void }) {
   const { lang } = useLangStore();
-  const { saveDiagnosis, savingDiagnosis } = useLeadStore();
+  const { saveDiagnosis, savingDiagnosis, currentDiagnosis, updateCurrentDiagnosisRecommendation } = useLeadStore();
   const [result, setResult] = useState<ReturnType<typeof recommendPath> | null>(null);
   const [showSave, setShowSave] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -45,9 +46,34 @@ export function Diagnosis({ onNavigate }: { onNavigate: (v: string) => void }) {
 
   const update = (patch: Partial<DiagnosisInput>) => setInput((p) => ({ ...p, ...patch }));
 
-  const submit = () => {
-    const rec = recommendPath(input);
-    setResult(rec);
+  // Sync with store for school selection linkage
+  useEffect(() => {
+    if (currentDiagnosis) {
+      setInput(currentDiagnosis.input);
+      if (currentDiagnosis.recommendation) {
+        setResult(currentDiagnosis.recommendation);
+      }
+    }
+  }, [currentDiagnosis]);
+
+  const submit = async () => {
+    try {
+      const res = await fetch("/api/diagnosis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) throw new Error("diagnosis failed");
+      const rec = await res.json();
+      setResult(rec);
+      // sync to store so Schools selection can update readiness live
+      updateCurrentDiagnosisRecommendation(input, rec);
+    } catch (e) {
+      // fallback to local (no compliance) so UI still works
+      const rec = recommendPath(input);
+      setResult(rec);
+      updateCurrentDiagnosisRecommendation(input, rec);
+    }
     setShowSave(false);
     setSaveError(null);
     setTimeout(() => {
@@ -297,6 +323,10 @@ export function Diagnosis({ onNavigate }: { onNavigate: (v: string) => void }) {
               </div>
             </CardContent>
           </Card>
+
+          {result.readiness && (
+            <ReadinessScoreCard readiness={result.readiness} lang={lang} />
+          )}
 
           <Card>
             <CardHeader>

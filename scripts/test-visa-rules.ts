@@ -4,7 +4,7 @@ import { join } from "path";
 import cases from "../quality/visa-rule-golden-cases.json";
 import { prepareLocalDb } from "./prepare-local-db";
 import { VISA_COMPLIANCE_RULE_SEEDS } from "../src/lib/rules/visa-rule-seed";
-import { VISA_RULES, type VisaRuleInput } from "../src/lib/rules/visa-rules";
+import { evaluateVisaRules, VISA_RULES, type VisaRuleInput } from "../src/lib/rules/visa-rules";
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -67,8 +67,8 @@ async function createTestRuleVersion(
   });
 }
 
-if (VISA_RULES.length !== 5) {
-  fail(`expected exactly 5 D-2/D-4 core rules, got ${VISA_RULES.length}`);
+if (VISA_RULES.length !== 11) {
+  fail(`expected 11 D-2/D-4 core rules (more specific nationality/program), got ${VISA_RULES.length}`);
 }
 
 if (VISA_COMPLIANCE_RULE_SEEDS.length !== VISA_RULES.length) {
@@ -90,6 +90,53 @@ for (const rule of VISA_COMPLIANCE_RULE_SEEDS) {
 
 if (cases.length < 20) {
   fail(`expected at least 20 golden test cases, got ${cases.length}`);
+}
+
+const staticSpecificCases: Array<{
+  id: string;
+  input: VisaRuleInput;
+  includesDocs: string[];
+  includesWarning?: string;
+  partnerEscalation?: boolean;
+}> = [
+  {
+    id: "static-vn-d2-scrutiny",
+    input: { visa_type: "D-2", nationality: "vn" },
+    includesDocs: ["vn_mn_additional_scrutiny"],
+    includesWarning: "추가 심사",
+  },
+  {
+    id: "static-vocational-d2",
+    input: { visa_type: "D-2", program: "vocational", nationality: "other" },
+    includesDocs: ["vocational_career_proof"],
+  },
+  {
+    id: "static-d4-to-d2-transfer",
+    input: { visa_type: "D-4", program: "degree", nationality: "other" },
+    includesDocs: ["d4_d2_transfer_docs"],
+    includesWarning: "전환",
+    partnerEscalation: true,
+  },
+];
+
+for (const testCase of staticSpecificCases) {
+  const result = evaluateVisaRules(testCase.input);
+  const docIds = result.documents.map((doc) => doc.id);
+  for (const docId of testCase.includesDocs) {
+    assert(docIds.includes(docId), `${testCase.id} expected static fallback doc ${docId}, got ${docIds.join(", ")}`);
+  }
+  if (testCase.includesWarning) {
+    assert(
+      includesText(result.warnings, testCase.includesWarning),
+      `${testCase.id} expected static warning containing ${testCase.includesWarning}, got ${result.warnings.join(" | ")}`
+    );
+  }
+  if (typeof testCase.partnerEscalation === "boolean") {
+    assert(
+      (result.partner_escalation_reasons.length > 0) === testCase.partnerEscalation,
+      `${testCase.id} expected static partner escalation ${testCase.partnerEscalation}, got ${result.partner_escalation_reasons}`
+    );
+  }
 }
 
 const tmpDir = mkdtempSync(join(tmpdir(), "kaxi-rule-test-"));

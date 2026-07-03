@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useLangStore } from "@/store/kbridge";
+import { useLangStore, useLeadStore } from "@/store/kbridge";
 import { tr, type Lang } from "@/lib/i18n/translations";
 import type { School } from "@/lib/data/schools";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,12 +31,20 @@ const PROGRAM_LABELS: Record<string, Record<Lang, string>> = {
 
 export function Schools() {
   const { lang } = useLangStore();
+  const {
+    selectedSchoolsForReadiness,
+    toggleSchoolForReadiness,
+    clearSelectedSchoolsForReadiness,
+    currentDiagnosis,
+  } = useLeadStore();
   const [region, setRegion] = useState("all");
   const [program, setProgram] = useState("all");
   const [accred, setAccred] = useState("all");
   const [maxTuition, setMaxTuition] = useState(6000000);
   const [schools, setSchools] = useState<School[]>([]);
   const [total, setTotal] = useState(0);
+  const [source, setSource] = useState<string>("");
+  const [operational, setOperational] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +65,8 @@ export function Schools() {
       .then((data) => {
         setSchools(data.schools || []);
         setTotal(Number(data.total || 0));
+        setSource(data.source || "");
+        setOperational(!!data.operational);
         setError(null);
       })
       .catch((err) => {
@@ -81,6 +91,11 @@ export function Schools() {
       <div>
         <h1 className="text-3xl font-bold">{tr("schools_title", lang)}</h1>
         <p className="text-muted-foreground mt-2">{tr("schools_subtitle", lang)}</p>
+        {source && (
+          <div className="mt-1 text-xs text-muted-foreground">
+            데이터 출처: <span className="font-mono">{source}</span> {operational ? "(운영 DB)" : "(시드 fallback)"}
+          </div>
+        )}
       </div>
 
       {/* 필터 */}
@@ -150,6 +165,28 @@ export function Schools() {
         </CardContent>
       </Card>
 
+      {/* Selected for readiness linkage */}
+      {selectedSchoolsForReadiness.length > 0 && (
+        <Card className="border-primary/50">
+          <CardHeader className="py-3">
+            <div className="flex justify-between items-center">
+              <CardTitle className="text-sm">
+                {tr("readiness_selected_schools", lang)} ({selectedSchoolsForReadiness.length}) - {tr("readiness_score_applied", lang)}
+              </CardTitle>
+              <Button variant="ghost" size="sm" onClick={clearSelectedSchoolsForReadiness}>
+                {tr("readiness_clear_schools", lang)}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0 text-xs text-muted-foreground">
+            {selectedSchoolsForReadiness.map((s) => s.name[lang] || s.name.ko).join(", ")}
+            {currentDiagnosis && (
+              <span className="ml-2 text-primary">({tr("readiness_auto_updates", lang)})</span>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {error && (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
@@ -177,6 +214,8 @@ export function Schools() {
 }
 
 function SchoolCard({ school, lang }: { school: School; lang: Lang }) {
+  const { selectedSchoolsForReadiness, toggleSchoolForReadiness } = useLeadStore();
+  const isSelected = selectedSchoolsForReadiness.some((s) => s.id === school.id);
   const accredBadge = {
     accredited: { variant: "default" as const, label: tr("school_accredited", lang), icon: ShieldCheck },
     standard: { variant: "secondary" as const, label: tr("school_non_accredited", lang), icon: SchoolIcon },
@@ -238,8 +277,18 @@ function SchoolCard({ school, lang }: { school: School; lang: Lang }) {
             {school.notes[lang]}
           </div>
         )}
-        <div className="pt-2 flex gap-2">
-          <Button size="sm" variant="outline" className="flex-1" asChild>
+        <div className="pt-2 flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant={isSelected ? "default" : "outline"}
+            className="min-w-[9rem] flex-1"
+            onClick={() => toggleSchoolForReadiness(school)}
+          >
+            {isSelected
+              ? `✓ ${tr("readiness_school_selected", lang)}`
+              : tr("readiness_select_school", lang)}
+          </Button>
+          <Button size="sm" variant="outline" className="min-w-[7rem] flex-1" asChild>
             <a href={school.officialUrl} target="_blank" rel="noopener noreferrer">
               <ExternalLink className="h-3 w-3 mr-1" />
               {tr("school_official_link", lang)}
@@ -252,7 +301,7 @@ function SchoolCard({ school, lang }: { school: School; lang: Lang }) {
               </a>
             </Button>
           )}
-          <Button size="sm" className="flex-1">
+          <Button size="sm" className="min-w-[7rem] flex-1">
             {tr("school_apply", lang)}
           </Button>
         </div>

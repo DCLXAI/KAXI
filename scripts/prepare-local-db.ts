@@ -4,7 +4,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync } from "fs
 import { dirname, isAbsolute, join } from "path";
 
 function sqlitePathFromDatabaseUrl(value: string | undefined): string {
-  const url = value?.trim();
+  const configuredUrl = value?.trim();
+  const url = !configuredUrl || configuredUrl.includes("/home/z/my-project") ? "file:./db/custom.db" : configuredUrl;
   if (!url?.startsWith("file:")) {
     throw new Error("DATABASE_URL must be a file: SQLite URL for local DB preparation.");
   }

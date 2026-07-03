@@ -8,8 +8,15 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-function assert(condition: unknown, message: string): void {
+function assert(condition: unknown, message: string): asserts condition {
   if (!condition) fail(message);
+}
+
+function assertNoPublicDebugFields(value: unknown, label: string): void {
+  const serialized = JSON.stringify(value);
+  for (const forbidden of ["appliedRules", "applied_rules", "sourceRefs", "source_refs", "compliance_rule_meta"]) {
+    assert(!serialized.includes(forbidden), `${label} should not expose ${forbidden}: ${serialized}`);
+  }
 }
 
 const base: DiagnosisInput = {
@@ -46,6 +53,94 @@ function testLanguagePathKeepsCoreOutputShape() {
   assert(result.confidence === "high", `specific baseline should be high confidence: ${JSON.stringify(result)}`);
   assert(result.appliedRules.includes("profile:goal_language"), `profile rule should be recorded: ${JSON.stringify(result)}`);
   assertSourceRefsExist(result);
+}
+
+function testReadinessScoreIsComputed() {
+  const result = recommendPath(base);
+  assert(result.readiness !== undefined, "readiness must be attached to recommendation");
+  assert(typeof result.readiness!.score === "number", "readiness score must be a number");
+  assert(result.readiness!.score >= 0 && result.readiness!.score <= 100, "score must be 0-100");
+  assert(["low", "medium", "high"].includes(result.readiness!.riskLevel), "riskLevel must be valid");
+  assert(Array.isArray(result.readiness!.factors), "factors must be an array");
+}
+
+function testReadinessBlockedReasonsForceHighRisk() {
+  const compliance = evaluateVisaRules({
+    visa_type: "D-2",
+    nationality: "vn",
+    asks_for_fake_documents: true,
+  });
+  const result = recommendPath(
+    {
+      ...base,
+      goal: "degree",
+      korean: "topik3",
+      budget: 20_000_000,
+    },
+    { visaRuleEvaluation: compliance }
+  );
+
+  const readiness = result.readiness;
+  assert(readiness, `blocked profile should include readiness: ${JSON.stringify(result)}`);
+  assert(readiness.score <= 29, `blocked reasons must cap score below 30: ${JSON.stringify(readiness)}`);
+  assert(readiness.riskLevel === "high", `blocked reasons must force high risk: ${JSON.stringify(readiness)}`);
+  assert(readiness.confidence !== "high", `blocked reasons must not show high confidence: ${JSON.stringify(readiness)}`);
+  assert(
+    readiness.factors[0]?.id === "compliance_blocked",
+    `blocked factor should be the top influence: ${JSON.stringify(readiness.factors)}`
+  );
+
+  const withAccreditedSchools = recommendPath(
+    {
+      ...base,
+      goal: "degree",
+      korean: "topik3",
+      budget: 20_000_000,
+    },
+    {
+      visaRuleEvaluation: compliance,
+      selectedSchoolAccreditations: ["accredited", "accredited"],
+    }
+  ).readiness;
+  assert(withAccreditedSchools, "blocked profile with selected schools should include readiness");
+  assert(
+    withAccreditedSchools.score <= 29 && withAccreditedSchools.riskLevel === "high",
+    `selected accredited schools must not override blocked hard cap: ${JSON.stringify(withAccreditedSchools)}`
+  );
+}
+
+function testSelectedSchoolsAffectReadinessFactors() {
+  const baseDegree = {
+    ...base,
+    goal: "degree" as const,
+    korean: "topik3" as const,
+    budget: 20_000_000,
+  };
+  const noSchool = recommendPath(baseDegree).readiness;
+  const accredited = recommendPath(baseDegree, {
+    selectedSchoolAccreditations: ["accredited"],
+  }).readiness;
+  const caution = recommendPath(baseDegree, {
+    selectedSchoolAccreditations: ["caution"],
+  }).readiness;
+
+  assert(noSchool && accredited && caution, "school readiness scenarios should include readiness");
+  assert(
+    accredited.score > noSchool.score,
+    `accredited school should improve readiness score: ${JSON.stringify({ noSchool, accredited })}`
+  );
+  assert(
+    caution.score < noSchool.score,
+    `caution school should reduce readiness score: ${JSON.stringify({ noSchool, caution })}`
+  );
+  assert(
+    accredited.factors.some((factor) => factor.id === "school_accredited"),
+    `accredited school should add school_accredited factor: ${JSON.stringify(accredited.factors)}`
+  );
+  assert(
+    caution.factors.some((factor) => factor.id === "school_caution"),
+    `caution school should add school_caution factor: ${JSON.stringify(caution.factors)}`
+  );
 }
 
 function testDegreePathExplainsLanguageAndBudgetRisk() {
@@ -187,16 +282,21 @@ async function testDiagnoseToolReturnsComplianceMeta() {
       result.compliance_documents.some((doc) => isRecord(doc) && doc.id === "financial_proof"),
     `diagnose_path should include compliance documents: ${JSON.stringify(result)}`
   );
+  // User payload is sanitized (no raw compliance_rule_meta / source_refs at top level for user)
   assert(
-    isRecord(result.compliance_rule_meta) &&
-      Array.isArray(result.compliance_rule_meta.applied_rule_ids) &&
-      result.compliance_rule_meta.applied_rule_ids.length > 0,
-    `diagnose_path should include compliance rule metadata: ${JSON.stringify(result)}`
+    !("compliance_rule_meta" in result) || result.compliance_rule_meta == null,
+    `user payload should not expose raw compliance_rule_meta: ${JSON.stringify(result)}`
   );
+  assertNoPublicDebugFields(result, "diagnose_path user payload");
   assert(
-    Array.isArray(result.source_refs) &&
-      result.source_refs.some((ref) => typeof ref === "string" && ref.startsWith("compliance:")),
-    `diagnose_path should expose compliance source refs: ${JSON.stringify(result)}`
+    Array.isArray(result.compliance_documents) &&
+      result.compliance_documents.some((doc) => isRecord(doc) && doc.id === "financial_proof"),
+    `diagnose_path should include compliance documents: ${JSON.stringify(result)}`
+  );
+  // Readiness should be present
+  assert(
+    isRecord(result.readiness) && typeof result.readiness.score === "number",
+    `diagnose_path should include readiness score: ${JSON.stringify(result)}`
   );
 }
 
@@ -223,10 +323,87 @@ async function testDiagnoseToolReturnsD10CoveragePolicy() {
       result.compliance_coverage.unsupportedReason === "d10_compliance_rule_engine_not_implemented",
     `diagnose_path should expose D-10 RAG-only compliance coverage: ${JSON.stringify(result)}`
   );
-  assert(result.compliance_rule_meta === null, `D-10 should not pretend rule-engine metadata exists: ${JSON.stringify(result)}`);
+  assert(
+    !("compliance_rule_meta" in result) || result.compliance_rule_meta == null,
+    `D-10 user payload should not include rule-engine metadata: ${JSON.stringify(result)}`
+  );
+  assertNoPublicDebugFields(result, "D-10 diagnose_path user payload");
+}
+
+async function testDiagnosisApiReturnsPublicReadinessPayload() {
+  const { NextRequest } = await import("next/server");
+  const { POST } = await import("../src/app/api/diagnosis/route");
+  const input: DiagnosisInput = {
+    ...base,
+    goal: "degree",
+    korean: "topik3",
+    budget: 20_000_000,
+    hasHistory: true,
+  };
+  const response = await POST(
+    new NextRequest("http://localhost/api/diagnosis", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    })
+  );
+  const body = await response.json();
+
+  assert(response.status === 200, `diagnosis API should accept valid input: ${JSON.stringify(body)}`);
+  assert(body.complianceCoverage?.status === "rule_engine", `diagnosis API should use compliance engine: ${JSON.stringify(body)}`);
+  assert(body.readiness?.score >= 0, `diagnosis API should include readiness score: ${JSON.stringify(body)}`);
+  assertNoPublicDebugFields(body, "diagnosis API public payload");
+
+  const invalid = await POST(
+    new NextRequest("http://localhost/api/diagnosis", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ goal: "degree" }),
+    })
+  );
+  assert(invalid.status === 400, `diagnosis API should reject invalid payloads, got ${invalid.status}`);
+}
+
+async function testDiagnosisApiTransferUsesD4ToD2ComplianceRule() {
+  const { NextRequest } = await import("next/server");
+  const { POST } = await import("../src/app/api/diagnosis/route");
+  const response = await POST(
+    new NextRequest("http://localhost/api/diagnosis", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ...base,
+        goal: "transfer",
+        korean: "topik2",
+        budget: 12_000_000,
+      }),
+    })
+  );
+  const body = await response.json();
+
+  assert(response.status === 200, `transfer diagnosis API should accept valid input: ${JSON.stringify(body)}`);
+  assert(body.visaType === "D-2", `transfer path should still recommend D-2 target: ${JSON.stringify(body)}`);
+  assert(body.riskLevel === "high", `D-4 to D-2 transfer human review should force high risk: ${JSON.stringify(body)}`);
+  assert(body.compliance?.visaType === "D-4", `compliance should evaluate current D-4 transfer facts: ${JSON.stringify(body)}`);
+  assert(
+    body.compliance?.documents?.some((doc: { id?: string }) => doc.id === "d4_d2_transfer_docs"),
+    `transfer compliance should include D-4 to D-2 documents: ${JSON.stringify(body)}`
+  );
+  assert(
+    Array.isArray(body.compliance?.partnerEscalationReasons) &&
+      body.compliance.partnerEscalationReasons.length > 0,
+    `transfer compliance should include partner escalation reasons: ${JSON.stringify(body)}`
+  );
+  assert(
+    body.readiness?.riskLevel === "high" && body.readiness?.score <= 44,
+    `transfer readiness should reflect human-review high risk: ${JSON.stringify(body.readiness)}`
+  );
 }
 
 testLanguagePathKeepsCoreOutputShape();
+testReadinessScoreIsComputed();
+testReadinessBlockedReasonsForceHighRisk();
+testSelectedSchoolsAffectReadinessFactors();
 testDegreePathExplainsLanguageAndBudgetRisk();
 testHistoryAndBrokerEscalateRisk();
 testUnsureGoalUsesLanguageBridgeForLowKorean();
@@ -234,4 +411,6 @@ testComplianceEvaluationGroundsDiagnosisRecommendation();
 testD10CareerPathDeclaresRagOnlyCompliancePolicy();
 await testDiagnoseToolReturnsComplianceMeta();
 await testDiagnoseToolReturnsD10CoveragePolicy();
+await testDiagnosisApiReturnsPublicReadinessPayload();
+await testDiagnosisApiTransferUsesD4ToD2ComplianceRule();
 console.log("PASS diagnosis rules");

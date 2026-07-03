@@ -379,46 +379,59 @@ const diagnosePathTool: Tool = {
       hasHistory,
     };
     const diagnosisVisaType = inferDiagnosisVisaType(input);
+    const complianceVisaType = goal === "transfer" ? "D-4" : diagnosisVisaType;
+    const complianceProgram =
+      goal === "language" ? "language" : goal === "degree" || goal === "transfer" ? "degree" : undefined;
     const complianceEvaluation =
       diagnosisVisaType === "D-2" || diagnosisVisaType === "D-4"
         ? await evaluateVisaRulesWithDbFallback({
-            visa_type: diagnosisVisaType,
-            program: goal === "language" ? "language" : goal === "degree" || goal === "transfer" ? "degree" : undefined,
+            visa_type: complianceVisaType,
+            program: complianceProgram,
             nationality,
             has_refusal_history: hasHistory,
           })
         : null;
     const rec = recommendPath(input, { visaRuleEvaluation: complianceEvaluation });
-    return {
-      result: {
-        path: rec.pathKey,
-        visa_type: rec.visaType,
-        prep_time: rec.prepTime.ko,
-        estimated_cost: rec.estimatedCost,
-        required_docs: rec.requiredDocs,
-        compliance_documents: rec.compliance?.documents || [],
-        warnings: rec.warnings.map((w) => w.ko),
-        compliance_warnings: rec.compliance?.warnings || [],
-        partner_escalation_reasons: rec.compliance?.partnerEscalationReasons || [],
-        blocked_reasons: rec.compliance?.blockedReasons || [],
-        next_actions: rec.nextActions.map((a) => a.ko),
-        risk_level: rec.riskLevel,
-        confidence: rec.confidence,
-        applied_rules: rec.appliedRules,
-        source_refs: rec.sourceRefs,
-        compliance_coverage: rec.complianceCoverage,
-        compliance_rule_meta: rec.compliance
-          ? {
-              required_inputs: rec.compliance.requiredInputs,
-              missing_inputs: rec.compliance.missingInputs,
-              applied_rule_ids: rec.compliance.appliedRuleIds,
-              review_status: rec.compliance.reviewStatus,
-              fallback_policy: rec.compliance.fallbackPolicy,
-              source_refs: rec.compliance.sourceRefs,
-            }
-          : null,
+
+    // Clean user-facing payload. Debug fields (applied_rules, source_refs, full compliance_rule_meta) are omitted here.
+    const userResult = {
+      path: rec.pathKey,
+      visa_type: rec.visaType,
+      prep_time: rec.prepTime.ko,
+      estimated_cost: rec.estimatedCost,
+      required_docs: rec.requiredDocs,
+      warnings: rec.warnings.map((w) => w.ko),
+      next_actions: rec.nextActions.map((a) => a.ko),
+      risk_level: rec.riskLevel,
+      confidence: rec.confidence,
+      readiness: rec.readiness
+        ? {
+            score: rec.readiness.score,
+            risk_level: rec.readiness.riskLevel,
+            confidence: rec.readiness.confidence,
+            factors: rec.readiness.factors.slice(0, 6),
+          }
+        : null,
+      compliance_documents:
+        rec.compliance?.documents.map((doc) => ({
+          id: doc.id,
+          label: doc.label,
+          required: doc.required,
+          note: doc.note,
+        })) || [],
+      compliance_warnings: rec.compliance?.warnings || [],
+      partner_escalation_reasons: rec.compliance?.partnerEscalationReasons || [],
+      blocked_reasons: rec.compliance?.blockedReasons || [],
+      compliance_coverage: {
+        status: rec.complianceCoverage?.status,
+        policy: rec.complianceCoverage?.policy,
+        unsupportedReason: rec.complianceCoverage?.unsupportedReason,
       },
-      summary: `추천 경로: ${rec.pathKey} (${rec.visaType}), 예상 비용: ${rec.estimatedCost.toLocaleString()}₩`,
+    };
+
+    return {
+      result: userResult,
+      summary: `추천 경로: ${rec.pathKey} (${rec.visaType}), 예상 비용: ${rec.estimatedCost.toLocaleString()}₩, 준비 리스크 지수: ${rec.readiness?.score ?? "N/A"}점`,
     };
   },
 };

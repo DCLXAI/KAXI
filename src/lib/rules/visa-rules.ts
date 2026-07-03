@@ -173,6 +173,60 @@ export const VISA_RULES: VisaRuleDefinition[] = [
     review_status: "approved",
     fallback_policy: "Refuse fake-document, illegal-work, or guarantee requests; route lawful case-specific filing/refusal issues to a licensed administrative scrivener.",
   },
+  {
+    id: "language-proficiency-for-degree",
+    title: "TOPIK or equivalent language proof for D-2 degree programs",
+    required_inputs: ["visa_type", "program", "nationality"],
+    effective_from: "2026-01-01",
+    source_refs: [IMMIGRATION_DECREE_STATUS_SOURCE, STUDY_SOURCE, IMMIGRATION_SOURCE],
+    review_status: "approved",
+    fallback_policy: "For D-2 programs, require confirmation of school-specific TOPIK or English proficiency; recommend TOPIK 3+ as baseline for degree entry.",
+  },
+  {
+    id: "ongoing-financial-maintenance",
+    title: "Ongoing financial maintenance requirement during stay",
+    required_inputs: ["visa_type"],
+    effective_from: "2026-01-01",
+    source_refs: [IMMIGRATION_RULE_ATTACHMENTS_SOURCE, STUDY_SOURCE],
+    review_status: "approved",
+    fallback_policy: "Financial proof is not one-time; must be maintained. Embassy/school may re-check during extensions.",
+  },
+  {
+    id: "health-insurance-mandatory",
+    title: "National health insurance or equivalent mandatory coverage",
+    required_inputs: ["visa_type"],
+    effective_from: "2026-01-01",
+    source_refs: [IMMIGRATION_RULE_ATTACHMENTS_SOURCE, STUDY_SOURCE],
+    review_status: "approved",
+    fallback_policy: "Foreign students must join National Health Insurance or provide equivalent private coverage proof upon registration.",
+  },
+  {
+    id: "nationality-vn-mn-d2-scrutiny",
+    title: "Additional scrutiny and documents for Vietnamese/Mongolian D-2 applicants",
+    required_inputs: ["visa_type", "nationality"],
+    effective_from: "2026-01-01",
+    source_refs: [IMMIGRATION_DECREE_STATUS_SOURCE, STUDY_SOURCE, IMMIGRATION_SOURCE],
+    review_status: "approved",
+    fallback_policy: "For VN/MN D-2, verify additional embassy-specific requirements; recommend extra financial or academic proof.",
+  },
+  {
+    id: "program-vocational-d2-requirements",
+    title: "Specific requirements for vocational/career D-2 programs",
+    required_inputs: ["visa_type", "program"],
+    effective_from: "2026-01-01",
+    source_refs: [IMMIGRATION_DECREE_STATUS_SOURCE, STUDY_SOURCE],
+    review_status: "approved",
+    fallback_policy: "Vocational D-2 requires proof of career relevance and may have stricter financial or language thresholds.",
+  },
+  {
+    id: "d4-to-d2-transfer-path",
+    title: "Requirements for D-4 to D-2 status change",
+    required_inputs: ["visa_type", "program"],
+    effective_from: "2026-01-01",
+    source_refs: [IMMIGRATION_ACT_PERMISSION_SOURCE, IMMIGRATION_DECREE_STATUS_SOURCE, STUDY_SOURCE],
+    review_status: "approved",
+    fallback_policy: "D-4 to D-2 transfer requires proof of academic progress, no gaps, and updated financials; timing critical.",
+  },
 ];
 
 export const CORE_DOCUMENTS: VisaRuleDocument[] = [
@@ -282,9 +336,19 @@ export function normalizeVisaType(value: VisaRuleInput["visa_type"]): VisaType |
 export function inferVisaTypeFromProgram(program: string | null | undefined): VisaType | null {
   const text = String(program || "").trim().toLowerCase();
   if (!text || text === "unknown" || text === "unsure") return null;
-  if (/(degree|college|university|graduate|bachelor|master|phd|학위|대학|대학원|전문대)/i.test(text)) return "D-2";
+  if (isDegreeProgram(text) || isVocationalProgram(text)) return "D-2";
   if (/(language|korean|non.?degree|training|연수|어학|한국어|비학위)/i.test(text)) return "D-4";
   return null;
+}
+
+function isDegreeProgram(program: string | null | undefined): boolean {
+  return /(degree|college|university|graduate|bachelor|master|phd|학위|대학|대학원|전문대)/i.test(
+    String(program || "")
+  );
+}
+
+function isVocationalProgram(program: string | null | undefined): boolean {
+  return /(vocational|career|caregiver|요양|직업|직업훈련)/i.test(String(program || ""));
 }
 
 export function normalizeRuleNationality(value: string | null | undefined): string | null {
@@ -402,6 +466,84 @@ export function evaluateVisaRules(input: VisaRuleInput): VisaRuleEvaluation {
   }
   if (blockedReasons.length > 0) {
     warnings.push("불법·허위·보장성 요청은 KAXI에서 지원하지 않습니다.");
+  }
+
+  // New rules from expanded seeds
+  const languageRule = VISA_RULES[5];
+  collectRuleMeta(languageRule, appliedRuleIds, sourceRefs);
+  if (visaType === "D-2") {
+    addVisaRuleDocument(documents, {
+      id: "language_proficiency",
+      label: "한국어능력증빙 (TOPIK 또는 학교 인정 증명)",
+      required: true,
+      note: "D-2 학위 과정은 학교별 TOPIK/영어 요건 확인 필수. 일반적으로 TOPIK 3급 이상 권장",
+      source_refs: [IMMIGRATION_DECREE_STATUS_SOURCE, STUDY_SOURCE],
+    });
+  }
+
+  const financialOngoingRule = VISA_RULES[6];
+  collectRuleMeta(financialOngoingRule, appliedRuleIds, sourceRefs);
+  if (visaType) {
+    const threshold = visaType === "D-2" ? "20,000달러 이상" : "13,000달러 이상";
+    addVisaRuleDocument(documents, {
+      id: "financial_proof",
+      label: "재정능력 증빙 (지속 유지)",
+      required: true,
+      note: `${threshold} 기준 유지 필요. 연장 시 재확인될 수 있음`,
+      source_refs: [IMMIGRATION_RULE_ATTACHMENTS_SOURCE, STUDY_SOURCE],
+    });
+  }
+
+  const insuranceRule = VISA_RULES[7];
+  collectRuleMeta(insuranceRule, appliedRuleIds, sourceRefs);
+  if (visaType) {
+    addVisaRuleDocument(documents, {
+      id: "health_insurance",
+      label: "건강보험 가입 증빙",
+      required: true,
+      note: "국민건강보험 또는 동등 민간보험. 등록 즉시 가입",
+      source_refs: [IMMIGRATION_RULE_ATTACHMENTS_SOURCE, STUDY_SOURCE],
+    });
+  }
+
+  // Specific nationality/program rules (dynamic from VISA_RULES)
+  const vnMnRule = VISA_RULES.find(r => r.id === "nationality-vn-mn-d2-scrutiny");
+  if (vnMnRule && visaType === "D-2" && (nationality === "vn" || nationality === "mn")) {
+    collectRuleMeta(vnMnRule, appliedRuleIds, sourceRefs);
+    addVisaRuleDocument(documents, {
+      id: "vn_mn_additional_scrutiny",
+      label: "베트남/몽골 D-2 추가 심사 서류",
+      required: true,
+      note: "VN/MN 국적 D-2 신청자는 대사관별 추가 재정/학력 증빙 필요",
+      source_refs: [IMMIGRATION_DECREE_STATUS_SOURCE, STUDY_SOURCE, IMMIGRATION_SOURCE],
+    });
+    warnings.push("VN/MN 국적 D-2는 추가 심사 기준 적용될 수 있습니다.");
+  }
+
+  const vocationalRule = VISA_RULES.find(r => r.id === "program-vocational-d2-requirements");
+  if (vocationalRule && visaType === "D-2" && isVocationalProgram(input.program)) {
+    collectRuleMeta(vocationalRule, appliedRuleIds, sourceRefs);
+    addVisaRuleDocument(documents, {
+      id: "vocational_career_proof",
+      label: "직업계열 관련성 증빙",
+      required: true,
+      note: "직업훈련 D-2는 경력/학력과 프로그램 연계 증명 필요",
+      source_refs: [IMMIGRATION_DECREE_STATUS_SOURCE, STUDY_SOURCE],
+    });
+  }
+
+  const transferRule = VISA_RULES.find(r => r.id === "d4-to-d2-transfer-path");
+  if (transferRule && explicitVisaType === "D-4" && isDegreeProgram(input.program)) {
+    collectRuleMeta(transferRule, appliedRuleIds, sourceRefs);
+    addVisaRuleDocument(documents, {
+      id: "d4_d2_transfer_docs",
+      label: "D-4 → D-2 전환 관련 서류",
+      required: true,
+      note: "D-4에서 D-2로 변경 시 학업 진척도, 공백 없음, 재정 증빙 필수",
+      source_refs: [IMMIGRATION_ACT_PERMISSION_SOURCE, IMMIGRATION_DECREE_STATUS_SOURCE, STUDY_SOURCE],
+    });
+    warnings.push("D-4 to D-2 전환은 타이밍과 서류가 중요합니다. 행정사 검토 권장.");
+    partnerEscalationReasons.push("D-4에서 D-2 체류자격 변경은 현재 체류상태·출석률·공백 여부 검토가 필요합니다.");
   }
 
   return {
