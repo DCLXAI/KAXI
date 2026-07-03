@@ -154,6 +154,7 @@ The workflow calls the package-level `ci:types`, `ci:domain`, and `ci:ops` profi
 `test:citations` verifies inline answer citation markers link to the visible source cards without rewriting existing Markdown links.
 `test:school-data` verifies public app/components do not import runtime school seed data directly; production-facing UI must use `/api/schools` or repository-backed APIs.
 `test:privacy` verifies consent-gated partner routing, third-party/consignment/overseas consent rows, privacy audit events, deletion/retention consent status changes, PII encryption/redaction behavior, production PII persistence guards, and hosted SQLite write guards.
+`test:privacy-env` verifies the production privacy-environment preflight rejects weak/missing `DATA_ENCRYPTION_KEY`, `PII_HASH_SECRET`, `CRON_SECRET`, enabled plaintext override, invalid retention windows, and never prints secret material.
 `test:agent` verifies Agent status diagnostics, dry-run preflight behavior, and partner-request PII masking.
 `test:admin-dashboard` verifies the Phase 3 admin APIs for cases, case actions, rules, knowledge documents, and audit logs.
 `test:documents` verifies Phase 5 signed document upload, file hash/size/MIME validation, admin review status changes, and audit logs.
@@ -165,6 +166,7 @@ The workflow calls the package-level `ci:types`, `ci:domain`, and `ci:ops` profi
 It returns `200` only when required production checks pass and `503` when the deployment is still a demo/read-only configuration.
 
 The readiness response intentionally exposes only booleans and reason strings, not secret values.
+Before production deploys, run `bun run privacy:check-production-env` with the production env loaded. It forces production privacy semantics even when run locally and fails unless `DATA_ENCRYPTION_KEY`, `PII_HASH_SECRET`, and `CRON_SECRET` are strong non-placeholder secrets, `PII_HASH_SECRET` differs from `DATA_ENCRYPTION_KEY`, `PII_ALLOW_UNENCRYPTED_PLAINTEXT` is not enabled, and any configured retention windows are positive.
 Before treating KAXI as production-ready, `/api/readiness` must report `status: "ready"` for:
 
 - current RAG `reviewAfter` metadata and non-expired school source metadata,
