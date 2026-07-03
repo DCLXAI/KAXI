@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useLangStore, useLeadStore } from "@/store/kbridge";
-import { tr } from "@/lib/i18n/translations";
+import { tr, type TranslationKey } from "@/lib/i18n/translations";
 import { recommendPath, type DiagnosisInput, pickLang } from "@/lib/data/diagnosis";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { CheckCircle2, Clock, FileText, AlertTriangle, ArrowRight, Save, Loader2 } from "lucide-react";
+
+const EDUCATION_VALUES = ["highschool", "college", "university", "master"] as const satisfies readonly DiagnosisInput["education"][];
+const KOREAN_VALUES = ["none", "topik1", "topik2", "topik3"] as const satisfies readonly DiagnosisInput["korean"][];
+const GOAL_VALUES = ["language", "degree", "transfer", "career", "unsure"] as const satisfies readonly DiagnosisInput["goal"][];
+
+function isOneOf<T extends string>(value: string, values: readonly T[]): value is T {
+  return values.includes(value as T);
+}
+
+function asTranslationKey(value: string): TranslationKey {
+  return value as TranslationKey;
+}
 
 export function Diagnosis({ onNavigate }: { onNavigate: (v: string) => void }) {
   const { lang } = useLangStore();
@@ -62,7 +74,7 @@ export function Diagnosis({ onNavigate }: { onNavigate: (v: string) => void }) {
     }
   };
 
-  const pathLabel = tr(result?.pathKey as any ?? "goal_language", lang);
+  const pathLabel = tr(asTranslationKey(result?.pathKey ?? "goal_language"), lang);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 space-y-6">
@@ -103,7 +115,12 @@ export function Diagnosis({ onNavigate }: { onNavigate: (v: string) => void }) {
             </div>
             <div className="space-y-2">
               <Label>{tr("diagnose_q_education", lang)}</Label>
-              <Select value={input.education} onValueChange={(v) => update({ education: v as any })}>
+              <Select
+                value={input.education}
+                onValueChange={(v) => {
+                  if (isOneOf(v, EDUCATION_VALUES)) update({ education: v });
+                }}
+              >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="highschool">{tr("edu_highschool", lang)}</SelectItem>
@@ -120,7 +137,9 @@ export function Diagnosis({ onNavigate }: { onNavigate: (v: string) => void }) {
             <Label>{tr("diagnose_q_korean", lang)}</Label>
             <RadioGroup
               value={input.korean}
-              onValueChange={(v) => update({ korean: v as any })}
+              onValueChange={(v) => {
+                if (isOneOf(v, KOREAN_VALUES)) update({ korean: v });
+              }}
               className="grid grid-cols-2 md:grid-cols-4 gap-2"
             >
               {[
@@ -144,7 +163,9 @@ export function Diagnosis({ onNavigate }: { onNavigate: (v: string) => void }) {
             <Label>{tr("diagnose_q_goal", lang)}</Label>
             <RadioGroup
               value={input.goal}
-              onValueChange={(v) => update({ goal: v as any })}
+              onValueChange={(v) => {
+                if (isOneOf(v, GOAL_VALUES)) update({ goal: v });
+              }}
               className="grid gap-2"
             >
               {[
@@ -291,7 +312,7 @@ export function Diagnosis({ onNavigate }: { onNavigate: (v: string) => void }) {
             <CardContent>
               <div className="flex flex-wrap gap-2">
                 {result.requiredDocs.map((k) => (
-                  <Badge key={k} variant="outline">{tr(k as any, lang)}</Badge>
+                  <Badge key={k} variant="outline">{tr(asTranslationKey(k), lang)}</Badge>
                 ))}
               </div>
             </CardContent>
