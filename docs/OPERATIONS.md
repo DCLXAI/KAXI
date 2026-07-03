@@ -120,7 +120,7 @@ Visa, immigration, school-accreditation, and cost guidance are time-sensitive.
 2. Official sources must include a public official-domain URL, `verifiedAt`, and `reviewAfter`.
 3. Internal analysis sources must be marked `owner: "internal"` and reviewed at least quarterly.
 4. Production RAG may use a `KnowledgeDocument` only when `reviewStatus=APPROVED`, `validFrom` is active, `validTo` is empty or in the future, `supersededBy` is empty, and at least one `KnowledgeChunk` exists.
-5. School data is served from the `School` table. `src/lib/data/schools.ts` remains a local development seed/fallback only; hosted and production runtimes fail closed instead of silently serving seed data when the table is unavailable or empty.
+5. School data is served from the `School` table. `src/lib/data/schools.ts` remains a local development seed/fallback only; hosted and production runtimes fail closed instead of silently serving seed data when the table is unavailable or empty. `GET /api/schools` returns `source`, `operational`, `fallback`, and `activeRows` so operators can verify whether the response came from the operational table or local seed fallback.
 6. RAG search and legacy retrieval automatically exclude documents whose source metadata is past `reviewAfter`; DB-backed RAG additionally excludes rejected and superseded documents.
 7. Automated crawling must only calculate diff and impact, or create non-searchable `PENDING` candidates. It must not write approved production chunks or change approval status without an admin approval action.
 8. Every answer grounded in RAG must show the source label and `lastCheckedAt` basis notice.

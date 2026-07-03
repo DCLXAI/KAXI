@@ -4,7 +4,7 @@ import { getAdminContext, jsonError, requireAdmin } from "@/lib/api/security";
 import { recordRequestAudit } from "@/lib/audit";
 import {
   isSchoolOperationalDatabaseError,
-  listSchools,
+  listSchoolsWithProvenance,
   normalizeSchoolPayload,
   type SchoolMutationInput,
 } from "@/lib/schools/repository";
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
       const unauthorized = await requireAdmin(req, { roles: ["owner", "admin", "viewer"] });
       if (unauthorized) return unauthorized;
     }
-    const schools = await listSchools({
+    const result = await listSchoolsWithProvenance({
       region: searchParams.get("region") || "all",
       program: searchParams.get("program") || "all",
       accreditation: searchParams.get("accreditation") || "all",
@@ -26,7 +26,14 @@ export async function GET(req: NextRequest) {
       includeExpired,
     });
 
-    return NextResponse.json({ schools, total: schools.length });
+    return NextResponse.json({
+      schools: result.schools,
+      total: result.schools.length,
+      source: result.source,
+      operational: result.operational,
+      fallback: result.fallback,
+      activeRows: result.activeRows,
+    });
   } catch (err) {
     if (isSchoolOperationalDatabaseError(err)) {
       return jsonError(err.message, 503);

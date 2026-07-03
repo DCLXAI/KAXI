@@ -77,6 +77,10 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
     if (!byKey.get("privacy.plaintext_override")?.ok) fail("missing plaintext override should pass plaintext override check");
     if (byKey.get("documents.upload_workspace")?.ok) fail("hosted local document storage should not pass upload workspace check");
     if (byKey.get("admin.mfa_role")?.ok) fail("missing MFA should not pass admin MFA check");
+    const schoolMetadata = byKey.get("schools.source_metadata")?.metadata;
+    if (schoolMetadata?.source === "seed" || schoolMetadata?.fallbackAllowed !== false) {
+      fail(`production readiness must not allow seed school fallback: ${JSON.stringify(schoolMetadata)}`);
+    }
   } finally {
     restoreEnv(snapshot);
   }

@@ -43,6 +43,17 @@ export interface SchoolMutationInput {
   notes?: Partial<Record<LangKey, string>>;
 }
 
+export type SchoolDataSource = "db" | "seed";
+
+export interface SchoolListResult {
+  schools: School[];
+  source: SchoolDataSource;
+  operational: boolean;
+  fallback: boolean;
+  matched: number;
+  activeRows?: number;
+}
+
 const REGIONS = new Set(["seoul", "gyeonggi", "busan", "daegu", "gwangju", "other"]);
 const PROGRAMS = new Set<Program>(["language", "college", "university", "graduate", "vocational"]);
 const ACCREDITATIONS = new Set<Accreditation>(["accredited", "standard", "caution"]);
@@ -218,14 +229,31 @@ function buildWhere(filters: SchoolFilters): Prisma.SchoolWhereInput {
   return where;
 }
 
-export async function listSchools(filters: SchoolFilters = {}): Promise<School[]> {
+function activeRowsWhere(filters: Pick<SchoolFilters, "includeExpired"> = {}): Prisma.SchoolWhereInput {
+  return filters.includeExpired ? {} : { reviewAfter: { gte: new Date() } };
+}
+
+export async function listSchoolsWithProvenance(filters: SchoolFilters = {}): Promise<SchoolListResult> {
   const query = normalizeSchoolQuery(filters.query);
   try {
-    const rows = await db.school.findMany({
-      where: buildWhere(filters),
-      orderBy: [{ accreditation: "asc" }, { region: "asc" }, { tuitionPerSemester: "asc" }],
-    });
-    if (rows.length > 0) return rows.map(mapDbSchool).filter((school) => matchesSchoolQuery(school, query));
+    const [rows, activeRows] = await Promise.all([
+      db.school.findMany({
+        where: buildWhere(filters),
+        orderBy: [{ accreditation: "asc" }, { region: "asc" }, { tuitionPerSemester: "asc" }],
+      }),
+      db.school.count({ where: activeRowsWhere(filters) }),
+    ]);
+    const schools = rows.map(mapDbSchool).filter((school) => matchesSchoolQuery(school, query));
+    if (rows.length > 0 || activeRows > 0) {
+      return {
+        schools,
+        source: "db",
+        operational: true,
+        fallback: false,
+        matched: schools.length,
+        activeRows,
+      };
+    }
   } catch (err) {
     if (!canUseSchoolSeedFallback()) {
       throw new SchoolOperationalDatabaseError(
@@ -239,7 +267,19 @@ export async function listSchools(filters: SchoolFilters = {}): Promise<School[]
     throw new SchoolOperationalDatabaseError("Operational School table has no current rows.");
   }
 
-  return staticSchools(filters);
+  const schools = staticSchools(filters);
+  return {
+    schools,
+    source: "seed",
+    operational: false,
+    fallback: true,
+    matched: schools.length,
+    activeRows: schools.length,
+  };
+}
+
+export async function listSchools(filters: SchoolFilters = {}): Promise<School[]> {
+  return (await listSchoolsWithProvenance(filters)).schools;
 }
 
 export async function findSchoolById(
@@ -402,6 +442,8 @@ export async function getSchoolSourceAudit(referenceDate: Date = new Date()) {
 
     return {
       source: "db" as const,
+      operational: true,
+      fallbackAllowed: canUseSchoolSeedFallback(),
       total,
       active: Math.max(0, total - expired),
       expired,
@@ -411,6 +453,8 @@ export async function getSchoolSourceAudit(referenceDate: Date = new Date()) {
     if (!canUseSchoolSeedFallback()) {
       return {
         source: "unavailable" as const,
+        operational: false,
+        fallbackAllowed: false,
         total: 0,
         active: 0,
         expired: 0,
@@ -423,6 +467,8 @@ export async function getSchoolSourceAudit(referenceDate: Date = new Date()) {
     const expired = schools.filter((school) => !isSchoolReviewCurrent(school, referenceDate)).length;
     return {
       source: "seed" as const,
+      operational: false,
+      fallbackAllowed: true,
       total: schools.length,
       active: schools.length - expired,
       expired,

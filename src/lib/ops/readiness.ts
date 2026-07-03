@@ -48,6 +48,32 @@ function check(
   return { key, label, ok, detail, metadata, severity };
 }
 
+function schoolReadinessDetail({
+  ready,
+  production,
+  source,
+  active,
+  missingSource,
+}: {
+  ready: boolean;
+  production: boolean;
+  source: string;
+  active: number;
+  missingSource: number;
+}): string {
+  if (ready) return "School rows include sourceUrl, verifiedAt, and current reviewAfter.";
+  if (production && source !== "db") {
+    return "Production must serve school metadata from the operational School table, not seed fallback.";
+  }
+  if (source === "db" && active === 0) {
+    return "Operational School table has no active rows. Run db:seed:schools or review expired rows.";
+  }
+  if (missingSource > 0) {
+    return "Some school rows are missing sourceUrl, verifiedAt, or reviewAfter metadata.";
+  }
+  return "Some school rows are expired or missing source metadata.";
+}
+
 export async function getReadinessPayload(): Promise<ReadinessPayload> {
   const env = process.env;
   const production = isProductionEnv(env);
@@ -98,11 +124,13 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
       "schools.source_metadata",
       "School source metadata",
       schoolMetadataReady,
-      schoolMetadataReady
-        ? "School rows include sourceUrl, verifiedAt, and current reviewAfter."
-        : production && schoolAudit.source !== "db"
-          ? "Production must serve school metadata from the operational School table, not seed fallback."
-          : "Some school rows are expired or missing source metadata.",
+      schoolReadinessDetail({
+        ready: schoolMetadataReady,
+        production,
+        source: schoolAudit.source,
+        active: schoolAudit.active,
+        missingSource: schoolAudit.missingSource,
+      }),
       schoolAudit
     ),
     check(
