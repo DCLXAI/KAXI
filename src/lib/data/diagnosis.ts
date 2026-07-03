@@ -1,5 +1,8 @@
 // 경로 진단 추천 로직
 import type { Lang } from "../i18n/translations";
+import type { VisaRuleEvaluation } from "../rules/visa-rules";
+
+export type DiagnosisVisaType = "D-2" | "D-4" | "D-10";
 
 export interface DiagnosisInput {
   nationality: string;
@@ -16,6 +19,7 @@ export interface DiagnosisInput {
 
 export interface PathRecommendation {
   pathKey: string; // goal_language | goal_degree | goal_transfer | goal_career
+  visaType: DiagnosisVisaType;
   prepTime: { ko: string; vi: string; mn: string; en: string };
   estimatedCost: number; // KRW, 6 months
   requiredDocs: string[]; // translation keys
@@ -25,13 +29,32 @@ export interface PathRecommendation {
   confidence: "low" | "medium" | "high";
   appliedRules: string[];
   sourceRefs: string[];
+  compliance?: {
+    visaType: "D-2" | "D-4" | null;
+    requiredInputs: string[];
+    missingInputs: string[];
+    appliedRuleIds: string[];
+    reviewStatus: string;
+    fallbackPolicy: string;
+    sourceRefs: string[];
+    documents: Array<{
+      id: string;
+      label: string;
+      required: boolean;
+      note: string;
+      sourceRefs: string[];
+    }>;
+    warnings: string[];
+    partnerEscalationReasons: string[];
+    blockedReasons: string[];
+  };
 }
 
 type LocalizedText = { ko: string; vi: string; mn: string; en: string };
 
 interface PathProfile {
   pathKey: string;
-  visaType: "D-2" | "D-4" | "D-10";
+  visaType: DiagnosisVisaType;
   basePrepMonths: number;
   baseCost: number;
   docs: string[];
@@ -91,6 +114,10 @@ function selectPathProfile(input: DiagnosisInput): PathProfile {
       : PATH_PROFILES.goal_degree;
   }
   return PATH_PROFILES.goal_language;
+}
+
+export function inferDiagnosisVisaType(input: DiagnosisInput): DiagnosisVisaType {
+  return selectPathProfile(input).visaType;
 }
 
 function regionCostMultiplier(region: string): number {
@@ -210,13 +237,53 @@ function riskLevel(score: number): PathRecommendation["riskLevel"] {
   return "low";
 }
 
-function confidenceFor(input: DiagnosisInput, appliedRules: string[]): PathRecommendation["confidence"] {
+function confidenceFor(
+  input: DiagnosisInput,
+  appliedRules: string[],
+  visaRuleEvaluation?: VisaRuleEvaluation | null
+): PathRecommendation["confidence"] {
+  if (visaRuleEvaluation?.missing_inputs.length) return "medium";
   if (input.goal === "unsure") return "medium";
   if (input.nationality === "other" || !input.budget || appliedRules.includes("rule:budget-gap")) return "medium";
   return "high";
 }
 
-export function recommendPath(input: DiagnosisInput): PathRecommendation {
+function complianceRiskFloor(evaluation?: VisaRuleEvaluation | null): number {
+  if (!evaluation) return 0;
+  if (evaluation.blocked_reasons.length > 0) return 3;
+  if (evaluation.partner_escalation_reasons.length > 0) return 2;
+  if (evaluation.warnings.length > 0 || evaluation.missing_inputs.length > 0) return 1;
+  return 0;
+}
+
+function complianceRecommendation(evaluation?: VisaRuleEvaluation | null): PathRecommendation["compliance"] | undefined {
+  if (!evaluation) return undefined;
+
+  return {
+    visaType: evaluation.visa_type,
+    requiredInputs: evaluation.required_inputs,
+    missingInputs: evaluation.missing_inputs,
+    appliedRuleIds: evaluation.applied_rule_ids,
+    reviewStatus: evaluation.review_status,
+    fallbackPolicy: evaluation.fallback_policy,
+    sourceRefs: evaluation.source_refs,
+    documents: evaluation.documents.map((doc) => ({
+      id: doc.id,
+      label: doc.label,
+      required: doc.required,
+      note: doc.note,
+      sourceRefs: doc.source_refs,
+    })),
+    warnings: evaluation.warnings,
+    partnerEscalationReasons: evaluation.partner_escalation_reasons,
+    blockedReasons: evaluation.blocked_reasons,
+  };
+}
+
+export function recommendPath(
+  input: DiagnosisInput,
+  options: { visaRuleEvaluation?: VisaRuleEvaluation | null } = {}
+): PathRecommendation {
   const profile = selectPathProfile(input);
   const estimatedCost = roundTo(profile.baseCost * regionCostMultiplier(input.region), 100_000);
   const appliedRules: string[] = [`profile:${profile.pathKey}`];
@@ -269,8 +336,16 @@ export function recommendPath(input: DiagnosisInput): PathRecommendation {
     sourceRefs.push("knowledge:tuberculosis-test");
   }
 
+  const visaRuleEvaluation = options.visaRuleEvaluation;
+  if (visaRuleEvaluation) {
+    appliedRules.push(...visaRuleEvaluation.applied_rule_ids.map((ruleId) => `compliance:${ruleId}`));
+    sourceRefs.push(...visaRuleEvaluation.source_refs.map((sourceRef) => `compliance:${sourceRef}`));
+    riskScore = Math.max(riskScore, complianceRiskFloor(visaRuleEvaluation));
+  }
+
   return {
     pathKey: profile.pathKey,
+    visaType: profile.visaType,
     prepTime: {
       ko: `${prepMonths}개월 (서류 준비 ~ 비자 발급)`,
       vi: `${prepMonths} tháng`,
@@ -282,9 +357,10 @@ export function recommendPath(input: DiagnosisInput): PathRecommendation {
     warnings,
     nextActions,
     riskLevel: riskLevel(riskScore),
-    confidence: confidenceFor(input, appliedRules),
+    confidence: confidenceFor(input, appliedRules, visaRuleEvaluation),
     appliedRules: unique(appliedRules),
     sourceRefs: unique(sourceRefs),
+    compliance: complianceRecommendation(visaRuleEvaluation),
   };
 }
 

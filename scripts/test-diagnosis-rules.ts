@@ -1,5 +1,7 @@
 import { recommendPath, type DiagnosisInput } from "../src/lib/data/diagnosis";
 import { KNOWLEDGE_DOCS } from "../src/lib/data/knowledge";
+import { TOOL_MAP, isRecord } from "../src/lib/agent/tools";
+import { evaluateVisaRules } from "../src/lib/rules/visa-rules";
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -36,6 +38,7 @@ function testLanguagePathKeepsCoreOutputShape() {
   const result = recommendPath(base);
 
   assert(result.pathKey === "goal_language", `language profile should be selected: ${JSON.stringify(result)}`);
+  assert(result.visaType === "D-4", `language profile should expose D-4 visa type: ${JSON.stringify(result)}`);
   assert(result.estimatedCost === 8_000_000, `language cost should remain 8M baseline: ${JSON.stringify(result)}`);
   assert(result.requiredDocs.includes("docs_doc_business"), `language path should include school business doc: ${JSON.stringify(result)}`);
   assert(result.requiredDocs.includes("docs_doc_tuberculosis"), `Vietnamese student should include TB doc: ${JSON.stringify(result)}`);
@@ -96,8 +99,83 @@ function testUnsureGoalUsesLanguageBridgeForLowKorean() {
   assertSourceRefsExist(result);
 }
 
+function testComplianceEvaluationGroundsDiagnosisRecommendation() {
+  const compliance = evaluateVisaRules({
+    visa_type: "D-2",
+    nationality: "vn",
+    has_refusal_history: true,
+  });
+  const result = recommendPath(
+    {
+      ...base,
+      goal: "degree",
+      korean: "topik3",
+      budget: 20_000_000,
+      hasHistory: true,
+    },
+    { visaRuleEvaluation: compliance }
+  );
+
+  assert(result.visaType === "D-2", `degree profile should expose D-2 visa type: ${JSON.stringify(result)}`);
+  assert(result.compliance, `diagnosis should embed compliance evaluation: ${JSON.stringify(result)}`);
+  assert(
+    result.compliance?.documents.some((doc) => doc.id === "financial_proof"),
+    `compliance documents should include financial proof: ${JSON.stringify(result.compliance)}`
+  );
+  assert(
+    result.compliance?.documents.some((doc) => doc.id === "tuberculosis_certificate"),
+    `Vietnamese compliance documents should include TB certificate: ${JSON.stringify(result.compliance)}`
+  );
+  assert(
+    result.appliedRules.some((rule) => rule.startsWith("compliance:")),
+    `diagnosis appliedRules should include compliance rule IDs: ${JSON.stringify(result)}`
+  );
+  assert(
+    result.sourceRefs.some((ref) => ref.startsWith("compliance:")),
+    `diagnosis sourceRefs should include compliance sources: ${JSON.stringify(result)}`
+  );
+}
+
+async function testDiagnoseToolReturnsComplianceMeta() {
+  const output = await TOOL_MAP.diagnose_path.execute(
+    {
+      nationality: "vn",
+      age: 20,
+      education: "highschool",
+      korean_level: "topik3",
+      goal: "degree",
+      budget: 20_000_000,
+      has_history: true,
+    },
+    { lang: "ko", dryRun: true }
+  );
+
+  const result = output.result;
+  if (!isRecord(result)) fail(`diagnose_path should return an object result: ${JSON.stringify(output)}`);
+
+  assert(result.visa_type === "D-2", `diagnose_path should expose visa_type: ${JSON.stringify(result)}`);
+  assert(
+    Array.isArray(result.compliance_documents) &&
+      result.compliance_documents.some((doc) => isRecord(doc) && doc.id === "financial_proof"),
+    `diagnose_path should include compliance documents: ${JSON.stringify(result)}`
+  );
+  assert(
+    isRecord(result.compliance_rule_meta) &&
+      Array.isArray(result.compliance_rule_meta.applied_rule_ids) &&
+      result.compliance_rule_meta.applied_rule_ids.length > 0,
+    `diagnose_path should include compliance rule metadata: ${JSON.stringify(result)}`
+  );
+  assert(
+    Array.isArray(result.source_refs) &&
+      result.source_refs.some((ref) => typeof ref === "string" && ref.startsWith("compliance:")),
+    `diagnose_path should expose compliance source refs: ${JSON.stringify(result)}`
+  );
+}
+
 testLanguagePathKeepsCoreOutputShape();
 testDegreePathExplainsLanguageAndBudgetRisk();
 testHistoryAndBrokerEscalateRisk();
 testUnsureGoalUsesLanguageBridgeForLowKorean();
+testComplianceEvaluationGroundsDiagnosisRecommendation();
+await testDiagnoseToolReturnsComplianceMeta();
 console.log("PASS diagnosis rules");

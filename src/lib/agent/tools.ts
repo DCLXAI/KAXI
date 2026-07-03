@@ -2,7 +2,7 @@
 // 각 도구는 name, description, parameters, execute 함수로 구성
 
 import { getEffectiveSourceMetadata, getRagDocumentMetadata, pickLangText } from "../data/knowledge";
-import { recommendPath, type DiagnosisInput } from "../data/diagnosis";
+import { inferDiagnosisVisaType, recommendPath, type DiagnosisInput } from "../data/diagnosis";
 import { hybridSearch } from "../embeddings/vector-store";
 import { withImmigrationLegalBasisDocs } from "../knowledge/legal-basis";
 import type { Lang } from "../i18n/translations";
@@ -378,17 +378,46 @@ const diagnosePathTool: Tool = {
       brokerCost,
       hasHistory,
     };
-    const rec = recommendPath(input);
+    const diagnosisVisaType = inferDiagnosisVisaType(input);
+    const complianceEvaluation =
+      diagnosisVisaType === "D-2" || diagnosisVisaType === "D-4"
+        ? await evaluateVisaRulesWithDbFallback({
+            visa_type: diagnosisVisaType,
+            program: goal === "language" ? "language" : goal === "degree" || goal === "transfer" ? "degree" : undefined,
+            nationality,
+            has_refusal_history: hasHistory,
+          })
+        : null;
+    const rec = recommendPath(input, { visaRuleEvaluation: complianceEvaluation });
     return {
       result: {
         path: rec.pathKey,
+        visa_type: rec.visaType,
         prep_time: rec.prepTime.ko,
         estimated_cost: rec.estimatedCost,
         required_docs: rec.requiredDocs,
+        compliance_documents: rec.compliance?.documents || [],
         warnings: rec.warnings.map((w) => w.ko),
+        compliance_warnings: rec.compliance?.warnings || [],
+        partner_escalation_reasons: rec.compliance?.partnerEscalationReasons || [],
+        blocked_reasons: rec.compliance?.blockedReasons || [],
         next_actions: rec.nextActions.map((a) => a.ko),
+        risk_level: rec.riskLevel,
+        confidence: rec.confidence,
+        applied_rules: rec.appliedRules,
+        source_refs: rec.sourceRefs,
+        compliance_rule_meta: rec.compliance
+          ? {
+              required_inputs: rec.compliance.requiredInputs,
+              missing_inputs: rec.compliance.missingInputs,
+              applied_rule_ids: rec.compliance.appliedRuleIds,
+              review_status: rec.compliance.reviewStatus,
+              fallback_policy: rec.compliance.fallbackPolicy,
+              source_refs: rec.compliance.sourceRefs,
+            }
+          : null,
       },
-      summary: `추천 경로: ${rec.pathKey}, 예상 비용: ${rec.estimatedCost.toLocaleString()}₩`,
+      summary: `추천 경로: ${rec.pathKey} (${rec.visaType}), 예상 비용: ${rec.estimatedCost.toLocaleString()}₩`,
     };
   },
 };
