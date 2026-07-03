@@ -524,12 +524,14 @@ function officialSummaryDocScore(question: string, doc: KnowledgeDoc, lang: Lang
     if (doc.id === "immigration-act-entry-inspection") score += 8;
   }
   if (asksDeportation) {
-    if (doc.id === "immigration-act-deportation-grounds") score += 32;
-    if (doc.id === "immigration-law-violation-risk") score += 10;
+    const asksSpecificDeportationProcedure =
+      asksDepartureOrder || asksDeportationObjection || asksDeportationDetention;
+    if (doc.id === "immigration-act-deportation-grounds") score += asksSpecificDeportationProcedure ? 8 : 32;
+    if (doc.id === "immigration-law-violation-risk") score += asksSpecificDeportationProcedure ? 4 : 10;
   }
   if (asksDepartureOrder) {
-    if (doc.id === "immigration-act-departure-recommendation-order") score += 32;
-    if (doc.id === "immigration-act-deportation-grounds") score += 14;
+    if (doc.id === "immigration-act-departure-recommendation-order") score += 48;
+    if (doc.id === "immigration-act-deportation-grounds") score += 6;
   }
   if (asksDepartureInspection) {
     if (doc.id === "immigration-act-departure-inspection") score += 32;
@@ -540,13 +542,13 @@ function officialSummaryDocScore(question: string, doc: KnowledgeDoc, lang: Lang
     if (doc.id === "immigration-act-departure-inspection") score += 8;
   }
   if (asksDeportationObjection) {
-    if (doc.id === "immigration-act-deportation-objection") score += 34;
-    if (doc.id === "immigration-act-deportation-grounds") score += 12;
+    if (doc.id === "immigration-act-deportation-objection") score += 64;
+    if (doc.id === "immigration-act-deportation-grounds") score += 4;
   }
   if (asksDeportationDetention) {
-    if (doc.id === "immigration-act-deportation-detention") score += 34;
-    if (doc.id === "immigration-act-deportation-objection") score += 8;
-    if (doc.id === "immigration-act-deportation-grounds") score += 8;
+    if (doc.id === "immigration-act-deportation-detention") score += 64;
+    if (doc.id === "immigration-act-deportation-objection") score += 6;
+    if (doc.id === "immigration-act-deportation-grounds") score += 4;
   }
   if (asksEmployerReport) {
     if (doc.id === "immigration-act-employer-reporting-duty") score += 32;
