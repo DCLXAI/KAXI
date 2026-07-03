@@ -65,7 +65,7 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
   ids.add(IMMIGRATION_GENERAL_STAY_STATUS_DOC_ID);
   ids.add(IMMIGRATION_STATUS_DOC_ID);
 
-  if (/단기|단기방문|단기취업|무사증|사증면제|관광|통과|입국|b-?1|b-?2|c-?1|c-?3|c-?4|short.?term|visa.?free|waiver|tourist|transit/.test(text)) {
+  if (/단기|단기방문|단기취업|무사증|사증면제|관광|통과|b-?1|b-?2|c-?1|c-?3|c-?4|short.?term|visa.?free|waiver|tourist|transit/.test(text)) {
     priorityIds.push(IMMIGRATION_GENERAL_STAY_STATUS_DOC_ID, IMMIGRATION_SHORT_TERM_STATUS_DOC_ID);
     ids.add(IMMIGRATION_SHORT_TERM_STATUS_DOC_ID);
   }
