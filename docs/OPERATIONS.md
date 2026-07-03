@@ -141,13 +141,16 @@ Production/hosted admin login fails closed unless `NEXTAUTH_SECRET`, `ADMIN_EMAI
 
 ## CI Quality Gates
 
-GitHub Actions restores non-DB runtime artifacts during `bun install --frozen-lockfile`, prepares the local test DB from Prisma migrations and seed scripts, then runs typecheck, lint, `test:schema`, `test:vector`, `test:rules`, `test:quality`, `test:governance`, `test:rag-ops`, `test:privacy`, `test:agent`, and production build.
+GitHub Actions restores non-DB runtime artifacts during `bun install --frozen-lockfile`, prepares the local test DB from Prisma migrations and seed scripts, then runs typecheck, lint, `test:schema`, `test:vector`, `test:rules`, `test:quality`, `test:governance`, `test:rag-ops`, `test:knowledge-monitor`, `test:privacy`, `test:agent`, `test:planner`, `test:citations`, `test:school-data`, admin/document/readiness checks, and production build.
 `test:schema` verifies the Phase 1 domain models, SQLite-compatible migration replay, and PostgreSQL operational migration DDL.
 `test:vector` verifies the restored model/vector cache can retrieve expected KAXI source documents.
 `test:rules` verifies the DB-backed D-2/D-4 Compliance Rule Engine, including approved-only execution, effective date windows, required source refs, 20+ golden cases, and `ComplianceEvaluation` persistence.
 `test:quality` validates the multilingual evaluation set in `quality/multilingual-eval-cases.json`, including expected source document, refusal expectation, and cost-format labels.
 `test:rag-ops` verifies Phase 7 RAG operations: approved-only production search, rejected/superseded blocking, answer source/checked-date notices, impact lists for rules/users, and diff-only crawler behavior.
 `test:knowledge-monitor` verifies official-source monitoring, non-searchable pending candidates, and admin approval superseding older RAG documents.
+`test:planner` verifies multilingual intent detection, slot filling, budget parsing, safety/partner signals, and exact-school refinements.
+`test:citations` verifies inline answer citation markers link to the visible source cards without rewriting existing Markdown links.
+`test:school-data` verifies public app/components do not import runtime school seed data directly; production-facing UI must use `/api/schools` or repository-backed APIs.
 `test:privacy` verifies consent-gated partner routing, third-party/consignment/overseas consent rows, privacy audit events, deletion/retention consent status changes, PII encryption/redaction behavior, production PII persistence guards, and hosted SQLite write guards.
 `test:agent` verifies Agent status diagnostics, dry-run preflight behavior, and partner-request PII masking.
 `test:admin-dashboard` verifies the Phase 3 admin APIs for cases, case actions, rules, knowledge documents, and audit logs.

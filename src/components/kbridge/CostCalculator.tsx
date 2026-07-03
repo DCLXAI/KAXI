@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useCostStore, useLangStore } from "@/store/kbridge";
 import { tr } from "@/lib/i18n/translations";
-import { SCHOOLS } from "@/lib/data/schools";
+import type { School } from "@/lib/data/schools";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,36 +41,70 @@ const PLATFORM_DEFAULTS: Record<string, number> = {
 
 const PLATFORM_FEE_ITEMS = new Set(["cost_item_application", "cost_item_visa", "cost_item_platform", "cost_item_partner"]);
 
+function schoolCostPatch(school: School): Record<"cost_item_tuition" | "cost_item_dorm", number> {
+  return {
+    cost_item_tuition: school.tuitionPerSemester,
+    cost_item_dorm: school.dormitoryAvailable ? (school.dormitoryCost ?? 0) : 0,
+  };
+}
+
 export function CostCalculator() {
   const { lang } = useLangStore();
   const { savedCosts, saveCost, removeCost } = useCostStore();
-  const [selectedSchool, setSelectedSchool] = useState<string>("snu-klc");
+  const [schools, setSchools] = useState<School[]>([]);
+  const [schoolsLoading, setSchoolsLoading] = useState(true);
+  const [schoolsError, setSchoolsError] = useState(false);
+  const [selectedSchool, setSelectedSchool] = useState<string>("");
   const [platformValues, setPlatformValues] = useState<Record<string, number>>(PLATFORM_DEFAULTS);
   const [brokerValues, setBrokerValues] = useState<Record<string, number>>({});
   const [brokerTotalInput, setBrokerTotalInput] = useState<number>(0);
   const [savedAlert, setSavedAlert] = useState(false);
 
-  const school = useMemo(() => SCHOOLS.find((s) => s.id === selectedSchool)!, [selectedSchool]);
+  const school = useMemo(
+    () => schools.find((s) => s.id === selectedSchool) || schools[0] || null,
+    [schools, selectedSchool]
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetch("/api/schools", { signal: controller.signal })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Failed to load schools");
+        return res.json();
+      })
+      .then((data) => {
+        const nextSchools = Array.isArray(data.schools) ? data.schools as School[] : [];
+        setSchools(nextSchools);
+        setSchoolsError(false);
+        setSelectedSchool((current) => {
+          if (current && nextSchools.some((item) => item.id === current)) return current;
+          return nextSchools[0]?.id || "";
+        });
+        if (nextSchools[0]) {
+          setPlatformValues((prev) => ({ ...prev, ...schoolCostPatch(nextSchools[0]) }));
+        }
+      })
+      .catch((err) => {
+        if (err.name === "AbortError") return;
+        console.error("[cost-schools]", err);
+        setSchoolsError(true);
+      })
+      .finally(() => setSchoolsLoading(false));
+
+    return () => controller.abort();
+  }, []);
 
   const applySchool = () => {
-    setPlatformValues((prev) => ({
-      ...prev,
-      cost_item_tuition: school.tuitionPerSemester,
-      cost_item_dorm: school.dormitoryAvailable ? (school.dormitoryCost ?? 0) : 0,
-    }));
+    if (!school) return;
+    setPlatformValues((prev) => ({ ...prev, ...schoolCostPatch(school) }));
   };
 
   // 학교 선택 변경시 자동으로 비용 반영
   const onSchoolChange = (id: string) => {
     setSelectedSchool(id);
-    const s = SCHOOLS.find((x) => x.id === id);
-    if (s) {
-      setPlatformValues((prev) => ({
-        ...prev,
-        cost_item_tuition: s.tuitionPerSemester,
-        cost_item_dorm: s.dormitoryAvailable ? (s.dormitoryCost ?? 0) : 0,
-      }));
-    }
+    const selected = schools.find((x) => x.id === id);
+    if (selected) setPlatformValues((prev) => ({ ...prev, ...schoolCostPatch(selected) }));
   };
 
   const platformTotal = Object.values(platformValues).reduce((a, b) => a + b, 0);
@@ -81,6 +115,7 @@ export function CostCalculator() {
   const isOver = brokerTotal > 0 && diffPct > 30;
 
   const handleSave = () => {
+    if (!school) return;
     saveCost({
       schoolId: school.id,
       schoolName: school.name[lang],
@@ -107,19 +142,32 @@ export function CostCalculator() {
         <CardContent>
           <div className="flex flex-col sm:flex-row gap-3">
             <Select value={selectedSchool} onValueChange={onSchoolChange}>
-              <SelectTrigger className="flex-1"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="flex-1" disabled={schoolsLoading || schools.length === 0}>
+                <SelectValue
+                  placeholder={
+                    schoolsLoading
+                      ? lang === "ko" ? "학교 데이터를 불러오는 중..." : "Loading school data..."
+                      : lang === "ko" ? "학교 데이터 없음" : "No school data"
+                  }
+                />
+              </SelectTrigger>
               <SelectContent>
-                {SCHOOLS.map((s) => (
+                {schools.map((s) => (
                   <SelectItem key={s.id} value={s.id}>
                     {s.name[lang]} ({s.tuitionPerSemester.toLocaleString()}₩)
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={applySchool}>
+            <Button variant="outline" onClick={applySchool} disabled={!school}>
               {lang === "ko" ? "학교 비용 반영" : lang === "vi" ? "Áp dụng" : lang === "mn" ? "Хэрэглэх" : "Apply school costs"}
             </Button>
           </div>
+          {schoolsError && (
+            <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {lang === "ko" ? "운영 학교 데이터를 불러오지 못했습니다." : "Could not load operational school data."}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -253,7 +301,7 @@ export function CostCalculator() {
               </div>
             )}
           </div>
-          <Button className="gap-2" onClick={handleSave}>
+          <Button className="gap-2" onClick={handleSave} disabled={!school}>
             <Save className="h-4 w-4" />
             {tr("cost_add_to_workspace", lang)}
           </Button>

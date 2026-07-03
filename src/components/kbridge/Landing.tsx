@@ -1,17 +1,44 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLangStore } from "@/store/kbridge";
 import { tr } from "@/lib/i18n/translations";
+import type { School } from "@/lib/data/schools";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Calculator, FileCheck, School as SchoolIcon, ShieldCheck, Users, Globe2, AlertTriangle, Scale, Sparkles } from "lucide-react";
-import { SCHOOLS } from "@/lib/data/schools";
 
 export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
   const { lang } = useLangStore();
-  const accreditedCount = SCHOOLS.filter((s) => s.accreditation === "accredited").length;
+  const [schoolStats, setSchoolStats] = useState<{ total: number | null; accredited: number | null }>({
+    total: null,
+    accredited: null,
+  });
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetch("/api/schools", { signal: controller.signal })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Failed to load school stats");
+        return res.json();
+      })
+      .then((data) => {
+        const schools = Array.isArray(data.schools) ? data.schools as School[] : [];
+        setSchoolStats({
+          total: Number(data.total || schools.length),
+          accredited: schools.filter((school) => school.accreditation === "accredited").length,
+        });
+      })
+      .catch((err) => {
+        if (err.name === "AbortError") return;
+        console.error("[landing-school-stats]", err);
+        setSchoolStats({ total: null, accredited: null });
+      });
+
+    return () => controller.abort();
+  }, []);
 
   const features = [
     {
@@ -101,8 +128,13 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
               <div className="text-xs text-muted-foreground mt-1">{tr("hero_stat_students", lang)}</div>
             </div>
             <div className="rounded-lg border bg-card p-4">
-              <div className="text-2xl md:text-3xl font-bold">{SCHOOLS.length}</div>
+              <div className="text-2xl md:text-3xl font-bold">{schoolStats.total ?? "—"}</div>
               <div className="text-xs text-muted-foreground mt-1">{tr("hero_stat_schools", lang)}</div>
+              {schoolStats.accredited !== null && (
+                <div className="mt-1 text-[10px] text-muted-foreground">
+                  {lang === "ko" ? `인증 ${schoolStats.accredited}` : `${schoolStats.accredited} accredited`}
+                </div>
+              )}
             </div>
             <div className="rounded-lg border bg-card p-4">
               <div className="text-2xl md:text-3xl font-bold">4</div>
