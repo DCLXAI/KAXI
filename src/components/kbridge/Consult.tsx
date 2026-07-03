@@ -8,7 +8,11 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { MessageResponse } from "@/components/ai-elements/message";
-import { SourceAnnotations, type SourceAnnotation } from "@/components/kbridge/SourceAnnotations";
+import {
+  SourceAnnotations,
+  linkCitationMarkers,
+  type SourceAnnotation,
+} from "@/components/kbridge/SourceAnnotations";
 import {
   Select,
   SelectContent,
@@ -60,6 +64,24 @@ interface RetrievedDoc {
     review_status?: string;
     checked_by?: string;
   };
+}
+
+function sourceAnnotationsFromDocs(docs?: RetrievedDoc[]): SourceAnnotation[] {
+  return (docs || []).map((doc): SourceAnnotation => ({
+    id: doc.id,
+    title: doc.title,
+    label: doc.sourceMeta?.label || doc.source,
+    source: doc.source,
+    url: doc.sourceMeta?.url || null,
+    kind: doc.sourceMeta?.owner === "internal" ? "internal" : "knowledge",
+    owner: doc.sourceMeta?.owner,
+    verifiedAt: doc.sourceMeta?.verifiedAt || doc.ragMeta?.last_checked_at,
+    reviewAfter: doc.sourceMeta?.reviewAfter,
+    sourceType: doc.sourceMeta?.sourceType,
+    reviewStatus: doc.sourceMeta?.reviewStatus || doc.ragMeta?.review_status,
+    checkedBy: doc.sourceMeta?.checkedBy || doc.ragMeta?.checked_by,
+    excerpt: doc.excerpt,
+  }));
 }
 
 type ConsultMode = "general" | "visa" | "documents" | "appeal" | "business";
@@ -362,27 +384,16 @@ export function Consult() {
                       )}
                     </div>
                     <div className="text-sm leading-relaxed">
-                      <MessageResponse>{m.text}</MessageResponse>
+                      <MessageResponse>
+                        {linkCitationMarkers(m.text, sourceAnnotationsFromDocs(m.retrievedDocs), `consult-message-${i}`, 4)}
+                      </MessageResponse>
                     </div>
 
                     <SourceAnnotations
-                      sources={m.retrievedDocs?.map((doc): SourceAnnotation => ({
-                        id: doc.id,
-                        title: doc.title,
-                        label: doc.sourceMeta?.label || doc.source,
-                        source: doc.source,
-                        url: doc.sourceMeta?.url || null,
-                        kind: doc.sourceMeta?.owner === "internal" ? "internal" : "knowledge",
-                        owner: doc.sourceMeta?.owner,
-                        verifiedAt: doc.sourceMeta?.verifiedAt || doc.ragMeta?.last_checked_at,
-                        reviewAfter: doc.sourceMeta?.reviewAfter,
-                        sourceType: doc.sourceMeta?.sourceType,
-                        reviewStatus: doc.sourceMeta?.reviewStatus || doc.ragMeta?.review_status,
-                        checkedBy: doc.sourceMeta?.checkedBy || doc.ragMeta?.checked_by,
-                        excerpt: doc.excerpt,
-                      }))}
+                      sources={sourceAnnotationsFromDocs(m.retrievedDocs)}
                       lang={lang}
                       max={4}
+                      idPrefix={`consult-message-${i}`}
                     />
                   </div>
 

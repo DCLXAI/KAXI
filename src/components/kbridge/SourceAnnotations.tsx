@@ -45,18 +45,45 @@ function checkedText(source: SourceAnnotation, lang: Lang): string | null {
   return [checked ? `checked ${checked}` : null, status ? `review ${status}` : null].filter(Boolean).join(" · ");
 }
 
+function visibleSourceList(sources: SourceAnnotation[] | undefined, max: number): SourceAnnotation[] {
+  return (sources || []).filter((source) => source?.title).slice(0, max);
+}
+
+export function sourceAnnotationDomId(idPrefix: string, index: number): string {
+  const safePrefix = idPrefix.replace(/[^A-Za-z0-9_-]/g, "-");
+  return `${safePrefix}-source-${index + 1}`;
+}
+
+export function linkCitationMarkers(
+  markdown: string,
+  sources: SourceAnnotation[] | undefined,
+  idPrefix: string,
+  max = 8
+): string {
+  const visibleSources = visibleSourceList(sources, max);
+  if (!markdown || visibleSources.length === 0) return markdown;
+
+  return markdown.replace(/\[(\d{1,2})\](?!\()/g, (match, rawIndex: string) => {
+    const index = Number(rawIndex);
+    if (!Number.isInteger(index) || index < 1 || index > visibleSources.length) return match;
+    return `[${index}](#${sourceAnnotationDomId(idPrefix, index - 1)})`;
+  });
+}
+
 export function SourceAnnotations({
   sources,
   lang,
   max = 8,
   title,
+  idPrefix,
 }: {
   sources?: SourceAnnotation[];
   lang: Lang;
   max?: number;
   title?: string;
+  idPrefix?: string;
 }) {
-  const visibleSources = (sources || []).filter((source) => source?.title).slice(0, max);
+  const visibleSources = visibleSourceList(sources, max);
   if (visibleSources.length === 0) return null;
 
   return (
@@ -101,7 +128,11 @@ export function SourceAnnotations({
           const checked = checkedText(source, lang);
 
           return (
-            <div key={`${source.id || source.title}-detail-${index}`} className="rounded-md border bg-muted/20 px-3 py-2 text-xs">
+            <div
+              key={`${source.id || source.title}-detail-${index}`}
+              id={idPrefix ? sourceAnnotationDomId(idPrefix, index) : undefined}
+              className="scroll-mt-24 rounded-md border bg-muted/20 px-3 py-2 text-xs target:border-primary/60 target:bg-primary/5 target:ring-2 target:ring-primary/20"
+            >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 font-medium">

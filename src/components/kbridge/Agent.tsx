@@ -16,7 +16,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MessageResponse } from "@/components/ai-elements/message";
-import { SourceAnnotations } from "@/components/kbridge/SourceAnnotations";
+import {
+  SourceAnnotations,
+  linkCitationMarkers,
+  type SourceAnnotation,
+} from "@/components/kbridge/SourceAnnotations";
 import {
   ArrowUp,
   Loader2,
@@ -152,6 +156,10 @@ function getConfiguredBridgeUrl(): { url: string | null; explicit: boolean } {
   if (envUrl) return { url: envUrl, explicit: true };
 
   return { url: null, explicit: false };
+}
+
+function agentSourceAnnotations(message: Msg): SourceAnnotation[] {
+  return message.meta?.sources || [];
 }
 
 async function hasLocalBridge(url: string): Promise<boolean> {
@@ -922,7 +930,9 @@ export function Agent() {
                       </div>
                     )}
                     <div className="text-sm leading-relaxed">
-                      <MessageResponse>{m.text}</MessageResponse>
+                      <MessageResponse>
+                        {linkCitationMarkers(m.text, agentSourceAnnotations(m), `agent-message-${i}`, 6)}
+                      </MessageResponse>
                     </div>
                     {m.meta?.safetyFlags && m.meta.safetyFlags.length > 0 && (
                       <div className="mt-3 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
@@ -1051,7 +1061,12 @@ export function Agent() {
                         </div>
                       );
                     })()}
-                    <SourceAnnotations sources={m.meta?.sources} lang={lang} max={6} />
+                    <SourceAnnotations
+                      sources={agentSourceAnnotations(m)}
+                      lang={lang}
+                      max={6}
+                      idPrefix={`agent-message-${i}`}
+                    />
                     {m.meta?.suggestions && m.meta.suggestions.length > 0 && (
                       <div className="mt-4 border-t pt-3">
                         <div className="mb-2 text-[11px] font-medium uppercase tracking-normal text-muted-foreground">
