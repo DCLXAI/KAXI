@@ -1,5 +1,6 @@
 import {
   analyzeAgentIntent,
+  extractAgentSlots,
   parseKrwBudget,
   type AgentMissingSlot,
   type PlannedToolName,
@@ -49,9 +50,11 @@ function testBudgetParsing() {
 
 function testSchoolAndCostIntent() {
   const result = analyzeAgentIntent("예산 500만원으로 서울 인증대학 어학당 찾아줘", "ko");
+  const slots = extractAgentSlots("예산 500만원으로 서울 인증대학 어학당 찾아줘");
 
   assert(result.school, `school intent missing: ${JSON.stringify(result)}`);
   assert(result.cost, `cost intent missing: ${JSON.stringify(result)}`);
+  assert(slots.signals.school && slots.signals.cost, `slot signals should capture school/cost: ${JSON.stringify(slots)}`);
   assert(result.budget === 5_000_000, `budget entity wrong: ${JSON.stringify(result)}`);
   assert(result.region === "seoul", `region entity wrong: ${JSON.stringify(result)}`);
   assert(result.program === "language", `program entity wrong: ${JSON.stringify(result)}`);
@@ -74,14 +77,18 @@ function testVisaDocumentIntent() {
 
 function testPartnerAndSafetyIntent() {
   const partner = analyzeAgentIntent("D-2 거절 이력이 있어서 행정사 상담 연결해줘", "ko");
+  const partnerSlots = extractAgentSlots("D-2 거절 이력이 있어서 행정사 상담 연결해줘");
   assert(partner.partner, `partner intent missing: ${JSON.stringify(partner)}`);
   assert(partner.hasHistory, `refusal history missing: ${JSON.stringify(partner)}`);
+  assert(partnerSlots.signals.partner && partnerSlots.hasHistory, `partner slot extraction wrong: ${JSON.stringify(partnerSlots)}`);
   assert(partner.partnerType === "admin", `partner type wrong: ${JSON.stringify(partner)}`);
   assert(partner.plan.some((item) => item.tool === "request_partner"), `partner tool missing: ${JSON.stringify(partner)}`);
 
   const safety = analyzeAgentIntent("브로커가 허위 서류로 비자 보장한다고 하는데 괜찮아?", "ko");
+  const safetySlots = extractAgentSlots("브로커가 허위 서류로 비자 보장한다고 하는데 괜찮아?");
   assert(safety.safety, `safety intent missing: ${JSON.stringify(safety)}`);
   assert(safety.usingBroker, `broker signal missing: ${JSON.stringify(safety)}`);
+  assert(safetySlots.signals.safety && safetySlots.usingBroker, `safety slot extraction wrong: ${JSON.stringify(safetySlots)}`);
   assert(safety.knowledge, `safety question should force knowledge: ${JSON.stringify(safety)}`);
   assert(safety.confidence === "high", `safety question should be high confidence: ${JSON.stringify(safety)}`);
 }
