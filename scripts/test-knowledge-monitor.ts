@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import { mkdtempSync, rmSync } from "fs";
+import { mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { prepareLocalDb } from "./prepare-local-db";
@@ -35,6 +35,10 @@ const {
   runOfficialKnowledgeSourceMonitor,
 } = await import("../src/lib/knowledge/source-monitor");
 const {
+  getKnowledgeDocsWithMetadata,
+  getRagDocumentMetadata,
+} = await import("../src/lib/data/knowledge");
+const {
   buildKnowledgeMonitorAlertPayload,
   sendKnowledgeMonitorAlert,
 } = await import("../src/lib/knowledge/monitor-alerts");
@@ -42,6 +46,7 @@ const {
 try {
   const requiredWatchlistIds = [
     "immigration-law-recent-promulgations",
+    "immigration-law-interpretation-hierarchy",
     "immigration-act-stay-status-scope",
     "immigration-act-visa-passport-requirement",
     "immigration-act-visa-issuance-certificate",
@@ -77,6 +82,13 @@ try {
     "immigration-rule-documents-attachments",
     "hikorea-homepage-urgent-notices",
     "hikorea-integrated-status-manual",
+    "hikorea-d2-d4-d10-e7-f2-f5-requirements",
+    "hikorea-stay-extension",
+    "hikorea-status-change",
+    "hikorea-activity-permit",
+    "hikorea-forms-document-checklist",
+    "hikorea-online-visit-application",
+    "hikorea-fees-processing-authentication",
     "hikorea-policy-notice-monitor",
     "moj-immigration-policy-news",
     "moj-notice-board-visa-policy",
@@ -107,6 +119,35 @@ try {
     assert(source, `official watchlist missing required source: ${docId}`);
     assert(source.monitorCadence === "daily", `${docId} must be monitored daily`);
     assert(source.sourceType.startsWith("official_"), `${docId} must use an official source type`);
+  }
+
+  const watchlistIds = new Set(OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST.map((item) => item.docId));
+  const officialDocIds = getKnowledgeDocsWithMetadata()
+    .filter((doc) =>
+      doc.id.startsWith("immigration-") ||
+      doc.id.startsWith("hikorea-") ||
+      doc.id.startsWith("moj-") ||
+      doc.id === "accredited-university" ||
+      doc.id === "visa-portal-visa-types"
+    )
+    .filter((doc) => getRagDocumentMetadata(doc, "ko").source_type.startsWith("official_"))
+    .map((doc) => doc.id);
+  for (const docId of officialDocIds) {
+    assert(watchlistIds.has(docId), `official RAG doc is not monitored: ${docId}`);
+  }
+
+  const workflowText = readFileSync(".github/workflows/official-source-monitor.yml", "utf8");
+  const workflowSourceIds = new Set<string>();
+  for (const match of workflowText.matchAll(/source_ids:\s*([^\n]+)/g)) {
+    for (const id of match[1].split(",").map((item) => item.trim()).filter(Boolean)) {
+      workflowSourceIds.add(id);
+    }
+  }
+  for (const docId of watchlistIds) {
+    assert(workflowSourceIds.has(docId), `official source watchlist is not scheduled in workflow: ${docId}`);
+  }
+  for (const docId of workflowSourceIds) {
+    assert(watchlistIds.has(docId), `workflow monitors unknown official source id: ${docId}`);
   }
   assert(
     OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST.some((item) => item.docId === "immigration-law-recent-promulgations" && item.legalPriority === 1),

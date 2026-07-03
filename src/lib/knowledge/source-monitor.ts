@@ -105,6 +105,7 @@ const LAW_DECREE_LONG_TERM_STATUS_TABLE_URL =
 const LAW_DECREE_PERMANENT_RESIDENCE_TABLE_URL =
   "https://www.law.go.kr/LSW/lsBylInfoPLinkR.do?lsiSeq=271319&lsNm=%EC%B6%9C%EC%9E%85%EA%B5%AD%EA%B4%80%EB%A6%AC%EB%B2%95+%EC%8B%9C%ED%96%89%EB%A0%B9&bylNo=0001&bylBrNo=03&bylCls=BE&bylEfYd=20250601&bylEfYdYn=Y";
 const HIKOREA_HOME_URL = "https://www.hikorea.go.kr/index.html";
+const HIKOREA_INFO_MAIN_URL = "https://www.hikorea.go.kr/info/InfoMain.pt";
 const HIKOREA_STATUS_MANUAL_URL =
   "https://www.hikorea.go.kr/board/BoardNtcDetailR.pt?BBS_GB_CD=BS10&BBS_SEQ=1&NTCCTT_SEQ=1062&page=1";
 const HIKOREA_NOTICE_URL = "https://www.hikorea.go.kr/board/BoardNtcListR.pt";
@@ -153,6 +154,16 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     legalPriority: 1,
     monitorCadence: "daily",
     changeSignals: ["new_promulgation", "effective_date", "law_number", "decree_or_rule_update"],
+  },
+  {
+    docId: "immigration-law-interpretation-hierarchy",
+    title: "출입국관리법 제10조·제17조 법령 해석 순서",
+    sourceUrl: LAW_ACT_URL,
+    sourceType: "official_law",
+    topic: "legal",
+    legalPriority: 1,
+    monitorCadence: "daily",
+    changeSignals: ["stay_status", "activity_scope", "law_decree_rule_hierarchy", "article_10", "article_17"],
   },
   {
     docId: "immigration-act-stay-status-scope",
@@ -610,6 +621,16 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     topic: "process",
     legalPriority: 4,
     monitorCadence: "daily",
+  },
+  {
+    docId: "hikorea-fees-processing-authentication",
+    title: "하이코리아 수수료·처리기간·원본/번역/아포스티유 안내",
+    sourceUrl: HIKOREA_INFO_MAIN_URL,
+    sourceType: "official_government",
+    topic: "cost",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["fee", "processing_period", "apostille", "translation", "original_document", "authentication"],
   },
   {
     docId: "hikorea-policy-notice-monitor",
