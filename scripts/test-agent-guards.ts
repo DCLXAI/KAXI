@@ -551,8 +551,12 @@ async function testConsultRouteUsesRemoteCodexBridge() {
     const res = await route.POST(req);
     const body = await res.json();
 
-    if (res.status !== 200 || body.answer !== "mocked consult bridge answer") {
+    const answer = String(body.answer || "");
+    if (res.status !== 200 || !answer.startsWith("mocked consult bridge answer")) {
       fail(`consult route should use remote bridge: status=${res.status} body=${JSON.stringify(body)}`);
+    }
+    if (!answer.includes("[1]") || !answer.includes("📚 출처:")) {
+      fail(`consult route should normalize bridge answers with citations and source links: ${answer}`);
     }
     if (body.backend !== "codex-cli-local-bridge" || body.codexMode !== "local-auth") {
       fail(`consult route should expose bridge backend metadata: ${JSON.stringify(body)}`);

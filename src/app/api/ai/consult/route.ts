@@ -15,6 +15,7 @@ import { runRemoteCodexBridge } from "@/lib/codex/remote-bridge";
 import { hybridSearch, initVectorStore } from "@/lib/embeddings/vector-store";
 import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
 import { withImmigrationLegalBasisDocs } from "@/lib/knowledge/legal-basis";
+import { ensureGroundedCitationAnswer } from "@/lib/knowledge/citations";
 import {
   consumeDailyQuota,
   getClientIp,
@@ -141,6 +142,13 @@ export async function POST(req: NextRequest) {
       parsePositiveInt(process.env.AI_LLM_TIMEOUT_MS, 55_000),
       "Expert LLM generation"
     );
+    const answer = ensureGroundedCitationAnswer({
+      answer: result.answer,
+      docs,
+      lang,
+      sourceNotice,
+      maxSources: 8,
+    });
 
     // 4. ChatLog 저장
     try {
@@ -150,7 +158,7 @@ export async function POST(req: NextRequest) {
           data: {
             lang,
             ...protectedQuestion,
-            answer: result.answer,
+            answer,
             source: "expert",
             retrievedDocs: JSON.stringify({
               docIds: docs.map((d) => d.id),
@@ -173,7 +181,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      answer: result.answer,
+      answer,
       disclaimer: result.disclaimer,
       retrievedDocs: docs.map((d) => ({
         id: d.id,
@@ -653,12 +661,18 @@ function buildOfficialSummaryFallback(
       const content = pickLangText(doc.content, lang).replace(/\s+/g, " ").trim();
       const excerpt = content.length > 520 ? `${content.slice(0, 520)}...` : content;
       const checked = meta?.last_checked_at ? `\n확인일: ${meta.last_checked_at}` : "";
-      return `### [${index + 1}] ${pickLangText(doc.title, lang)}\n\n${excerpt} [${index + 1}]\n\n출처: ${doc.source}${checked}`;
+      const sourceUrl = meta?.source_url ? ` <${meta.source_url}>` : "";
+      return `### [${index + 1}] ${pickLangText(doc.title, lang)}\n\n${excerpt} [${index + 1}]\n\n출처: ${doc.source}${sourceUrl}${checked}`;
     })
     .join("\n\n");
 
   const sourceList = prioritized
-    .map((doc, index) => `- [${index + 1}] ${pickLangText(doc.title, lang)} — ${doc.source}`)
+    .map((doc, index) => {
+      const meta = getRagDocumentMetadata(doc, lang);
+      const sourceUrl = meta?.source_url ? ` <${meta.source_url}>` : "";
+      const checked = meta?.last_checked_at ? ` (확인일 ${meta.last_checked_at})` : "";
+      return `- [${index + 1}] ${pickLangText(doc.title, lang)} — ${doc.source}${sourceUrl}${checked}`;
+    })
     .join("\n");
 
   return `## 공식 근거 기반 요약
@@ -734,7 +748,8 @@ function buildCodexConsultPrompt({
     .map((d, i) => {
       const meta = getRagDocumentMetadata(d, "ko");
       const checked = meta?.last_checked_at ? ` (확인일 ${meta.last_checked_at})` : "";
-      return `${i + 1}. ${pickLangText(d.title, "ko")} - ${d.source}${checked}`;
+      const url = meta?.source_url ? ` - ${meta.source_url}` : "";
+      return `${i + 1}. ${pickLangText(d.title, "ko")} - ${d.source}${url}${checked}`;
     })
     .join("\n");
 

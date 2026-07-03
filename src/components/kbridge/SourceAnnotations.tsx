@@ -68,8 +68,10 @@ export function sourceAnnotationDomId(idPrefix: string, index: number): string {
   return `${safePrefix}-source-${index + 1}`;
 }
 
-function markdownTitle(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').slice(0, 120);
+function markdownTitle(source: SourceAnnotation): string {
+  const basis = source.basis || source.excerpt;
+  const value = basis ? `${source.title} — ${basis}` : source.title;
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').slice(0, 180);
 }
 
 export function linkCitationMarkers(
@@ -84,7 +86,7 @@ export function linkCitationMarkers(
   return markdown.replace(/\[(\d{1,2})\](?!\()/g, (match, rawIndex: string) => {
     const index = Number(rawIndex);
     if (!Number.isInteger(index) || index < 1 || index > visibleSources.length) return match;
-    return `[${index}](#${sourceAnnotationDomId(idPrefix, index - 1)} "${markdownTitle(visibleSources[index - 1].title)}")`;
+    return `[${index}](#${sourceAnnotationDomId(idPrefix, index - 1)} "${markdownTitle(visibleSources[index - 1])}")`;
   });
 }
 

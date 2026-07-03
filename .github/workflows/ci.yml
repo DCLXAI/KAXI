@@ -26,33 +26,13 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Prepare local database from migrations
         run: bun run db:prepare-local && bun run db:seed:schools && bun run db:seed:synonyms && bun run db:seed:rules
-      - name: Typecheck app
-        run: bunx tsc --noEmit
-      - name: Typecheck scripts
-        run: bunx tsc --noEmit -p tsconfig.scripts.json
-      - name: Typecheck e2e
-        run: bun run test:e2e:types
+      - name: Typecheck profiles
+        run: bun run ci:types
       - name: Lint
         run: bun run lint
-      - name: Verify DB schema policy
-        run: bun run test:schema
-      - name: Verify vector cache search
-        run: bun run test:vector
-      - name: Verify visa rules
-        run: bun run test:rules
-      - name: Verify multilingual quality dataset
-        run: bun run test:quality
-      - name: Verify data governance policy
-        run: bun run test:governance
-      - name: Verify privacy guards
-        run: bun run test:privacy
-      - name: Verify agent guards
-        run: bun run test:agent
-      - name: Verify admin dashboard
-        run: bun run test:admin-dashboard
-      - name: Verify document upload flow
-        run: bun run test:documents
-      - name: Verify production readiness guards
-        run: bun run test:readiness
+      - name: Verify domain quality gates
+        run: bun run ci:domain
+      - name: Verify operations quality gates
+        run: bun run ci:ops
       - name: Build
         run: bun run build

@@ -14,6 +14,7 @@ import { db } from "@/lib/db";
 import { generateZaiChatText, isZaiConfigurationError, type ZaiChatMessage } from "@/lib/ai/zai";
 import { hybridSearch, initVectorStore, initTransformerStore, getStoreStats } from "@/lib/embeddings/vector-store";
 import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
+import { ensureGroundedCitationAnswer } from "@/lib/knowledge/citations";
 import {
   consumeDailyQuota,
   parseLimit,
@@ -119,9 +120,7 @@ export async function POST(req: NextRequest) {
       answer = AI_DEFAULT_REPLY[lang];
     }
 
-    if (sourceNotice && !answer.includes(sourceNotice)) {
-      answer = `${answer}\n\n${sourceNotice}`;
-    }
+    answer = ensureGroundedCitationAnswer({ answer, docs, lang, sourceNotice, maxSources: 3 });
 
     // 5. 로그 저장 (비동기, 실패 무시)
     try {
@@ -186,10 +185,15 @@ function buildCitedFallbackAnswer(baseAnswer: string | null, doc: KnowledgeDoc, 
   const sourceHeading = lang === "ko" ? "📚 출처:" : "📚 Sources:";
   const basisHeading = lang === "ko" ? "공식 근거 요약" : "Official-source basis";
   const sourceUrl = meta.source_url ? ` <${meta.source_url}>` : "";
+  const checked = meta.last_checked_at
+    ? lang === "ko"
+      ? ` (확인일 ${meta.last_checked_at})`
+      : ` (checked ${meta.last_checked_at})`
+    : "";
   const sections = baseAnswer?.trim() ? [`${baseAnswer.trim()} [1]`] : [];
 
   sections.push(`### ${basisHeading}\n\n${excerpt} [1]`);
-  sections.push(`${sourceHeading}\n- [1] ${title} — ${doc.source}${sourceUrl}`);
+  sections.push(`${sourceHeading}\n- [1] ${title} — ${doc.source}${sourceUrl}${checked}`);
 
   return sections.join("\n\n");
 }
