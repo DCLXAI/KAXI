@@ -1,3 +1,28 @@
+import {
+  ACCREDITATION_KEYWORDS,
+  BROKER_KEYWORDS,
+  COST_SIGNAL_KEYWORDS,
+  D2_VISA_KEYWORDS,
+  D4_VISA_KEYWORDS,
+  DIAGNOSIS_KEYWORDS,
+  DOCUMENT_KEYWORDS,
+  EDUCATION_KEYWORDS,
+  EDUCATION_SIGNAL_KEYWORDS,
+  GOAL_KEYWORDS,
+  KNOWLEDGE_KEYWORDS,
+  NATIONALITY_KEYWORDS,
+  NO_KOREAN_KEYWORDS,
+  PARTNER_SIGNAL_KEYWORDS,
+  PARTNER_TYPE_KEYWORDS,
+  PROGRAM_KEYWORDS,
+  REFUSAL_HISTORY_KEYWORDS,
+  REGION_KEYWORDS,
+  SCHOOL_SIGNAL_KEYWORDS,
+  SMALL_TALK_KEYWORDS,
+  includesAnyKeyword,
+  matchKeywordRule,
+} from "@/lib/agent/intent-keywords";
+
 export type AgentEducation = "highschool" | "college" | "university" | "master";
 export type AgentKoreanLevel = "none" | "topik1" | "topik2" | "topik3";
 export type AgentGoal = "language" | "degree" | "transfer" | "career" | "unsure";
@@ -35,10 +60,6 @@ export interface AgentSlotExtraction {
   usingBroker: boolean;
   hasHistory: boolean;
   signals: AgentIntentSignals;
-}
-
-function includesAny(text: string, words: string[]): boolean {
-  return words.some((word) => text.includes(word));
 }
 
 function parseNumber(raw: string): number {
@@ -93,76 +114,45 @@ function isGenericSchoolNameCandidate(value: string): boolean {
 }
 
 export function detectRegion(text: string): string {
-  if (includesAny(text, ["서울", "seoul", "sơ-un", "seul", "сеул"])) return "seoul";
-  if (includesAny(text, ["경기", "gyeonggi", "수원", "성남", "안양", "용인", "gyeonggi-do"])) return "gyeonggi";
-  if (includesAny(text, ["부산", "busan", "пусан"])) return "busan";
-  if (includesAny(text, ["대구", "daegu"])) return "daegu";
-  if (includesAny(text, ["광주", "gwangju"])) return "gwangju";
-  return "all";
+  return matchKeywordRule(text, REGION_KEYWORDS, "all");
 }
 
 export function detectProgram(text: string): string {
-  if (includesAny(text, ["어학", "어학당", "한국어", "language", "tiếng hàn", "tieng han", "ngôn ngữ", "ngon ngu", "d-4", "d4", "хэлний", "солонгос хэл"])) {
-    return "language";
-  }
-  if (includesAny(text, ["전문대", "college", "cao đẳng", "cao dang"])) return "college";
-  if (includesAny(text, ["대학원", "석사", "박사", "graduate", "master", "phd", "thạc sĩ", "thac si", "магистр"])) {
-    return "graduate";
-  }
-  if (includesAny(text, ["학위", "대학교", "대학", "university", "degree", "d-2", "d2", "đại học", "dai hoc", "их сургууль"])) {
-    return "university";
-  }
-  if (includesAny(text, ["직업", "요양", "vocational", "career", "nghề", "nghe", "мэргэжил"])) return "vocational";
-  return "all";
+  return matchKeywordRule(text, PROGRAM_KEYWORDS, "all");
 }
 
 export function detectAccreditation(text: string): string {
-  if (includesAny(text, ["인증", "accredited", "인증대학", "chứng nhận", "chung nhan", "итгэмжлэгдсэн"])) return "accredited";
-  if (includesAny(text, ["비자심사", "강화", "주의", "caution", "strict", "rủi ro", "rui ro", "анхаарал"])) return "caution";
-  return "all";
+  return matchKeywordRule(text, ACCREDITATION_KEYWORDS, "all");
 }
 
 export function detectVisaType(text: string): AgentVisaType {
-  return /d-2|d2|학위|대학교|대학원|degree|university|graduate|đại học|dai hoc|их сургууль|магистр/i.test(text)
-    ? "D-2"
-    : "D-4";
+  return includesAnyKeyword(text, D2_VISA_KEYWORDS) ? "D-2" : "D-4";
 }
 
 export function detectNationality(text: string): string {
-  if (includesAny(text, ["베트남", "vietnam", "vietnamese", "việt", "việt nam", "viet nam"])) return "vn";
-  if (includesAny(text, ["몽골", "mongolia", "mongolian", "монгол"])) return "mn";
-  if (includesAny(text, ["중국", "china", "chinese", "trung quốc", "trung quoc"])) return "cn";
-  if (includesAny(text, ["우즈벡", "uzbek", "uzbekistan"])) return "uz";
-  return "other";
+  return matchKeywordRule(text, NATIONALITY_KEYWORDS, "other");
 }
 
 export function detectEducation(text: string): AgentEducation {
-  if (includesAny(text, ["석사", "master", "thạc sĩ", "thac si", "магистр"])) return "master";
-  if (includesAny(text, ["대졸", "대학교 졸업", "bachelor", "đại học", "dai hoc", "их сургууль төгс"])) return "university";
-  if (includesAny(text, ["전문대", "college", "cao đẳng", "cao dang"])) return "college";
-  return "highschool";
+  return matchKeywordRule(text, EDUCATION_KEYWORDS, "highschool");
 }
 
 export function detectKoreanLevel(text: string): AgentKoreanLevel {
   if (/topik\s*3|토픽\s*3|3급|topik3/i.test(text)) return "topik3";
   if (/topik\s*2|토픽\s*2|2급|topik2/i.test(text)) return "topik2";
   if (/topik\s*1|토픽\s*1|1급|topik1/i.test(text)) return "topik1";
-  if (includesAny(text, ["한국어 못", "한국어 없음", "no korean", "chưa biết tiếng hàn", "chua biet tieng han", "солонгос хэлгүй"])) {
+  if (includesAnyKeyword(text, NO_KOREAN_KEYWORDS)) {
     return "none";
   }
   return "none";
 }
 
 export function detectGoal(text: string): AgentGoal {
-  if (includesAny(text, ["어학", "한국어", "language", "tiếng hàn", "tieng han", "хэлний"])) return "language";
-  if (includesAny(text, ["편입", "transfer", "chuyển tiếp", "chuyen tiep"])) return "transfer";
-  if (includesAny(text, ["취업", "career", "nghề", "nghe", "ажил"])) return "career";
-  if (includesAny(text, ["학위", "대학", "degree", "đại học", "dai hoc", "их сургууль"])) return "degree";
-  return "unsure";
+  return matchKeywordRule(text, GOAL_KEYWORDS, "unsure");
 }
 
 export function hasExplicitVisaType(text: string): boolean {
-  return /d-2|d2|d-4|d4|어학|어학당|한국어|language|tiếng hàn|tieng han|хэлний|학위|대학교|대학원|degree|university|graduate|đại học|dai hoc|их сургууль|магистр/i.test(text);
+  return includesAnyKeyword(text, D2_VISA_KEYWORDS) || includesAnyKeyword(text, D4_VISA_KEYWORDS);
 }
 
 export function hasBudgetSignal(text: string): boolean {
@@ -170,23 +160,7 @@ export function hasBudgetSignal(text: string): boolean {
 }
 
 export function hasEducationSignal(text: string): boolean {
-  return includesAny(text, [
-    "고졸",
-    "고등학교",
-    "대졸",
-    "대학교 졸업",
-    "전문대",
-    "석사",
-    "master",
-    "bachelor",
-    "college",
-    "cao đẳng",
-    "cao dang",
-    "thạc sĩ",
-    "thac si",
-    "магистр",
-    "их сургууль төгс",
-  ]);
+  return includesAnyKeyword(text, EDUCATION_SIGNAL_KEYWORDS);
 }
 
 export function hasKoreanLevelSignal(text: string): boolean {
@@ -194,43 +168,16 @@ export function hasKoreanLevelSignal(text: string): boolean {
 }
 
 export function hasGoalSignal(text: string): boolean {
-  return includesAny(text, [
-    "어학",
-    "한국어",
-    "language",
-    "tiếng hàn",
-    "tieng han",
-    "хэлний",
-    "편입",
-    "transfer",
-    "chuyển tiếp",
-    "chuyen tiep",
-    "취업",
-    "career",
-    "nghề",
-    "nghe",
-    "ажил",
-    "학위",
-    "degree",
-    "đại học",
-    "dai hoc",
-    "их сургууль",
-  ]);
+  return GOAL_KEYWORDS.some((rule) => includesAnyKeyword(text, rule.keywords));
 }
 
 export function detectPartnerType(text: string): string {
-  if (includesAny(text, ["번역", "공증", "translation", "notary", "dịch", "dich", "công chứng", "cong chung", "орчуулга"])) {
-    return "translation";
-  }
-  if (includesAny(text, ["입학처", "admission", "tuyển sinh", "tuyen sinh"])) return "admission";
-  if (includesAny(text, ["어학원", "academy", "language center"])) return "academy";
-  if (includesAny(text, ["정착", "settlement", "nhà ở", "nha o", "байр"])) return "settlement";
-  return "admin";
+  return matchKeywordRule(text, PARTNER_TYPE_KEYWORDS, "admin");
 }
 
 export function isSmallTalk(text: string): boolean {
   const normalized = text.replace(/\s+/g, "").toLowerCase();
-  return ["안녕", "hi", "hello", "테스트", "상태", "status", "xin chào", "sainuu"].some((word) => normalized.includes(word)) && normalized.length < 40;
+  return includesAnyKeyword(normalized, SMALL_TALK_KEYWORDS) && normalized.length < 40;
 }
 
 export function hasSafetySignal(text: string): boolean {
@@ -251,7 +198,7 @@ export function extractAgentSlots(question: string): AgentSlotExtraction {
   const koreanLevel = detectKoreanLevel(text);
   const goal = detectGoal(text);
   const safety = hasSafetySignal(text);
-  const documents = includesAny(text, ["서류", "문서", "documents", "hồ sơ", "ho so", "비자", "visa", "d-2", "d-4", "d2", "d4", "баримт", "виз"]);
+  const documents = includesAnyKeyword(text, DOCUMENT_KEYWORDS);
 
   return {
     text,
@@ -266,20 +213,20 @@ export function extractAgentSlots(question: string): AgentSlotExtraction {
     education,
     koreanLevel,
     goal,
-    usingBroker: includesAny(text, ["브로커", "broker", "môi giới", "moi gioi"]),
-    hasHistory: includesAny(text, ["거절", "refusal", "rejected", "từ chối", "tu choi", "татгалз"]),
+    usingBroker: includesAnyKeyword(text, BROKER_KEYWORDS),
+    hasHistory: includesAnyKeyword(text, REFUSAL_HISTORY_KEYWORDS),
     signals: {
       smallTalk: isSmallTalk(text),
       safety,
-      school: Boolean(schoolName) || includesAny(text, ["학교", "어학당", "대학", "school", "university", "language", "trường", "truong", "du học", "du hoc", "сургууль"]),
-      cost: includesAny(text, ["비용", "견적", "예산", "등록금", "학비", "cost", "budget", "tuition", "chi phí", "chi phi", "học phí", "hoc phi", "зардал", "төлбөр"]) || Boolean(budget),
+      school: Boolean(schoolName) || includesAnyKeyword(text, SCHOOL_SIGNAL_KEYWORDS),
+      cost: includesAnyKeyword(text, COST_SIGNAL_KEYWORDS) || Boolean(budget),
       documents,
       knowledge:
         documents ||
         safety ||
-        includesAny(text, ["법", "절차", "거절", "체류", "출입국", "process", "refusal", "illegal", "quy trình", "tu choi", "từ chối", "журам", "татгалз"]),
-      diagnosis: includesAny(text, ["진단", "추천 경로", "로드맵", "맞춤", "profile", "diagnose", "lộ trình", "lo trinh", "đánh giá", "danh gia", "онош", "маршрут"]),
-      partner: includesAny(text, ["상담", "연결", "행정사", "partner", "consult", "lawyer", "tư vấn", "tu van", "luật sư", "luat su", "kết nối", "ket noi", "зөвлөгөө", "холб"]),
+        includesAnyKeyword(text, KNOWLEDGE_KEYWORDS),
+      diagnosis: includesAnyKeyword(text, DIAGNOSIS_KEYWORDS),
+      partner: includesAnyKeyword(text, PARTNER_SIGNAL_KEYWORDS),
       explicitVisaType: hasExplicitVisaType(text),
       budgetSignal: hasBudgetSignal(text),
       educationSignal: hasEducationSignal(text),

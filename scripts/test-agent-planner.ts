@@ -147,6 +147,43 @@ function testExactSchoolRefinement() {
   expectNoMissingSlots(result.missingSlots, ["region", "program", "budget"], result);
 }
 
+function testMultilingualIntentCorpus() {
+  const greeting = analyzeAgentIntent("xin chào", "vi");
+  assert(greeting.smallTalk, `Vietnamese greeting should be small talk: ${JSON.stringify(greeting)}`);
+  assert(greeting.plan.length === 0, `small talk should not call tools: ${JSON.stringify(greeting)}`);
+
+  const vi = analyzeAgentIntent(
+    "Tôi là người Việt Nam, ngân sách 5 triệu won, muốn tìm trường tiếng Hàn ở Seoul và tư vấn hồ sơ D-4",
+    "vi"
+  );
+  assert(vi.nationality === "vn", `Vietnamese corpus nationality failed: ${JSON.stringify(vi)}`);
+  assert(vi.budget === 5_000_000, `Vietnamese corpus budget failed: ${JSON.stringify(vi)}`);
+  assert(vi.region === "seoul", `Vietnamese corpus region failed: ${JSON.stringify(vi)}`);
+  assert(vi.program === "language", `Vietnamese corpus program failed: ${JSON.stringify(vi)}`);
+  assert(vi.school && vi.cost && vi.documents && vi.partner, `Vietnamese corpus signals failed: ${JSON.stringify(vi)}`);
+  assert(
+    ["search_schools", "get_documents", "request_partner"].every((tool) => vi.plan.some((item) => item.tool === tool)),
+    `Vietnamese corpus plan failed: ${JSON.stringify(vi)}`
+  );
+
+  const mn = analyzeAgentIntent(
+    "Монгол оюутан, солонгос хэлгүй, хэлний сургууль Сеулд 6 сая won зардалтай хайж байна",
+    "mn"
+  );
+  assert(mn.nationality === "mn", `Mongolian corpus nationality failed: ${JSON.stringify(mn)}`);
+  assert(mn.budget === 6_000_000, `Mongolian corpus budget failed: ${JSON.stringify(mn)}`);
+  assert(mn.region === "seoul", `Mongolian corpus region failed: ${JSON.stringify(mn)}`);
+  assert(mn.program === "language", `Mongolian corpus program failed: ${JSON.stringify(mn)}`);
+  assert(mn.koreanLevel === "none", `Mongolian corpus Korean level failed: ${JSON.stringify(mn)}`);
+  assert(mn.plan.some((item) => item.tool === "search_schools"), `Mongolian corpus plan failed: ${JSON.stringify(mn)}`);
+
+  const en = analyzeAgentIntent("I have a D-2 refusal and need an administrative consult", "en");
+  assert(en.visaType === "D-2", `English corpus visa type failed: ${JSON.stringify(en)}`);
+  assert(en.hasHistory, `English corpus refusal history failed: ${JSON.stringify(en)}`);
+  assert(en.partner, `English corpus partner signal failed: ${JSON.stringify(en)}`);
+  assert(en.plan.some((item) => item.tool === "request_partner"), `English corpus partner plan failed: ${JSON.stringify(en)}`);
+}
+
 testBudgetParsing();
 testSchoolAndCostIntent();
 testGenericSchoolConditionsAreNotSchoolNames();
@@ -154,4 +191,5 @@ testVisaDocumentIntent();
 testPartnerAndSafetyIntent();
 testDiagnosisSlotFilling();
 testExactSchoolRefinement();
+testMultilingualIntentCorpus();
 console.log("PASS agent planner regressions");
