@@ -2,6 +2,7 @@ import { checkRuntimeDatabaseConnectivity, getRuntimeDatabaseInfo } from "@/lib/
 import { getKnowledgeSourceAudit } from "@/lib/data/knowledge";
 import { getDocumentUploadSigningSecret } from "@/lib/documents/crypto";
 import { getDocumentStorageInfo } from "@/lib/documents/storage";
+import { getStoreStats } from "@/lib/embeddings/vector-store";
 import { getPrivacyRuntimeReadiness } from "@/lib/privacy/config";
 import { getSchoolSourceAudit } from "@/lib/schools/repository";
 
@@ -85,6 +86,7 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
   const sourceAudit = getKnowledgeSourceAudit();
   const schoolAudit = await getSchoolSourceAudit();
   const privacyReadiness = getPrivacyRuntimeReadiness(env);
+  const embeddingStats = getStoreStats();
 
   const managedDatabase = databaseInfo.sharedWritable && databaseConnectivity.ok;
   const postgresqlOperationalUrl = databaseInfo.kind === "postgresql" && databaseInfo.postgresqlConfigured;
@@ -213,6 +215,26 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
         blobTokenConfigured: documentStorage.blobTokenConfigured,
         uploadSigningConfigured: documentSigningConfigured,
       }
+    ),
+    check(
+      "embeddings.cache",
+      "Embedding and vector cache",
+      !production || embeddingStats.vectorCache.exists || embeddingStats.transformerRuntime.cache.exists,
+      embeddingStats.vectorCache.exists
+        ? "Vector embedding cache artifact is present."
+        : production
+          ? "Production can run with TF-IDF fallback, but vector/model cache artifacts are missing or not restored."
+          : "Local development can rebuild vector/model cache artifacts on demand.",
+      {
+        storeReady: embeddingStats.ready,
+        method: embeddingStats.method,
+        knowledgeSource: embeddingStats.knowledgeSource,
+        transformerAvailable: embeddingStats.transformerAvailable,
+        transformerCoverage: embeddingStats.transformerCoverage,
+        vectorCache: embeddingStats.vectorCache,
+        transformerRuntime: embeddingStats.transformerRuntime,
+      },
+      "warning"
     ),
     check(
       "rate_limit.shared",

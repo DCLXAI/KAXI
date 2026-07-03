@@ -63,6 +63,7 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
       "privacy.plaintext_override",
       "privacy.retention",
       "documents.upload_workspace",
+      "embeddings.cache",
       "rate_limit.shared",
       "admin.session_hash",
       "admin.mfa_role",
@@ -77,6 +78,13 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
     if (!byKey.get("privacy.plaintext_override")?.ok) fail("missing plaintext override should pass plaintext override check");
     if (byKey.get("documents.upload_workspace")?.ok) fail("hosted local document storage should not pass upload workspace check");
     if (byKey.get("admin.mfa_role")?.ok) fail("missing MFA should not pass admin MFA check");
+    if (byKey.get("embeddings.cache")?.severity !== "warning") {
+      fail(`embedding cache readiness should be warning severity: ${JSON.stringify(byKey.get("embeddings.cache"))}`);
+    }
+    const embeddingSerialized = JSON.stringify(byKey.get("embeddings.cache"));
+    if (embeddingSerialized.includes(process.cwd()) || (process.env.HOME && embeddingSerialized.includes(process.env.HOME))) {
+      fail(`embedding readiness metadata should not expose absolute local paths: ${embeddingSerialized}`);
+    }
     const schoolMetadata = byKey.get("schools.source_metadata")?.metadata;
     if (schoolMetadata?.source === "seed" || schoolMetadata?.fallbackAllowed !== false) {
       fail(`production readiness must not allow seed school fallback: ${JSON.stringify(schoolMetadata)}`);

@@ -11,7 +11,7 @@ import {
   shouldRequireAgentLlm,
   shouldRequireConsultLlm,
 } from "../src/lib/ai/backend-selector";
-import { resolveModelCacheDir } from "../src/lib/embeddings/transformer-embedder";
+import { getTransformerRuntimeInfo, resolveModelCacheDir } from "../src/lib/embeddings/transformer-embedder";
 import { TOOL_MAP } from "../src/lib/agent/tools";
 import { NextRequest } from "next/server";
 
@@ -639,6 +639,7 @@ function testVercelModelCacheDefaultsToTmp() {
   const defaultLocal = resolveModelCacheDir({});
   const defaultVercel = resolveModelCacheDir({ VERCEL: "1" });
   const configured = resolveModelCacheDir({ VERCEL: "1", MODEL_CACHE_DIR: "/custom/cache" });
+  const diagnostics = getTransformerRuntimeInfo({ VERCEL: "1", MODEL_CACHE_DIR: "/custom/cache" });
 
   if (!defaultLocal.endsWith("data/model-cache")) {
     fail(`local model cache default should be data/model-cache, got ${defaultLocal}`);
@@ -648,6 +649,12 @@ function testVercelModelCacheDefaultsToTmp() {
   }
   if (configured !== "/custom/cache") {
     fail(`MODEL_CACHE_DIR override not respected, got ${configured}`);
+  }
+  if (diagnostics.cache.location !== "custom" || diagnostics.cache.configured !== true) {
+    fail(`model cache diagnostics should expose safe location metadata: ${JSON.stringify(diagnostics)}`);
+  }
+  if (JSON.stringify(diagnostics).includes("/custom/cache")) {
+    fail(`model cache diagnostics should not expose absolute configured path: ${JSON.stringify(diagnostics)}`);
   }
 }
 

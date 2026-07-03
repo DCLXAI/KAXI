@@ -22,6 +22,7 @@ import {
   embedBatch,
   cosineSim,
   isTransformerAvailable,
+  getTransformerRuntimeInfo,
   type EmbeddingVector,
 } from "./transformer-embedder";
 import * as fs from "fs";
@@ -65,6 +66,55 @@ let store: VectorStore = {
 const CACHE_FILE =
   process.env.VECTOR_CACHE_FILE ||
   path.join(process.cwd(), "data", "vector-store", "embeddings-cache.json");
+
+function vectorCacheLocation(): "custom" | "project-data" {
+  return process.env.VECTOR_CACHE_FILE?.trim() ? "custom" : "project-data";
+}
+
+function sanitizeDiagnosticText(value: unknown): string {
+  const text = (value instanceof Error ? value.message : String(value)).slice(0, 240);
+  const cwd = process.cwd();
+  const home = process.env.HOME;
+  return text
+    .replaceAll(cwd, "<project>")
+    .replaceAll(home || "__no_home__", "<home>");
+}
+
+function getVectorCacheDiagnostics() {
+  try {
+    if (!fs.existsSync(CACHE_FILE)) {
+      return {
+        configured: Boolean(process.env.VECTOR_CACHE_FILE?.trim()),
+        location: vectorCacheLocation(),
+        exists: false,
+        bytes: 0,
+        entries: 0,
+      };
+    }
+
+    const stat = fs.statSync(CACHE_FILE);
+    const parsed = JSON.parse(fs.readFileSync(CACHE_FILE, "utf-8"));
+    const entries = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? Object.keys(parsed).length
+      : 0;
+    return {
+      configured: Boolean(process.env.VECTOR_CACHE_FILE?.trim()),
+      location: vectorCacheLocation(),
+      exists: true,
+      bytes: stat.size,
+      entries,
+    };
+  } catch (error) {
+    return {
+      configured: Boolean(process.env.VECTOR_CACHE_FILE?.trim()),
+      location: vectorCacheLocation(),
+      exists: false,
+      bytes: 0,
+      entries: 0,
+      error: sanitizeDiagnosticText(error),
+    };
+  }
+}
 
 function embeddingCacheKey(doc: KnowledgeDoc): string {
   const text = multilingualText({
@@ -496,5 +546,7 @@ export function getStoreStats() {
     transformerCoverage: store.transformerDocVectors.filter(
       (v) => v.length > 0 && v.some((x) => x !== 0)
     ).length,
+    transformerRuntime: getTransformerRuntimeInfo(),
+    vectorCache: getVectorCacheDiagnostics(),
   };
 }
