@@ -237,7 +237,15 @@ The bridge listens on `http://127.0.0.1:8787` by default.
 The deployed Agent UI does not auto-probe localhost. Set `NEXT_PUBLIC_CODEX_BRIDGE_URL` or the browser override below only for trusted owner sessions that should call the local bridge directly.
 If the bridge is reachable, chat requests go to the local Codex CLI and return `backend: "codex-cli-local-bridge"`.
 If it is not reachable or a bridge request fails, the UI falls back to `/api/ai/agent` on Vercel.
-`GET /api/ai/agent` returns safe diagnostics for backend readiness, bridge configuration, preflight, limits, and persistence without exposing secrets.
+`GET /api/ai/agent` returns safe diagnostics for backend readiness, bridge configuration, preflight, limits, and persistence without exposing secrets. The `remoteBridge` block intentionally exposes only a redacted endpoint (`protocol://host/path`), token-present boolean, timeout, and in-process attempt/success/failure counters.
+
+Check the local bridge directly:
+
+```bash
+curl -s http://127.0.0.1:8787/health | jq
+```
+
+The local health payload includes uptime, `sleepGuard.active`, rate/body/question limits, fallback mode, and recent request/failure counters. It never returns `CODEX_BRIDGE_TOKEN`.
 
 Useful browser overrides:
 
@@ -288,6 +296,7 @@ Then expose `http://127.0.0.1:8787` through a tunnel such as Cloudflare Tunnel, 
 The tunnel URL goes only into Vercel server environment variables as `CODEX_REMOTE_BRIDGE_URL`.
 The public frontend continues calling `/api/ai/agent` and `/api/ai/consult`, and Vercel forwards LLM-bound requests to the Mac bridge with the secret token.
 Remote-bridge production is strict by default: bridge failures return `503 LLM backend unavailable` instead of being disguised as built-in tool answers.
+During incidents, compare `GET /api/ai/agent` `remoteBridge.stats` with the Mac `/health` `stats`: Vercel-side failures with no Mac-side requests usually indicate tunnel/DNS/token/CORS reachability, while Mac-side failures indicate Codex CLI timeout, auth, or local runtime issues.
 Set `AI_REQUIRE_LLM=true` as an explicit safety marker.
 If you intentionally want degraded service, set `AI_ALLOW_LLM_FALLBACK=true`; `/api/ai/agent` can fall back to built-in tools and `/api/ai/consult` can summarize retrieved official sources.
 

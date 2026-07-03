@@ -34,6 +34,21 @@ const allowedOrigins = new Set(
 
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
 let caffeinateProcess: ChildProcess | null = null;
+const startedAt = Date.now();
+const bridgeStats = {
+  totalRequests: 0,
+  totalSuccesses: 0,
+  totalFailures: 0,
+  totalFallbacks: 0,
+  totalUnauthorized: 0,
+  totalRateLimited: 0,
+  consecutiveFailures: 0,
+  lastRequestAt: null as string | null,
+  lastSuccessAt: null as string | null,
+  lastFailureAt: null as string | null,
+  lastDurationMs: null as number | null,
+  lastErrorMessage: null as string | null,
+};
 
 function startSleepGuard() {
   if (!PREVENT_SLEEP) return;
@@ -68,6 +83,61 @@ function parseLimit(value: string | undefined, fallback: number): number {
 function json(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(body));
+}
+
+function isoNow(): string {
+  return new Date().toISOString();
+}
+
+function markRequest() {
+  bridgeStats.totalRequests += 1;
+  bridgeStats.lastRequestAt = isoNow();
+}
+
+function markSuccess(durationMs: number) {
+  bridgeStats.totalSuccesses += 1;
+  bridgeStats.consecutiveFailures = 0;
+  bridgeStats.lastSuccessAt = isoNow();
+  bridgeStats.lastDurationMs = Math.round(durationMs);
+  bridgeStats.lastErrorMessage = null;
+}
+
+function markFailure(error: unknown, durationMs: number) {
+  bridgeStats.totalFailures += 1;
+  bridgeStats.consecutiveFailures += 1;
+  bridgeStats.lastFailureAt = isoNow();
+  bridgeStats.lastDurationMs = Math.round(durationMs);
+  bridgeStats.lastErrorMessage = error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240);
+}
+
+function buildHealth() {
+  return {
+    ok: true,
+    service: "kaxi-codex-local-bridge",
+    backend: "codex-cli-local-bridge",
+    host: HOST,
+    port: PORT,
+    uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
+    security: {
+      tokenRequired: Boolean(REQUIRED_TOKEN),
+      allowedOriginCount: allowedOrigins.size,
+    },
+    limits: {
+      rateLimitPerMinute: RATE_LIMIT,
+      maxBodyBytes: MAX_BODY_BYTES,
+      maxQuestionChars: MAX_QUESTION_CHARS,
+      codexExecTimeoutMs: Number(process.env.CODEX_EXEC_TIMEOUT_MS || 60_000),
+    },
+    sleepGuard: {
+      requested: PREVENT_SLEEP,
+      platform: process.platform,
+      active: Boolean(caffeinateProcess && !caffeinateProcess.killed),
+    },
+    fallback: {
+      enabled: ENABLE_TOOL_FALLBACK,
+    },
+    stats: { ...bridgeStats },
+  };
 }
 
 function applyCors(req: IncomingMessage, res: ServerResponse): boolean {
@@ -163,13 +233,7 @@ const server = createServer(async (req, res) => {
   const path = new URL(req.url || "/", `http://${HOST}:${PORT}`).pathname;
 
   if (req.method === "GET" && path === "/health") {
-    json(res, 200, {
-      ok: true,
-      service: "kaxi-codex-local-bridge",
-      backend: "codex-cli-local-bridge",
-      host: HOST,
-      port: PORT,
-    });
+    json(res, 200, buildHealth());
     return;
   }
 
@@ -179,15 +243,19 @@ const server = createServer(async (req, res) => {
   }
 
   if (!isAuthorized(req)) {
+    bridgeStats.totalUnauthorized += 1;
     json(res, 401, { error: "Missing or invalid bridge token" });
     return;
   }
 
   if (!checkRateLimit(req)) {
+    bridgeStats.totalRateLimited += 1;
     json(res, 429, { error: "Local bridge rate limit exceeded" });
     return;
   }
 
+  const requestStartedAt = Date.now();
+  markRequest();
   let question = "";
   let lang: Lang = "ko";
   let promptMode: "public-agent" | "raw" = "public-agent";
@@ -197,10 +265,12 @@ const server = createServer(async (req, res) => {
     const body = rawBody ? JSON.parse(rawBody) : {};
     question = typeof body.question === "string" ? body.question.trim() : "";
     if (!question) {
+      markFailure(new Error("Missing question"), Date.now() - requestStartedAt);
       json(res, 400, { error: "Missing question" });
       return;
     }
     if (question.length > MAX_QUESTION_CHARS) {
+      markFailure(new Error(`Question is too long (${MAX_QUESTION_CHARS} chars max)`), Date.now() - requestStartedAt);
       json(res, 413, { error: `Question is too long (${MAX_QUESTION_CHARS} chars max)` });
       return;
     }
@@ -215,6 +285,7 @@ const server = createServer(async (req, res) => {
       promptMode,
     });
 
+    markSuccess(Date.now() - requestStartedAt);
     json(res, 200, {
       answer: result.answer,
       backend: "codex-cli-local-bridge",
@@ -233,6 +304,7 @@ const server = createServer(async (req, res) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown local bridge error";
     console.error("[codex-local-bridge]", message);
+    markFailure(error, Date.now() - requestStartedAt);
     if (!question) {
       json(res, 502, { error: message });
       return;
@@ -248,6 +320,7 @@ const server = createServer(async (req, res) => {
 
     try {
       const fallback = await runFallbackAgent(question, lang, { lang, dryRun: true });
+      bridgeStats.totalFallbacks += 1;
       json(res, 200, {
         answer: fallback.answer,
         backend: "tool-fallback",

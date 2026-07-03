@@ -295,15 +295,36 @@ async function testFallbackAnswerIncludesCitationMarkers() {
 }
 
 async function testAgentStatusRoute() {
-  const route = await import("../src/app/api/ai/agent/route");
-  const res = await route.GET();
-  if (res.status !== 200) fail(`agent status expected 200, got ${res.status}`);
-  const body = await res.json();
-  if (!body.backend || !body.preflight || !body.limits) {
-    fail(`agent status shape incomplete: ${JSON.stringify(body)}`);
-  }
-  if (JSON.stringify(body).includes(process.env.CODEX_API_KEY || "__never__")) {
-    fail("agent status leaked CODEX_API_KEY");
+  const snapshot = { ...process.env };
+  try {
+    Object.assign(process.env, {
+      AGENT_BACKEND: "remote-bridge",
+      CODEX_REMOTE_BRIDGE_ENABLED: "true",
+      CODEX_REMOTE_BRIDGE_URL: "https://user:pass@bridge.example.test/api/ai/agent?token=query-secret#hash",
+      CODEX_REMOTE_BRIDGE_TOKEN: "bridge-secret-token",
+      CODEX_REMOTE_BRIDGE_TIMEOUT_MS: "12345",
+      CODEX_API_KEY: "codex-secret-key",
+    });
+
+    const route = await import("../src/app/api/ai/agent/route");
+    const res = await route.GET();
+    if (res.status !== 200) fail(`agent status expected 200, got ${res.status}`);
+    const body = await res.json();
+    if (!body.backend || !body.preflight || !body.limits || !body.remoteBridge?.stats) {
+      fail(`agent status shape incomplete: ${JSON.stringify(body)}`);
+    }
+    if (!body.remoteBridge.tokenConfigured || body.remoteBridge.timeoutMs !== 12345) {
+      fail(`agent status should expose safe bridge configuration flags: ${JSON.stringify(body.remoteBridge)}`);
+    }
+    if (body.remoteBridge.url?.endpoint !== "https://bridge.example.test/api/ai/agent") {
+      fail(`agent status should redact remote bridge credentials/query/hash: ${JSON.stringify(body.remoteBridge.url)}`);
+    }
+    const serialized = JSON.stringify(body);
+    for (const secret of ["codex-secret-key", "bridge-secret-token", "query-secret", "user:pass"]) {
+      if (serialized.includes(secret)) fail(`agent status leaked secret material: ${secret}`);
+    }
+  } finally {
+    restoreEnv(snapshot);
   }
 }
 

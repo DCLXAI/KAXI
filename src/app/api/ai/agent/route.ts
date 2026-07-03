@@ -12,7 +12,11 @@ import {
   shouldRequireAdminForCodexAgent,
 } from "@/lib/codex/serverless";
 import { getAgentBackend, shouldRequireAgentLlm } from "@/lib/ai/backend-selector";
-import { isRemoteCodexBridgeEnabled, runRemoteCodexBridge } from "@/lib/codex/remote-bridge";
+import {
+  getRemoteCodexBridgeDiagnostics,
+  isRemoteCodexBridgeEnabled,
+  runRemoteCodexBridge,
+} from "@/lib/codex/remote-bridge";
 import {
   consumeDailyQuota,
   getClientIp,
@@ -196,10 +200,11 @@ export async function GET() {
   }
 
   const remoteBridgeEnabled = isRemoteCodexBridgeEnabled();
+  const remoteBridgeDiagnostics = getRemoteCodexBridgeDiagnostics();
   const backendReady =
     backend === "tool-fallback" ||
     backend === "zai" ||
-    (backend === "remote-bridge" ? remoteBridgeEnabled : codexReady);
+    (backend === "remote-bridge" ? remoteBridgeEnabled && !remoteBridgeDiagnostics.issue : codexReady);
 
   return NextResponse.json({
     ok: backendReady,
@@ -218,10 +223,7 @@ export async function GET() {
       issue: codexIssue,
       requireAdmin: shouldRequireAdminForCodexAgent(),
     },
-    remoteBridge: {
-      enabled: remoteBridgeEnabled,
-      configured: Boolean(process.env.CODEX_REMOTE_BRIDGE_URL?.trim()),
-    },
+    remoteBridge: remoteBridgeDiagnostics,
     preflight: {
       enabled: isEnvTrue(process.env.AI_AGENT_PREFLIGHT_ENABLED),
       timeoutMs: parsePositiveInt(process.env.AI_AGENT_PREFLIGHT_TIMEOUT_MS, 12_000),
