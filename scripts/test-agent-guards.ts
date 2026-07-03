@@ -252,6 +252,9 @@ async function testPreflightCarriesPlannerContext() {
   if (!result.groundingContext.includes("Intent confidence") || !result.groundingContext.includes("Missing slots")) {
     fail(`preflight should include planner context: ${JSON.stringify(result)}`);
   }
+  if (!result.groundingContext.includes("Detected signals") || !result.groundingContext.includes("Resolved slots")) {
+    fail(`preflight should include planner evidence: ${JSON.stringify(result)}`);
+  }
   if (!result.groundedQuestion.includes("KAXI server-side tool context")) {
     fail(`grounded question should include tool context: ${result.groundedQuestion}`);
   }
@@ -606,6 +609,9 @@ function testAgentMetaDoesNotEchoPii() {
   }
   if (!meta.quality.intentConfidence || typeof meta.quality.missingSlotCount !== "number") {
     fail(`agent meta quality missing intent diagnostics: ${serialized}`);
+  }
+  if (!meta.intentEvidence.detectedSignals.includes("documents") || meta.intentEvidence.resolvedSlots.length === 0) {
+    fail(`agent meta should expose planner evidence: ${serialized}`);
   }
   if (serialized.includes("user@example.com")) {
     fail("agent meta leaked raw email from question");

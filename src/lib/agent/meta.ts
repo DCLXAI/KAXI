@@ -1,6 +1,6 @@
 import type { Lang } from "@/lib/i18n/translations";
 import type { ToolResult } from "@/lib/agent/tools";
-import { analyzeAgentIntent, type AgentMissingSlot } from "@/lib/agent/planner";
+import { analyzeAgentIntent, type AgentIntentEvidence, type AgentMissingSlot } from "@/lib/agent/planner";
 import { buildRagBasisNoticeFromMetadata, type RagDocumentMetadata } from "@/lib/data/knowledge";
 
 export interface AgentSource {
@@ -39,6 +39,7 @@ export interface AgentMeta {
   suggestions: AgentSuggestion[];
   safetyFlags: string[];
   sourceNotice?: string;
+  intentEvidence: Pick<AgentIntentEvidence, "detectedSignals" | "resolvedSlots" | "planReasons" | "confidenceDrivers">;
   quality: {
     backend: string;
     grounded: boolean;
@@ -363,6 +364,12 @@ export function buildAgentMeta({
     suggestions: buildSuggestions(toolResults, safeLang),
     safetyFlags: detectSafetyFlags(question, safeLang),
     sourceNotice: sourceNotice || undefined,
+    intentEvidence: {
+      detectedSignals: analysis.evidence.detectedSignals,
+      resolvedSlots: analysis.evidence.resolvedSlots,
+      planReasons: analysis.evidence.planReasons,
+      confidenceDrivers: analysis.evidence.confidenceDrivers,
+    },
     quality: {
       backend,
       grounded,

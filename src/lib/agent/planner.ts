@@ -1,6 +1,12 @@
 import type { Lang } from "@/lib/i18n/translations";
 import { extractAgentSlots } from "@/lib/agent/slot-extraction";
-import type { AgentEducation, AgentGoal, AgentKoreanLevel, AgentVisaType } from "@/lib/agent/slot-extraction";
+import type {
+  AgentEducation,
+  AgentGoal,
+  AgentIntentSignals,
+  AgentKoreanLevel,
+  AgentVisaType,
+} from "@/lib/agent/slot-extraction";
 
 export {
   detectAccreditation,
@@ -28,6 +34,20 @@ export interface PlannedToolCall {
 }
 
 export type AgentIntentConfidence = "low" | "medium" | "high";
+export type AgentIntentSignalName = keyof AgentIntentSignals;
+
+export interface AgentResolvedSlot {
+  slot: string;
+  value: string | number | boolean;
+}
+
+export interface AgentIntentEvidence {
+  detectedSignals: AgentIntentSignalName[];
+  resolvedSlots: AgentResolvedSlot[];
+  missingSlots: AgentMissingSlot[];
+  planReasons: string[];
+  confidenceDrivers: string[];
+}
 
 export type AgentMissingSlot =
   | "region"
@@ -64,6 +84,7 @@ export interface AgentIntentAnalysis {
   hasHistory: boolean;
   confidence: AgentIntentConfidence;
   missingSlots: AgentMissingSlot[];
+  evidence: AgentIntentEvidence;
   plan: PlannedToolCall[];
 }
 
@@ -174,12 +195,62 @@ function confidenceFor(
   return "high";
 }
 
+function detectedSignals(signals: AgentIntentSignals): AgentIntentSignalName[] {
+  return (Object.keys(signals) as AgentIntentSignalName[]).filter((key) => signals[key]);
+}
+
+function resolvedSlots(slots: ReturnType<typeof extractAgentSlots>): AgentResolvedSlot[] {
+  const resolved: AgentResolvedSlot[] = [];
+  if (slots.budget) resolved.push({ slot: "budget", value: slots.budget });
+  if (slots.schoolName) resolved.push({ slot: "schoolName", value: slots.schoolName });
+  if (slots.region !== "all") resolved.push({ slot: "region", value: slots.region });
+  if (slots.program !== "all") resolved.push({ slot: "program", value: slots.program });
+  if (slots.accreditation !== "all") resolved.push({ slot: "accreditation", value: slots.accreditation });
+  if (slots.signals.explicitVisaType) resolved.push({ slot: "visaType", value: slots.visaType });
+  if (slots.nationality !== "other") resolved.push({ slot: "nationality", value: slots.nationality });
+  if (slots.signals.partner) resolved.push({ slot: "partnerType", value: slots.partnerType });
+  if (slots.signals.educationSignal) resolved.push({ slot: "education", value: slots.education });
+  if (slots.signals.koreanLevelSignal) resolved.push({ slot: "koreanLevel", value: slots.koreanLevel });
+  if (slots.signals.goalSignal && slots.goal !== "unsure") resolved.push({ slot: "goal", value: slots.goal });
+  if (slots.usingBroker) resolved.push({ slot: "usingBroker", value: true });
+  if (slots.hasHistory) resolved.push({ slot: "hasHistory", value: true });
+  return resolved;
+}
+
+function confidenceDrivers(
+  slots: ReturnType<typeof extractAgentSlots>,
+  plan: PlannedToolCall[],
+  missingSlots: AgentMissingSlot[]
+): string[] {
+  if (slots.signals.smallTalk) return ["small_talk_terminal"];
+  if (slots.signals.safety) return ["safety_terminal"];
+  if (plan.length === 0) return ["no_tool_plan"];
+  if (missingSlots.length >= 3) return ["many_missing_slots"];
+  if (missingSlots.length > 0) return ["missing_slots"];
+  return ["slots_complete"];
+}
+
+function buildIntentEvidence(
+  slots: ReturnType<typeof extractAgentSlots>,
+  plan: PlannedToolCall[],
+  missingSlots: AgentMissingSlot[]
+): AgentIntentEvidence {
+  return {
+    detectedSignals: detectedSignals(slots.signals),
+    resolvedSlots: resolvedSlots(slots),
+    missingSlots,
+    planReasons: plan.map((item) => item.reason),
+    confidenceDrivers: confidenceDrivers(slots, plan, missingSlots),
+  };
+}
+
 export function analyzeAgentIntent(question: string, lang?: Lang): AgentIntentAnalysis {
   void lang;
   const slots = extractAgentSlots(question);
   const plan = buildToolPlan(question, slots);
   const missingSlots = detectMissingSlots(slots);
   const confidence = confidenceFor(slots, plan, missingSlots);
+  const evidence = buildIntentEvidence(slots, plan, missingSlots);
   const { signals } = slots;
 
   return {
@@ -207,6 +278,7 @@ export function analyzeAgentIntent(question: string, lang?: Lang): AgentIntentAn
     hasHistory: slots.hasHistory,
     confidence,
     missingSlots,
+    evidence,
     plan,
   };
 }

@@ -182,6 +182,7 @@ Use `RATE_LIMIT_BACKEND=database` with a reachable managed production DB for Ver
 `/api/ai/agent` runs a deterministic KAXI preflight before Codex bridge calls when `AI_AGENT_PREFLIGHT_ENABLED` is not `false`.
 The preflight uses the same intent planner as the built-in fallback agent, with Korean, English, Vietnamese, and Mongolian cues for school search, cost calculation, document checklist, path diagnosis, partner request drafts, and RAG search tools.
 The resulting compact context is prepended to the Codex bridge prompt so public answers are grounded in KAXI data even when the bridge is running in fast direct-answer mode.
+Planner diagnostics in that context include detected signals, resolved slots, missing slots, and confidence drivers. The same evidence is returned in agent response `meta.intentEvidence` for runtime debugging without exposing raw secrets.
 
 Partner requests created from the conversational agent stay in dry-run draft mode. Persist actual contact requests through the explicit lead/partner intake flow so consent, retention, and PII controls remain clear.
 

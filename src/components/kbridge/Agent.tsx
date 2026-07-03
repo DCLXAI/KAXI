@@ -135,6 +135,12 @@ interface AgentMeta {
   suggestions: AgentSuggestion[];
   safetyFlags: string[];
   sourceNotice?: string;
+  intentEvidence?: {
+    detectedSignals: string[];
+    resolvedSlots: { slot: string; value: string | number | boolean }[];
+    planReasons: string[];
+    confidenceDrivers: string[];
+  };
   quality: {
     backend: string;
     grounded: boolean;

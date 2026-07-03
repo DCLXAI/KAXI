@@ -135,7 +135,14 @@ function summarizePlannerContext(analysis: AgentIntentAnalysis): string[] {
   const lines = [
     "### planner",
     `Intent confidence: ${analysis.confidence}`,
+    `Detected signals: ${analysis.evidence.detectedSignals.length > 0 ? analysis.evidence.detectedSignals.join(", ") : "none"}`,
+    `Resolved slots: ${
+      analysis.evidence.resolvedSlots.length > 0
+        ? analysis.evidence.resolvedSlots.map((slot) => `${slot.slot}=${slot.value}`).join(", ")
+        : "none"
+    }`,
     `Missing slots: ${analysis.missingSlots.length > 0 ? analysis.missingSlots.join(", ") : "none"}`,
+    `Confidence drivers: ${analysis.evidence.confidenceDrivers.join(", ")}`,
   ];
 
   if (analysis.plan.length > 0) {

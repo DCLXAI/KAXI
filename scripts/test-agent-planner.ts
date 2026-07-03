@@ -59,6 +59,16 @@ function testSchoolAndCostIntent() {
   assert(result.region === "seoul", `region entity wrong: ${JSON.stringify(result)}`);
   assert(result.program === "language", `program entity wrong: ${JSON.stringify(result)}`);
   assert(result.accreditation === "accredited", `accreditation entity wrong: ${JSON.stringify(result)}`);
+  assert(result.evidence.detectedSignals.includes("school"), `school signal evidence missing: ${JSON.stringify(result)}`);
+  assert(result.evidence.detectedSignals.includes("cost"), `cost signal evidence missing: ${JSON.stringify(result)}`);
+  assert(
+    result.evidence.resolvedSlots.some((slot) => slot.slot === "budget" && slot.value === 5_000_000),
+    `budget evidence missing: ${JSON.stringify(result)}`
+  );
+  assert(
+    result.evidence.confidenceDrivers.includes("slots_complete"),
+    `confidence evidence should show complete slots: ${JSON.stringify(result)}`
+  );
   expectTools("예산 500만원으로 서울 인증대학 어학당 찾아줘", ["search_schools"]);
   expectNoMissingSlots(result.missingSlots, ["region", "program", "budget"], result);
 }
@@ -83,6 +93,11 @@ function testVisaDocumentIntent() {
   assert(result.visaType === "D-2", `visa entity wrong: ${JSON.stringify(result)}`);
   assert(result.nationality === "vn", `nationality entity wrong: ${JSON.stringify(result)}`);
   assert(tools.includes("get_documents") && tools.includes("search_knowledge"), `document tools missing: ${JSON.stringify(result)}`);
+  assert(
+    result.evidence.planReasons.includes("visa_document_request") &&
+      result.evidence.planReasons.includes("official_knowledge_required"),
+    `planner evidence should expose plan reasons: ${JSON.stringify(result)}`
+  );
   expectNoMissingSlots(result.missingSlots, ["visa_type", "nationality"], result);
 }
 
