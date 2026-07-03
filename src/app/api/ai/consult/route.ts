@@ -41,8 +41,19 @@ class LlmBackendUnavailableError extends Error {
   }
 }
 
-function shouldRequireConsultLlm(): boolean {
-  return process.env.AI_REQUIRE_LLM === "true" || process.env.AI_CONSULT_REQUIRE_LLM === "true";
+function shouldRequireConsultLlm(consultBackend?: ConsultBackend): boolean {
+  if (
+    process.env.AI_ALLOW_LLM_FALLBACK === "true" ||
+    process.env.AI_CONSULT_ALLOW_OFFICIAL_SUMMARY_FALLBACK === "true"
+  ) {
+    return false;
+  }
+
+  return (
+    process.env.AI_REQUIRE_LLM === "true" ||
+    process.env.AI_CONSULT_REQUIRE_LLM === "true" ||
+    consultBackend === "remote-bridge"
+  );
 }
 
 function isFallbackBackend(backend: string): boolean {
@@ -356,7 +367,7 @@ ${context}
       };
     } catch (e) {
       console.warn("[Expert Codex bridge skipped]", e instanceof Error ? e.message : e);
-      if (shouldRequireConsultLlm()) {
+      if (shouldRequireConsultLlm(consultBackend)) {
         throw new LlmBackendUnavailableError(e instanceof Error ? e.message : "Unknown bridge error");
       }
       return buildOfficialSummaryExpertResult({
@@ -394,7 +405,7 @@ ${context}
       };
     } catch (e) {
       console.warn("[Expert Codex backend skipped]", e instanceof Error ? e.message : e);
-      if (shouldRequireConsultLlm()) {
+      if (shouldRequireConsultLlm(consultBackend)) {
         throw new LlmBackendUnavailableError(e instanceof Error ? e.message : "Unknown Codex error");
       }
     }
@@ -421,7 +432,7 @@ ${context}
     } else {
       console.error("[Expert LLM error]", e);
     }
-    if (shouldRequireConsultLlm()) {
+    if (shouldRequireConsultLlm(consultBackend)) {
       throw new LlmBackendUnavailableError(message);
     }
     return buildOfficialSummaryExpertResult({

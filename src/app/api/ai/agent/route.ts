@@ -30,8 +30,19 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 const AGENT_REMOTE_BRIDGE_MAX_WAIT_MS = 52_000;
 
-function shouldRequireAgentLlm(): boolean {
-  return process.env.AI_REQUIRE_LLM === "true" || process.env.AI_AGENT_REQUIRE_LLM === "true";
+function shouldRequireAgentLlm(configuredBackend = getAgentBackend()): boolean {
+  if (
+    process.env.AI_ALLOW_LLM_FALLBACK === "true" ||
+    process.env.AI_AGENT_ALLOW_TOOL_FALLBACK === "true"
+  ) {
+    return false;
+  }
+
+  return (
+    process.env.AI_REQUIRE_LLM === "true" ||
+    process.env.AI_AGENT_REQUIRE_LLM === "true" ||
+    configuredBackend === "remote-bridge"
+  );
 }
 
 function isFallbackBackend(backend: string): boolean {
@@ -226,7 +237,7 @@ export async function GET() {
       configured: Boolean(process.env.CODEX_REMOTE_BRIDGE_URL?.trim()),
     },
     preflight: {
-      enabled: process.env.AI_AGENT_PREFLIGHT_ENABLED !== "false",
+      enabled: process.env.AI_AGENT_PREFLIGHT_ENABLED === "true",
       timeoutMs: parsePositiveInt(process.env.AI_AGENT_PREFLIGHT_TIMEOUT_MS, 12_000),
     },
     limits: {
@@ -375,7 +386,7 @@ export async function POST(req: NextRequest) {
           bridgeErr instanceof Error ? bridgeErr.message : bridgeErr
         );
         if (configuredBackend === "remote-bridge") {
-          if (shouldRequireAgentLlm()) {
+          if (shouldRequireAgentLlm(configuredBackend)) {
             await persistAgentLedger({
               req,
               leadId,
@@ -506,7 +517,7 @@ export async function POST(req: NextRequest) {
           "[Codex backend fallback]",
           codexErr instanceof Error ? codexErr.message : codexErr
         );
-        if (shouldRequireAgentLlm()) {
+        if (shouldRequireAgentLlm(configuredBackend)) {
           await persistAgentLedger({
             req,
             leadId,
@@ -566,7 +577,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (configuredBackend === "tool-fallback") {
-      if (shouldRequireAgentLlm()) {
+      if (shouldRequireAgentLlm(configuredBackend)) {
         await persistAgentLedger({
           req,
           leadId,
@@ -641,7 +652,7 @@ export async function POST(req: NextRequest) {
         "[Agent backend fallback]",
         agentErr instanceof Error ? agentErr.message : agentErr
       );
-      if (shouldRequireAgentLlm()) {
+      if (shouldRequireAgentLlm(configuredBackend)) {
         await persistAgentLedger({
           req,
           leadId,

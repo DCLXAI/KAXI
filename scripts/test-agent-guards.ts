@@ -217,6 +217,7 @@ async function testRemoteBridgeFailureFallsBackToTools() {
       AGENT_BACKEND: "remote-bridge",
       CODEX_REMOTE_BRIDGE_URL: "http://127.0.0.1:9/api/ai/agent",
       CODEX_REMOTE_BRIDGE_ENABLED: "true",
+      AI_AGENT_ALLOW_TOOL_FALLBACK: "true",
       AI_AGENT_RATE_LIMIT: "0",
       AI_AGENT_DAILY_QUOTA: "0",
       AI_AGENT_PREFLIGHT_TIMEOUT_MS: "1000",

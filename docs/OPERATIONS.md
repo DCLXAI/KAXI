@@ -269,6 +269,7 @@ CODEX_REMOTE_BRIDGE_TIMEOUT_MS=52000
 AI_CONSULT_BACKEND=remote-bridge
 AI_CONSULT_REMOTE_BRIDGE_TIMEOUT_MS=52000
 AI_REQUIRE_LLM=true
+AI_ALLOW_LLM_FALLBACK=false
 ```
 
 On the Mac:
@@ -283,9 +284,9 @@ bun run codex:bridge
 Then expose `http://127.0.0.1:8787` through a tunnel such as Cloudflare Tunnel, ngrok, or Tailscale Funnel.
 The tunnel URL goes only into Vercel server environment variables as `CODEX_REMOTE_BRIDGE_URL`.
 The public frontend continues calling `/api/ai/agent` and `/api/ai/consult`, and Vercel forwards LLM-bound requests to the Mac bridge with the secret token.
-Set `AI_REQUIRE_LLM=true` in production when public answers must come from Codex CLI.
-With that setting, bridge failures return `503 LLM backend unavailable` instead of being disguised as built-in tool answers.
-If you intentionally want degraded service, set `AI_REQUIRE_LLM=false`; `/api/ai/agent` can fall back to built-in tools and `/api/ai/consult` can summarize retrieved official sources.
+Remote-bridge production is strict by default: bridge failures return `503 LLM backend unavailable` instead of being disguised as built-in tool answers.
+Set `AI_REQUIRE_LLM=true` as an explicit safety marker.
+If you intentionally want degraded service, set `AI_ALLOW_LLM_FALLBACK=true`; `/api/ai/agent` can fall back to built-in tools and `/api/ai/consult` can summarize retrieved official sources.
 
 Minimum safety rules:
 
