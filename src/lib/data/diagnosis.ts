@@ -29,6 +29,13 @@ export interface PathRecommendation {
   confidence: "low" | "medium" | "high";
   appliedRules: string[];
   sourceRefs: string[];
+  complianceCoverage: {
+    status: "rule_engine" | "not_evaluated" | "rag_only";
+    visaType: DiagnosisVisaType;
+    policy: string;
+    sourceRefs: string[];
+    unsupportedReason?: string;
+  };
   compliance?: {
     visaType: "D-2" | "D-4" | null;
     requiredInputs: string[];
@@ -225,6 +232,17 @@ const DIAGNOSIS_RULES: DiagnosisRule[] = [
       en: "Applicants under 18 need guardian consent, housing checks, and each school's minor-student policy review.",
     }),
   },
+  {
+    id: "policy:d10-rag-only-compliance",
+    applies: (_input, profile) => profile.visaType === "D-10",
+    riskDelta: 1,
+    warning: () => ({
+      ko: "D-10 구직/창업 준비 경로는 현재 KAXI compliance rule engine의 실행 대상이 아닙니다. 법령·하이코리아 RAG 근거로 일반 원칙만 확인하고, 현재 체류자격·만료일·구직/창업 요건은 행정사 검토가 필요합니다.",
+      vi: "Lộ trình D-10 hiện chưa được chạy bằng compliance rule engine của KAXI. Chỉ dùng căn cứ luật/HiKorea RAG cho nguyên tắc chung; tình trạng hiện tại, ngày hết hạn và điều kiện tìm việc/khởi nghiệp cần chuyên gia hành chính rà soát.",
+      mn: "D-10 ажил хайх/стартап бэлтгэлийн зам одоогоор KAXI compliance rule engine-д хамрагдаагүй. Хууль болон HiKorea RAG эх сурвалжаар ерөнхий зарчмыг шалгаж, одоогийн ангилал, хугацаа, ажил хайх/стартап нөхцөлийг мэргэжлийн хүнээр шалгуулна.",
+      en: "The D-10 job-seeking/startup path is not yet executable in the KAXI compliance rule engine. Use law/HiKorea RAG only for general principles, and route current status, expiry, job-seeking, or startup eligibility facts to administrative-scrivener review.",
+    }),
+  },
 ];
 
 function unique<T>(items: T[]): T[] {
@@ -244,6 +262,7 @@ function confidenceFor(
 ): PathRecommendation["confidence"] {
   if (visaRuleEvaluation?.missing_inputs.length) return "medium";
   if (input.goal === "unsure") return "medium";
+  if (appliedRules.includes("policy:d10-rag-only-compliance")) return "medium";
   if (input.nationality === "other" || !input.budget || appliedRules.includes("rule:budget-gap")) return "medium";
   return "high";
 }
@@ -277,6 +296,37 @@ function complianceRecommendation(evaluation?: VisaRuleEvaluation | null): PathR
     warnings: evaluation.warnings,
     partnerEscalationReasons: evaluation.partner_escalation_reasons,
     blockedReasons: evaluation.blocked_reasons,
+  };
+}
+
+function complianceCoverage(
+  visaType: DiagnosisVisaType,
+  evaluation?: VisaRuleEvaluation | null
+): PathRecommendation["complianceCoverage"] {
+  if (evaluation) {
+    return {
+      status: "rule_engine",
+      visaType,
+      policy: "D-2/D-4 compliance rule engine executed and its documents, warnings, escalation reasons, and source refs were merged into the recommendation.",
+      sourceRefs: evaluation.source_refs,
+    };
+  }
+
+  if (visaType === "D-10") {
+    return {
+      status: "rag_only",
+      visaType,
+      policy: "D-10 is currently covered by law-first RAG and source references only; no approved executable compliance rule version is applied yet.",
+      sourceRefs: ["hikorea-d2-d4-d10-e7-f2-f5-requirements", "visa-portal-visa-types"],
+      unsupportedReason: "d10_compliance_rule_engine_not_implemented",
+    };
+  }
+
+  return {
+    status: "not_evaluated",
+    visaType,
+    policy: "No compliance rule evaluation was supplied to this recommendation call.",
+    sourceRefs: [],
   };
 }
 
@@ -360,6 +410,7 @@ export function recommendPath(
     confidence: confidenceFor(input, appliedRules, visaRuleEvaluation),
     appliedRules: unique(appliedRules),
     sourceRefs: unique(sourceRefs),
+    complianceCoverage: complianceCoverage(profile.visaType, visaRuleEvaluation),
     compliance: complianceRecommendation(visaRuleEvaluation),
   };
 }

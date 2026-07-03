@@ -153,6 +153,34 @@ function testExactSchoolRefinement() {
   expectNoMissingSlots(result.missingSlots, ["region", "program", "budget"], result);
 }
 
+function testKeywordCollisionCases() {
+  const d4AtUniversity = analyzeAgentIntent("연세대학교 어학당 D-4 비자 서류 알려줘", "ko");
+  assert(
+    d4AtUniversity.visaType === "D-4",
+    `explicit D-4 should beat university-name/degree keywords: ${JSON.stringify(d4AtUniversity)}`
+  );
+  assert(
+    d4AtUniversity.program === "language",
+    `university language institute should still be treated as language program: ${JSON.stringify(d4AtUniversity)}`
+  );
+  expectNoMissingSlots(d4AtUniversity.missingSlots, ["visa_type"], d4AtUniversity);
+
+  const d2WithKoreanPrep = analyzeAgentIntent("D-2 학위과정인데 한국어 보충이 필요해. 서류도 알려줘", "ko");
+  assert(
+    d2WithKoreanPrep.visaType === "D-2",
+    `explicit D-2 should beat Korean-language prep keywords: ${JSON.stringify(d2WithKoreanPrep)}`
+  );
+
+  const gyeonggiGwangju = analyzeAgentIntent("경기 광주 근처 어학당 500만원 예산으로 찾아줘", "ko");
+  assert(
+    gyeonggiGwangju.region === "gyeonggi",
+    `경기 광주는 전남/광주광역시가 아니라 gyeonggi로 유지해야 함: ${JSON.stringify(gyeonggiGwangju)}`
+  );
+
+  const cityGwangju = analyzeAgentIntent("광주 어학당 500만원 예산으로 찾아줘", "ko");
+  assert(cityGwangju.region === "gwangju", `광주 단독 지역 감지가 깨짐: ${JSON.stringify(cityGwangju)}`);
+}
+
 function testStructuredSlotRequirements() {
   const vague = analyzeAgentIntent("비자 서류랑 학교 추천해줘", "ko");
 
@@ -243,6 +271,7 @@ testVisaDocumentIntent();
 testPartnerAndSafetyIntent();
 testDiagnosisSlotFilling();
 testExactSchoolRefinement();
+testKeywordCollisionCases();
 testStructuredSlotRequirements();
 testMultilingualIntentCorpus();
 console.log("PASS agent planner regressions");

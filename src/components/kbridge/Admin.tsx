@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Search, Eye, RefreshCw, Users, AlertTriangle, Clock, TrendingUp } from "lucide-react";
+import { Search, Eye, RefreshCw, Users, AlertTriangle, Clock, TrendingUp, Bot } from "lucide-react";
 import { AdminSchools } from "./AdminSchools";
 
 interface Stats {
@@ -19,6 +19,38 @@ interface Stats {
   recentLeads: number;
   byNationality: { nationality: string; _count: number }[];
   byPath: { pathKey: string; _count: number }[];
+}
+
+interface AdminOpsStatus {
+  aiBackend: {
+    agent: {
+      backend: string;
+      ready: boolean;
+      requireLlm: boolean;
+      fallbackAllowed: boolean;
+      decisionTable: { code: string; outcome: string; detail: string }[];
+    };
+    consult: {
+      backend: string;
+      ready: boolean;
+      requireLlm: boolean;
+      fallbackAllowed: boolean;
+      decisionTable: { code: string; outcome: string; detail: string }[];
+    };
+    issues: string[];
+    warnings: string[];
+  };
+  readiness: {
+    status: "ready" | "degraded";
+    environment: string;
+    production: boolean;
+    checkedAt: string;
+    aiBackendPolicyCheck: {
+      ok: boolean;
+      severity: "required" | "warning";
+      detail: string;
+    } | null;
+  };
 }
 
 export function Admin() {
@@ -32,6 +64,7 @@ export function Admin() {
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [opsStatus, setOpsStatus] = useState<AdminOpsStatus | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const hasAdminAccess = isSessionAdmin || Boolean(adminKey);
 
@@ -58,6 +91,17 @@ export function Admin() {
           console.error("[stats]", e);
         } finally {
           setStatsLoading(false);
+        }
+      })(),
+      (async () => {
+        try {
+          const res = await fetch("/api/admin/ops", { headers });
+          if (res.ok) {
+            const ops = await res.json();
+            setOpsStatus(ops);
+          }
+        } catch (e) {
+          console.error("[admin ops]", e);
         }
       })(),
     ]);
@@ -130,6 +174,58 @@ export function Admin() {
         <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {authError}
         </div>
+      )}
+
+      {opsStatus && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Bot className="h-4 w-4" />
+              {lang === "ko" ? "AI 백엔드 운영 상태" : "AI backend operations"}
+            </CardTitle>
+            <CardDescription>
+              {opsStatus.readiness.environment} · {opsStatus.readiness.status}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 text-xs md:grid-cols-3">
+            {[
+              { label: "Agent", item: opsStatus.aiBackend.agent },
+              { label: "Consult", item: opsStatus.aiBackend.consult },
+            ].map(({ label, item }) => (
+              <div key={label} className="rounded-md border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium">{label}</span>
+                  <Badge variant={item.ready ? "default" : "destructive"} className="text-[10px]">
+                    {item.ready ? "ready" : "check"}
+                  </Badge>
+                </div>
+                <div className="mt-2 space-y-1 text-muted-foreground">
+                  <div>backend: <span className="font-mono text-foreground">{item.backend}</span></div>
+                  <div>require LLM: {item.requireLlm ? "yes" : "no"}</div>
+                  <div>fallback: {item.fallbackAllowed ? "allowed" : "blocked"}</div>
+                  <div>decisions: {item.decisionTable.filter((step) => step.outcome === "selected").length}</div>
+                </div>
+              </div>
+            ))}
+            <div className="rounded-md border p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium">{lang === "ko" ? "정책 체크" : "Policy check"}</span>
+                <Badge
+                  variant={opsStatus.aiBackend.issues.length > 0 ? "destructive" : "outline"}
+                  className="text-[10px]"
+                >
+                  {opsStatus.aiBackend.issues.length} issues
+                </Badge>
+              </div>
+              <div className="mt-2 space-y-1 text-muted-foreground">
+                <div>warnings: {opsStatus.aiBackend.warnings.length}</div>
+                <div className="line-clamp-3">
+                  {opsStatus.readiness.aiBackendPolicyCheck?.detail || "AI backend policy check unavailable"}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* 통계 대시보드 */}

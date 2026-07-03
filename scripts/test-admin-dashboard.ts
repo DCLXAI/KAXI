@@ -49,6 +49,7 @@ try {
   const knowledgeRoute = await import("../src/app/api/admin/knowledge/route");
   const knowledgeMonitorRoute = await import("../src/app/api/knowledge/monitor/route");
   const auditRoute = await import("../src/app/api/admin/audit/route");
+  const opsRoute = await import("../src/app/api/admin/ops/route");
 
   const caseList = await json(await casesRoute.GET(adminRequest("/api/admin/cases")));
   assert(caseList.counts.total >= 5, `expected at least 5 cases, got ${caseList.counts.total}`);
@@ -255,7 +256,17 @@ try {
     "case action should be visible in audit events"
   );
 
-  console.log("PASS admin dashboard API: cases, actions, rules, knowledge, audit");
+  const ops = await json(await opsRoute.GET(adminRequest("/api/admin/ops")));
+  assert(ops.aiBackend.agent.backend, "admin ops should expose agent backend diagnostics");
+  assert(Array.isArray(ops.aiBackend.agent.decisionTable), "admin ops should expose agent decision table");
+  assert(Array.isArray(ops.aiBackend.consult.decisionTable), "admin ops should expose consult decision table");
+  assert(ops.readiness.aiBackendPolicyCheck, "admin ops should expose readiness ai backend policy check");
+  const serializedOps = JSON.stringify(ops);
+  for (const secret of ["test-admin-key", process.env.ADMIN_API_KEY]) {
+    assert(!serializedOps.includes(String(secret)), "admin ops diagnostics must not leak admin secrets");
+  }
+
+  console.log("PASS admin dashboard API: cases, actions, rules, knowledge, audit, ops");
 } finally {
   await db.$disconnect();
   rmSync(tmpDir, { recursive: true, force: true });

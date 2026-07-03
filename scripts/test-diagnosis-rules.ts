@@ -134,6 +134,34 @@ function testComplianceEvaluationGroundsDiagnosisRecommendation() {
     result.sourceRefs.some((ref) => ref.startsWith("compliance:")),
     `diagnosis sourceRefs should include compliance sources: ${JSON.stringify(result)}`
   );
+  assert(
+    result.complianceCoverage.status === "rule_engine" && result.complianceCoverage.visaType === "D-2",
+    `diagnosis should declare D-2 rule-engine coverage: ${JSON.stringify(result.complianceCoverage)}`
+  );
+}
+
+function testD10CareerPathDeclaresRagOnlyCompliancePolicy() {
+  const result = recommendPath({
+    ...base,
+    goal: "career",
+    korean: "topik3",
+    budget: 20_000_000,
+  });
+
+  assert(result.pathKey === "goal_career", `career goal should select D-10 path: ${JSON.stringify(result)}`);
+  assert(result.visaType === "D-10", `career path should expose D-10 visa type: ${JSON.stringify(result)}`);
+  assert(
+    result.complianceCoverage.status === "rag_only" &&
+      result.complianceCoverage.unsupportedReason === "d10_compliance_rule_engine_not_implemented",
+    `D-10 path should explicitly declare RAG-only compliance coverage: ${JSON.stringify(result.complianceCoverage)}`
+  );
+  assert(
+    result.appliedRules.includes("policy:d10-rag-only-compliance"),
+    `D-10 path should record the explicit coverage policy: ${JSON.stringify(result.appliedRules)}`
+  );
+  assert(result.riskLevel === "medium", `D-10 RAG-only policy should raise risk to medium: ${JSON.stringify(result)}`);
+  assert(result.confidence === "medium", `D-10 RAG-only policy should avoid high confidence: ${JSON.stringify(result)}`);
+  assert(/D-10|rule engine|RAG/.test(JSON.stringify(result.warnings)), `D-10 warning should explain coverage limit: ${JSON.stringify(result.warnings)}`);
 }
 
 async function testDiagnoseToolReturnsComplianceMeta() {
@@ -172,10 +200,38 @@ async function testDiagnoseToolReturnsComplianceMeta() {
   );
 }
 
+async function testDiagnoseToolReturnsD10CoveragePolicy() {
+  const output = await TOOL_MAP.diagnose_path.execute(
+    {
+      nationality: "vn",
+      age: 24,
+      education: "university",
+      korean_level: "topik3",
+      goal: "career",
+      budget: 20_000_000,
+    },
+    { lang: "ko", dryRun: true }
+  );
+
+  const result = output.result;
+  if (!isRecord(result)) fail(`diagnose_path should return an object result: ${JSON.stringify(output)}`);
+
+  assert(result.visa_type === "D-10", `diagnose_path should expose D-10 visa_type: ${JSON.stringify(result)}`);
+  assert(
+    isRecord(result.compliance_coverage) &&
+      result.compliance_coverage.status === "rag_only" &&
+      result.compliance_coverage.unsupportedReason === "d10_compliance_rule_engine_not_implemented",
+    `diagnose_path should expose D-10 RAG-only compliance coverage: ${JSON.stringify(result)}`
+  );
+  assert(result.compliance_rule_meta === null, `D-10 should not pretend rule-engine metadata exists: ${JSON.stringify(result)}`);
+}
+
 testLanguagePathKeepsCoreOutputShape();
 testDegreePathExplainsLanguageAndBudgetRisk();
 testHistoryAndBrokerEscalateRisk();
 testUnsureGoalUsesLanguageBridgeForLowKorean();
 testComplianceEvaluationGroundsDiagnosisRecommendation();
+testD10CareerPathDeclaresRagOnlyCompliancePolicy();
 await testDiagnoseToolReturnsComplianceMeta();
+await testDiagnoseToolReturnsD10CoveragePolicy();
 console.log("PASS diagnosis rules");

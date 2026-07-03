@@ -406,6 +406,7 @@ const diagnosePathTool: Tool = {
         confidence: rec.confidence,
         applied_rules: rec.appliedRules,
         source_refs: rec.sourceRefs,
+        compliance_coverage: rec.complianceCoverage,
         compliance_rule_meta: rec.compliance
           ? {
               required_inputs: rec.compliance.requiredInputs,

@@ -1,6 +1,11 @@
 import { readdirSync, readFileSync, statSync } from "fs";
 import { join } from "path";
 import { NextRequest } from "next/server";
+import { db } from "../src/lib/db";
+import {
+  isSchoolOperationalDatabaseError,
+  listSchoolsWithProvenance,
+} from "../src/lib/schools/repository";
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -126,6 +131,45 @@ function testSchoolDataStrategyDocs() {
   }
 }
 
+function restoreEnv(snapshot: NodeJS.ProcessEnv) {
+  for (const key of Object.keys(process.env)) {
+    if (!(key in snapshot)) delete process.env[key];
+  }
+  Object.assign(process.env, snapshot);
+}
+
+async function withMockedSchoolDelegate<T>(
+  implementation: {
+    findMany: (...args: unknown[]) => unknown;
+    count: (...args: unknown[]) => unknown;
+  },
+  run: () => Promise<T>
+): Promise<T> {
+  const originalFindMany = db.school.findMany;
+  const originalCount = db.school.count;
+  Object.defineProperty(db.school, "findMany", {
+    value: implementation.findMany,
+    configurable: true,
+  });
+  Object.defineProperty(db.school, "count", {
+    value: implementation.count,
+    configurable: true,
+  });
+
+  try {
+    return await run();
+  } finally {
+    Object.defineProperty(db.school, "findMany", {
+      value: originalFindMany,
+      configurable: true,
+    });
+    Object.defineProperty(db.school, "count", {
+      value: originalCount,
+      configurable: true,
+    });
+  }
+}
+
 async function testSchoolApiExposesProvenance() {
   const route = await import("../src/app/api/schools/route");
   const res = await route.GET(new NextRequest("https://kaxi.local/api/schools?query=__no_such_school__"));
@@ -148,7 +192,99 @@ async function testSchoolApiExposesProvenance() {
   }
 }
 
+async function testHostedSchoolFailClosed() {
+  const snapshot = { ...process.env };
+  const route = await import("../src/app/api/schools/route");
+  try {
+    Object.assign(process.env, {
+      NODE_ENV: "production",
+      VERCEL: "1",
+      VERCEL_ENV: "production",
+    });
+
+    await withMockedSchoolDelegate(
+      {
+        findMany: async () => {
+          throw new Error("simulated school database outage");
+        },
+        count: async () => {
+          throw new Error("simulated school database outage");
+        },
+      },
+      async () => {
+        let threw = false;
+        try {
+          await listSchoolsWithProvenance();
+        } catch (err) {
+          threw = true;
+          if (!isSchoolOperationalDatabaseError(err)) {
+            fail(`hosted school DB outage should throw SchoolOperationalDatabaseError: ${String(err)}`);
+          }
+          if (!String(err.message).includes("unavailable")) {
+            fail(`hosted school DB outage should explain unavailable table: ${String(err.message)}`);
+          }
+        }
+        if (!threw) fail("hosted school DB outage must not return seed fallback");
+
+        const res = await route.GET(new NextRequest("https://kaxi.local/api/schools"));
+        const body = await res.json();
+        if (res.status !== 503 || body.source === "seed" || body.fallback === true) {
+          fail(`hosted school API outage must fail closed without seed fallback: ${JSON.stringify({ status: res.status, body })}`);
+        }
+      }
+    );
+
+    await withMockedSchoolDelegate(
+      {
+        findMany: async () => [],
+        count: async () => 0,
+      },
+      async () => {
+        const res = await route.GET(new NextRequest("https://kaxi.local/api/schools"));
+        const body = await res.json();
+        if (res.status !== 503 || body.source === "seed" || body.fallback === true) {
+          fail(`hosted empty School table must fail closed without seed fallback: ${JSON.stringify({ status: res.status, body })}`);
+        }
+      }
+    );
+  } finally {
+    restoreEnv(snapshot);
+  }
+}
+
+async function testLocalSchoolSeedFallbackIsExplicit() {
+  const snapshot = { ...process.env };
+  try {
+    Object.assign(process.env, {
+      NODE_ENV: "test",
+      VERCEL: "",
+      VERCEL_ENV: "",
+    });
+
+    await withMockedSchoolDelegate(
+      {
+        findMany: async () => {
+          throw new Error("simulated local database outage");
+        },
+        count: async () => {
+          throw new Error("simulated local database outage");
+        },
+      },
+      async () => {
+        const result = await listSchoolsWithProvenance({ query: "__no_such_school__" });
+        if (result.source !== "seed" || result.operational || !result.fallback) {
+          fail(`local school fallback should be explicit seed provenance: ${JSON.stringify(result)}`);
+        }
+      }
+    );
+  } finally {
+    restoreEnv(snapshot);
+  }
+}
+
 testSchoolDataStrategyDocs();
 await testSchoolApiExposesProvenance();
+await testHostedSchoolFailClosed();
+await testLocalSchoolSeedFallbackIsExplicit();
 
 console.log("PASS school data boundary");

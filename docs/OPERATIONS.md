@@ -233,6 +233,7 @@ Strict LLM requirement:
 | Consult | `AI_ALLOW_LLM_FALLBACK=true` or `AI_CONSULT_ALLOW_OFFICIAL_SUMMARY_FALLBACK=true` | `AI_REQUIRE_LLM=true`, `AI_CONSULT_REQUIRE_LLM=true`, or selected `remote-bridge` |
 
 Inspect `GET /api/ai/agent` `backendPolicy.agent.decisionTable` and `backendPolicy.consult.decisionTable` first when the site says it is using built-in fallback or an unexpected backend.
+Authenticated operators can also inspect the same safe diagnostics in `/admin` and `GET /api/admin/ops`, which pairs the backend decision table with the readiness `ai.backend_policy` check.
 
 Local development can reuse the Codex CLI login already present on the developer machine:
 

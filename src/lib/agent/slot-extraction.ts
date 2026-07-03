@@ -126,6 +126,10 @@ export function detectAccreditation(text: string): string {
 }
 
 export function detectVisaType(text: string): AgentVisaType {
+  const explicitD2 = /\bd\s*-?\s*2\b/i.test(text);
+  const explicitD4 = /\bd\s*-?\s*4\b/i.test(text);
+  if (explicitD4 && !explicitD2) return "D-4";
+  if (explicitD2) return "D-2";
   return includesAnyKeyword(text, D2_VISA_KEYWORDS) ? "D-2" : "D-4";
 }
 
