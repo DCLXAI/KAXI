@@ -6,7 +6,13 @@ export type RuntimeDatabaseKind = "missing" | "file" | "libsql" | "postgresql" |
 
 export interface RuntimeDatabaseInfo {
   kind: RuntimeDatabaseKind;
-  source: "DATABASE_URL" | "POSTGRES_URL" | "TURSO_DATABASE_URL" | "default";
+  source:
+    | "DATABASE_URL"
+    | "POSTGRES_URL"
+    | "SUPABASE_DATABASE_URL"
+    | "SUPABASE_POOLER_URL"
+    | "TURSO_DATABASE_URL"
+    | "default";
   hostedRuntime: boolean;
   writable: boolean;
   sharedWritable: boolean;
@@ -21,6 +27,11 @@ function configured(value: string | undefined): boolean {
   return Boolean(trimmed) && !/^replace-with-/i.test(trimmed);
 }
 
+function isPlaceholderDatabaseUrl(value: string | undefined): boolean {
+  const trimmed = value?.trim() || "";
+  return !configured(trimmed) || trimmed.includes("/home/z/my-project");
+}
+
 function isHostedRuntime(env: NodeJS.ProcessEnv): boolean {
   return env.VERCEL === "1" || Boolean(env.VERCEL_ENV);
 }
@@ -33,8 +44,18 @@ function normalizeDatabaseEnv() {
   const databaseUrl = process.env.DATABASE_URL?.trim();
   const tursoUrl = process.env.TURSO_DATABASE_URL?.trim();
   const postgresUrl = process.env.POSTGRES_URL?.trim();
+  const supabaseDatabaseUrl = process.env.SUPABASE_DATABASE_URL?.trim();
+  const supabasePoolerUrl = process.env.SUPABASE_POOLER_URL?.trim();
   if (postgresUrl && (!databaseUrl || databaseUrl.includes("/home/z/my-project"))) {
     process.env.DATABASE_URL = postgresUrl;
+    return;
+  }
+  if (supabaseDatabaseUrl && isPlaceholderDatabaseUrl(databaseUrl)) {
+    process.env.DATABASE_URL = supabaseDatabaseUrl;
+    return;
+  }
+  if (supabasePoolerUrl && isPlaceholderDatabaseUrl(databaseUrl)) {
+    process.env.DATABASE_URL = supabasePoolerUrl;
     return;
   }
   if (!databaseUrl || databaseUrl.includes("/home/z/my-project")) {
@@ -48,9 +69,25 @@ function databaseUrlFromEnv(env: NodeJS.ProcessEnv) {
   const tursoUrl = env.TURSO_DATABASE_URL?.trim();
   const databaseUrl = env.DATABASE_URL?.trim();
   const postgresUrl = env.POSTGRES_URL?.trim();
+  const supabaseDatabaseUrl = env.SUPABASE_DATABASE_URL?.trim();
+  const supabasePoolerUrl = env.SUPABASE_POOLER_URL?.trim();
   if (databaseUrl && isPostgresUrl(databaseUrl)) return { url: databaseUrl, source: "DATABASE_URL" as const };
   if (postgresUrl && (!databaseUrl || databaseUrl.includes("/home/z/my-project") || databaseUrl.startsWith("file:"))) {
     return { url: postgresUrl, source: "POSTGRES_URL" as const };
+  }
+  if (
+    supabaseDatabaseUrl &&
+    isPostgresUrl(supabaseDatabaseUrl) &&
+    (!databaseUrl || databaseUrl.includes("/home/z/my-project") || databaseUrl.startsWith("file:"))
+  ) {
+    return { url: supabaseDatabaseUrl, source: "SUPABASE_DATABASE_URL" as const };
+  }
+  if (
+    supabasePoolerUrl &&
+    isPostgresUrl(supabasePoolerUrl) &&
+    (!databaseUrl || databaseUrl.includes("/home/z/my-project") || databaseUrl.startsWith("file:"))
+  ) {
+    return { url: supabasePoolerUrl, source: "SUPABASE_POOLER_URL" as const };
   }
   if (tursoUrl) return { url: tursoUrl, source: "TURSO_DATABASE_URL" as const };
   if (databaseUrl) return { url: databaseUrl, source: "DATABASE_URL" as const };

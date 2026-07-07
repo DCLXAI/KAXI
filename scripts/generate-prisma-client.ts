@@ -23,9 +23,21 @@ function providerOverride(): "postgresql" | "sqlite" | null {
 function databaseUrlForGeneration(): string {
   const databaseUrl = process.env.DATABASE_URL?.trim();
   const postgresUrl = process.env.POSTGRES_URL?.trim();
+  const supabaseDatabaseUrl = process.env.SUPABASE_DATABASE_URL?.trim();
+  const supabasePoolerUrl = process.env.SUPABASE_POOLER_URL?.trim();
   if (postgresUrl && (!databaseUrl || databaseUrl.includes("/home/z/my-project"))) {
     process.env.DATABASE_URL = postgresUrl;
     return postgresUrl;
+  }
+
+  if (supabaseDatabaseUrl && (!databaseUrl || databaseUrl.includes("/home/z/my-project") || databaseUrl.startsWith("file:"))) {
+    process.env.DATABASE_URL = supabaseDatabaseUrl;
+    return supabaseDatabaseUrl;
+  }
+
+  if (supabasePoolerUrl && (!databaseUrl || databaseUrl.includes("/home/z/my-project") || databaseUrl.startsWith("file:"))) {
+    process.env.DATABASE_URL = supabasePoolerUrl;
+    return supabasePoolerUrl;
   }
 
   if (databaseUrl) return databaseUrl;
@@ -39,6 +51,8 @@ const provider =
   forcedProvider ||
   (isPostgresUrl(databaseUrl) ||
   isPostgresUrl(process.env.POSTGRES_URL) ||
+  isPostgresUrl(process.env.SUPABASE_DATABASE_URL) ||
+  isPostgresUrl(process.env.SUPABASE_POOLER_URL) ||
   isPrismaPostgresUrl(process.env.PRISMA_DATABASE_URL)
     ? "postgresql"
     : "sqlite");

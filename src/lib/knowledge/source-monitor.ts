@@ -52,6 +52,8 @@ const LAW_RECENT_PROMULGATION_URL =
   "https://www.law.go.kr/LSW/nwRvsLsPop.do?chrIdx=10&cptOfi=&lsKndCd=&lsNm=%EC%B6%9C%EC%9E%85%EA%B5%AD%EA%B4%80%EB%A6%AC%EB%B2%95&p_epubdt=&p_epubno=&p_spubdt=&p_spubno=&searchType=lsNm&sortIdx=0";
 const LAW_ACT_VISA_PASSPORT_REQUIREMENT_URL =
   "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0007&lsiSeq=272921&urlMode=lsScJoRltInfoR";
+const LAW_ACT_VISA_ISSUANCE_CERTIFICATE_URL =
+  "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0009&lsiSeq=272921&urlMode=lsScJoRltInfoR";
 const LAW_ACT_EMPLOYMENT_RESTRICTION_URL =
   "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0018&lsiSeq=272921&urlMode=lsScJoRltInfoR";
 const LAW_ACT_EMPLOYER_REPORTING_DUTY_URL =
@@ -201,7 +203,7 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
   {
     docId: "immigration-act-visa-issuance-certificate",
     title: "출입국관리법 제8조·제9조 사증·사증발급인정서",
-    sourceUrl: LAW_ACT_URL,
+    sourceUrl: LAW_ACT_VISA_ISSUANCE_CERTIFICATE_URL,
     sourceType: "official_law",
     topic: "process",
     legalPriority: 1,

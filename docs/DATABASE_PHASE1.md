@@ -52,7 +52,7 @@ prisma/postgres/schema.prisma
 | --- | --- | --- |
 | Local demo | `DATABASE_URL=file:./db/custom.db` | SQLite-compatible DB may be restored from artifact or rebuilt from migrations. |
 | CI | `DATABASE_URL=file:${GITHUB_WORKSPACE}/db/custom.db` | `RESTORE_SQLITE_DEMO_DB=false`; DB is rebuilt with `db:prepare-local` and seeded. |
-| Preview/Production | `DATABASE_URL=postgresql://...` | Must use PostgreSQL before write-bearing operations are considered production-ready. |
+| Preview/Production | `DATABASE_URL=postgresql://...` or Supabase Postgres aliases | Must use PostgreSQL before write-bearing operations are considered production-ready. |
 
 ## Local Rebuild
 
@@ -69,7 +69,7 @@ bun run test:schema
 
 1. Provision managed PostgreSQL.
 2. Rotate any database URL or API key that has been exposed outside Vercel/Prisma secret storage.
-3. Load `DATABASE_URL=postgresql://...` into the deployment environment.
+3. Load `DATABASE_URL=postgresql://...` into the deployment environment. Supabase can also use `SUPABASE_POOLER_URL` or `SUPABASE_DATABASE_URL` for runtime and `SUPABASE_DIRECT_URL` for migrations.
 4. Apply production migrations:
 
 ```bash

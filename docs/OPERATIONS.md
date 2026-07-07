@@ -3,6 +3,7 @@
 ## Required Environment Variables
 
 - `DATABASE_URL`: Database URL. Local development may use `file:./db/custom.db`; production must target PostgreSQL after the Phase 1 cutover (`postgresql://...` or `postgres://...`).
+- `SUPABASE_DATABASE_URL`, `SUPABASE_POOLER_URL`, `SUPABASE_DIRECT_URL`: Optional Supabase Postgres aliases. Runtime may use `SUPABASE_DATABASE_URL` or `SUPABASE_POOLER_URL`; Prisma migrations should prefer `SUPABASE_DIRECT_URL`.
 - `RESTORE_SQLITE_DEMO_DB`: Set `false` in CI/hosted builds to avoid depending on the bundled SQLite demo DB. Local demos may leave it unset to restore `runtime-artifacts/db/custom.db`.
 - `ADMIN_API_KEY`: Break-glass admin API key for admin APIs. Prefer session login for day-to-day operations.
 - `MODEL_CACHE_DIR`: Optional local cache path for Transformer models. Defaults to `data/model-cache` locally and `/tmp/kaxi-model-cache` on Vercel/serverless runtimes.
@@ -102,7 +103,7 @@ bun run db:migrate:deploy
 bun run db:generate
 ```
 
-For PostgreSQL production, provision the database first, load `DATABASE_URL=postgresql://...`, then run `bun run db:migrate:deploy` from a trusted operator machine or CI job. This command uses `prisma/postgres/schema.prisma` and `prisma/postgres/migrations`. After migration, run `bun run db:seed:schools`, `bun run db:seed:synonyms`, and `bun run db:seed:rules` with production DB env loaded so `School`, `Synonym`, and approved compliance rule versions are operational tables. `GET /api/readiness` will not pass merely because the env var exists; it also checks connectivity and required production secrets.
+For PostgreSQL production, provision the database first, load `DATABASE_URL=postgresql://...`, then run `bun run db:migrate:deploy` from a trusted operator machine or CI job. Supabase deployments may instead set `SUPABASE_DIRECT_URL` for migrations and `SUPABASE_POOLER_URL` or `SUPABASE_DATABASE_URL` for runtime; see `docs/SUPABASE_INTEGRATION.md`. This command uses `prisma/postgres/schema.prisma` and `prisma/postgres/migrations`. After migration, run `bun run db:seed:schools`, `bun run db:seed:synonyms`, and `bun run db:seed:rules` with production DB env loaded so `School`, `Synonym`, and approved compliance rule versions are operational tables. `GET /api/readiness` will not pass merely because the env var exists; it also checks connectivity and required production secrets.
 
 If a production `DATABASE_URL`, Prisma Accelerate URL, or Blob token is exposed in chat, logs, or a committed file, rotate it before using it in Vercel.
 
@@ -130,7 +131,11 @@ Visa, immigration, school-accreditation, and cost guidance are time-sensitive.
 12. Immigration, visa, and stay-status answers must use a law-first hierarchy: recent promulgation/effective-date check, Immigration Act, Enforcement Decree stay-status tables, Enforcement Rule attachment/fee rules, then HiKorea/manual operational guidance. HiKorea sources are official operational RAG sources, but they are not the final legal basis when a statute or regulation controls the issue.
 13. HiKorea sources cover the homepage urgent notices, integrated stay-status manual, D-2/D-4/D-10/E-7/F-2/F-5 requirement checks, extension/change/outside-activity procedures, e-application/visit reservation, forms, fees/authentication cautions, and policy-change notices. Treat these as official RAG sources, but still route case-specific filing judgment to 1345, the competent immigration office, or an administrative-scrivener review.
 14. `/api/knowledge/monitor` checks the official watchlist for recent Immigration Act/Decree/Rule promulgations and effective dates, current Immigration Act/Enforcement Decree/Enforcement Rule text, HiKorea homepage/manual/procedure/form/notice sources, and Ministry of Justice immigration policy news. Vercel Cron calls it daily; GitHub Actions also calls it every 30 minutes in source batches to supplement Vercel Hobby cron limits; admins can run preview or PENDING-candidate creation from `/admin/knowledge` when an administrative scrivener spots a live change. Changed sources become `PENDING` candidates for admin review and approval before production RAG use. If `KNOWLEDGE_MONITOR_ALERT_WEBHOOK_URL` is configured, changed/failed monitor runs send an operations alert with impacted rule/user counts and a link back to `/admin/knowledge`.
-15. `bun run test:governance` verifies source metadata, required immigration-law RAG coverage, required HiKorea RAG coverage, required MOJ policy-news coverage, school seed metadata, and automatic expiry filtering.
+15. Run `bun run knowledge:metadata` as a dry-run before and after source-monitor batches. It canonicalizes approved candidate IDs/titles, normalizes source metadata, and collapses duplicate `PENDING` candidates so each source family keeps at most one latest review candidate. Use `bun run knowledge:metadata --apply` only after backing up `KnowledgeDocument` and `KnowledgeChunk`.
+16. Run `bun run knowledge:quality --write-report` after metadata cleanup to classify `PENDING` candidates into `approve_ready`, `needs_cleaning`, or `reject`. It writes `quality/knowledge-quality-report.json` and `.md` with body length, UI-noise ratio, official keyword hits, legal keyword hits, issues, and recommended action.
+17. Use `bun run knowledge:quality --apply-legal-approvals` only after a database backup. The script promotes allowlisted official-law candidates when the cleaned body contains real article/table/form markers. Article-required law candidates without a body marker remain non-production and must be re-fetched or manually cleaned.
+18. Use `bun run knowledge:quality --audit-approved --write-report` to inspect approved official-law chunks for drift. Use `bun run knowledge:quality --apply-approved-cleaning` after backup to rewrite approved law chunks with the cleaner and move unsafe article-level documents back to a `PENDING` quality-hold candidate ID so static approved fallbacks are no longer shadowed.
+19. `bun run test:governance` verifies source metadata, required immigration-law RAG coverage, required HiKorea RAG coverage, required MOJ policy-news coverage, school seed metadata, and automatic expiry filtering. `bun run test:knowledge-quality` verifies law.go.kr UI-noise removal and the article-body approval gate.
 
 ## Admin Access
 
@@ -149,6 +154,7 @@ The workflow calls the package-level `ci:types`, `ci:domain`, and `ci:ops` profi
 `test:rules` verifies the DB-backed D-2/D-4 Compliance Rule Engine, including approved-only execution, effective date windows, required source refs, 20+ golden cases, and `ComplianceEvaluation` persistence.
 `test:quality` validates the multilingual evaluation set in `quality/multilingual-eval-cases.json`, including expected source document, refusal expectation, and cost-format labels.
 `test:rag-ops` verifies Phase 7 RAG operations: approved-only production search, rejected/superseded blocking, answer source/checked-date notices, impact lists for rules/users, and diff-only crawler behavior.
+`test:knowledge-quality` verifies official-law candidate cleaning, required article-body gating, and candidate ID/title canonicalization.
 `test:knowledge-monitor` verifies official-source monitoring, non-searchable pending candidates, and admin approval superseding older RAG documents.
 `test:planner` verifies multilingual intent detection, slot filling, budget parsing, safety/partner signals, and exact-school refinements.
 `test:citations` verifies inline answer citation markers link to the visible source cards without rewriting existing Markdown links.

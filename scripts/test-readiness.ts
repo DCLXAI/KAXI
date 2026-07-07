@@ -180,9 +180,37 @@ function testDatabaseRuntimeInfo() {
     process.env.DATABASE_URL = "file:./db/custom.db";
     process.env.TURSO_DATABASE_URL = "libsql://kaxi-example.turso.io";
     process.env.TURSO_AUTH_TOKEN = "test-token";
+    delete process.env.SUPABASE_DATABASE_URL;
+    delete process.env.SUPABASE_POOLER_URL;
     const libsql = getRuntimeDatabaseInfo();
     if (libsql.kind !== "libsql" || !libsql.sharedWritable || !libsql.libSqlAuthConfigured || libsql.postgresqlConfigured) {
       fail(`libSQL config should be recognized as shared writable: ${JSON.stringify(libsql)}`);
+    }
+
+    process.env.DATABASE_URL = "file:./db/custom.db";
+    delete process.env.POSTGRES_URL;
+    delete process.env.TURSO_DATABASE_URL;
+    delete process.env.TURSO_AUTH_TOKEN;
+    process.env.SUPABASE_DATABASE_URL = "postgresql://postgres:password@db.example.supabase.co:5432/postgres";
+    const supabase = getRuntimeDatabaseInfo();
+    if (
+      supabase.kind !== "postgresql" ||
+      supabase.source !== "SUPABASE_DATABASE_URL" ||
+      !supabase.sharedWritable ||
+      supabase.activePrismaProvider !== "postgresql"
+    ) {
+      fail(`Supabase database URL should be detected as PostgreSQL runtime: ${JSON.stringify(supabase)}`);
+    }
+
+    process.env.SUPABASE_DATABASE_URL = "";
+    process.env.SUPABASE_POOLER_URL = "postgresql://postgres.example:password@aws-0-ap-northeast-2.pooler.supabase.com:6543/postgres";
+    const supabasePooler = getRuntimeDatabaseInfo();
+    if (
+      supabasePooler.kind !== "postgresql" ||
+      supabasePooler.source !== "SUPABASE_POOLER_URL" ||
+      !supabasePooler.postgresqlConfigured
+    ) {
+      fail(`Supabase pooler URL should be detected as PostgreSQL runtime: ${JSON.stringify(supabasePooler)}`);
     }
   } finally {
     restoreEnv(snapshot);

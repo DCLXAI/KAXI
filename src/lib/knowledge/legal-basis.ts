@@ -72,6 +72,73 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
   ids.add(IMMIGRATION_GENERAL_STAY_STATUS_DOC_ID);
   ids.add(IMMIGRATION_STATUS_DOC_ID);
 
+  const asksTargetStayStatus =
+    /d-?2|d-?4|d-?10|e-?7|f-?2|f-?5|유학|어학|연수|구직|특정활동|전문인력|거주|영주|degree|language training|job seeking|specific activity|residence|permanent/.test(text);
+  const asksStudentVisa = /d-?2|d-?4|유학|어학|연수|학위|학생|student|degree|language training/.test(text);
+  const asksJobSeeking = /d-?10|구직|job seeking/.test(text);
+  const asksE7 = /e-?7|특정활동|전문인력|specific activity/.test(text);
+  const asksF2F5 = /f-?2|f-?5|거주|영주|residence|permanent/.test(text);
+
+  if (asksTargetStayStatus) {
+    priorityIds.push(
+      IMMIGRATION_GENERAL_STAY_STATUS_DOC_ID,
+      IMMIGRATION_STATUS_DOC_ID,
+      IMMIGRATION_REVIEW_CRITERIA_DOC_ID,
+      IMMIGRATION_ATTACHMENTS_DOC_ID,
+      IMMIGRATION_FEES_DOC_ID
+    );
+    ids.add(IMMIGRATION_GENERAL_STAY_STATUS_DOC_ID);
+    ids.add(IMMIGRATION_STATUS_DOC_ID);
+    ids.add(IMMIGRATION_REVIEW_CRITERIA_DOC_ID);
+    ids.add(IMMIGRATION_ATTACHMENTS_DOC_ID);
+    ids.add(IMMIGRATION_FEES_DOC_ID);
+  }
+
+  if (asksStudentVisa) {
+    priorityIds.push(
+      IMMIGRATION_STATUS_CHANGE_DOC_ID,
+      IMMIGRATION_STAY_EXTENSION_DOC_ID,
+      IMMIGRATION_OUTSIDE_STATUS_ACTIVITY_DOC_ID,
+      IMMIGRATION_STUDENT_MANAGEMENT_REPORTING_DOC_ID
+    );
+    ids.add(IMMIGRATION_STATUS_CHANGE_DOC_ID);
+    ids.add(IMMIGRATION_STAY_EXTENSION_DOC_ID);
+    ids.add(IMMIGRATION_OUTSIDE_STATUS_ACTIVITY_DOC_ID);
+    ids.add(IMMIGRATION_STUDENT_MANAGEMENT_REPORTING_DOC_ID);
+  }
+
+  if (asksJobSeeking) {
+    ids.add(IMMIGRATION_STATUS_CHANGE_DOC_ID);
+    ids.add(IMMIGRATION_STAY_EXTENSION_DOC_ID);
+    ids.add(IMMIGRATION_REVIEW_CRITERIA_DOC_ID);
+  }
+
+  if (asksE7) {
+    priorityIds.push(
+      IMMIGRATION_EMPLOYMENT_RESTRICTION_DOC_ID,
+      IMMIGRATION_EMPLOYER_REPORTING_DUTY_DOC_ID,
+      IMMIGRATION_WORKPLACE_CHANGE_DOC_ID
+    );
+    ids.add(IMMIGRATION_EMPLOYMENT_RESTRICTION_DOC_ID);
+    ids.add(IMMIGRATION_EMPLOYER_REPORTING_DUTY_DOC_ID);
+    ids.add(IMMIGRATION_WORKPLACE_CHANGE_DOC_ID);
+    ids.add(IMMIGRATION_STATUS_CHANGE_DOC_ID);
+    ids.add(IMMIGRATION_STAY_EXTENSION_DOC_ID);
+  }
+
+  if (asksF2F5) {
+    priorityIds.push(
+      IMMIGRATION_PERMANENT_RESIDENCE_STATUS_DOC_ID,
+      IMMIGRATION_PERMANENT_RESIDENCE_DOC_ID,
+      IMMIGRATION_STATUS_CHANGE_DOC_ID,
+      IMMIGRATION_STAY_EXTENSION_DOC_ID
+    );
+    ids.add(IMMIGRATION_PERMANENT_RESIDENCE_STATUS_DOC_ID);
+    ids.add(IMMIGRATION_PERMANENT_RESIDENCE_DOC_ID);
+    ids.add(IMMIGRATION_STATUS_CHANGE_DOC_ID);
+    ids.add(IMMIGRATION_STAY_EXTENSION_DOC_ID);
+  }
+
   if (/단기|단기방문|단기취업|무사증|사증면제|관광|통과|b-?1|b-?2|c-?1|c-?3|c-?4|short.?term|visa.?free|waiver|tourist|transit/.test(text)) {
     priorityIds.push(IMMIGRATION_GENERAL_STAY_STATUS_DOC_ID, IMMIGRATION_SHORT_TERM_STATUS_DOC_ID);
     ids.add(IMMIGRATION_SHORT_TERM_STATUS_DOC_ID);

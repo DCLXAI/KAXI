@@ -1,0 +1,1426 @@
+{
+  "generatedAt": "2026-07-07T17:33:21.078Z",
+  "mode": "audit-pending",
+  "totalPending": 51,
+  "totalApprovedAudited": 0,
+  "counts": {
+    "approve_ready": 31,
+    "needs_cleaning": 7,
+    "reject": 13
+  },
+  "promotableLegalDocIds": [],
+  "promoted": [],
+  "candidates": [
+    {
+      "docId": "accredited-university__candidate__bf69c6ba6141",
+      "baseDocId": "accredited-university",
+      "title": "Study in Korea 교육국제화역량 인증대학",
+      "sourceType": "official_government",
+      "topic": "school",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 16407,
+      "cleanLength": 15787,
+      "chunkCount": 8,
+      "noiseRatio": 0.038,
+      "recommendedAction": "approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "Study in Korea",
+        "studyinkorea.go.kr"
+      ],
+      "legalKeywordHits": [],
+      "sourceUrl": "https://studyinkorea.go.kr/ko/plan/certifiedUniversity.do"
+    },
+    {
+      "docId": "hikorea-fees-processing-authentication__candidate__df746694dbb2",
+      "baseDocId": "hikorea-fees-processing-authentication",
+      "title": "하이코리아 수수료·처리기간·원본/번역/아포스티유 안내",
+      "sourceType": "official_government",
+      "topic": "cost",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 3202,
+      "cleanLength": 2671,
+      "chunkCount": 2,
+      "noiseRatio": 0.166,
+      "recommendedAction": "approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법무부",
+        "출입국·외국인",
+        "하이코리아",
+        "대한민국 공식 전자정부",
+        "hikorea.go.kr"
+      ],
+      "legalKeywordHits": [
+        "서식",
+        "체류자격"
+      ],
+      "sourceUrl": "https://www.hikorea.go.kr/info/InfoMain.pt"
+    },
+    {
+      "docId": "hikorea-policy-notice-monitor__candidate__010479b0a7c3",
+      "baseDocId": "hikorea-policy-notice-monitor",
+      "title": "하이코리아 공지사항 정책 변경 감시",
+      "sourceType": "official_government",
+      "topic": "warning",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 2296,
+      "cleanLength": 1960,
+      "chunkCount": 1,
+      "noiseRatio": 0.146,
+      "recommendedAction": "approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법무부",
+        "하이코리아",
+        "대한민국 공식 전자정부",
+        "hikorea.go.kr"
+      ],
+      "legalKeywordHits": [
+        "서식",
+        "체류자격"
+      ],
+      "sourceUrl": "https://www.hikorea.go.kr/board/BoardNtcListR.pt"
+    },
+    {
+      "docId": "moj-e-arrival-card__candidate__d28f75de2699",
+      "baseDocId": "moj-e-arrival-card",
+      "title": "법무부 전자입국신고서(e-Arrival card)",
+      "sourceType": "official_government",
+      "topic": "process",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 7207,
+      "cleanLength": 5303,
+      "chunkCount": 3,
+      "noiseRatio": 0.264,
+      "recommendedAction": "clean_and_approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법제처",
+        "법무부",
+        "출입국·외국인",
+        "하이코리아",
+        "대한민국 공식 전자정부",
+        "immigration.go.kr"
+      ],
+      "legalKeywordHits": [],
+      "sourceUrl": "https://www.immigration.go.kr/immigration/3509/subview.do"
+    },
+    {
+      "docId": "moj-e-arrival-card-notice__candidate__0ffe8e9c1370",
+      "baseDocId": "moj-e-arrival-card-notice",
+      "title": "전자입국신고서 제도 시행 알림",
+      "sourceType": "official_government",
+      "topic": "process",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 7078,
+      "cleanLength": 5085,
+      "chunkCount": 3,
+      "noiseRatio": 0.282,
+      "recommendedAction": "clean_and_approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법제처",
+        "법무부",
+        "출입국·외국인",
+        "하이코리아",
+        "대한민국 공식 전자정부",
+        "immigration.go.kr"
+      ],
+      "legalKeywordHits": [],
+      "sourceUrl": "https://www.immigration.go.kr/bbs/immigration/224/592036/artclView.do?layout=unknown"
+    },
+    {
+      "docId": "moj-e7-wage-requirement-2026__candidate__028d612dff8e",
+      "baseDocId": "moj-e7-wage-requirement-2026",
+      "title": "2026년 특정활동(E-7) 체류자격 임금요건 기준",
+      "sourceType": "official_government",
+      "topic": "visa",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 8351,
+      "cleanLength": 5668,
+      "chunkCount": 3,
+      "noiseRatio": 0.321,
+      "recommendedAction": "clean_and_approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법제처",
+        "법무부",
+        "출입국·외국인",
+        "하이코리아",
+        "대한민국 공식 전자정부",
+        "immigration.go.kr"
+      ],
+      "legalKeywordHits": [
+        "체류자격"
+      ],
+      "sourceUrl": "https://www.immigration.go.kr/bbs/moj/184/601893/artclView.do?layout=unknown"
+    },
+    {
+      "docId": "moj-f4-employment-restriction-preannouncement__candidate__e53bffa858e3",
+      "baseDocId": "moj-f4-employment-restriction-preannouncement",
+      "title": "재외동포(F-4) 취업활동 제한범위 고시 행정예고",
+      "sourceType": "official_government",
+      "topic": "warning",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 8645,
+      "cleanLength": 5949,
+      "chunkCount": 4,
+      "noiseRatio": 0.312,
+      "recommendedAction": "clean_and_approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법제처",
+        "법무부",
+        "출입국·외국인",
+        "하이코리아",
+        "대한민국 공식 전자정부",
+        "immigration.go.kr"
+      ],
+      "legalKeywordHits": [
+        "제\\d+조"
+      ],
+      "sourceUrl": "https://www.immigration.go.kr/bbs/moj/184/602340/artclView.do?layout=unknown"
+    },
+    {
+      "docId": "moj-f6-marriage-visa-criteria__candidate__f96a8405bf40",
+      "baseDocId": "moj-f6-marriage-visa-criteria",
+      "title": "결혼동거 목적 사증 발급 요건·심사면제 기준 고시",
+      "sourceType": "official_government",
+      "topic": "visa",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 8376,
+      "cleanLength": 5692,
+      "chunkCount": 4,
+      "noiseRatio": 0.32,
+      "recommendedAction": "clean_and_approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법제처",
+        "법무부",
+        "출입국·외국인",
+        "하이코리아",
+        "대한민국 공식 전자정부",
+        "immigration.go.kr"
+      ],
+      "legalKeywordHits": [
+        "체류자격"
+      ],
+      "sourceUrl": "https://www.immigration.go.kr/bbs/moj/184/601864/artclView.do?layout=unknown"
+    },
+    {
+      "docId": "moj-k-eta-entry-authorization__candidate__b0d61b852ec9",
+      "baseDocId": "moj-k-eta-entry-authorization",
+      "title": "법무부 전자여행허가제(K-ETA)",
+      "sourceType": "official_government",
+      "topic": "process",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 7559,
+      "cleanLength": 5632,
+      "chunkCount": 3,
+      "noiseRatio": 0.255,
+      "recommendedAction": "clean_and_approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법제처",
+        "법무부",
+        "출입국·외국인",
+        "하이코리아",
+        "대한민국 공식 전자정부",
+        "immigration.go.kr"
+      ],
+      "legalKeywordHits": [],
+      "sourceUrl": "https://www.immigration.go.kr/immigration/3339/subview.do"
+    },
+    {
+      "docId": "moj-k-eta-scam-warning__candidate__57ce8dd80d04",
+      "baseDocId": "moj-k-eta-scam-warning",
+      "title": "K-ETA 유사 웹사이트 주의",
+      "sourceType": "official_government",
+      "topic": "warning",
+      "grade": "needs_cleaning",
+      "score": 100,
+      "rawLength": 1008,
+      "cleanLength": 819,
+      "chunkCount": 1,
+      "noiseRatio": 0.188,
+      "recommendedAction": "manual_cleaning_or_refetch",
+      "issues": [],
+      "officialKeywordHits": [
+        "법무부",
+        "immigration.go.kr"
+      ],
+      "legalKeywordHits": [],
+      "sourceUrl": "https://www.immigration.go.kr/bbs/immigration/220/597906/artclView.do"
+    },
+    {
+      "docId": "moj-mobile-immigration-office__candidate__084d1f2b32d4",
+      "baseDocId": "moj-mobile-immigration-office",
+      "title": "법무부 이동출입국사무소 운영 안내",
+      "sourceType": "official_government",
+      "topic": "process",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 6636,
+      "cleanLength": 4795,
+      "chunkCount": 3,
+      "noiseRatio": 0.277,
+      "recommendedAction": "clean_and_approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법제처",
+        "법무부",
+        "출입국·외국인",
+        "하이코리아",
+        "대한민국 공식 전자정부",
+        "immigration.go.kr"
+      ],
+      "legalKeywordHits": [],
+      "sourceUrl": "https://www.immigration.go.kr/immigration/2344/subview.do"
+    },
+    {
+      "docId": "moj-notice-board-visa-policy__candidate__eb6dffe0a211",
+      "baseDocId": "moj-notice-board-visa-policy",
+      "title": "법무부 공지사항 체류·사증 정책 변경",
+      "sourceType": "official_government",
+      "topic": "warning",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 9861,
+      "cleanLength": 5898,
+      "chunkCount": 4,
+      "noiseRatio": 0.402,
+      "recommendedAction": "clean_and_approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법제처",
+        "법무부",
+        "출입국·외국인",
+        "하이코리아",
+        "대한민국 공식 전자정부",
+        "immigration.go.kr"
+      ],
+      "legalKeywordHits": [],
+      "sourceUrl": "https://www.immigration.go.kr/moj/223/subview.do"
+    },
+    {
+      "docId": "moj-office-jurisdiction-busan-gyeongnam__candidate__51827b13a966",
+      "baseDocId": "moj-office-jurisdiction-busan-gyeongnam",
+      "title": "법무부 소속기관 관할구역 부산·경남",
+      "sourceType": "official_government",
+      "topic": "process",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 7702,
+      "cleanLength": 5589,
+      "chunkCount": 3,
+      "noiseRatio": 0.274,
+      "recommendedAction": "clean_and_approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법제처",
+        "법무부",
+        "출입국·외국인",
+        "하이코리아",
+        "대한민국 공식 전자정부",
+        "immigration.go.kr"
+      ],
+      "legalKeywordHits": [],
+      "sourceUrl": "https://www.immigration.go.kr/immigration/2058/subview.do"
+    },
+    {
+      "docId": "moj-office-jurisdiction-daegu-gyeongbuk-gangwon__candidate__e205227b3a8e",
+      "baseDocId": "moj-office-jurisdiction-daegu-gyeongbuk-gangwon",
+      "title": "법무부 소속기관 관할구역 대구·경북·강원",
+      "sourceType": "official_government",
+      "topic": "process",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 7481,
+      "cleanLength": 5434,
+      "chunkCount": 3,
+      "noiseRatio": 0.274,
+      "recommendedAction": "clean_and_approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법제처",
+        "법무부",
+        "출입국·외국인",
+        "하이코리아",
+        "대한민국 공식 전자정부",
+        "immigration.go.kr"
+      ],
+      "legalKeywordHits": [],
+      "sourceUrl": "https://www.immigration.go.kr/immigration/2060/subview.do"
+    },
+    {
+      "docId": "moj-office-jurisdiction-daejeon-chungcheong__candidate__1cc6dc14524a",
+      "baseDocId": "moj-office-jurisdiction-daejeon-chungcheong",
+      "title": "법무부 소속기관 관할구역 대전·충청",
+      "sourceType": "official_government",
+      "topic": "process",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 7722,
+      "cleanLength": 5629,
+      "chunkCount": 3,
+      "noiseRatio": 0.271,
+      "recommendedAction": "clean_and_approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법제처",
+        "법무부",
+        "출입국·외국인",
+        "하이코리아",
+        "대한민국 공식 전자정부",
+        "immigration.go.kr"
+      ],
+      "legalKeywordHits": [],
+      "sourceUrl": "https://www.immigration.go.kr/immigration/2061/subview.do"
+    },
+    {
+      "docId": "moj-office-jurisdiction-gwangju-jeolla-jeju__candidate__9d8a8f56bede",
+      "baseDocId": "moj-office-jurisdiction-gwangju-jeolla-jeju",
+      "title": "법무부 소속기관 관할구역 광주·전라·제주",
+      "sourceType": "official_government",
+      "topic": "process",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 7712,
+      "cleanLength": 5627,
+      "chunkCount": 3,
+      "noiseRatio": 0.27,
+      "recommendedAction": "clean_and_approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법제처",
+        "법무부",
+        "출입국·외국인",
+        "하이코리아",
+        "대한민국 공식 전자정부",
+        "immigration.go.kr"
+      ],
+      "legalKeywordHits": [],
+      "sourceUrl": "https://www.immigration.go.kr/immigration/2059/subview.do"
+    },
+    {
+      "docId": "moj-office-jurisdiction-seoul-incheon-gyeonggi__candidate__ec06382c1ac2",
+      "baseDocId": "moj-office-jurisdiction-seoul-incheon-gyeonggi",
+      "title": "법무부 소속기관 관할구역 서울·인천·경기",
+      "sourceType": "official_government",
+      "topic": "process",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 9531,
+      "cleanLength": 7086,
+      "chunkCount": 5,
+      "noiseRatio": 0.257,
+      "recommendedAction": "clean_and_approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법제처",
+        "법무부",
+        "출입국·외국인",
+        "하이코리아",
+        "대한민국 공식 전자정부",
+        "immigration.go.kr"
+      ],
+      "legalKeywordHits": [],
+      "sourceUrl": "https://www.immigration.go.kr/immigration/2057/subview.do"
+    },
+    {
+      "docId": "moj-online-stay-visa-center__candidate__ee4f42359b9b",
+      "baseDocId": "moj-online-stay-visa-center",
+      "title": "법무부 온라인체류·사증민원센터",
+      "sourceType": "official_government",
+      "topic": "process",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 9243,
+      "cleanLength": 6344,
+      "chunkCount": 4,
+      "noiseRatio": 0.314,
+      "recommendedAction": "clean_and_approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법제처",
+        "법무부",
+        "출입국·외국인",
+        "하이코리아",
+        "대한민국 공식 전자정부",
+        "immigration.go.kr",
+        "hikorea.go.kr"
+      ],
+      "legalKeywordHits": [],
+      "sourceUrl": "https://www.immigration.go.kr/moj/198/subview.do"
+    },
+    {
+      "docId": "moj-seasonal-worker-program__candidate__5dc6bf5f26d4",
+      "baseDocId": "moj-seasonal-worker-program",
+      "title": "법무부 외국인 계절근로자 프로그램",
+      "sourceType": "official_government",
+      "topic": "visa",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 9316,
+      "cleanLength": 6376,
+      "chunkCount": 4,
+      "noiseRatio": 0.316,
+      "recommendedAction": "clean_and_approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법제처",
+        "법무부",
+        "출입국·외국인",
+        "하이코리아",
+        "대한민국 공식 전자정부",
+        "immigration.go.kr"
+      ],
+      "legalKeywordHits": [
+        "체류자격"
+      ],
+      "sourceUrl": "https://www.immigration.go.kr/moj/194/subview.do"
+    },
+    {
+      "docId": "moj-skilled-worker-points-visa__candidate__197f409c615f",
+      "baseDocId": "moj-skilled-worker-points-visa",
+      "title": "법무부 외국인 숙련기능인력 점수제 비자",
+      "sourceType": "official_government",
+      "topic": "visa",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 9465,
+      "cleanLength": 6496,
+      "chunkCount": 4,
+      "noiseRatio": 0.314,
+      "recommendedAction": "clean_and_approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법제처",
+        "법무부",
+        "출입국관리법",
+        "출입국·외국인",
+        "하이코리아",
+        "대한민국 공식 전자정부",
+        "immigration.go.kr"
+      ],
+      "legalKeywordHits": [],
+      "sourceUrl": "https://www.immigration.go.kr/moj/187/subview.do"
+    },
+    {
+      "docId": "moj-social-integration-program-kiip__candidate__1d6bd933d5e6",
+      "baseDocId": "moj-social-integration-program-kiip",
+      "title": "법무부 사회통합프로그램",
+      "sourceType": "official_government",
+      "topic": "visa",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 8912,
+      "cleanLength": 6041,
+      "chunkCount": 4,
+      "noiseRatio": 0.322,
+      "recommendedAction": "clean_and_approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법제처",
+        "법무부",
+        "출입국·외국인",
+        "하이코리아",
+        "대한민국 공식 전자정부",
+        "immigration.go.kr"
+      ],
+      "legalKeywordHits": [
+        "체류자격"
+      ],
+      "sourceUrl": "https://www.immigration.go.kr/moj/369/subview.do"
+    },
+    {
+      "docId": "moj-stay-management-policy__candidate__8829efece56e",
+      "baseDocId": "moj-stay-management-policy",
+      "title": "법무부 외국인 체류관리 정책",
+      "sourceType": "official_government",
+      "topic": "process",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 13756,
+      "cleanLength": 11740,
+      "chunkCount": 6,
+      "noiseRatio": 0.147,
+      "recommendedAction": "approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법제처",
+        "법무부",
+        "출입국관리법",
+        "출입국·외국인",
+        "하이코리아",
+        "대한민국 공식 전자정부",
+        "immigration.go.kr",
+        "hikorea.go.kr",
+        "visa.go.kr"
+      ],
+      "legalKeywordHits": [
+        "체류자격",
+        "법무부장관"
+      ],
+      "sourceUrl": "https://www.immigration.go.kr/immigration/1515/subview.do"
+    },
+    {
+      "docId": "moj-tax-health-arrears-extension-restriction__candidate__872772e56f01",
+      "baseDocId": "moj-tax-health-arrears-extension-restriction",
+      "title": "외국인 비자연장 전 세금·건강보험료 체납 확인제도",
+      "sourceType": "official_government",
+      "topic": "warning",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 7386,
+      "cleanLength": 5364,
+      "chunkCount": 3,
+      "noiseRatio": 0.274,
+      "recommendedAction": "clean_and_approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법제처",
+        "법무부",
+        "출입국·외국인",
+        "하이코리아",
+        "대한민국 공식 전자정부",
+        "immigration.go.kr"
+      ],
+      "legalKeywordHits": [],
+      "sourceUrl": "https://www.immigration.go.kr/immigration/1522/subview.do"
+    },
+    {
+      "docId": "immigration-act-departure-inspection__candidate__df4374f3bcc3",
+      "baseDocId": "immigration-act-departure-inspection",
+      "title": "출입국관리법 제28조 출국심사",
+      "sourceType": "official_law",
+      "topic": "process",
+      "grade": "approve_ready",
+      "score": 92,
+      "rawLength": 3531,
+      "cleanLength": 822,
+      "chunkCount": 2,
+      "noiseRatio": 0.767,
+      "recommendedAction": "clean_and_approve",
+      "issues": [
+        "ui_noise_high"
+      ],
+      "officialKeywordHits": [
+        "법무부",
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "제\\d+조",
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정",
+        "전문개정"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0028&lsiSeq=272921&urlMode=lsScJoRltInfoR"
+    },
+    {
+      "docId": "immigration-act-departure-recommendation-order__candidate__9de667fe948b",
+      "baseDocId": "immigration-act-departure-recommendation-order",
+      "title": "출입국관리법 제67조·제68조 출국권고·출국명령",
+      "sourceType": "official_law",
+      "topic": "warning",
+      "grade": "reject",
+      "score": 32,
+      "rawLength": 4455,
+      "cleanLength": 355,
+      "chunkCount": 3,
+      "noiseRatio": 0.92,
+      "recommendedAction": "reject_or_supersede",
+      "issues": [
+        "clean_content_short",
+        "ui_noise_extreme",
+        "missing_article_or_table_marker"
+      ],
+      "officialKeywordHits": [
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=272921"
+    },
+    {
+      "docId": "immigration-act-departure-suspension__candidate__a29a5502cecd",
+      "baseDocId": "immigration-act-departure-suspension",
+      "title": "출입국관리법 제29조 외국인 출국의 정지",
+      "sourceType": "official_law",
+      "topic": "warning",
+      "grade": "needs_cleaning",
+      "score": 78,
+      "rawLength": 3327,
+      "cleanLength": 638,
+      "chunkCount": 2,
+      "noiseRatio": 0.808,
+      "recommendedAction": "manual_cleaning_or_refetch",
+      "issues": [
+        "clean_content_short",
+        "ui_noise_high"
+      ],
+      "officialKeywordHits": [
+        "법무부",
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "제\\d+조",
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정",
+        "전문개정",
+        "법무부장관"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0029&lsiSeq=272921&urlMode=lsScJoRltInfoR"
+    },
+    {
+      "docId": "immigration-act-deportation-detention__candidate__b89f0d3c0b85",
+      "baseDocId": "immigration-act-deportation-detention",
+      "title": "출입국관리법 제63조 강제퇴거명령을 받은 사람의 보호",
+      "sourceType": "official_law",
+      "topic": "warning",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 4641,
+      "cleanLength": 1912,
+      "chunkCount": 2,
+      "noiseRatio": 0.588,
+      "recommendedAction": "clean_and_approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법무부",
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "제\\d+조",
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정",
+        "전문개정",
+        "법무부장관"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0063&lsiSeq=272921&urlMode=lsScJoRltInfoR"
+    },
+    {
+      "docId": "immigration-act-deportation-grounds__candidate__63ddf8db3623",
+      "baseDocId": "immigration-act-deportation-grounds",
+      "title": "출입국관리법 제46조 강제퇴거의 대상자",
+      "sourceType": "official_law",
+      "topic": "warning",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 4526,
+      "cleanLength": 1757,
+      "chunkCount": 2,
+      "noiseRatio": 0.612,
+      "recommendedAction": "clean_and_approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "법무부",
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "제\\d+조",
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정",
+        "전문개정",
+        "법무부장관"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0046&lsiSeq=272921&urlMode=lsScJoRltInfoR"
+    },
+    {
+      "docId": "immigration-act-deportation-objection__candidate__fb9ef0698db9",
+      "baseDocId": "immigration-act-deportation-objection",
+      "title": "출입국관리법 제60조 강제퇴거명령 이의신청",
+      "sourceType": "official_law",
+      "topic": "warning",
+      "grade": "approve_ready",
+      "score": 92,
+      "rawLength": 3698,
+      "cleanLength": 991,
+      "chunkCount": 2,
+      "noiseRatio": 0.732,
+      "recommendedAction": "clean_and_approve",
+      "issues": [
+        "ui_noise_high"
+      ],
+      "officialKeywordHits": [
+        "법무부",
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "제\\d+조",
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정",
+        "전문개정",
+        "법무부장관"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0060&lsiSeq=272921&urlMode=lsScJoRltInfoR"
+    },
+    {
+      "docId": "immigration-act-detention-order__candidate__1b475eebae55",
+      "baseDocId": "immigration-act-detention-order",
+      "title": "출입국관리법 제51조 보호명령서·긴급보호",
+      "sourceType": "official_law",
+      "topic": "warning",
+      "grade": "approve_ready",
+      "score": 92,
+      "rawLength": 3701,
+      "cleanLength": 1000,
+      "chunkCount": 2,
+      "noiseRatio": 0.73,
+      "recommendedAction": "clean_and_approve",
+      "issues": [
+        "ui_noise_high"
+      ],
+      "officialKeywordHits": [
+        "법무부",
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "제\\d+조",
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정",
+        "전문개정"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0051&lsiSeq=272921&urlMode=lsScJoRltInfoR"
+    },
+    {
+      "docId": "immigration-act-detention-temporary-release__candidate__2ad31416fe50",
+      "baseDocId": "immigration-act-detention-temporary-release",
+      "title": "출입국관리법 제65조 보호의 일시해제",
+      "sourceType": "official_law",
+      "topic": "warning",
+      "grade": "approve_ready",
+      "score": 92,
+      "rawLength": 3575,
+      "cleanLength": 882,
+      "chunkCount": 2,
+      "noiseRatio": 0.753,
+      "recommendedAction": "clean_and_approve",
+      "issues": [
+        "ui_noise_high"
+      ],
+      "officialKeywordHits": [
+        "법무부",
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "제\\d+조",
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정",
+        "전문개정"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0065&lsiSeq=272921&urlMode=lsScJoRltInfoR"
+    },
+    {
+      "docId": "immigration-act-emergency-extension-special__candidate__e1e26c303200",
+      "baseDocId": "immigration-act-emergency-extension-special",
+      "title": "출입국관리법 제25조의5 국가비상사태 등 체류기간 연장 특칙",
+      "sourceType": "official_law",
+      "topic": "process",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 79693,
+      "cleanLength": 75202,
+      "chunkCount": 35,
+      "noiseRatio": 0.056,
+      "recommendedAction": "approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "국가법령정보센터",
+        "법무부",
+        "출입국관리법",
+        "출입국·외국인",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "제\\d+조",
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정",
+        "체류자격",
+        "법무부장관"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsRvsDocListP.do?chrClsCd=010202&lsId=001707&lsRvsGubun=all"
+    },
+    {
+      "docId": "immigration-act-general-stay-status__candidate__788c56826f1a",
+      "baseDocId": "immigration-act-general-stay-status",
+      "title": "출입국관리법 제10조의2 일반체류자격",
+      "sourceType": "official_law",
+      "topic": "legal",
+      "grade": "needs_cleaning",
+      "score": 86,
+      "rawLength": 822,
+      "cleanLength": 633,
+      "chunkCount": 1,
+      "noiseRatio": 0.23,
+      "recommendedAction": "manual_cleaning_or_refetch",
+      "issues": [
+        "clean_content_short"
+      ],
+      "officialKeywordHits": [
+        "국가법령정보센터",
+        "법무부",
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "제\\d+조",
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정",
+        "체류자격"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsLawLinkInfo.do?chrClsCd=010202&lsJoLnkSeq=1000817596"
+    },
+    {
+      "docId": "immigration-act-marriage-immigrant-extension-special__candidate__afd42e90643a",
+      "baseDocId": "immigration-act-marriage-immigrant-extension-special",
+      "title": "출입국관리법 제25조의2 결혼이민자 등에 대한 특칙",
+      "sourceType": "official_law",
+      "topic": "process",
+      "grade": "approve_ready",
+      "score": 100,
+      "rawLength": 1156,
+      "cleanLength": 1047,
+      "chunkCount": 1,
+      "noiseRatio": 0.094,
+      "recommendedAction": "approve",
+      "issues": [],
+      "officialKeywordHits": [
+        "국가법령정보센터",
+        "법무부",
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "제\\d+조",
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정",
+        "전문개정",
+        "법무부장관"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsLawLinkInfo.do?chrClsCd=010202&lsJoLnkSeq=1000822759"
+    },
+    {
+      "docId": "immigration-act-permanent-residence-status__candidate__a8eda8e37290",
+      "baseDocId": "immigration-act-permanent-residence-status",
+      "title": "출입국관리법 제10조의3 영주자격",
+      "sourceType": "official_law",
+      "topic": "legal",
+      "grade": "needs_cleaning",
+      "score": 86,
+      "rawLength": 779,
+      "cleanLength": 589,
+      "chunkCount": 1,
+      "noiseRatio": 0.244,
+      "recommendedAction": "manual_cleaning_or_refetch",
+      "issues": [
+        "clean_content_short"
+      ],
+      "officialKeywordHits": [
+        "국가법령정보센터",
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "제\\d+조",
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsLawLinkInfo.do?chrClsCd=010202&lsJoLnkSeq=1000817607"
+    },
+    {
+      "docId": "immigration-act-permission-matrix__candidate__aec13dfe824c",
+      "baseDocId": "immigration-act-permission-matrix",
+      "title": "출입국관리법 변경·연장·자격외활동 허가 구조",
+      "sourceType": "official_law",
+      "topic": "legal",
+      "grade": "reject",
+      "score": 11,
+      "rawLength": 4365,
+      "cleanLength": 265,
+      "chunkCount": 3,
+      "noiseRatio": 0.939,
+      "recommendedAction": "reject_or_supersede",
+      "issues": [
+        "clean_content_too_short",
+        "ui_noise_extreme",
+        "missing_article_or_table_marker"
+      ],
+      "officialKeywordHits": [
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=272921"
+    },
+    {
+      "docId": "immigration-act-permission-matrix__candidate__quality-hold-27e44cf65aae",
+      "baseDocId": "immigration-act-permission-matrix",
+      "title": "출입국관리법 변경·연장·자격외활동 허가 구조",
+      "sourceType": "official_law",
+      "topic": "legal",
+      "grade": "reject",
+      "score": 41,
+      "rawLength": 273,
+      "cleanLength": 273,
+      "chunkCount": 1,
+      "noiseRatio": 0,
+      "recommendedAction": "reject_or_supersede",
+      "issues": [
+        "clean_content_too_short",
+        "missing_article_or_table_marker"
+      ],
+      "officialKeywordHits": [
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=245973"
+    },
+    {
+      "docId": "immigration-act-permit-cancellation-change__candidate__566218586e6f",
+      "baseDocId": "immigration-act-permit-cancellation-change",
+      "title": "출입국관리법 제89조 각종 허가 등의 취소·변경",
+      "sourceType": "official_law",
+      "topic": "warning",
+      "grade": "approve_ready",
+      "score": 92,
+      "rawLength": 3821,
+      "cleanLength": 1106,
+      "chunkCount": 2,
+      "noiseRatio": 0.711,
+      "recommendedAction": "clean_and_approve",
+      "issues": [
+        "ui_noise_high"
+      ],
+      "officialKeywordHits": [
+        "법무부",
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "제\\d+조",
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정",
+        "전문개정",
+        "법무부장관"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0089&lsiSeq=272921&urlMode=lsScJoRltInfoR"
+    },
+    {
+      "docId": "immigration-act-stay-status-scope__candidate__cb26e57a01b3",
+      "baseDocId": "immigration-act-stay-status-scope",
+      "title": "출입국관리법 체류자격·활동범위",
+      "sourceType": "official_law",
+      "topic": "legal",
+      "grade": "reject",
+      "score": 11,
+      "rawLength": 4357,
+      "cleanLength": 257,
+      "chunkCount": 3,
+      "noiseRatio": 0.941,
+      "recommendedAction": "reject_or_supersede",
+      "issues": [
+        "clean_content_too_short",
+        "ui_noise_extreme",
+        "missing_article_or_table_marker"
+      ],
+      "officialKeywordHits": [
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=272921"
+    },
+    {
+      "docId": "immigration-act-stay-status-scope__candidate__quality-hold-be9914044c12",
+      "baseDocId": "immigration-act-stay-status-scope",
+      "title": "출입국관리법 체류자격·활동범위",
+      "sourceType": "official_law",
+      "topic": "legal",
+      "grade": "reject",
+      "score": 41,
+      "rawLength": 265,
+      "cleanLength": 265,
+      "chunkCount": 1,
+      "noiseRatio": 0,
+      "recommendedAction": "reject_or_supersede",
+      "issues": [
+        "clean_content_too_short",
+        "missing_article_or_table_marker"
+      ],
+      "officialKeywordHits": [
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=245973"
+    },
+    {
+      "docId": "immigration-act-student-management-reporting__candidate__e589f5bbb4d4",
+      "baseDocId": "immigration-act-student-management-reporting",
+      "title": "출입국관리법 제19조의4 외국인유학생의 관리 등",
+      "sourceType": "official_law",
+      "topic": "process",
+      "grade": "reject",
+      "score": 32,
+      "rawLength": 4491,
+      "cleanLength": 391,
+      "chunkCount": 3,
+      "noiseRatio": 0.913,
+      "recommendedAction": "reject_or_supersede",
+      "issues": [
+        "clean_content_short",
+        "ui_noise_extreme",
+        "missing_article_or_table_marker"
+      ],
+      "officialKeywordHits": [
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=272921"
+    },
+    {
+      "docId": "immigration-act-visa-issuance-certificate__candidate__quality-hold-8e5405163ce0",
+      "baseDocId": "immigration-act-visa-issuance-certificate",
+      "title": "출입국관리법 제8조·제9조 사증·사증발급인정서",
+      "sourceType": "official_law",
+      "topic": "process",
+      "grade": "needs_cleaning",
+      "score": 17,
+      "rawLength": 415,
+      "cleanLength": 415,
+      "chunkCount": 1,
+      "noiseRatio": 0,
+      "recommendedAction": "manual_cleaning_or_refetch",
+      "issues": [
+        "clean_content_short",
+        "missing_article_or_table_marker",
+        "missing_required_article_body"
+      ],
+      "officialKeywordHits": [
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=272921"
+    },
+    {
+      "docId": "immigration-decree-current-text__candidate__quality-hold-afc697d96a32",
+      "baseDocId": "immigration-decree-current-text",
+      "title": "출입국관리법 시행령 최신 본문",
+      "sourceType": "official_law",
+      "topic": "legal",
+      "grade": "reject",
+      "score": 41,
+      "rawLength": 266,
+      "cleanLength": 266,
+      "chunkCount": 1,
+      "noiseRatio": 0,
+      "recommendedAction": "reject_or_supersede",
+      "issues": [
+        "clean_content_too_short",
+        "missing_article_or_table_marker"
+      ],
+      "officialKeywordHits": [
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "시행\\s*\\d{4}",
+        "대통령령\\s*제\\d+호",
+        "일부개정"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=271319"
+    },
+    {
+      "docId": "immigration-decree-long-term-status-table__candidate__quality-hold-62bded6883e4",
+      "baseDocId": "immigration-decree-long-term-status-table",
+      "title": "출입국관리법 시행령 별표 1의2 장기체류자격",
+      "sourceType": "official_law",
+      "topic": "legal",
+      "grade": "reject",
+      "score": 65,
+      "rawLength": 247,
+      "cleanLength": 247,
+      "chunkCount": 1,
+      "noiseRatio": 0,
+      "recommendedAction": "reject_or_supersede",
+      "issues": [
+        "clean_content_too_short"
+      ],
+      "officialKeywordHits": [
+        "국가법령정보센터",
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "제\\d+조",
+        "별표",
+        "서식",
+        "체류자격"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsLawLinkInfo.do?lsJoLnkSeq=1000870036"
+    },
+    {
+      "docId": "immigration-decree-permanent-residence-table__candidate__012ac5ecea95",
+      "baseDocId": "immigration-decree-permanent-residence-table",
+      "title": "출입국관리법 시행령 별표 1의3 영주자격",
+      "sourceType": "official_law",
+      "topic": "legal",
+      "grade": "needs_cleaning",
+      "score": 86,
+      "rawLength": 500,
+      "cleanLength": 467,
+      "chunkCount": 1,
+      "noiseRatio": 0.066,
+      "recommendedAction": "manual_cleaning_or_refetch",
+      "issues": [
+        "clean_content_short"
+      ],
+      "officialKeywordHits": [
+        "국가법령정보센터",
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "제\\d+조",
+        "별표",
+        "서식"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsBylInfoPLinkR.do?lsiSeq=271319&lsNm=%EC%B6%9C%EC%9E%85%EA%B5%AD%EA%B4%80%EB%A6%AC%EB%B2%95+%EC%8B%9C%ED%96%89%EB%A0%B9&bylNo=0001&bylBrNo=03&bylCls=BE&bylEfYd=20250601&bylEfYdYn=Y"
+    },
+    {
+      "docId": "immigration-decree-short-term-status-table__candidate__c90bb44d6d49",
+      "baseDocId": "immigration-decree-short-term-status-table",
+      "title": "출입국관리법 시행령 별표 1 단기체류자격",
+      "sourceType": "official_law",
+      "topic": "legal",
+      "grade": "needs_cleaning",
+      "score": 86,
+      "rawLength": 462,
+      "cleanLength": 429,
+      "chunkCount": 1,
+      "noiseRatio": 0.071,
+      "recommendedAction": "manual_cleaning_or_refetch",
+      "issues": [
+        "clean_content_short"
+      ],
+      "officialKeywordHits": [
+        "국가법령정보센터",
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "제\\d+조",
+        "별표",
+        "서식",
+        "체류자격"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsBylInfoPLinkR.do?lsiSeq=271319&lsNm=%EC%B6%9C%EC%9E%85%EA%B5%AD%EA%B4%80%EB%A6%AC%EB%B2%95+%EC%8B%9C%ED%96%89%EB%A0%B9&bylNo=0001&bylBrNo=00&bylCls=BE&bylEfYd=20250601&bylEfYdYn=Y"
+    },
+    {
+      "docId": "immigration-law-interpretation-hierarchy__candidate__1bcc11c65fdb",
+      "baseDocId": "immigration-law-interpretation-hierarchy",
+      "title": "출입국관리법 제10조·제17조 법령 해석 순서",
+      "sourceType": "official_law",
+      "topic": "legal",
+      "grade": "reject",
+      "score": 11,
+      "rawLength": 4432,
+      "cleanLength": 332,
+      "chunkCount": 3,
+      "noiseRatio": 0.925,
+      "recommendedAction": "reject_or_supersede",
+      "issues": [
+        "clean_content_too_short",
+        "ui_noise_extreme",
+        "missing_article_or_table_marker"
+      ],
+      "officialKeywordHits": [
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=272921"
+    },
+    {
+      "docId": "immigration-law-violation-risk__candidate__9d9dbf293fbe",
+      "baseDocId": "immigration-law-violation-risk",
+      "title": "출입국관리법 위반 제재",
+      "sourceType": "official_law",
+      "topic": "warning",
+      "grade": "reject",
+      "score": 11,
+      "rawLength": 4355,
+      "cleanLength": 255,
+      "chunkCount": 3,
+      "noiseRatio": 0.941,
+      "recommendedAction": "reject_or_supersede",
+      "issues": [
+        "clean_content_too_short",
+        "ui_noise_extreme",
+        "missing_article_or_table_marker"
+      ],
+      "officialKeywordHits": [
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=272921"
+    },
+    {
+      "docId": "immigration-law-violation-risk__candidate__quality-hold-af936a46b72f",
+      "baseDocId": "immigration-law-violation-risk",
+      "title": "출입국관리법 위반 제재",
+      "sourceType": "official_law",
+      "topic": "warning",
+      "grade": "reject",
+      "score": 41,
+      "rawLength": 263,
+      "cleanLength": 263,
+      "chunkCount": 1,
+      "noiseRatio": 0,
+      "recommendedAction": "reject_or_supersede",
+      "issues": [
+        "clean_content_too_short",
+        "missing_article_or_table_marker"
+      ],
+      "officialKeywordHits": [
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "시행\\s*\\d{4}",
+        "법률\\s*제\\d+호",
+        "일부개정"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=245973"
+    },
+    {
+      "docId": "immigration-rule-documents-attachments__candidate__quality-hold-635fbe8452bb",
+      "baseDocId": "immigration-rule-documents-attachments",
+      "title": "출입국관리법 시행규칙 제76조·별표 5·별표 5의2",
+      "sourceType": "official_law",
+      "topic": "documents",
+      "grade": "reject",
+      "score": 41,
+      "rawLength": 284,
+      "cleanLength": 284,
+      "chunkCount": 1,
+      "noiseRatio": 0,
+      "recommendedAction": "reject_or_supersede",
+      "issues": [
+        "clean_content_too_short",
+        "missing_article_or_table_marker"
+      ],
+      "officialKeywordHits": [
+        "법무부",
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "시행\\s*\\d{4}",
+        "법무부령\\s*제\\d+호",
+        "일부개정"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=283059"
+    },
+    {
+      "docId": "immigration-rule-stay-permission-review-criteria__candidate__5d7904e4c14f",
+      "baseDocId": "immigration-rule-stay-permission-review-criteria",
+      "title": "출입국관리법 시행규칙 제31조의2 체류자격 부여 등 심사기준",
+      "sourceType": "official_law",
+      "topic": "legal",
+      "grade": "reject",
+      "score": 32,
+      "rawLength": 4496,
+      "cleanLength": 355,
+      "chunkCount": 3,
+      "noiseRatio": 0.921,
+      "recommendedAction": "reject_or_supersede",
+      "issues": [
+        "clean_content_short",
+        "ui_noise_extreme",
+        "missing_article_or_table_marker"
+      ],
+      "officialKeywordHits": [
+        "법무부",
+        "출입국관리법",
+        "law.go.kr"
+      ],
+      "legalKeywordHits": [
+        "시행\\s*\\d{4}",
+        "법무부령\\s*제\\d+호",
+        "일부개정"
+      ],
+      "sourceUrl": "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=283059"
+    }
+  ]
+}

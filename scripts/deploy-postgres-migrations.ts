@@ -5,7 +5,13 @@ import { join } from "path";
 const ROOT = process.cwd();
 const ENV_FILE = join(ROOT, ".vercel", ".env.production.local");
 const FUNCTIONS_DIR = join(ROOT, ".vercel", "output", "functions");
-const POSTGRES_KEYS = ["DATABASE_URL", "POSTGRES_URL"] as const;
+const POSTGRES_KEYS = [
+  "SUPABASE_DIRECT_URL",
+  "DATABASE_URL",
+  "POSTGRES_URL",
+  "SUPABASE_DATABASE_URL",
+  "SUPABASE_POOLER_URL",
+] as const;
 
 type EnvSource = {
   label: string;
@@ -134,7 +140,7 @@ if (!postgresUrl) {
     (summaryItems.length > 24 ? `, ... ${summaryItems.length - 24} more` : "");
   console.error(
     `[deploy-postgres-migrations] direct PostgreSQL URL not found. ` +
-      `Set DATABASE_URL or POSTGRES_URL to postgres:// or postgresql:// before deploying. ` +
+      `Set DATABASE_URL, POSTGRES_URL, or SUPABASE_DIRECT_URL to postgres:// or postgresql:// before deploying. ` +
       `Detected: ${summary || "no environment sources"}`
   );
   process.exit(1);

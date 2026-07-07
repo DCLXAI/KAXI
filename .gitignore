@@ -61,3 +61,4 @@ server.log
 /data/model-cache/
 /data/vector-store/
 /db/*.db
+/supabase/.temp/

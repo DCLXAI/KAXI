@@ -26,31 +26,19 @@ if (!connectivity.ok) {
 }
 
 try {
-  const [
-    schools,
-    auditLogs,
-    rateLimitBuckets,
-    organizations,
-    users,
-    studentProfiles,
-    consents,
-    complianceRules,
-    knowledgeDocuments,
-    escalationCases,
-    auditEvents,
-  ] = await Promise.all([
-    db.school.count(),
-    db.adminAuditLog.count(),
-    db.rateLimitBucket.count(),
-    db.organization.count(),
-    db.user.count(),
-    db.studentProfile.count(),
-    db.consent.count(),
-    db.complianceRule.count(),
-    db.knowledgeDocument.count(),
-    db.escalationCase.count(),
-    db.auditEvent.count(),
-  ]);
+  // Keep these sequential so Supabase pooler/session-mode databases do not
+  // briefly exceed small connection pool limits during a health check.
+  const schools = await db.school.count();
+  const auditLogs = await db.adminAuditLog.count();
+  const rateLimitBuckets = await db.rateLimitBucket.count();
+  const organizations = await db.organization.count();
+  const users = await db.user.count();
+  const studentProfiles = await db.studentProfile.count();
+  const consents = await db.consent.count();
+  const complianceRules = await db.complianceRule.count();
+  const knowledgeDocuments = await db.knowledgeDocument.count();
+  const escalationCases = await db.escalationCase.count();
+  const auditEvents = await db.auditEvent.count();
 
   if (schools <= 0) {
     fail("School table is empty. Run bun run db:seed:schools with production DB env loaded.");
