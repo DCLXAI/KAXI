@@ -20,6 +20,10 @@ const CASE_INCLUDE = {
     },
   },
   reviews: true,
+  organization: true,
+  assignedUser: true,
+  timelineEvents: true,
+  documentLinks: { include: { documentItem: true } },
 } as const;
 
 export async function GET(req: NextRequest, { params }: RouteParams) {
@@ -47,12 +51,19 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       }),
     ]);
 
-    const events = [
+    const [partnerOffices, events] = await Promise.all([
+      db.organization.findMany({
+        where: { type: "PARTNER_AGENT_OFFICE" },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      Promise.resolve([
       ...auditEvents.map(toAuditEventItem),
       ...adminLogs.map(toAdminAuditLogItem),
-    ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      ].sort((a, b) => b.createdAt.localeCompare(a.createdAt))),
+    ]);
 
-    return NextResponse.json({ case: toAdminCaseDetail(caseItem, events) });
+    return NextResponse.json({ case: toAdminCaseDetail(caseItem, events, partnerOffices) });
   } catch (err) {
     console.error("[GET /api/admin/cases/:id]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

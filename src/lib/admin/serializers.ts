@@ -10,7 +10,9 @@ import type {
   AdminCaseBucket,
   AdminCaseCounts,
   AdminCaseDetail,
+  AdminCaseDocumentLinkItem,
   AdminCaseListItem,
+  AdminCaseTimelineItem,
   AdminComplianceEvaluationItem,
   AdminDocumentItem,
   AdminKnowledgeItem,
@@ -30,6 +32,10 @@ type CaseWithRelations = Prisma.EscalationCaseGetPayload<{
       };
     };
     reviews: true;
+    organization: true;
+    assignedUser: true;
+    timelineEvents: true;
+    documentLinks: { include: { documentItem: true } };
   };
 }>;
 
@@ -121,6 +127,12 @@ export function toAdminCaseListItem(caseItem: CaseWithRelations): AdminCaseListI
     missingDocumentCount,
     reviewCount: caseItem.reviews.length,
     bucket: getCaseBucket(caseItem),
+    organizationId: caseItem.organizationId,
+    organizationName: caseItem.organization?.name || null,
+    assignedUserId: caseItem.assignedUserId,
+    matchedAt: iso(caseItem.matchedAt),
+    acceptedAt: iso(caseItem.acceptedAt),
+    closedAt: iso(caseItem.closedAt),
   };
 }
 
@@ -171,7 +183,35 @@ function toAdminReviewItem(review: CaseWithRelations["reviews"][number]): AdminR
   };
 }
 
-export function toAdminCaseDetail(caseItem: CaseWithRelations, auditEvents: AdminAuditItem[]): AdminCaseDetail {
+function toAdminTimelineItem(event: CaseWithRelations["timelineEvents"][number]): AdminCaseTimelineItem {
+  return {
+    id: event.id,
+    eventType: event.eventType,
+    message: event.message,
+    actorUserId: event.actorUserId,
+    actorRole: event.actorRole,
+    metadata: event.metadata,
+    createdAt: event.createdAt.toISOString(),
+  };
+}
+
+function toAdminCaseDocumentLink(link: CaseWithRelations["documentLinks"][number]): AdminCaseDocumentLinkItem {
+  return {
+    id: link.id,
+    documentItemId: link.documentItemId,
+    documentType: link.documentItem.documentType,
+    purpose: link.purpose,
+    requested: link.requested,
+    note: link.note,
+    createdAt: link.createdAt.toISOString(),
+  };
+}
+
+export function toAdminCaseDetail(
+  caseItem: CaseWithRelations,
+  auditEvents: AdminAuditItem[],
+  partnerOffices: Array<{ id: string; name: string }> = []
+): AdminCaseDetail {
   return {
     ...toAdminCaseListItem(caseItem),
     student: {
@@ -188,14 +228,20 @@ export function toAdminCaseDetail(caseItem: CaseWithRelations, auditEvents: Admi
     conversationSummary: caseItem.conversationSummary,
     ruleSnapshot: caseItem.ruleSnapshot,
     aiDraft: caseItem.aiDraft,
+    closedReason: caseItem.closedReason,
     documents: caseItem.studentProfile.documents
       .map(toAdminDocumentItem)
       .sort((a, b) => a.documentType.localeCompare(b.documentType)),
+    caseDocumentLinks: caseItem.documentLinks
+      .map(toAdminCaseDocumentLink)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     evaluations: caseItem.studentProfile.complianceEvaluations
       .map(toAdminEvaluationItem)
       .sort((a, b) => b.evaluatedAt.localeCompare(a.evaluatedAt)),
     reviews: caseItem.reviews.map(toAdminReviewItem).sort((a, b) => b.reviewedAt.localeCompare(a.reviewedAt)),
+    timelineEvents: caseItem.timelineEvents.map(toAdminTimelineItem).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     auditEvents,
+    partnerOffices,
   };
 }
 

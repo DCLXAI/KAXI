@@ -54,6 +54,8 @@ const requiredModels = [
   "KnowledgeDocument",
   "KnowledgeChunk",
   "EscalationCase",
+  "CaseTimelineEvent",
+  "CaseDocumentLink",
   "AgentReview",
   "AuditEvent",
 ];

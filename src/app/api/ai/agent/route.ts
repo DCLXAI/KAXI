@@ -20,6 +20,7 @@ import {
 import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
 import { isPiiEncryptionConfigured } from "@/lib/privacy/pii";
 import { isEnvFalse, isEnvTrue } from "@/lib/env";
+import { maybeCreateHighRiskEscalationCase } from "@/lib/cases/high-risk-hook";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -59,6 +60,14 @@ function shouldPersistAgentLedger(): boolean {
 function estimateTokens(question: string, answer: string, preflight: AgentPreflightResult): number {
   const groundedContextChars = preflight.groundingContext.length;
   return Math.max(1, Math.ceil((question.length + answer.length + groundedContextChars) / 4));
+}
+
+function hasHighRiskAgentSignal(toolResults: Array<{ tool: string; summary: string; success: boolean }>): boolean {
+  return toolResults.some((result) =>
+    /risk[_\s-]?level:\s*high|고위험|human[_\s-]?review|행정사 상담|partner_escalation|blocked_reasons/i.test(
+      `${result.tool} ${result.summary}`
+    )
+  );
 }
 
 async function persistAgentLog({
@@ -223,7 +232,7 @@ export async function POST(req: NextRequest) {
     });
     if (parsed.error) return parsed.error;
 
-    const { question, history, leadId } = parsed.value;
+    const { question, history, leadId, studentProfileId } = parsed.value;
     const lang = parsed.value.lang as Lang;
     const ctx: ToolContext = { lang, leadId };
     ledgerContext = { question, leadId, preflight: emptyPreflight(question) };
@@ -303,6 +312,27 @@ export async function POST(req: NextRequest) {
       preflight,
       toolCount: toolResults.length,
     });
+
+    if (hasHighRiskAgentSignal(toolResults)) {
+      maybeCreateHighRiskEscalationCase({
+        studentProfileId,
+        category: "agent:high-risk",
+        summary: "에이전트 상담 고위험 판정",
+        conversationSummary: question,
+        ruleSnapshot: {
+          backend,
+          toolResults: toolResults.map((item) => ({
+            tool: item.tool,
+            summary: item.summary,
+            success: item.success,
+          })),
+        },
+        aiDraft: result.answer,
+        source: "agent",
+      }).catch((err) => {
+        console.warn("[agent high-risk escalation skipped]", err instanceof Error ? err.message : err);
+      });
+    }
 
     return NextResponse.json({
       answer: result.answer,

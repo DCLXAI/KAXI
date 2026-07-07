@@ -296,6 +296,7 @@ export function sanitizeAiBody(
       history,
       mode,
       leadId: typeof body.leadId === "string" ? body.leadId.slice(0, 128) : null,
+      studentProfileId: typeof body.studentProfileId === "string" ? body.studentProfileId.slice(0, 128) : null,
     },
   };
 }

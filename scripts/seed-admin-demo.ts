@@ -153,8 +153,16 @@ export async function seedAdminDemo() {
   });
 
   await db.agentReview.deleteMany({ where: { escalationCaseId: { in: STUDENTS.map((student) => student.caseId) } } });
+  await db.caseTimelineEvent.deleteMany({ where: { escalationCaseId: { in: STUDENTS.map((student) => student.caseId) } } });
+  await db.caseDocumentLink.deleteMany({ where: { escalationCaseId: { in: STUDENTS.map((student) => student.caseId) } } });
   await db.auditEvent.deleteMany({ where: { caseId: { in: STUDENTS.map((student) => student.caseId) } } });
   await db.complianceEvaluation.deleteMany({ where: { studentProfileId: { in: STUDENTS.map((student) => student.profileId) } } });
+  await db.consent.deleteMany({
+    where: {
+      userId: { in: STUDENTS.map((student) => student.userId) },
+      scope: "THIRD_PARTY_PROVISION",
+    },
+  });
 
   for (const [index, student] of STUDENTS.entries()) {
     await db.user.upsert({
@@ -195,6 +203,17 @@ export async function seedAdminDemo() {
         semesterStatus: index === 4 ? "ready_to_file" : "preparing",
         topikLevel: student.visaType === "D-2" ? 3 : 1,
         visaExpiryDate: futureDate(index === 1 ? 9 : 60),
+      },
+    });
+
+    await db.consent.create({
+      data: {
+        userId: student.userId,
+        scope: "THIRD_PARTY_PROVISION",
+        status: "GRANTED",
+        version: "phase3-demo",
+        locale: "ko",
+        evidenceJson: jsonValue({ source: "seed-admin-demo", caseId: student.caseId }),
       },
     });
 
@@ -239,7 +258,10 @@ export async function seedAdminDemo() {
           .slice(0, 5)
           .map((doc) => `- ${doc.label}: ${doc.note}`)
           .join("\n")}\n\n이 안내는 2026-07-01에 확인된 Study in Korea / 법무부 출처 기준입니다.`,
+        matchedAt: student.status === "APPROVED" ? new Date() : null,
+        acceptedAt: student.status === "APPROVED" ? new Date() : null,
         closedAt: student.status === "APPROVED" ? new Date() : null,
+        closedReason: student.status === "APPROVED" ? "데모 승인 완료" : null,
       },
       create: {
         id: student.caseId,
@@ -255,7 +277,20 @@ export async function seedAdminDemo() {
           .slice(0, 5)
           .map((doc) => `- ${doc.label}: ${doc.note}`)
           .join("\n")}\n\n이 안내는 2026-07-01에 확인된 Study in Korea / 법무부 출처 기준입니다.`,
+        matchedAt: student.status === "APPROVED" ? new Date() : null,
+        acceptedAt: student.status === "APPROVED" ? new Date() : null,
         closedAt: student.status === "APPROVED" ? new Date() : null,
+        closedReason: student.status === "APPROVED" ? "데모 승인 완료" : null,
+      },
+    });
+
+    await db.caseTimelineEvent.create({
+      data: {
+        escalationCaseId: student.caseId,
+        actorRole: "admin",
+        eventType: "case.demo_seed",
+        message: student.summary,
+        metadata: jsonValue({ status: student.status, riskLevel: student.riskLevel }),
       },
     });
 

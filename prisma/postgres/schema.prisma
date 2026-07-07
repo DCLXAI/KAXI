@@ -103,6 +103,7 @@ model Organization {
 
 model User {
   id             String   @id @default(cuid())
+  authUserId     String?  @unique @db.Uuid
   organizationId String?
   role           UserRole
   email          String?  @unique
@@ -118,6 +119,7 @@ model User {
   uploadedFiles  UploadedFile[] @relation("UploadedFileOwner")
   assignedCases  EscalationCase[] @relation("AssignedCases")
   agentReviews   AgentReview[] @relation("AgentReviewReviewer")
+  caseTimelineEvents CaseTimelineEvent[] @relation("CaseTimelineActor")
   auditEvents    AuditEvent[] @relation("AuditActor")
 
   @@index([organizationId])
@@ -205,6 +207,7 @@ model DocumentItem {
 
   studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
   file           UploadedFile?  @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  caseLinks      CaseDocumentLink[]
 
   @@index([studentProfileId])
   @@index([documentType])
@@ -622,6 +625,9 @@ model EscalationCase {
   conversationSummary String?
   ruleSnapshot     Json?
   aiDraft          String?
+  matchedAt        DateTime?
+  acceptedAt       DateTime?
+  closedReason     String?
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
   closedAt         DateTime?
@@ -630,6 +636,8 @@ model EscalationCase {
   studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
   assignedUser   User?          @relation("AssignedCases", fields: [assignedUserId], references: [id], onDelete: SetNull)
   reviews        AgentReview[]
+  timelineEvents CaseTimelineEvent[]
+  documentLinks  CaseDocumentLink[]
 
   @@index([organizationId])
   @@index([studentProfileId])
@@ -637,6 +645,47 @@ model EscalationCase {
   @@index([status])
   @@index([riskLevel])
   @@index([category])
+  @@index([matchedAt])
+  @@index([acceptedAt])
+  @@index([closedAt])
+  @@index([createdAt])
+}
+
+model CaseTimelineEvent {
+  id               String   @id @default(cuid())
+  escalationCaseId String
+  actorUserId      String?
+  actorRole        String?
+  eventType        String
+  message          String?
+  metadata         Json?
+  createdAt        DateTime @default(now())
+
+  escalationCase EscalationCase @relation(fields: [escalationCaseId], references: [id], onDelete: Cascade)
+  actor          User?          @relation("CaseTimelineActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([escalationCaseId])
+  @@index([actorUserId])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+model CaseDocumentLink {
+  id               String   @id @default(cuid())
+  escalationCaseId String
+  documentItemId   String
+  purpose          String   @default("shared")
+  requested        Boolean  @default(false)
+  note             String?
+  createdAt        DateTime @default(now())
+
+  escalationCase EscalationCase @relation(fields: [escalationCaseId], references: [id], onDelete: Cascade)
+  documentItem   DocumentItem   @relation(fields: [documentItemId], references: [id], onDelete: Cascade)
+
+  @@unique([escalationCaseId, documentItemId])
+  @@index([escalationCaseId])
+  @@index([documentItemId])
+  @@index([requested])
   @@index([createdAt])
 }
 

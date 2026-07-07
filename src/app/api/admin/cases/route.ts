@@ -17,6 +17,10 @@ const CASE_INCLUDE = {
     },
   },
   reviews: true,
+  organization: true,
+  assignedUser: true,
+  timelineEvents: true,
+  documentLinks: { include: { documentItem: true } },
 } as const;
 
 function isBucket(value: string | null): value is AdminCaseBucket {

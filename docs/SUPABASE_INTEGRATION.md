@@ -97,4 +97,39 @@ Enable the `vector` extension and add embeddings to `KnowledgeChunk` or a dedica
 
 ### Phase 4: Supabase Auth / RLS
 
-Supabase Auth and row-level security can replace or augment the current NextAuth/admin-password flow, but this requires a separate role and tenant policy design for students, partner agents, and platform admins.
+The first Auth/RLS slice keeps server-side Prisma as the trusted operational path and adds a direct-client safety boundary for future Supabase browser clients.
+
+Implemented boundary:
+
+- `User.authUserId` maps an internal KAXI user to `auth.users.id`.
+- `School` is public-readable only while its source review window is current.
+- `KnowledgeDocument` and `KnowledgeChunk` are public-readable only for approved, current, non-superseded RAG.
+- students can read their own profile, documents, journey state, compliance evaluations, and case data.
+- partner agents can read cases assigned to their organization and linked student/document metadata.
+- platform admins can read governance and operational tables through RLS-scoped direct clients.
+- `DocumentFileBlob` has RLS enabled but no direct-client policy; original document bytes stay server/service-role only.
+- direct-client mutations remain closed until the UI flow and audit requirements are explicitly designed.
+
+Apply the slice after the case-pipeline migration:
+
+```bash
+SUPABASE_DIRECT_URL="<direct Supabase postgres url>" \
+DATABASE_URL="$SUPABASE_DIRECT_URL" \
+KAXI_PRISMA_PROVIDER=postgresql \
+PRISMA_SCHEMA_PROVIDER=postgresql \
+bun run db:migrate:deploy
+```
+
+Verify the policy migration locally before deploy:
+
+```bash
+bun run test:supabase-rls
+bun run test:schema
+```
+
+Next Auth/RLS follow-ups:
+
+- add Supabase Auth sign-up/sign-in UI for student and partner-agent accounts;
+- create an admin-only account-linking flow that writes `User.authUserId`;
+- move direct document downloads to Supabase Storage signed URLs;
+- add write policies only for audited, narrow mutations such as case timeline comments or student profile self-service edits.

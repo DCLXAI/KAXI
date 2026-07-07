@@ -4,7 +4,12 @@ export type AdminCaseAction =
   | "approve_send"
   | "request_more_documents"
   | "mark_high_risk"
-  | "stop_suspected_fraud";
+  | "stop_suspected_fraud"
+  | "assign_partner"
+  | "accept_case"
+  | "add_comment"
+  | "request_supplement"
+  | "close_case";
 
 export interface AdminCaseListItem {
   id: string;
@@ -23,6 +28,12 @@ export interface AdminCaseListItem {
   missingDocumentCount: number;
   reviewCount: number;
   bucket: AdminCaseBucket;
+  organizationId: string | null;
+  organizationName: string | null;
+  assignedUserId: string | null;
+  matchedAt: string | null;
+  acceptedAt: string | null;
+  closedAt: string | null;
 }
 
 export interface AdminCaseCounts {
@@ -71,6 +82,31 @@ export interface AdminReviewItem {
   reviewedAt: string;
 }
 
+export interface AdminCaseTimelineItem {
+  id: string;
+  eventType: string;
+  message: string | null;
+  actorUserId: string | null;
+  actorRole: string | null;
+  metadata: unknown;
+  createdAt: string;
+}
+
+export interface AdminCaseDocumentLinkItem {
+  id: string;
+  documentItemId: string;
+  documentType: string;
+  purpose: string;
+  requested: boolean;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface AdminPartnerOfficeItem {
+  id: string;
+  name: string;
+}
+
 export interface AdminAuditItem {
   id: string;
   source: "AuditEvent" | "AdminAuditLog";
@@ -100,10 +136,14 @@ export interface AdminCaseDetail extends AdminCaseListItem {
   conversationSummary: string | null;
   ruleSnapshot: unknown;
   aiDraft: string | null;
+  closedReason: string | null;
   documents: AdminDocumentItem[];
+  caseDocumentLinks: AdminCaseDocumentLinkItem[];
   evaluations: AdminComplianceEvaluationItem[];
   reviews: AdminReviewItem[];
+  timelineEvents: AdminCaseTimelineItem[];
   auditEvents: AdminAuditItem[];
+  partnerOffices: AdminPartnerOfficeItem[];
 }
 
 export interface AdminRuleVersionItem {

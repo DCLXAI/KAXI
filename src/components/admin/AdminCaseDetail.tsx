@@ -2,7 +2,18 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { AlertOctagon, ArrowLeft, CheckCircle2, FileWarning, RefreshCw, Send, ShieldAlert } from "lucide-react";
+import {
+  AlertOctagon,
+  ArrowLeft,
+  Building2,
+  CheckCircle2,
+  FileWarning,
+  MessageSquare,
+  RefreshCw,
+  Send,
+  ShieldAlert,
+  UserCheck,
+} from "lucide-react";
 import { useAdminApi } from "@/components/admin/AdminShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,7 +41,8 @@ function JsonBlock({ value }: { value: unknown }) {
 }
 
 function statusBadge(status: string, risk: string) {
-  if (status === "APPROVED" || status === "CLOSED") return <Badge className="bg-emerald-600">승인 완료</Badge>;
+  if (status === "CLOSED") return <Badge className="bg-slate-700">종결</Badge>;
+  if (status === "APPROVED") return <Badge className="bg-emerald-600">수임/승인</Badge>;
   if (status === "STOPPED") return <Badge variant="destructive">처리 중단</Badge>;
   if (risk === "HIGH" || status === "HIGH_RISK") return <Badge variant="destructive">고위험</Badge>;
   if (status === "NEEDS_MORE_DOCUMENTS") return <Badge className="bg-amber-600">보완 요청</Badge>;
@@ -58,6 +70,8 @@ export function AdminCaseDetail({ caseId }: { caseId: string }) {
   const [savingAction, setSavingAction] = useState<AdminCaseAction | null>(null);
   const [savingDocumentId, setSavingDocumentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [partnerOfficeId, setPartnerOfficeId] = useState("");
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
 
   const loadCase = useCallback(async () => {
     setLoading(true);
@@ -68,6 +82,8 @@ export function AdminCaseDetail({ caseId }: { caseId: string }) {
       if (!res.ok) throw new Error(data.error || "케이스를 불러오지 못했습니다.");
       setCaseItem(data.case);
       setDraft(data.case?.aiDraft || "");
+      setPartnerOfficeId(data.case?.organizationId || data.case?.partnerOffices?.[0]?.id || "");
+      setSelectedDocumentIds(data.case?.caseDocumentLinks?.filter((link: { requested: boolean }) => link.requested).map((link: { documentItemId: string }) => link.documentItemId) || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -79,13 +95,13 @@ export function AdminCaseDetail({ caseId }: { caseId: string }) {
     loadCase();
   }, [loadCase]);
 
-  const submitAction = async (action: AdminCaseAction) => {
+  const submitAction = async (action: AdminCaseAction, extra: Record<string, unknown> = {}) => {
     setSavingAction(action);
     setError(null);
     try {
       const res = await adminFetch(`/api/admin/cases/${caseId}/actions`, {
         method: "POST",
-        body: JSON.stringify({ action, note, responseDraft: draft }),
+        body: JSON.stringify({ action, note, responseDraft: draft, ...extra }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "처리하지 못했습니다.");
@@ -96,6 +112,12 @@ export function AdminCaseDetail({ caseId }: { caseId: string }) {
     } finally {
       setSavingAction(null);
     }
+  };
+
+  const toggleDocumentSelection = (documentId: string) => {
+    setSelectedDocumentIds((current) =>
+      current.includes(documentId) ? current.filter((id) => id !== documentId) : [...current, documentId]
+    );
   };
 
   const reviewDocument = async (
@@ -209,6 +231,14 @@ export function AdminCaseDetail({ caseId }: { caseId: string }) {
                   <div className="text-xs text-muted-foreground">비자 만료</div>
                   <div className="font-medium">{formatDate(caseItem.student.visaExpiryDate)}</div>
                 </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">배정 사무소</div>
+                  <div className="font-medium">{caseItem.organizationName || "-"}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">수임/종결</div>
+                  <div className="font-medium">{formatDate(caseItem.acceptedAt)} / {formatDate(caseItem.closedAt)}</div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -252,6 +282,14 @@ export function AdminCaseDetail({ caseId }: { caseId: string }) {
                           <td className="py-2 pr-3 text-xs text-muted-foreground">{doc.file?.originalName || "-"}</td>
                           <td className="py-2">
                             <div className="flex flex-wrap gap-1">
+                              <Button
+                                size="sm"
+                                variant={selectedDocumentIds.includes(doc.id) ? "secondary" : "outline"}
+                                disabled={savingDocumentId === doc.id}
+                                onClick={() => toggleDocumentSelection(doc.id)}
+                              >
+                                선택
+                              </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -336,6 +374,124 @@ export function AdminCaseDetail({ caseId }: { caseId: string }) {
         <div className="space-y-5">
           <Card>
             <CardHeader className="pb-3">
+              <CardTitle className="text-base">케이스 수명주기</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">파트너 사무소</label>
+                <select
+                  value={partnerOfficeId}
+                  onChange={(event) => setPartnerOfficeId(event.target.value)}
+                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                >
+                  {caseItem.partnerOffices.length === 0 ? (
+                    <option value="">등록된 파트너 없음</option>
+                  ) : (
+                    caseItem.partnerOffices.map((office) => (
+                      <option key={office.id} value={office.id}>
+                        {office.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+              <Textarea
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                rows={4}
+                placeholder="배정/수임/보완/코멘트/종결 메모"
+              />
+              <div className="grid gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => submitAction("assign_partner", { organizationId: partnerOfficeId })}
+                  disabled={Boolean(savingAction) || !partnerOfficeId}
+                  className="justify-start"
+                >
+                  {savingAction === "assign_partner" ? (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Building2 className="h-3.5 w-3.5" />
+                  )}
+                  파트너 사무소 배정
+                </Button>
+                <Button
+                  variant="default"
+                  onClick={() => submitAction("accept_case", { organizationId: partnerOfficeId })}
+                  disabled={Boolean(savingAction) || !partnerOfficeId}
+                  className="justify-start"
+                >
+                  {savingAction === "accept_case" ? (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <UserCheck className="h-3.5 w-3.5" />
+                  )}
+                  수임 처리
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() =>
+                    submitAction("request_supplement", {
+                      organizationId: partnerOfficeId || undefined,
+                      documentItemIds: selectedDocumentIds,
+                    })
+                  }
+                  disabled={Boolean(savingAction)}
+                  className="justify-start"
+                >
+                  {savingAction === "request_supplement" ? (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <FileWarning className="h-3.5 w-3.5" />
+                  )}
+                  선택 서류 보완 요청
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => submitAction("add_comment", { organizationId: partnerOfficeId || undefined })}
+                  disabled={Boolean(savingAction)}
+                  className="justify-start"
+                >
+                  {savingAction === "add_comment" ? (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <MessageSquare className="h-3.5 w-3.5" />
+                  )}
+                  협업 코멘트 추가
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => submitAction("close_case", { organizationId: partnerOfficeId || undefined })}
+                  disabled={Boolean(savingAction)}
+                  className="justify-start"
+                >
+                  {savingAction === "close_case" ? (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  )}
+                  케이스 종결
+                </Button>
+              </div>
+              {caseItem.caseDocumentLinks.length > 0 && (
+                <div className="space-y-2 pt-2">
+                  <div className="text-xs font-medium text-muted-foreground">케이스 연결 서류</div>
+                  {caseItem.caseDocumentLinks.map((link) => (
+                    <div key={link.id} className="rounded-md border px-3 py-2 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium">{link.documentType}</span>
+                        <Badge variant={link.requested ? "secondary" : "outline"}>{link.purpose}</Badge>
+                      </div>
+                      {link.note && <div className="mt-1 text-muted-foreground">{link.note}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
               <CardTitle className="text-base">AI 답변 초안</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -393,7 +549,28 @@ export function AdminCaseDetail({ caseId }: { caseId: string }) {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">케이스 이벤트 로그</CardTitle>
+              <CardTitle className="text-base">협업 타임라인</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {caseItem.timelineEvents.length === 0 ? (
+                <div className="text-sm text-muted-foreground">타임라인이 없습니다.</div>
+              ) : (
+                caseItem.timelineEvents.slice(0, 12).map((event) => (
+                  <div key={event.id} className="rounded-md border px-3 py-2 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium">{event.eventType}</span>
+                      <span className="font-mono text-muted-foreground">{formatDate(event.createdAt)}</span>
+                    </div>
+                    <div className="mt-1 text-muted-foreground">{event.actorRole || "-"} · {event.message || "-"}</div>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">감사 로그</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               {caseItem.auditEvents.length === 0 ? (

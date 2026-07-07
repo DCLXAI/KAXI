@@ -22,6 +22,7 @@ import {
   sanitizeAiBody,
   withTimeout,
 } from "@/lib/api/security";
+import { maybeCreateHighRiskEscalationCase } from "@/lib/cases/high-risk-hook";
 
 // POST /api/ai/consult - 행정사 전문 AI 에이전트 상담 채팅
 // 일반 AI 도우미보다 더 깊이 있는 법적/행정적 답변 제공
@@ -107,7 +108,7 @@ export async function POST(req: NextRequest) {
     });
     if (parsed.error) return parsed.error;
 
-    const { question, history } = parsed.value;
+    const { question, history, studentProfileId } = parsed.value;
     const lang = parsed.value.lang as Lang;
     const mode = parsed.value.mode || "general"; // general | visa | documents | appeal | business
 
@@ -167,6 +168,25 @@ export async function POST(req: NextRequest) {
       }
     } catch (logErr) {
       console.error("[ChatLog save error]", logErr);
+    }
+
+    if (result.needsHumanExpert) {
+      maybeCreateHighRiskEscalationCase({
+        studentProfileId,
+        category: `consult:${mode}`,
+        summary: "전문 상담 고위험/행정사 검토 필요 판정",
+        conversationSummary: question,
+        ruleSnapshot: {
+          mode,
+          backend: result.backend,
+          docIds: docs.map((doc) => doc.id),
+          sourceNotice,
+        },
+        aiDraft: answer,
+        source: "consult",
+      }).catch((err) => {
+        console.warn("[consult high-risk escalation skipped]", err instanceof Error ? err.message : err);
+      });
     }
 
     return NextResponse.json({

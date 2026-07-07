@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { inferDiagnosisVisaType, recommendPath, type DiagnosisInput, type PathRecommendation } from "@/lib/data/diagnosis";
 import { evaluateVisaRulesWithDbFallback } from "@/lib/rules/visa-rule-engine";
+import { maybeCreateHighRiskEscalationCase } from "@/lib/cases/high-risk-hook";
 
 const EDUCATION_VALUES = ["highschool", "college", "university", "master"] as const;
 const KOREAN_VALUES = ["none", "topik1", "topik2", "topik3"] as const;
@@ -20,6 +21,13 @@ function stringField(body: Record<string, unknown>, key: string, fallback = ""):
   if (typeof value === "string") return value.trim().slice(0, 80);
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   return fallback;
+}
+
+function optionalStringField(body: Record<string, unknown>, key: string, max = 128): string | null {
+  const value = body[key];
+  if (typeof value !== "string") return null;
+  const text = value.trim().slice(0, max);
+  return text || null;
 }
 
 function numberField(body: Record<string, unknown>, key: string, fallback = 0): number {
@@ -107,7 +115,8 @@ function toPublicRecommendation(rec: PathRecommendation) {
 
 export async function POST(req: NextRequest) {
   try {
-    const input = parseDiagnosisInput(await req.json().catch(() => null));
+    const rawBody = await req.json().catch(() => null);
+    const input = parseDiagnosisInput(rawBody);
     if (!input) {
       return NextResponse.json({ error: "Invalid input" }, { status: 400 });
     }
@@ -129,6 +138,18 @@ export async function POST(req: NextRequest) {
         : null;
 
     const rec = recommendPath(input, { visaRuleEvaluation: complianceEvaluation });
+    if ((rec.riskLevel === "high" || rec.readiness?.riskLevel === "high") && isRecord(rawBody)) {
+      maybeCreateHighRiskEscalationCase({
+        studentProfileId: optionalStringField(rawBody, "studentProfileId"),
+        category: `diagnosis:${rec.visaType}`,
+        summary: `${rec.visaType} 진단 고위험 판정`,
+        conversationSummary: rec.warnings.map((warning) => warning.ko).join("\n").slice(0, 4000),
+        ruleSnapshot: toPublicRecommendation(rec),
+        source: "diagnosis",
+      }).catch((err) => {
+        console.warn("[diagnosis high-risk escalation skipped]", err instanceof Error ? err.message : err);
+      });
+    }
 
     return NextResponse.json(toPublicRecommendation(rec));
   } catch (e) {

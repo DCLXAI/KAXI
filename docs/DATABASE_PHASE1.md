@@ -67,5 +67,9 @@ Production is considered unfinished when:
 
 ## RLS Notes
 
-The current schema establishes the table boundaries needed for future Supabase RLS work.
-RLS policies are handled in later PRD phases.
+The Supabase Auth/RLS baseline lives in `20260708060000_supabase_auth_rls`.
+It maps `auth.users.id` to `User.authUserId`, enables RLS on operational tables,
+keeps direct-client mutations closed, exposes only public/current school and
+approved RAG rows, and scopes student/partner/admin reads through helper
+functions. Server-side Prisma remains the trusted mutation path until narrower
+audited write policies are designed.
