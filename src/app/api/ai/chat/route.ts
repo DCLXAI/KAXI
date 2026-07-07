@@ -11,7 +11,7 @@ import {
 import type { Lang } from "@/lib/i18n/translations";
 import { findFAQ, AI_DEFAULT_REPLY } from "@/lib/data/faq";
 import { db } from "@/lib/db";
-import { generateZaiChatText, isZaiConfigurationError, type ZaiChatMessage } from "@/lib/ai/zai";
+import { generateClaudeText, isClaudeNotConfiguredError, type ClaudeGatewayMessage } from "@/lib/ai/claude-gateway";
 import { hybridSearch, initVectorStore, initTransformerStore, getStoreStats } from "@/lib/embeddings/vector-store";
 import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
 import { ensureGroundedCitationAnswer } from "@/lib/knowledge/citations";
@@ -240,7 +240,7 @@ async function generateWithLLM(
 컨텍스트 문서 (Vector Search + Keyword Match로 검색됨):
 ${context}`;
 
-    const messages: ZaiChatMessage[] = [
+    const messages: ClaudeGatewayMessage[] = [
       { role: "system", content: systemPrompt },
       ...history.slice(-4).map((h) => ({
         role: h.role === "user" ? ("user" as const) : ("assistant" as const),
@@ -249,15 +249,16 @@ ${context}`;
       { role: "user", content: question },
     ];
 
-    return await generateZaiChatText("chat", {
+    const completion = await generateClaudeText({
+      feature: "consult",
       messages,
-      thinking: { type: "disabled" },
       temperature: 0.3,
-      max_tokens: 600,
+      maxTokens: 600,
     });
+    return completion.text;
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    if (isZaiConfigurationError(e)) {
+    if (isClaudeNotConfiguredError(e)) {
       console.warn("[LLM generation skipped]", message);
     } else {
       console.error("[LLM generation error]", e);

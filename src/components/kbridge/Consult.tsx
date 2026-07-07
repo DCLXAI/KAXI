@@ -40,7 +40,6 @@ interface Msg {
   suggestedFollowups?: string[];
   needsHumanExpert?: boolean;
   backend?: string;
-  codexMode?: string;
 }
 
 interface RetrievedDoc {
@@ -179,7 +178,6 @@ export function Consult() {
           suggestedFollowups: data.suggestedFollowups,
           needsHumanExpert: data.needsHumanExpert,
           backend: data.backend,
-          codexMode: data.codexMode,
         },
       ]);
     } catch (e) {
@@ -206,7 +204,7 @@ export function Consult() {
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
-  // Z.ai 스타일 — 시작 전 중앙 정렬 화면
+  // 시작 전 중앙 정렬 화면
   if (!started) {
     return (
       <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center px-4 py-12">
@@ -252,7 +250,7 @@ export function Consult() {
             </Select>
           </div>
 
-          {/* 입력 박스 (Z.ai 스타일) */}
+          {/* 입력 박스 */}
           <Card className="p-4 shadow-lg border-2 focus-within:border-primary/50 transition-colors">
             <Textarea
               ref={inputRef}

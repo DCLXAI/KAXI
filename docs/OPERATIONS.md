@@ -10,9 +10,11 @@
 - `RESTORE_MODEL_CACHE_ON_INSTALL`: Set `true` to decompress the local Transformer model during install. Vercel builds skip this by default to keep function bundles under file-size limits.
 - `AI_*_RATE_LIMIT`, `AI_*_DAILY_QUOTA`: Optional AI abuse and cost controls. Use `0` to disable a specific limit. Public Agent and Consult demos default to disabled limits until a managed shared limiter is configured.
 - `RATE_LIMIT_BACKEND`: `auto`, `database`, or `memory`. Use `database` with a writable shared PostgreSQL production DB so Vercel instances share quota.
-- `AI_CONSULT_BACKEND`: Optional Consult backend override: `remote-bridge`, `codex`, or `zai`. When unset, Consult follows the remote Codex bridge if the Agent backend is configured that way.
-- `AI_AGENT_PREFLIGHT_ENABLED`: Enables deterministic server-side tool/RAG preflight before Codex bridge calls.
-- `AI_AGENT_PREFLIGHT_TIMEOUT_MS`, `AI_AGENT_CONTEXT_MAX_CHARS`, `AI_AGENT_GROUNDED_QUESTION_MAX_CHARS`: Bound preflight latency and context sent to the LLM bridge.
+- `ANTHROPIC_API_KEY`: Managed Claude API key. When missing, Agent falls back to deterministic tools and Consult summarizes retrieved official sources unless `AI_REQUIRE_LLM=true`.
+- `ANTHROPIC_MODEL`: Optional Claude model override. Defaults to `claude-opus-4-8`.
+- `AI_REQUIRE_LLM`, `AI_ALLOW_LLM_FALLBACK`: Global LLM strictness policy. Keep fallback allowed in CI and local development without an API key.
+- `AI_AGENT_PREFLIGHT_ENABLED`: Enables deterministic server-side tool/RAG preflight before Claude calls.
+- `AI_AGENT_PREFLIGHT_TIMEOUT_MS`, `AI_AGENT_CONTEXT_MAX_CHARS`, `AI_AGENT_GROUNDED_QUESTION_MAX_CHARS`: Bound preflight latency and context sent to Claude.
 - `AI_AGENT_LOGGING_ENABLED`: Enables Agent `ChatLog` persistence when Postgres is configured.
 - `AI_AGENT_LEDGER_ENABLED`: Enables per-request Agent cost/quality ledger persistence when Postgres is configured.
 - `NEXTAUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`: Required for session-based admin login. Generate the hash with `bun run admin:hash-password -- <password>`.
@@ -28,11 +30,6 @@
 - `KNOWLEDGE_MONITOR_ALERT_WEBHOOK_URL`: Optional operations webhook. When configured, changed or failed official-source monitor runs send a signed JSON alert, or Slack-formatted alert when `KNOWLEDGE_MONITOR_ALERT_FORMAT=slack`.
 - `KNOWLEDGE_MONITOR_ALERT_SIGNING_SECRET`: Optional HMAC secret. Adds `x-kaxi-signature: sha256=...` so an operations receiver can verify monitor alerts.
 - GitHub secret `KAXI_ADMIN_API_KEY`: Required by `.github/workflows/official-source-monitor.yml` for the 30-minute external monitor that supplements Vercel Cron limits. Use the current production `ADMIN_API_KEY` value and rotate both together.
-- `AGENT_BACKEND`: Agent backend selector. Defaults to `codex`; set `zai` only when explicit Z.ai settings are present.
-- `CODEX_AUTH_MODE`: `auto`, `local`, or `api-key`. `auto` uses the current local Codex CLI login in local dev and API-key mode on Vercel.
-- `CODEX_API_KEY`: Required on Vercel when `AGENT_BACKEND=codex`.
-- `CODEX_AGENT_REQUIRE_ADMIN`: Optional guard for `/api/ai/agent` Codex execution. Keep `false` for public demo, `true` for private/internal use.
-- `ZAI_ENABLED`, `ZAI_API_KEY`, `ZAI_CONFIG_PATH`: Optional legacy Z.ai SDK configuration. Leave disabled for Codex CLI/bridge operation.
 - `DOCUMENT_UPLOAD_SIGNING_SECRET`: HMAC secret for short-lived document upload URLs. Required before enabling document uploads outside local development.
 - `DOCUMENT_UPLOAD_MAX_BYTES`: Optional max upload size. Defaults to 10 MB.
 - `DOCUMENT_UPLOAD_DIR`: Local byte-storage path for development. Production should use managed object storage.
@@ -187,181 +184,37 @@ Use `RATE_LIMIT_BACKEND=database` with a reachable managed production DB for Ver
 
 ## Agent Grounding
 
-`/api/ai/agent` runs a deterministic KAXI preflight before Codex bridge calls when `AI_AGENT_PREFLIGHT_ENABLED` is not `false`.
+`/api/ai/agent` runs a deterministic KAXI preflight before Claude calls when `AI_AGENT_PREFLIGHT_ENABLED` is not `false`.
 The preflight uses the same intent planner as the built-in fallback agent, with Korean, English, Vietnamese, and Mongolian cues for school search, cost calculation, document checklist, path diagnosis, partner request drafts, and RAG search tools.
-The resulting compact context is prepended to the Codex bridge prompt so public answers are grounded in KAXI data even when the bridge is running in fast direct-answer mode.
-Planner diagnostics in that context include detected signals, resolved slots, missing slots, and confidence drivers. The same evidence is returned in agent response `meta.intentEvidence` for runtime debugging without exposing raw secrets.
+Planner diagnostics include detected signals, resolved slots, missing slots, and confidence drivers. The same evidence is returned in agent response `meta.intentEvidence` for runtime debugging without exposing raw secrets.
 
 Partner requests created from the conversational agent stay in dry-run draft mode. Persist actual contact requests through the explicit lead/partner intake flow so consent, retention, and PII controls remain clear.
 
 Keep `AI_AGENT_PREFLIGHT_TIMEOUT_MS` below the total function budget. If preflight times out, the route skips grounding and continues with the original user question.
 Agent `ChatLog` and `AgentRequestLedger` persistence should use a writable production database.
 
-The ledger records IP/user id, backend, Codex mode, duration, estimated tokens, grounded/tool count, success/failure, and compact error type/message. It is for cost/debug accounting, not a permanent user profile.
+The ledger records IP/user id, backend, duration, estimated tokens, grounded/tool count, success/failure, and compact error type/message. It is for cost/debug accounting, not a permanent user profile.
 
-## Codex CLI Agent Backend
+## Claude Backend
 
-The app routes `/api/ai/agent` to Codex CLI by default (`AGENT_BACKEND=codex`).
-Set `AGENT_BACKEND=zai` only if the deployment explicitly configures `ZAI_ENABLED=true` with `ZAI_CONFIG_PATH` or another SDK-supported credential path.
-If Codex credentials are missing or a Codex run fails, `/api/ai/agent` falls back to the built-in tool engine instead of returning 500.
+Agent, Consult, general chat, and structured admin suggestions use `src/lib/ai/claude-gateway.ts`.
+The gateway uses the official `@anthropic-ai/sdk`, defaults to `claude-opus-4-8`, sends `thinking: { type: "adaptive" }`, and uses `output_config.format(json_schema)` for structured outputs.
+`ANTHROPIC_MODEL` can override the model without code changes.
+
+Every LLM call passes through the gateway, which redacts emails, phone numbers, and private messenger handles before sending text to Claude.
+Agent preflight, rate limits, daily quotas, `AgentRequestLedger`, and citation normalization remain enforced around the gateway.
 
 ### AI Backend Decision Table
 
 The runtime selector in `src/lib/ai/backend-selector.ts` is the single policy source for Agent, Consult, `/api/ai/agent` status, and `/api/readiness`.
-It returns safe `decisionTable` entries so operators can see which branch selected the backend without exposing secrets.
+There is no runtime backend selection in Phase 2: both Agent and Consult select `claude`.
 
-Agent backend selection:
+| condition | behavior |
+| --- | --- |
+| `ANTHROPIC_API_KEY` configured | Claude managed API serves Agent/Consult. |
+| key missing and `AI_REQUIRE_LLM=false` | Agent uses built-in tools; Consult summarizes retrieved approved official sources. |
+| key missing and `AI_REQUIRE_LLM=true` with no fallback override | endpoints return `503 LLM backend unavailable`; readiness reports an AI backend issue. |
+| legacy Codex/bridge/Z.ai env vars present | ignored and surfaced as warnings only. |
 
-| priority | condition | selected backend | note |
-| --- | --- | --- | --- |
-| 1 | `AGENT_BACKEND=zai` | `zai` | Requires explicit Z.ai configuration for LLM readiness. |
-| 2 | `AGENT_BACKEND=tool-fallback` | `tool-fallback` | Built-in KAXI tools only; strict LLM mode will report unavailable. |
-| 3 | `AGENT_BACKEND=remote-bridge` | `remote-bridge` | Uses the server-side Codex bridge and requires an LLM by default. |
-| 4 | unset or unsupported value | `codex` | Unsupported values are ignored but surfaced in diagnostics. |
-
-Consult backend selection:
-
-| priority | condition | selected backend | note |
-| --- | --- | --- | --- |
-| 1 | `AI_CONSULT_BACKEND=remote-bridge` or `codex` | configured value | Explicit Consult override wins. |
-| 2 | Agent selected `remote-bridge`, or `CODEX_REMOTE_BRIDGE_URL` is enabled | `remote-bridge` | Keeps `/consult` aligned with public Agent bridge deployments. |
-| 3 | `AI_CONSULT_BACKEND=zai` | `zai` | Explicit Z.ai Consult override. |
-| 4 | Agent selected `codex` and Codex is usable by API key, serverless flag, or local runtime | `codex` | Local development can use the current Codex CLI login. |
-| 5 | otherwise | `zai` | Safe fallback target; readiness warns if Z.ai is not configured and fallback is not strict. |
-
-Strict LLM requirement:
-
-| feature | fallback-allow override | strict signals |
-| --- | --- | --- |
-| Agent | `AI_ALLOW_LLM_FALLBACK=true` or `AI_AGENT_ALLOW_TOOL_FALLBACK=true` | `AI_REQUIRE_LLM=true`, `AI_AGENT_REQUIRE_LLM=true`, or selected `remote-bridge` |
-| Consult | `AI_ALLOW_LLM_FALLBACK=true` or `AI_CONSULT_ALLOW_OFFICIAL_SUMMARY_FALLBACK=true` | `AI_REQUIRE_LLM=true`, `AI_CONSULT_REQUIRE_LLM=true`, or selected `remote-bridge` |
-
-Inspect `GET /api/ai/agent` `backendPolicy.agent.decisionTable` and `backendPolicy.consult.decisionTable` first when the site says it is using built-in fallback or an unexpected backend.
+Inspect `GET /api/ai/agent` `backendPolicy.agent.decisionTable` and `backendPolicy.consult.decisionTable` first when the site says it is using fallback.
 Authenticated operators can also inspect the same safe diagnostics in `/admin` and `GET /api/admin/ops`, which pairs the backend decision table with the readiness `ai.backend_policy` check.
-
-Local development can reuse the Codex CLI login already present on the developer machine:
-
-```bash
-CODEX_AUTH_MODE=auto bun run dev
-```
-
-In local mode the app runs the system `codex` binary, defaults `CODEX_HOME` to `~/.codex`, and returns `backend: "codex-cli-local"` from `/api/ai/agent`.
-Use `CODEX_CLI_PATH` or `CODEX_LOCAL_HOME` only when the CLI binary or auth cache lives somewhere non-standard.
-Set `CODEX_USE_USER_CONFIG=true` only for trusted local experiments that should load the user's full Codex config.
-
-Vercel Production cannot access the developer machine's current Codex CLI session.
-Do not copy `~/.codex/auth.json` into source control, chat, or public deployment artifacts.
-For production Codex CLI execution, set:
-
-```env
-AGENT_BACKEND=codex
-CODEX_AUTH_MODE=api-key
-CODEX_API_KEY=...
-```
-
-### Browser-to-Local Codex Bridge
-
-When the developer MacBook is on, the deployed site can use that Mac's current Codex CLI through a localhost bridge.
-This is intended for the owner opening `https://kaxi.vercel.app/agent` on the same Mac, not for public multi-user production.
-
-Start the bridge:
-
-```bash
-bun run codex:bridge
-```
-
-On macOS, keep the bridge awake while the lid is open:
-
-```bash
-bun run codex:bridge:awake
-```
-
-The bridge listens on `http://127.0.0.1:8787` by default.
-The deployed Agent UI does not auto-probe localhost. Set `NEXT_PUBLIC_CODEX_BRIDGE_URL` or the browser override below only for trusted owner sessions that should call the local bridge directly.
-If the bridge is reachable, chat requests go to the local Codex CLI and return `backend: "codex-cli-local-bridge"`.
-If it is not reachable or a bridge request fails, the UI falls back to `/api/ai/agent` on Vercel.
-`GET /api/ai/agent` returns safe diagnostics for backend readiness, bridge configuration, preflight, limits, persistence, and the shared `backendPolicy` decision without exposing secrets. The `remoteBridge` block intentionally exposes only a redacted endpoint (`protocol://host/path`), token-present boolean, timeout, and in-process attempt/success/failure counters.
-`GET /api/readiness` also includes `ai.backend_policy`, using the same backend selector diagnostics so operators can see whether Agent/Consult are using Codex, Z.ai, remote bridge, or fallback and whether strict LLM mode has blocking configuration issues.
-
-Check the local bridge directly:
-
-```bash
-curl -s http://127.0.0.1:8787/health | jq
-```
-
-The local health payload includes uptime, `sleepGuard.active`, rate/body/question limits, fallback mode, and recent request/failure counters. It never returns `CODEX_BRIDGE_TOKEN`.
-
-Useful browser overrides:
-
-```js
-localStorage.setItem("kaxiCodexBridgeUrl", "http://127.0.0.1:8787/api/ai/agent")
-localStorage.setItem("kaxiCodexBridgeUrl", "off")
-localStorage.setItem("kaxiCodexBridgeToken", "...")
-```
-
-Useful bridge environment variables:
-
-- `CODEX_BRIDGE_HOST`: Defaults to `127.0.0.1`. Keep localhost unless using a trusted tunnel.
-- `CODEX_BRIDGE_PORT`: Defaults to `8787`.
-- `CODEX_BRIDGE_PREVENT_SLEEP`: Set `true` to run macOS `caffeinate` while the bridge process is alive.
-- `CODEX_BRIDGE_ALLOWED_ORIGINS`: Comma-separated browser origins allowed by CORS.
-- `CODEX_BRIDGE_TOKEN`: Optional token required as `x-kaxi-codex-bridge-token`.
-- `CODEX_EXEC_TIMEOUT_MS`: Codex CLI timeout for each local bridge request.
-
-Do not bind the bridge to `0.0.0.0` or expose it through a tunnel without `CODEX_BRIDGE_TOKEN`.
-
-### Public Users Through A Mac Tunnel
-
-For external users, do not expose the bridge token in browser JavaScript.
-Use Vercel as the server-side proxy:
-
-```env
-AGENT_BACKEND=remote-bridge
-CODEX_REMOTE_BRIDGE_URL=https://<tunnel-host>/api/ai/agent
-CODEX_REMOTE_BRIDGE_TOKEN=<same-secret-as-CODEX_BRIDGE_TOKEN-on-the-Mac>
-CODEX_REMOTE_BRIDGE_TIMEOUT_MS=52000
-# Optional. If unset, /consult follows AGENT_BACKEND=remote-bridge automatically.
-AI_CONSULT_BACKEND=remote-bridge
-AI_CONSULT_REMOTE_BRIDGE_TIMEOUT_MS=52000
-AI_REQUIRE_LLM=true
-AI_ALLOW_LLM_FALLBACK=false
-```
-
-On the Mac:
-
-```bash
-export CODEX_BRIDGE_TOKEN=<long-random-secret>
-export CODEX_BRIDGE_ENABLE_TOOL_FALLBACK=false
-export CODEX_EXEC_TIMEOUT_MS=52000
-bun run codex:bridge
-```
-
-Then expose `http://127.0.0.1:8787` through a tunnel such as Cloudflare Tunnel, ngrok, or Tailscale Funnel.
-The tunnel URL goes only into Vercel server environment variables as `CODEX_REMOTE_BRIDGE_URL`.
-The public frontend continues calling `/api/ai/agent` and `/api/ai/consult`, and Vercel forwards LLM-bound requests to the Mac bridge with the secret token.
-Remote-bridge production is strict by default: bridge failures return `503 LLM backend unavailable` instead of being disguised as built-in tool answers.
-During incidents, compare `GET /api/ai/agent` `remoteBridge.stats` with the Mac `/health` `stats`: Vercel-side failures with no Mac-side requests usually indicate tunnel/DNS/token/CORS reachability, while Mac-side failures indicate Codex CLI timeout, auth, or local runtime issues.
-Set `AI_REQUIRE_LLM=true` as an explicit safety marker.
-If you intentionally want degraded service, set `AI_ALLOW_LLM_FALLBACK=true`; `/api/ai/agent` can fall back to built-in tools and `/api/ai/consult` can summarize retrieved official sources.
-
-Minimum safety rules:
-
-1. Keep `CODEX_BRIDGE_TOKEN` enabled for any tunnel.
-2. For public stress testing, set `CODEX_BRIDGE_RATE_LIMIT=0`, `AI_AGENT_RATE_LIMIT=0`, `AI_AGENT_DAILY_QUOTA=0`, `AI_CONSULT_RATE_LIMIT=0`, and `AI_CONSULT_DAILY_QUOTA=0`.
-3. Keep Codex sandbox `read-only` and `CODEX_USE_USER_CONFIG=false`.
-4. Do not run the bridge from a directory containing private files that external prompts should never inspect.
-5. Keep `CODEX_BRIDGE_ENABLE_TOOL_FALLBACK=false` for production so bridge timeouts are visible and can be fixed.
-6. Turn off the tunnel when public testing is over.
-
-`/api/codex/exec` remains guarded by `requireAdmin` for direct admin-only tests.
-For `/api/ai/agent`, set `CODEX_AGENT_REQUIRE_ADMIN=true` if Codex should be private/internal only.
-
-Codex CLI in serverless has important tradeoffs:
-
-1. Codex CLI can inspect the deployed bundle and may invoke shell commands.
-2. Vercel functions are ephemeral and time-limited; long agent runs may timeout.
-3. The native Codex binary is large, so Vercel function packaging may fail on plan or bundle limits.
-4. Set `CODEX_API_KEY` in Vercel Production only if this cost and runtime risk is accepted.
-5. Keep `CODEX_EXEC_RATE_LIMIT`, `CODEX_EXEC_TIMEOUT_MS`, and `CODEX_EXEC_MAX_CHARS` conservative.
-
-Recommended production path remains a normal API-based agent using the OpenAI API or Vercel AI Gateway, not Codex CLI inside serverless.

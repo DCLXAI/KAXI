@@ -64,28 +64,19 @@ interface Msg {
   toolResults?: ToolResult[];
   iterations?: number;
   backend?: string;
-  codexMode?: string;
   durationMs?: number;
   grounded?: boolean;
   meta?: AgentMeta;
 }
 
-type BridgeState = "checking" | "reachable" | "unreachable" | "off";
-
 interface AgentStatus {
   ok: boolean;
   status: "ready" | "needs_configuration";
   backend: string;
-  codex?: {
-    ready: boolean;
-    mode: string | null;
+  claude?: {
     apiKeyConfigured: boolean;
-    localAuthAllowed: boolean;
-    issue: string | null;
-  };
-  remoteBridge?: {
-    enabled: boolean;
-    configured: boolean;
+    model: string;
+    managedApi: boolean;
   };
   preflight?: {
     enabled: boolean;
@@ -162,60 +153,11 @@ interface AgentMeta {
   };
 }
 
-function getConfiguredBridgeUrl(): { url: string | null; explicit: boolean } {
-  if (typeof window === "undefined") return { url: null, explicit: false };
-
-  const stored = window.localStorage.getItem("kaxiCodexBridgeUrl")?.trim();
-  if (stored === "off") return { url: null, explicit: true };
-  if (stored) return { url: stored, explicit: true };
-
-  const envUrl = process.env.NEXT_PUBLIC_CODEX_BRIDGE_URL?.trim();
-  if (envUrl) return { url: envUrl, explicit: true };
-
-  return { url: null, explicit: false };
-}
-
 function agentSourceAnnotations(message: Msg): SourceAnnotation[] {
   return message.meta?.sources || [];
 }
 
-async function hasLocalBridge(url: string): Promise<boolean> {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 900);
-  try {
-    const healthUrl = new URL("/health", url).toString();
-    const res = await fetch(healthUrl, { method: "GET", mode: "cors", signal: controller.signal });
-    return res.ok;
-  } catch {
-    return false;
-  } finally {
-    window.clearTimeout(timeout);
-  }
-}
-
 async function fetchAgent(payload: unknown): Promise<Response> {
-  const bridge = getConfiguredBridgeUrl();
-  const token =
-    typeof window !== "undefined" ? window.localStorage.getItem("kaxiCodexBridgeToken")?.trim() : "";
-
-  if (bridge.url && (await hasLocalBridge(bridge.url))) {
-    try {
-      const bridgeRes = await fetch(bridge.url, {
-        method: "POST",
-        mode: "cors",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { "x-kaxi-codex-bridge-token": token } : {}),
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (bridgeRes.ok) return bridgeRes;
-    } catch {
-      // Fall back to the hosted API below. The local bridge is an acceleration path, not the only answer path.
-    }
-  }
-
   return fetch("/api/ai/agent", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -243,29 +185,20 @@ const TOOL_LABELS: Record<string, Record<Lang, string>> = {
 
 function backendLabel(backend?: string): string {
   if (!backend) return "Agent";
-  if (backend === "codex-cli-local-bridge") return "Local Codex";
-  if (backend === "codex-cli-remote-bridge") return "Remote Codex";
-  if (backend === "codex-cli-local") return "Local Codex";
-  if (backend === "codex-cli") return "Codex";
+  if (backend === "claude") return "Claude";
   if (backend === "tool-fallback") return "KAXI Tools";
-  if (backend === "zai") return "Z.ai";
   return backend;
 }
 
-function statusText(lang: Lang, status: AgentStatus | null, bridgeState: BridgeState): string {
-  if (bridgeState === "reachable") return "Local Codex";
+function statusText(lang: Lang, status: AgentStatus | null): string {
   if (!status) return lang === "ko" ? "상태 확인 중" : "Checking";
-  if (status.backend === "codex" && status.codex && !status.codex.ready) {
-    return lang === "ko" ? "Codex 설정 필요" : "Codex setup needed";
+  if (status.backend === "claude" && !status.claude?.apiKeyConfigured) {
+    return lang === "ko" ? "Claude 미설정 · 도구 fallback" : "Claude fallback";
   }
-  if (status.backend === "remote-bridge" && !status.remoteBridge?.enabled) {
-    return lang === "ko" ? "브릿지 설정 필요" : "Bridge setup needed";
-  }
-  return backendLabel(status.backend === "codex" ? "codex-cli" : status.backend);
+  return backendLabel(status.backend);
 }
 
-function statusDotClass(status: AgentStatus | null, bridgeState: BridgeState): string {
-  if (bridgeState === "reachable") return "bg-green-500";
+function statusDotClass(status: AgentStatus | null): string {
   if (!status) return "bg-muted-foreground";
   return status.ok ? "bg-green-500" : "bg-amber-500";
 }
@@ -596,7 +529,6 @@ export function Agent() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [started, setStarted] = useState(false);
   const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
-  const [bridgeState, setBridgeState] = useState<BridgeState>("checking");
   const [clarifyDrafts, setClarifyDrafts] = useState<Record<number, ClarifyDraft>>({});
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -618,22 +550,6 @@ export function Agent() {
         if (alive && data) setAgentStatus(data);
       })
       .catch(() => undefined);
-
-    const bridge = getConfiguredBridgeUrl();
-    if (!bridge.url) {
-      setBridgeState("off");
-      return () => {
-        alive = false;
-      };
-    }
-
-    hasLocalBridge(bridge.url)
-      .then((ok) => {
-        if (alive) setBridgeState(ok ? "reachable" : "unreachable");
-      })
-      .catch(() => {
-        if (alive) setBridgeState("unreachable");
-      });
 
     return () => {
       alive = false;
@@ -662,8 +578,8 @@ export function Agent() {
         const message =
           res.status === 401
             ? lang === "ko"
-              ? "Codex CLI 백엔드는 관리자 로그인 후 사용할 수 있습니다."
-              : "Codex CLI backend requires admin login."
+              ? "AI 에이전트는 관리자 로그인 후 사용할 수 있습니다."
+              : "AI agent requires admin login."
             : errorBody.error || "API failed";
         throw new Error(message);
       }
@@ -678,7 +594,6 @@ export function Agent() {
           toolResults: data.toolResults,
           iterations: data.iterations,
           backend: data.backend,
-          codexMode: data.codexMode,
           durationMs: data.durationMs,
           grounded: Boolean(data.grounded),
           meta: data.meta,
@@ -724,7 +639,7 @@ export function Agent() {
     send(prompt);
   };
 
-  // 시작 화면 (Z.ai 스타일 + 에이전트 강조)
+  // 시작 화면
   if (!started) {
     return (
       <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center px-4 py-12">
@@ -737,8 +652,8 @@ export function Agent() {
             <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
               <Sparkles className="h-3.5 w-3.5" />
               {lang === "ko" ? "AI 에이전트 · 도구 호출 가능" : "AI Agent · Tool-Use"}
-              <span className={`h-1.5 w-1.5 rounded-full ${statusDotClass(agentStatus, bridgeState)}`} />
-              {statusText(lang, agentStatus, bridgeState)}
+              <span className={`h-1.5 w-1.5 rounded-full ${statusDotClass(agentStatus)}`} />
+              {statusText(lang, agentStatus)}
             </div>
             <h1 className="text-4xl md:text-5xl font-bold tracking-tight italic mb-3" style={{ fontFamily: "Georgia, serif" }}>
               {lang === "ko" ? "유학 준비, 에이전트에게 맡기세요" : lang === "vi" ? "Giao việc cho AI agent" : lang === "mn" ? "Агентэд даатгаарай" : "Delegate to the AI agent"}
@@ -787,7 +702,7 @@ export function Agent() {
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Brain className="h-3 w-3" />
                 <span>
-                  {backendLabel(agentStatus?.backend === "codex" ? "codex-cli" : agentStatus?.backend)} · 6 Tools · Max 5 steps
+                  {backendLabel(agentStatus?.backend)} · 6 Tools · Max 5 steps
                 </span>
               </div>
               <Button size="sm" onClick={() => send()} disabled={!input.trim() || loading} className="gap-1.5">
@@ -835,8 +750,8 @@ export function Agent() {
               <Badge variant="outline" className="text-[10px] py-0 h-4">ReAct</Badge>
             </div>
             <div className="text-xs text-muted-foreground flex items-center gap-1.5">
-              <span className={`h-1.5 w-1.5 rounded-full ${statusDotClass(agentStatus, bridgeState)}`} />
-              {statusText(lang, agentStatus, bridgeState)}
+              <span className={`h-1.5 w-1.5 rounded-full ${statusDotClass(agentStatus)}`} />
+              {statusText(lang, agentStatus)}
             </div>
           </div>
         </div>

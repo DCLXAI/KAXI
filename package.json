@@ -7,8 +7,6 @@
     "postinstall": "bun run scripts/generate-prisma-client.ts && bun run scripts/restore-runtime-artifacts.ts",
     "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/ && bun run scripts/prune-vercel-output.ts",
     "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
-    "codex:bridge": "bun run scripts/codex-local-bridge.ts",
-    "codex:bridge:awake": "CODEX_BRIDGE_PREVENT_SLEEP=true bun run scripts/codex-local-bridge.ts",
     "lint": "eslint .",
     "test:e2e": "playwright test",
     "test:e2e:types": "tsc --noEmit -p tsconfig.e2e.json",
@@ -54,12 +52,12 @@
     "db:seed:admin-demo": "bun run scripts/seed-admin-demo.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@hookform/resolvers": "^5.1.1",
     "@mdxeditor/editor": "^3.39.1",
-    "@openai/codex": "^0.142.4",
     "@prisma/client": "^6.11.1",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
@@ -127,7 +125,6 @@
     "tailwindcss-animate": "^1.0.7",
     "uuid": "^11.1.0",
     "vaul": "^1.1.2",
-    "z-ai-web-dev-sdk": "^0.0.18",
     "zod": "^4.0.2",
     "zustand": "^5.0.6"
   },

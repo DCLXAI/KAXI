@@ -30,7 +30,9 @@ jobs:
       RESTORE_MODEL_CACHE_ON_INSTALL: "true"
       TRANSFORMERS_ALLOW_REMOTE: "false"
       TRANSFORMERS_ALLOW_LOCAL: "true"
-      ZAI_ENABLED: "false"
+      ANTHROPIC_API_KEY: ""
+      ANTHROPIC_MODEL: "claude-opus-4-8"
+      AI_ALLOW_LLM_FALLBACK: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2

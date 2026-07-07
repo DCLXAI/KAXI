@@ -58,7 +58,7 @@ flowchart TD
 | User requests administrative-scrivener consultation | Third-party provision to independent partner | contact/lead ID, visa type, consultation topic, relevant profile facts | recipient/items/purpose/retention notice before transfer | partner request record + audit log |
 | KAXI uses hosting/database/email vendor | Processing consignment | service records, logs, notification data | privacy policy consignment disclosure | vendor register |
 | KAXI sends prompt to overseas AI API | Overseas transfer plus possible consignment/third-party analysis depending contract | prompt, retrieved context, answer | overseas-transfer disclosure and AI notice | AI request log/minimized record |
-| Local Codex bridge processes prompt on operator Mac through KAXI proxy | Internal/contracted operation depending deployment owner | prompt/context | operational privacy notice; no overseas AI claim unless external API used | bridge logs minimized |
+| KAXI sends prompt to Anthropic Claude API | Overseas transfer plus possible consignment/third-party analysis depending contract | redacted prompt, retrieved context, generated answer | overseas-transfer disclosure and AI notice | AI request log/minimized record |
 | Privacy deletion request | Internal legal obligation/rights handling | contact or exact question hash, request metadata | privacy rights notice | rights-handling record |
 
 ## Minimum Runtime Controls

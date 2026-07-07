@@ -6,24 +6,14 @@ import { runFallbackAgent } from "@/lib/agent/fallback";
 import type { ToolContext } from "@/lib/agent/tools";
 import { buildAgentMeta } from "@/lib/agent/meta";
 import { runAgentPreflight, type AgentPreflightResult } from "@/lib/agent/preflight";
-import {
-  getCodexRunMode,
-  runCodexServerless,
-  shouldRequireAdminForCodexAgent,
-} from "@/lib/codex/serverless";
-import { getAgentBackend, getAiBackendDiagnostics, shouldRequireAgentLlm } from "@/lib/ai/backend-selector";
-import {
-  getRemoteCodexBridgeDiagnostics,
-  isRemoteCodexBridgeEnabled,
-  runRemoteCodexBridge,
-} from "@/lib/codex/remote-bridge";
+import { getAiBackendDiagnostics, shouldRequireAgentLlm } from "@/lib/ai/backend-selector";
+import { isClaudeNotConfiguredError } from "@/lib/ai/claude-gateway";
 import {
   consumeDailyQuota,
   getClientIp,
   parseLimit,
   parsePositiveInt,
   rateLimit,
-  requireAdmin,
   sanitizeAiBody,
   withTimeout,
 } from "@/lib/api/security";
@@ -33,17 +23,12 @@ import { isEnvFalse, isEnvTrue } from "@/lib/env";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-const AGENT_REMOTE_BRIDGE_MAX_WAIT_MS = 52_000;
-
-function isFallbackBackend(backend: string): boolean {
-  return backend === "tool-fallback" || backend === "official-summary";
-}
 
 function llmUnavailableResponse(message: string) {
   return NextResponse.json(
     {
       error: "LLM backend unavailable",
-      message: "Codex LLM bridge is unavailable. Built-in tool fallback is disabled for this deployment.",
+      message: "Claude LLM gateway is unavailable. Built-in tool fallback is disabled for this deployment.",
       detail: message.slice(0, 500),
       backend: "llm-unavailable",
     },
@@ -133,7 +118,6 @@ async function persistAgentLedger({
   question,
   answer,
   backend,
-  codexMode,
   durationMs,
   success,
   errorType,
@@ -146,7 +130,6 @@ async function persistAgentLedger({
   question: string;
   answer?: string;
   backend: string;
-  codexMode?: string;
   durationMs?: number;
   success: boolean;
   errorType?: string;
@@ -165,7 +148,6 @@ async function persistAgentLedger({
         questionChars: question.length,
         answerChars: finalAnswer.length,
         backend,
-        codexMode: codexMode || null,
         durationMs: durationMs ? Math.round(durationMs) : null,
         tokenEstimate: estimateTokens(question, finalAnswer, preflight),
         success,
@@ -182,49 +164,18 @@ async function persistAgentLedger({
 
 export async function GET() {
   const backendPolicy = getAiBackendDiagnostics();
-  const backend = backendPolicy.agent.backend;
-  const hostedRuntime = backendPolicy.runtime.hosted;
-  const codexApiKeyConfigured = backendPolicy.codex.apiKeyConfigured;
-  let codexMode: string | null = null;
-  let codexReady = true;
-  let codexIssue: string | null = null;
-
-  try {
-    codexMode = getCodexRunMode();
-    codexReady = codexMode === "local-auth" ? !hostedRuntime : codexApiKeyConfigured;
-    if (!codexReady && codexMode === "api-key") {
-      codexIssue = "CODEX_API_KEY or OPENAI_API_KEY is not configured";
-    }
-  } catch (error) {
-    codexReady = false;
-    codexIssue = error instanceof Error ? error.message : "Codex mode check failed";
-  }
-
-  const remoteBridgeEnabled = isRemoteCodexBridgeEnabled();
-  const remoteBridgeDiagnostics = getRemoteCodexBridgeDiagnostics();
-  const backendReady =
-    backend === "tool-fallback" ||
-    backend === "zai" ||
-    (backend === "remote-bridge" ? remoteBridgeEnabled && !remoteBridgeDiagnostics.issue : codexReady);
+  const backendReady = backendPolicy.agent.ready && backendPolicy.issues.length === 0;
 
   return NextResponse.json({
     ok: backendReady,
     status: backendReady ? "ready" : "needs_configuration",
-    backend,
+    backend: backendPolicy.agent.backend,
     runtime: {
-      hosted: hostedRuntime,
+      hosted: backendPolicy.runtime.hosted,
       vercelEnv: process.env.VERCEL_ENV || null,
       maxDuration,
     },
-    codex: {
-      mode: codexMode,
-      ready: codexReady,
-      apiKeyConfigured: codexApiKeyConfigured,
-      localAuthAllowed: !hostedRuntime,
-      issue: codexIssue,
-      requireAdmin: shouldRequireAdminForCodexAgent(),
-    },
-    remoteBridge: remoteBridgeDiagnostics,
+    claude: backendPolicy.claude,
     preflight: {
       enabled: isEnvTrue(process.env.AI_AGENT_PREFLIGHT_ENABLED),
       timeoutMs: parsePositiveInt(process.env.AI_AGENT_PREFLIGHT_TIMEOUT_MS, 12_000),
@@ -245,7 +196,6 @@ export async function GET() {
   });
 }
 
-// POST /api/ai/agent - 에이전트 대화 (도구 호출 + 다중 단계 추론)
 export async function POST(req: NextRequest) {
   const requestStartedAt = Date.now();
   let ledgerContext: {
@@ -262,11 +212,7 @@ export async function POST(req: NextRequest) {
     });
     if (limited) return limited;
 
-    const quotaExceeded = await consumeDailyQuota(
-      req,
-      "ai:agent",
-      parseLimit(process.env.AI_AGENT_DAILY_QUOTA, 30)
-    );
+    const quotaExceeded = await consumeDailyQuota(req, "ai:agent", parseLimit(process.env.AI_AGENT_DAILY_QUOTA, 30));
     if (quotaExceeded) return quotaExceeded;
 
     const body = await req.json();
@@ -282,16 +228,8 @@ export async function POST(req: NextRequest) {
     const ctx: ToolContext = { lang, leadId };
     ledgerContext = { question, leadId, preflight: emptyPreflight(question) };
 
-    const configuredBackend = getAgentBackend();
-    const preflightEnabled = isEnvTrue(process.env.AI_AGENT_PREFLIGHT_ENABLED);
-    const shouldPreflight =
-      preflightEnabled &&
-      (configuredBackend === "remote-bridge" ||
-        configuredBackend === "codex" ||
-        isRemoteCodexBridgeEnabled());
     let preflight = emptyPreflight(question);
-
-    if (shouldPreflight) {
+    if (isEnvTrue(process.env.AI_AGENT_PREFLIGHT_ENABLED)) {
       try {
         preflight = await withTimeout(
           runAgentPreflight(question, lang, ctx),
@@ -299,350 +237,25 @@ export async function POST(req: NextRequest) {
           "Agent preflight"
         );
       } catch (preflightErr) {
-        console.warn(
-          "[Agent preflight skipped]",
-          preflightErr instanceof Error ? preflightErr.message : preflightErr
-        );
+        console.warn("[Agent preflight skipped]", preflightErr instanceof Error ? preflightErr.message : preflightErr);
       }
     }
     ledgerContext.preflight = preflight;
 
-    if (configuredBackend === "remote-bridge" || isRemoteCodexBridgeEnabled()) {
-      try {
-        const remoteBridgeTimeoutMs = Math.min(
-          parsePositiveInt(process.env.CODEX_REMOTE_BRIDGE_TIMEOUT_MS, AGENT_REMOTE_BRIDGE_MAX_WAIT_MS),
-          AGENT_REMOTE_BRIDGE_MAX_WAIT_MS
-        );
-        const result = await withTimeout(
-          runRemoteCodexBridge({
-            question: preflight.groundedQuestion,
-            lang,
-            history,
-            requestIp: getClientIp(req),
-            timeoutMs: remoteBridgeTimeoutMs,
-          }),
-          remoteBridgeTimeoutMs + 500,
-          "Agent remote Codex bridge"
-        );
-        if (isFallbackBackend(result.backend)) {
-          throw new Error(`Remote Codex bridge returned fallback backend: ${result.backend}`);
-        }
-        const steps = [...preflight.steps, ...result.steps];
-        const toolResults = [...preflight.toolResults, ...result.toolResults];
-        await persistAgentLog({
-          lang,
-          question,
-          answer: result.answer,
-          backend: result.backend,
-          preflight,
-          steps,
-          toolResults,
-          iterations: result.iterations,
-        });
-        await persistAgentLedger({
-          req,
-          leadId,
-          question,
-          answer: result.answer,
-          backend: result.backend,
-          codexMode: result.codexMode,
-          durationMs: result.durationMs || Date.now() - requestStartedAt,
-          success: true,
-          preflight,
-          toolCount: toolResults.length,
-        });
-
-        return NextResponse.json({
-          answer: result.answer,
-          backend: result.backend,
-          codexMode: result.codexMode,
-          steps,
-          toolResults,
-          iterations: result.iterations,
-          durationMs: result.durationMs,
-          grounded: Boolean(preflight.groundingContext),
-          meta: buildAgentMeta({
-            lang,
-            question,
-            backend: result.backend,
-            grounded: Boolean(preflight.groundingContext),
-            toolResults,
-            durationMs: result.durationMs,
-          }),
-        });
-      } catch (bridgeErr) {
-        console.warn(
-          "[Remote Codex bridge fallback]",
-          bridgeErr instanceof Error ? bridgeErr.message : bridgeErr
-        );
-        if (configuredBackend === "remote-bridge") {
-          if (shouldRequireAgentLlm(configuredBackend)) {
-            await persistAgentLedger({
-              req,
-              leadId,
-              question,
-              backend: "llm-unavailable",
-              durationMs: Date.now() - requestStartedAt,
-              success: false,
-              errorType: "remote_bridge_unavailable",
-              errorMessage: bridgeErr instanceof Error ? bridgeErr.message : "Unknown bridge error",
-              preflight,
-              toolCount: preflight.toolResults.length,
-            });
-            return llmUnavailableResponse(
-              bridgeErr instanceof Error ? bridgeErr.message : "Unknown bridge error"
-            );
-          }
-          const fallback = await runFallbackAgent(question, lang, ctx);
-          await persistAgentLog({
-            lang,
-            question,
-            answer: fallback.answer,
-            backend: "tool-fallback",
-            preflight,
-            steps: fallback.steps,
-            toolResults: fallback.toolResults,
-            iterations: fallback.iterations,
-          });
-          await persistAgentLedger({
-            req,
-            leadId,
-            question,
-            answer: fallback.answer,
-            backend: "tool-fallback",
-            durationMs: Date.now() - requestStartedAt,
-            success: true,
-            errorType: "remote_bridge_fallback",
-            errorMessage: bridgeErr instanceof Error ? bridgeErr.message : "Unknown bridge error",
-            preflight,
-            toolCount: fallback.toolResults.length,
-          });
-          return NextResponse.json({
-            answer: fallback.answer,
-            backend: "tool-fallback",
-            steps: fallback.steps,
-            toolResults: fallback.toolResults,
-            iterations: fallback.iterations,
-            durationMs: Date.now() - requestStartedAt,
-            grounded: Boolean(preflight.groundingContext),
-            meta: buildAgentMeta({
-              lang,
-              question,
-              backend: "tool-fallback",
-              grounded: Boolean(preflight.groundingContext),
-              toolResults: fallback.toolResults,
-              durationMs: Date.now() - requestStartedAt,
-            }),
-          });
-        }
-      }
-    }
-
-    if (configuredBackend === "codex") {
-      if (shouldRequireAdminForCodexAgent()) {
-        const unauthorized = await requireAdmin(req);
-        if (unauthorized) return unauthorized;
-      }
-
-      try {
-        const result = await runCodexServerless({
-          question: preflight.groundedQuestion,
-          lang,
-          history,
-          timeoutMs: parsePositiveInt(process.env.CODEX_EXEC_TIMEOUT_MS, 45_000),
-        });
-        const steps = [
-          ...preflight.steps,
-          {
-            type: "final_answer" as const,
-            content: result.answer,
-            timestamp: Date.now(),
-          },
-        ];
-        const toolResults = preflight.toolResults;
-        const backend = result.mode === "local-auth" ? "codex-cli-local" : "codex-cli";
-        await persistAgentLog({
-          lang,
-          question,
-          answer: result.answer,
-          backend,
-          preflight,
-          steps,
-          toolResults,
-          iterations: 1,
-        });
-        await persistAgentLedger({
-          req,
-          leadId,
-          question,
-          answer: result.answer,
-          backend,
-          codexMode: result.mode,
-          durationMs: result.durationMs || Date.now() - requestStartedAt,
-          success: true,
-          preflight,
-          toolCount: toolResults.length,
-        });
-
-        return NextResponse.json({
-          answer: result.answer,
-          backend,
-          codexMode: result.mode,
-          steps,
-          toolResults,
-          iterations: 1,
-          durationMs: result.durationMs,
-          grounded: Boolean(preflight.groundingContext),
-          meta: buildAgentMeta({
-            lang,
-            question,
-            backend,
-            grounded: Boolean(preflight.groundingContext),
-            toolResults,
-            durationMs: result.durationMs,
-          }),
-        });
-      } catch (codexErr) {
-        console.warn(
-          "[Codex backend fallback]",
-          codexErr instanceof Error ? codexErr.message : codexErr
-        );
-        if (shouldRequireAgentLlm(configuredBackend)) {
-          await persistAgentLedger({
-            req,
-            leadId,
-            question,
-            backend: "llm-unavailable",
-            durationMs: Date.now() - requestStartedAt,
-            success: false,
-            errorType: "codex_backend_unavailable",
-            errorMessage: codexErr instanceof Error ? codexErr.message : "Unknown Codex error",
-            preflight,
-            toolCount: preflight.toolResults.length,
-          });
-          return llmUnavailableResponse(codexErr instanceof Error ? codexErr.message : "Unknown Codex error");
-        }
-        const fallback = await runFallbackAgent(question, lang, ctx);
-        await persistAgentLog({
-          lang,
-          question,
-          answer: fallback.answer,
-          backend: "tool-fallback",
-          preflight,
-          steps: fallback.steps,
-          toolResults: fallback.toolResults,
-          iterations: fallback.iterations,
-        });
-        await persistAgentLedger({
-          req,
-          leadId,
-          question,
-          answer: fallback.answer,
-          backend: "tool-fallback",
-          durationMs: Date.now() - requestStartedAt,
-          success: true,
-          errorType: "codex_backend_fallback",
-          errorMessage: codexErr instanceof Error ? codexErr.message : "Unknown Codex error",
-          preflight,
-          toolCount: fallback.toolResults.length,
-        });
-        return NextResponse.json({
-          answer: fallback.answer,
-          backend: "tool-fallback",
-          steps: fallback.steps,
-          toolResults: fallback.toolResults,
-          iterations: fallback.iterations,
-          durationMs: Date.now() - requestStartedAt,
-          grounded: Boolean(preflight.groundingContext),
-          meta: buildAgentMeta({
-            lang,
-            question,
-            backend: "tool-fallback",
-            grounded: Boolean(preflight.groundingContext),
-            toolResults: fallback.toolResults,
-            durationMs: Date.now() - requestStartedAt,
-          }),
-        });
-      }
-    }
-
-    if (configuredBackend === "tool-fallback") {
-      if (shouldRequireAgentLlm(configuredBackend)) {
-        await persistAgentLedger({
-          req,
-          leadId,
-          question,
-          backend: "llm-unavailable",
-          durationMs: Date.now() - requestStartedAt,
-          success: false,
-          errorType: "tool_fallback_configured",
-          errorMessage: "AGENT_BACKEND=tool-fallback while AI_REQUIRE_LLM=true",
-          preflight,
-          toolCount: preflight.toolResults.length,
-        });
-        return llmUnavailableResponse("AGENT_BACKEND=tool-fallback while AI_REQUIRE_LLM=true");
-      }
-      const fallback = await runFallbackAgent(question, lang, ctx);
-      await persistAgentLog({
-        lang,
-        question,
-        answer: fallback.answer,
-        backend: "tool-fallback",
-        preflight,
-        steps: fallback.steps,
-        toolResults: fallback.toolResults,
-        iterations: fallback.iterations,
-      });
-      await persistAgentLedger({
-        req,
-        leadId,
-        question,
-        answer: fallback.answer,
-        backend: "tool-fallback",
-        durationMs: Date.now() - requestStartedAt,
-        success: true,
-        preflight,
-        toolCount: fallback.toolResults.length,
-      });
-      return NextResponse.json({
-        answer: fallback.answer,
-        backend: "tool-fallback",
-        steps: fallback.steps,
-        toolResults: fallback.toolResults,
-        iterations: fallback.iterations,
-        durationMs: Date.now() - requestStartedAt,
-        grounded: Boolean(preflight.groundingContext),
-        meta: buildAgentMeta({
-          lang,
-          question,
-          backend: "tool-fallback",
-          grounded: Boolean(preflight.groundingContext),
-          toolResults: fallback.toolResults,
-          durationMs: Date.now() - requestStartedAt,
-        }),
-      });
-    }
-
-    if (shouldRequireAdminForCodexAgent()) {
-      const unauthorized = await requireAdmin(req);
-      if (unauthorized) return unauthorized;
-    }
-
-    // 에이전트 실행. 배포 환경에 외부 AI 설정이 없으면 내장 도구 fallback으로 응답한다.
     let result;
-    let backend = "zai";
+    let backend = "claude";
+    let errorType: string | undefined;
+    let errorMessage: string | undefined;
+
     try {
       result = await withTimeout(
-        runAgent(question, lang, history, ctx),
+        runAgent(preflight.groundedQuestion, lang, history, ctx),
         parsePositiveInt(process.env.AI_AGENT_TIMEOUT_MS, 45_000),
-        "Agent execution"
+        "Claude Agent execution"
       );
     } catch (agentErr) {
-      console.warn(
-        "[Agent backend fallback]",
-        agentErr instanceof Error ? agentErr.message : agentErr
-      );
-      if (shouldRequireAgentLlm(configuredBackend)) {
+      console.warn("[Claude Agent fallback]", agentErr instanceof Error ? agentErr.message : agentErr);
+      if (shouldRequireAgentLlm()) {
         await persistAgentLedger({
           req,
           leadId,
@@ -650,60 +263,52 @@ export async function POST(req: NextRequest) {
           backend: "llm-unavailable",
           durationMs: Date.now() - requestStartedAt,
           success: false,
-          errorType: "zai_backend_unavailable",
-          errorMessage: agentErr instanceof Error ? agentErr.message : "Unknown Agent backend error",
+          errorType: isClaudeNotConfiguredError(agentErr) ? "claude_not_configured" : "claude_backend_unavailable",
+          errorMessage: agentErr instanceof Error ? agentErr.message : "Unknown Claude error",
           preflight,
           toolCount: preflight.toolResults.length,
         });
-        return llmUnavailableResponse(agentErr instanceof Error ? agentErr.message : "Unknown Agent backend error");
+        return llmUnavailableResponse(agentErr instanceof Error ? agentErr.message : "Unknown Claude error");
       }
+
       backend = "tool-fallback";
+      errorType = isClaudeNotConfiguredError(agentErr) ? "claude_not_configured_fallback" : "claude_backend_fallback";
+      errorMessage = agentErr instanceof Error ? agentErr.message : "Unknown Claude error";
       result = await runFallbackAgent(question, lang, ctx);
-      await persistAgentLedger({
-        req,
-        leadId,
-        question,
-        answer: result.answer,
-        backend,
-        durationMs: Date.now() - requestStartedAt,
-        success: true,
-        errorType: "zai_backend_fallback",
-        errorMessage: agentErr instanceof Error ? agentErr.message : "Unknown Agent backend error",
-        preflight,
-        toolCount: result.toolResults.length,
-      });
     }
 
-    // ChatLog 저장 (도구 호출 이력 포함)
+    const steps = backend === "claude" ? [...preflight.steps, ...result.steps] : result.steps;
+    const toolResults = backend === "claude" ? [...preflight.toolResults, ...result.toolResults] : result.toolResults;
+
     await persistAgentLog({
       lang,
       question,
       answer: result.answer,
       backend,
       preflight,
-      steps: result.steps,
-      toolResults: result.toolResults,
+      steps,
+      toolResults,
       iterations: result.iterations,
     });
-    if (backend !== "tool-fallback") {
-      await persistAgentLedger({
-        req,
-        leadId,
-        question,
-        answer: result.answer,
-        backend,
-        durationMs: Date.now() - requestStartedAt,
-        success: true,
-        preflight,
-        toolCount: result.toolResults.length,
-      });
-    }
+    await persistAgentLedger({
+      req,
+      leadId,
+      question,
+      answer: result.answer,
+      backend,
+      durationMs: Date.now() - requestStartedAt,
+      success: true,
+      errorType,
+      errorMessage,
+      preflight,
+      toolCount: toolResults.length,
+    });
 
     return NextResponse.json({
       answer: result.answer,
       backend,
-      steps: result.steps,
-      toolResults: result.toolResults,
+      steps,
+      toolResults,
       iterations: result.iterations,
       durationMs: Date.now() - requestStartedAt,
       grounded: Boolean(preflight.groundingContext),
@@ -712,7 +317,7 @@ export async function POST(req: NextRequest) {
         question,
         backend,
         grounded: Boolean(preflight.groundingContext),
-        toolResults: result.toolResults,
+        toolResults,
         durationMs: Date.now() - requestStartedAt,
       }),
     });

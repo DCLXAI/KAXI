@@ -1,5 +1,3 @@
-import { createServer } from "node:http";
-import type { AddressInfo } from "node:net";
 import { readFileSync } from "node:fs";
 import { runAgentPreflight } from "../src/lib/agent/preflight";
 import { runFallbackAgent } from "../src/lib/agent/fallback";
@@ -65,49 +63,36 @@ function testBackendSelectorContracts() {
   const snapshot = { ...process.env };
   try {
     Object.assign(process.env, {
-      AGENT_BACKEND: "remote-bridge",
-      CODEX_REMOTE_BRIDGE_URL: "https://bridge.example.invalid/api/ai/agent",
-      CODEX_REMOTE_BRIDGE_ENABLED: "true",
-      AI_AGENT_ALLOW_TOOL_FALLBACK: "false",
-      AI_CONSULT_ALLOW_OFFICIAL_SUMMARY_FALLBACK: "false",
+      ANTHROPIC_API_KEY: "anthropic-secret",
+      ANTHROPIC_MODEL: "claude-opus-4-8",
+      AI_REQUIRE_LLM: "false",
+      AI_ALLOW_LLM_FALLBACK: "true",
     });
-    delete process.env.AI_ALLOW_LLM_FALLBACK;
-    delete process.env.AI_CONSULT_BACKEND;
 
-    if (getAgentBackend() !== "remote-bridge") fail("agent backend selector should honor remote-bridge");
-    if (getConsultBackend() !== "remote-bridge") fail("consult backend selector should inherit remote bridge");
-    if (!shouldRequireAgentLlm()) fail("remote bridge agent should require LLM by default");
-    if (!shouldRequireConsultLlm()) fail("remote bridge consult should require LLM by default");
-    const remoteDiagnostics = getAiBackendDiagnostics();
+    if (getAgentBackend() !== "claude") fail("agent backend selector should always use Claude");
+    if (getConsultBackend() !== "claude") fail("consult backend selector should always use Claude");
+    if (shouldRequireAgentLlm()) fail("fallback policy should allow agent fallback by default");
+    if (shouldRequireConsultLlm()) fail("fallback policy should allow consult fallback by default");
+    const diagnostics = getAiBackendDiagnostics();
     if (
-      remoteDiagnostics.agent.backend !== "remote-bridge" ||
-      !remoteDiagnostics.agent.requireLlm ||
-      !remoteDiagnostics.remoteBridge.configured ||
-      remoteDiagnostics.issues.length !== 0
+      diagnostics.agent.backend !== "claude" ||
+      diagnostics.consult.backend !== "claude" ||
+      !diagnostics.claude.apiKeyConfigured ||
+      diagnostics.issues.length !== 0
     ) {
-      fail(`remote bridge diagnostics should show strict configured bridge: ${JSON.stringify(remoteDiagnostics)}`);
+      fail(`Claude diagnostics should show managed API backend: ${JSON.stringify(diagnostics)}`);
     }
     if (
-      !remoteDiagnostics.agent.decisionTable.some(
-        (item) => item.code === "agent.backend.explicit_remote_bridge" && item.outcome === "selected"
+      !diagnostics.agent.decisionTable.some(
+        (item) => item.code === "agent.backend.claude" && item.outcome === "selected"
       ) ||
-      !remoteDiagnostics.agent.decisionTable.some(
-        (item) => item.code === "agent.require.strict_llm" && item.outcome === "selected"
+      !diagnostics.consult.decisionTable.some(
+        (item) => item.code === "consult.backend.claude" && item.outcome === "selected"
       )
     ) {
-      fail(`agent diagnostics should expose selected bridge decision path: ${JSON.stringify(remoteDiagnostics.agent)}`);
-    }
-    if (
-      !remoteDiagnostics.consult.decisionTable.some(
-        (item) => item.code === "consult.backend.inherit_remote_bridge" && item.outcome === "selected"
-      )
-    ) {
-      fail(`consult diagnostics should expose inherited bridge decision path: ${JSON.stringify(remoteDiagnostics.consult)}`);
+      fail(`diagnostics should expose selected Claude decision path: ${JSON.stringify(diagnostics)}`);
     }
 
-    process.env.AI_ALLOW_LLM_FALLBACK = " true ";
-    if (shouldRequireAgentLlm()) fail("global LLM fallback flag should disable strict agent LLM requirement");
-    if (shouldRequireConsultLlm()) fail("global LLM fallback flag should disable strict consult LLM requirement");
     if (explainAgentBackendDecision().requireLlm || explainConsultBackendDecision().requireLlm) {
       fail("decision explanations should mirror LLM fallback requirement policy");
     }
@@ -115,55 +100,23 @@ function testBackendSelectorContracts() {
     Object.assign(process.env, {
       VERCEL: "1",
       VERCEL_ENV: "production",
-      AGENT_BACKEND: "codex",
-      CODEX_SERVERLESS_ENABLED: " false ",
-      CODEX_REMOTE_BRIDGE_URL: "",
-      CODEX_REMOTE_BRIDGE_ENABLED: "false",
-      AI_ALLOW_LLM_FALLBACK: "",
-    });
-    delete process.env.CODEX_API_KEY;
-    delete process.env.OPENAI_API_KEY;
-    delete process.env.AI_CONSULT_BACKEND;
-
-    if (getConsultBackend() !== "zai") fail("hosted consult without Codex config should route to zAI");
-    const hostedDiagnostics = getAiBackendDiagnostics();
-    if (!hostedDiagnostics.warnings.some((item) => item.toLowerCase().includes("codex")) || hostedDiagnostics.issues.length !== 0) {
-      fail(`hosted fallback diagnostics should warn, not fail strict readiness: ${JSON.stringify(hostedDiagnostics)}`);
-    }
-    if (
-      !hostedDiagnostics.consult.decisionTable.some(
-        (item) => item.code === "consult.backend.default_zai" && item.outcome === "selected"
-      )
-    ) {
-      fail(`hosted consult diagnostics should expose default Z.ai decision: ${JSON.stringify(hostedDiagnostics.consult)}`);
-    }
-
-    process.env.CODEX_SERVERLESS_ENABLED = " true ";
-    if (getConsultBackend() !== "codex") fail("explicit CODEX_SERVERLESS_ENABLED=true should route consult to Codex");
-
-    Object.assign(process.env, {
-      VERCEL: "",
-      VERCEL_ENV: "",
-      AGENT_BACKEND: "nonsense",
-      AI_CONSULT_BACKEND: "mystery",
-      CODEX_SERVERLESS_ENABLED: "",
-      CODEX_REMOTE_BRIDGE_URL: "",
-      CODEX_REMOTE_BRIDGE_ENABLED: "true",
+      ANTHROPIC_API_KEY: "",
+      AI_REQUIRE_LLM: "false",
       AI_ALLOW_LLM_FALLBACK: "true",
     });
-    const unsupportedDiagnostics = getAiBackendDiagnostics();
-    if (
-      unsupportedDiagnostics.agent.configuredValue !== "unsupported" ||
-      unsupportedDiagnostics.consult.configuredValue !== "unsupported" ||
-      unsupportedDiagnostics.agent.backend !== "codex"
-    ) {
-      fail(`unsupported backend values should be visible but ignored safely: ${JSON.stringify(unsupportedDiagnostics)}`);
+
+    const hostedDiagnostics = getAiBackendDiagnostics();
+    if (!hostedDiagnostics.warnings.some((item) => item.includes("ANTHROPIC_API_KEY")) || hostedDiagnostics.issues.length !== 0) {
+      fail(`hosted fallback diagnostics should warn, not fail strict readiness: ${JSON.stringify(hostedDiagnostics)}`);
     }
-    if (
-      !unsupportedDiagnostics.agent.decisionTable.some((item) => item.code === "agent.backend.unsupported_ignored") ||
-      !unsupportedDiagnostics.consult.decisionTable.some((item) => item.code === "consult.backend.unsupported_ignored")
-    ) {
-      fail(`unsupported backend decisions should be represented in diagnostics: ${JSON.stringify(unsupportedDiagnostics)}`);
+
+    Object.assign(process.env, {
+      AI_REQUIRE_LLM: "true",
+      AI_ALLOW_LLM_FALLBACK: "false",
+    });
+    const strictDiagnostics = getAiBackendDiagnostics();
+    if (strictDiagnostics.issues.length === 0 || !shouldRequireAgentLlm() || !shouldRequireConsultLlm()) {
+      fail(`strict mode without key should be blocking: ${JSON.stringify(strictDiagnostics)}`);
     }
   } finally {
     restoreEnv(snapshot);
@@ -369,32 +322,25 @@ async function testAgentStatusRoute() {
   const snapshot = { ...process.env };
   try {
     Object.assign(process.env, {
-      AGENT_BACKEND: "remote-bridge",
-      CODEX_REMOTE_BRIDGE_ENABLED: "true",
-      CODEX_REMOTE_BRIDGE_URL: "https://user:pass@bridge.example.test/api/ai/agent?token=query-secret#hash",
-      CODEX_REMOTE_BRIDGE_TOKEN: "bridge-secret-token",
-      CODEX_REMOTE_BRIDGE_TIMEOUT_MS: "12345",
-      CODEX_API_KEY: "codex-secret-key",
+      ANTHROPIC_API_KEY: "anthropic-secret-key",
+      ANTHROPIC_MODEL: "claude-opus-4-8",
     });
 
     const route = await import("../src/app/api/ai/agent/route");
     const res = await route.GET();
     if (res.status !== 200) fail(`agent status expected 200, got ${res.status}`);
     const body = await res.json();
-    if (!body.backend || !body.preflight || !body.limits || !body.remoteBridge?.stats) {
+    if (!body.backend || !body.preflight || !body.limits || !body.claude) {
       fail(`agent status shape incomplete: ${JSON.stringify(body)}`);
     }
     if (!body.backendPolicy?.agent || !body.backendPolicy?.consult || !body.backendPolicy?.fallbackPolicy) {
       fail(`agent status should expose backend policy diagnostics: ${JSON.stringify(body)}`);
     }
-    if (!body.remoteBridge.tokenConfigured || body.remoteBridge.timeoutMs !== 12345) {
-      fail(`agent status should expose safe bridge configuration flags: ${JSON.stringify(body.remoteBridge)}`);
+    if (body.backend !== "claude" || !body.claude.apiKeyConfigured) {
+      fail(`agent status should expose Claude backend metadata: ${JSON.stringify(body)}`);
     }
-    if (body.remoteBridge.url?.endpoint !== "https://bridge.example.test/api/ai/agent") {
-      fail(`agent status should redact remote bridge credentials/query/hash: ${JSON.stringify(body.remoteBridge.url)}`);
-    }
-    const serialized = JSON.stringify(body);
-    for (const secret of ["codex-secret-key", "bridge-secret-token", "query-secret", "user:pass"]) {
+    for (const secret of ["anthropic-secret-key"]) {
+      const serialized = JSON.stringify(body);
       if (serialized.includes(secret)) fail(`agent status leaked secret material: ${secret}`);
     }
   } finally {
@@ -402,14 +348,13 @@ async function testAgentStatusRoute() {
   }
 }
 
-async function testRemoteBridgeFailureFallsBackToTools() {
+async function testClaudeMissingKeyFallsBackToTools() {
   const snapshot = { ...process.env };
   try {
     Object.assign(process.env, {
-      AGENT_BACKEND: "remote-bridge",
-      CODEX_REMOTE_BRIDGE_URL: "http://127.0.0.1:9/api/ai/agent",
-      CODEX_REMOTE_BRIDGE_ENABLED: "true",
-      AI_AGENT_ALLOW_TOOL_FALLBACK: "true",
+      ANTHROPIC_API_KEY: "",
+      AI_REQUIRE_LLM: "false",
+      AI_ALLOW_LLM_FALLBACK: "true",
       AI_AGENT_RATE_LIMIT: "0",
       AI_AGENT_DAILY_QUOTA: "0",
       AI_AGENT_PREFLIGHT_TIMEOUT_MS: "1000",
@@ -431,7 +376,42 @@ async function testRemoteBridgeFailureFallsBackToTools() {
     const body = await res.json();
 
     if (res.status !== 200 || body.backend !== "tool-fallback" || !body.answer) {
-      fail(`remote bridge failure should fall back to tools: status=${res.status} body=${JSON.stringify(body)}`);
+      fail(`missing Claude key should fall back to tools: status=${res.status} body=${JSON.stringify(body)}`);
+    }
+  } finally {
+    restoreEnv(snapshot);
+  }
+}
+
+async function testClaudeStrictModeBlocksWithoutKey() {
+  const snapshot = { ...process.env };
+  try {
+    Object.assign(process.env, {
+      ANTHROPIC_API_KEY: "",
+      AI_REQUIRE_LLM: "true",
+      AI_ALLOW_LLM_FALLBACK: "false",
+      AI_AGENT_RATE_LIMIT: "0",
+      AI_AGENT_DAILY_QUOTA: "0",
+      AI_AGENT_PREFLIGHT_ENABLED: "false",
+      AI_AGENT_LOGGING_ENABLED: "false",
+      AI_AGENT_LEDGER_ENABLED: "false",
+    });
+
+    const route = await import("../src/app/api/ai/agent/route");
+    const req = new NextRequest("http://localhost/api/ai/agent", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        question: "행정사 AI 에이전트",
+        lang: "ko",
+        history: [],
+      }),
+    });
+    const res = await route.POST(req);
+    const body = await res.json();
+
+    if (res.status !== 503 || body.backend !== "llm-unavailable") {
+      fail(`strict mode without Claude key should return 503: status=${res.status} body=${JSON.stringify(body)}`);
     }
   } finally {
     restoreEnv(snapshot);
@@ -451,7 +431,9 @@ async function testConsultRouteDoesNotRequireSharedLimiterWhenDisabled() {
       AI_CONSULT_DAILY_QUOTA: "0",
       AI_EMBEDDING_INIT_TIMEOUT_MS: "1",
       AI_LLM_TIMEOUT_MS: "1000",
-      ZAI_ENABLED: "false",
+      ANTHROPIC_API_KEY: "",
+      AI_REQUIRE_LLM: "false",
+      AI_ALLOW_LLM_FALLBACK: "true",
     });
     delete process.env.DATA_ENCRYPTION_KEY;
 
@@ -494,10 +476,11 @@ async function testConsultOfficialSummaryPrioritizesQuestionDocuments() {
       RATE_LIMIT_BACKEND: "auto",
       AI_CONSULT_RATE_LIMIT: "0",
       AI_CONSULT_DAILY_QUOTA: "0",
-      AI_CONSULT_BACKEND: "zai",
       AI_EMBEDDING_INIT_TIMEOUT_MS: "1",
       AI_LLM_TIMEOUT_MS: "1000",
-      ZAI_ENABLED: "false",
+      ANTHROPIC_API_KEY: "",
+      AI_REQUIRE_LLM: "false",
+      AI_ALLOW_LLM_FALLBACK: "true",
     });
     delete process.env.DATA_ENCRYPTION_KEY;
 
@@ -532,98 +515,6 @@ async function testConsultOfficialSummaryPrioritizesQuestionDocuments() {
       fail(`consult official summary should not lead with recent promulgation monitor: ${answer.slice(0, 600)}`);
     }
   } finally {
-    restoreEnv(snapshot);
-  }
-}
-
-async function testConsultRouteUsesRemoteCodexBridge() {
-  const snapshot = { ...process.env };
-  let seenBody = "";
-  const server = createServer((req, res) => {
-    let raw = "";
-    req.on("data", (chunk) => {
-      raw += chunk.toString("utf8");
-    });
-    req.on("end", () => {
-      seenBody = raw;
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(
-        JSON.stringify({
-          answer: "mocked consult bridge answer",
-          backend: "codex-cli-local-bridge",
-          codexMode: "local-auth",
-          steps: [],
-          toolResults: [],
-          iterations: 1,
-          durationMs: 12,
-        })
-      );
-    });
-  });
-
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address() as AddressInfo;
-
-  try {
-    Object.assign(process.env, {
-      NODE_ENV: "test",
-      VERCEL_ENV: "",
-      VERCEL: "",
-      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/kaxi",
-      AI_CONSULT_RATE_LIMIT: "0",
-      AI_CONSULT_DAILY_QUOTA: "0",
-      AI_CONSULT_BACKEND: "zai",
-      AGENT_BACKEND: "remote-bridge",
-      AI_EMBEDDING_INIT_TIMEOUT_MS: "1",
-      AI_LLM_TIMEOUT_MS: "5000",
-      CODEX_REMOTE_BRIDGE_URL: `http://127.0.0.1:${address.port}/api/ai/agent`,
-      CODEX_REMOTE_BRIDGE_TIMEOUT_MS: "3000",
-      ZAI_ENABLED: "false",
-    });
-    delete process.env.CODEX_REMOTE_BRIDGE_TOKEN;
-
-    const route = await import("../src/app/api/ai/consult/route");
-    const req = new NextRequest("https://kaxi.local/api/ai/consult", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-forwarded-for": "203.0.113.88",
-      },
-      body: JSON.stringify({
-        question: "행정사 AI",
-        lang: "ko",
-        history: [],
-        mode: "general",
-      }),
-    });
-    const res = await route.POST(req);
-    const body = await res.json();
-
-    const answer = String(body.answer || "");
-    if (res.status !== 200 || !answer.startsWith("mocked consult bridge answer")) {
-      fail(`consult route should use remote bridge: status=${res.status} body=${JSON.stringify(body)}`);
-    }
-    if (!answer.includes("[1]") || !answer.includes("📚 출처:")) {
-      fail(`consult route should normalize bridge answers with citations and source links: ${answer}`);
-    }
-    if (body.backend !== "codex-cli-local-bridge" || body.codexMode !== "local-auth") {
-      fail(`consult route should expose bridge backend metadata: ${JSON.stringify(body)}`);
-    }
-    if (String(body.disclaimer).includes("외부 LLM 없이")) {
-      fail(`consult route should not expose external LLM configuration fallback: ${JSON.stringify(body)}`);
-    }
-    const payload = JSON.parse(seenBody);
-    const prompt = String(payload.question || "");
-    if (payload.promptMode !== "raw") {
-      fail(`consult bridge payload should request raw Codex prompt mode, got ${seenBody}`);
-    }
-    if (!prompt.includes("Role: KAXI") || !prompt.includes("Base the answer only on the official excerpts")) {
-      fail(`consult bridge payload should include consult guardrails, got ${seenBody}`);
-    }
-  } finally {
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
     restoreEnv(snapshot);
   }
 }
@@ -740,10 +631,10 @@ await testPreflightCarriesPlannerContext();
 await testFallbackPartnerRequestStaysDraft();
 await testFallbackAnswerIncludesCitationMarkers();
 await testAgentStatusRoute();
-await testRemoteBridgeFailureFallsBackToTools();
+await testClaudeMissingKeyFallsBackToTools();
+await testClaudeStrictModeBlocksWithoutKey();
 await testConsultRouteDoesNotRequireSharedLimiterWhenDisabled();
 await testConsultOfficialSummaryPrioritizesQuestionDocuments();
-await testConsultRouteUsesRemoteCodexBridge();
 testAgentMetaDoesNotEchoPii();
 testAgentMetaClarifyingQuestions();
 testVercelModelCacheDefaultsToTmp();

@@ -4,7 +4,7 @@
 
 import { TOOL_MAP, getToolsDescription, parseToolCall, sanitizeToolArgsForDisplay, type ToolArgs, type ToolResult, type ToolContext } from "./tools";
 import type { Lang } from "../i18n/translations";
-import { completeZaiChatText, createZaiClient, type ZaiChatMessage } from "../ai/zai";
+import { ClaudeNotConfiguredError, generateClaudeText, type ClaudeGatewayMessage } from "../ai/claude-gateway";
 
 export interface AgentStep {
   type: "thinking" | "tool_call" | "tool_result" | "final_answer" | "error";
@@ -121,7 +121,7 @@ ${getToolsDescription()}
 - 사용자 ID: ${ctx.leadId || "익명"}`;
 
   // 메시지 히스토리 구성
-  const messages: ZaiChatMessage[] = [
+  const messages: ClaudeGatewayMessage[] = [
     { role: "system", content: systemPrompt },
     ...history.slice(-4).map((h) => ({
       role: h.role === "user" ? ("user" as const) : ("assistant" as const),
@@ -129,8 +129,6 @@ ${getToolsDescription()}
     })),
     { role: "user", content: question },
   ];
-
-  const zai = await createZaiClient("agent");
 
   let iteration = 0;
   let finalAnswer = "";
@@ -140,12 +138,13 @@ ${getToolsDescription()}
     iteration++;
 
     try {
-      const content = await completeZaiChatText(zai, {
+      const completion = await generateClaudeText({
+        feature: "agent",
         messages,
-        thinking: { type: "disabled" },
         temperature: 0.2,
-        max_tokens: 1200,
-      }) || "";
+        maxTokens: 1200,
+      });
+      const content = completion.text || "";
 
       // 도구 호출인지 확인
       const toolCall = parseToolCall(content);
@@ -217,6 +216,11 @@ ${getToolsDescription()}
       });
       break;
     } catch (e) {
+      if (e instanceof ClaudeNotConfiguredError) {
+        // 키/SDK 부재는 여기서 삼키지 않고 라우트의 deterministic tool
+        // fallback으로 승격시킨다.
+        throw e;
+      }
       console.error("[Agent iteration error]", e);
       const errMsg = errorMessage(e);
       steps.push({

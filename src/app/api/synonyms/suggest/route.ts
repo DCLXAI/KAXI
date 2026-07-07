@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin, withTimeout } from "@/lib/api/security";
-import { createZaiClient, isZaiConfigurationError } from "@/lib/ai/zai";
+import { generateClaudeJson, isClaudeNotConfiguredError } from "@/lib/ai/claude-gateway";
 import { safeChatQuestionForAnalytics } from "@/lib/privacy/chat-log";
 
 // POST /api/synonyms/suggest - LLM 기반 동의어 후보 자동 추천
@@ -125,8 +125,6 @@ async function generateSynonymSuggestions(
   reason: string;
 }>> {
   try {
-    const zai = await createZaiClient("synonym suggestions");
-
     const candidatesText = candidates
       .map((c) => `- "${c.word}" (빈도: ${c.count}, 언어: ${c.langs.join("/")})\n  예시: "${c.examples[0]}"`)
       .join("\n");
@@ -158,49 +156,44 @@ ${candidatesText}
 
 JSON 배열로 응답:`;
 
-    const completion = await zai.chat.completions.create({
+    const suggestions = await generateClaudeJson<Array<{
+      source: string;
+      targets: string[];
+      category: string;
+      confidence: number;
+      reason: string;
+    }>>({
+      feature: "structured",
       messages: [
-        { role: "assistant", content: systemPrompt },
+        { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      thinking: { type: "disabled" },
       temperature: 0.3,
-      max_tokens: 2000,
+      maxTokens: 2000,
+      jsonSchema: {
+        name: "synonym_suggestions",
+        schema: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["source", "targets", "category", "confidence", "reason"],
+            properties: {
+              source: { type: "string" },
+              targets: { type: "array", items: { type: "string" } },
+              category: { type: "string", enum: ["cost", "visa", "documents", "school", "warning", "process", "general"] },
+              confidence: { type: "number", minimum: 0, maximum: 1 },
+              reason: { type: "string" },
+            },
+          },
+        },
+      },
     });
 
-    const content = completion.choices?.[0]?.message?.content || "";
-    console.log("[LLM suggest] Response length:", content.length);
-    console.log("[LLM suggest] Response preview:", content.substring(0, 300));
-
-    // JSON 추출 — 여러 패턴 시도
-    // 1. ```json ... ``` 블록
-    let jsonStr: string | null = null;
-    const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (codeBlockMatch) {
-      jsonStr = codeBlockMatch[1].trim();
-    }
-    // 2. 직접 배열
-    if (!jsonStr) {
-      const arrayMatch = content.match(/\[[\s\S]*\]/);
-      if (arrayMatch) jsonStr = arrayMatch[0];
-    }
-
-    if (!jsonStr) {
-      console.log("[LLM suggest] No JSON found in response");
-      return [];
-    }
-
-    try {
-      const suggestions = JSON.parse(jsonStr);
-      return Array.isArray(suggestions) ? suggestions : [];
-    } catch (parseErr) {
-      console.error("[LLM suggest] JSON parse error:", parseErr);
-      console.error("[LLM suggest] JSON string was:", jsonStr.substring(0, 500));
-      return [];
-    }
+    return Array.isArray(suggestions) ? suggestions : [];
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    if (isZaiConfigurationError(e)) {
+    if (isClaudeNotConfiguredError(e)) {
       console.warn("[LLM synonym suggestion skipped]", message);
     } else {
       console.error("[LLM synonym suggestion error]", e);

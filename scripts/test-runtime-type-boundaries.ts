@@ -6,7 +6,7 @@ function fail(message: string): never {
 }
 
 const guardedFiles = [
-  "src/lib/ai/zai.ts",
+  "src/lib/ai/claude-gateway.ts",
   "src/lib/agent/agent.ts",
   "src/app/api/ai/chat/route.ts",
   "src/app/api/ai/consult/route.ts",
@@ -33,7 +33,7 @@ for (const file of guardedFiles) {
     violations.push(`${file}: use unknown or explicit records instead of Record<string, any>`);
   }
   if (/messages:\s*messages\s+as\s+any/.test(content)) {
-    violations.push(`${file}: Z.ai messages must use typed ChatMessage arrays`);
+    violations.push(`${file}: LLM messages must use typed message arrays`);
   }
 }
 

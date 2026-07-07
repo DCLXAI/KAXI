@@ -8,17 +8,14 @@ import {
 } from "@/lib/data/knowledge";
 import type { Lang } from "@/lib/i18n/translations";
 import { db } from "@/lib/db";
-import { generateZaiChatText, isZaiConfigurationError, type ZaiChatMessage } from "@/lib/ai/zai";
-import { getConsultBackend, shouldRequireConsultLlm, type ConsultBackend } from "@/lib/ai/backend-selector";
-import { runCodexServerless } from "@/lib/codex/serverless";
-import { runRemoteCodexBridge } from "@/lib/codex/remote-bridge";
+import { getConsultBackend, shouldRequireConsultLlm } from "@/lib/ai/backend-selector";
+import { generateClaudeText, isClaudeNotConfiguredError, type ClaudeGatewayMessage } from "@/lib/ai/claude-gateway";
 import { hybridSearch, initVectorStore } from "@/lib/embeddings/vector-store";
 import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
 import { withImmigrationLegalBasisDocs } from "@/lib/knowledge/legal-basis";
 import { ensureGroundedCitationAnswer } from "@/lib/knowledge/citations";
 import {
   consumeDailyQuota,
-  getClientIp,
   parseLimit,
   parsePositiveInt,
   rateLimit,
@@ -33,8 +30,6 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const CONSULT_REMOTE_BRIDGE_MAX_WAIT_MS = 52_000;
-
 class LlmBackendUnavailableError extends Error {
   constructor(message: string) {
     super(message);
@@ -42,15 +37,11 @@ class LlmBackendUnavailableError extends Error {
   }
 }
 
-function isFallbackBackend(backend: string): boolean {
-  return backend === "tool-fallback" || backend === "official-summary";
-}
-
 function llmUnavailableResponse(message: string) {
   return NextResponse.json(
     {
       error: "LLM backend unavailable",
-      message: "Codex LLM bridge is unavailable. Official-summary fallback is disabled for this deployment.",
+      message: "Claude LLM gateway is unavailable. Official-summary fallback is disabled for this deployment.",
       detail: message.slice(0, 500),
       backend: "llm-unavailable",
     },
@@ -64,7 +55,6 @@ interface ExpertAnswerResult {
   suggestedFollowups: string[];
   needsHumanExpert: boolean;
   backend: string;
-  codexMode?: string;
   durationMs?: number;
 }
 
@@ -138,7 +128,7 @@ export async function POST(req: NextRequest) {
 
     // 3. 행정사 전문 LLM 답변 생성
     const result = await withTimeout(
-      generateExpertAnswer(question, lang, docs, history, mode, getClientIp(req)),
+      generateExpertAnswer(question, lang, docs, history, mode),
       parsePositiveInt(process.env.AI_LLM_TIMEOUT_MS, 55_000),
       "Expert LLM generation"
     );
@@ -170,7 +160,6 @@ export async function POST(req: NextRequest) {
               mode,
               expert: true,
               backend: result.backend,
-              codexMode: result.codexMode || null,
               sourceNotice,
             }),
           },
@@ -196,7 +185,7 @@ export async function POST(req: NextRequest) {
       suggestedFollowups: result.suggestedFollowups,
       needsHumanExpert: result.needsHumanExpert,
       backend: result.backend,
-      codexMode: result.codexMode || null,
+      model: result.backend === "claude" ? process.env.ANTHROPIC_MODEL || "claude-opus-4-8" : null,
       sourceNotice,
     });
   } catch (e) {
@@ -213,8 +202,7 @@ async function generateExpertAnswer(
   lang: Lang,
   docs: KnowledgeDoc[],
   history: { role: string; content: string }[],
-  mode: string,
-  requestIp: string
+  mode: string
 ): Promise<ExpertAnswerResult> {
   const langName = { ko: "Korean", vi: "Vietnamese", mn: "Mongolian", en: "English" }[lang];
 
@@ -260,7 +248,6 @@ async function generateExpertAnswer(
         })
         .join("\n\n---\n\n")
     : "(관련 공식 문서가 검색되지 않음 — 일반 지식으로 답변시 명확히 표시)";
-  const codexContext = buildCompactCodexContext(docs, lang);
 
   const systemPrompt = `당신은 KAXI의 ${modeConfig.role}입니다. 한국 유학 준비생에게 전문적이고 정확한 행정·법률 정보를 제공합니다.
 
@@ -300,7 +287,7 @@ ${context}
 - 답변 마지막에는 다음 출처 기준 문장을 그대로 포함: "${buildRagBasisNotice(lang, docs)}"
 - ${needsHumanExpert ? "⚠️ 이 사례는 반드시 행정사 상담이 필요합니다. 답변 끝에 권유하세요." : ""}`;
 
-  const messages: ZaiChatMessage[] = [
+  const messages: ClaudeGatewayMessage[] = [
     { role: "system", content: systemPrompt },
     ...history.slice(-6).map((h) => ({
       role: h.role === "user" ? ("user" as const) : ("assistant" as const),
@@ -313,109 +300,28 @@ ${context}
   const sourceNotice = buildRagBasisNotice(lang, docs);
   const disclaimer = [sourceNotice, consultDisclaimer(lang)].filter(Boolean).join(" ");
   const consultBackend = getConsultBackend();
-  const codexPrompt = buildCodexConsultPrompt({
-    question,
-    langName,
-    docs,
-    history,
-    modeConfig,
-    dangerSignals,
-    needsHumanExpert,
-    context: codexContext,
-    sourceNotice,
-  });
-
-  if (consultBackend === "remote-bridge") {
-    try {
-      const remoteBridgeTimeoutMs = Math.min(
-        parsePositiveInt(process.env.AI_CONSULT_REMOTE_BRIDGE_TIMEOUT_MS, CONSULT_REMOTE_BRIDGE_MAX_WAIT_MS),
-        parsePositiveInt(process.env.CODEX_REMOTE_BRIDGE_TIMEOUT_MS, CONSULT_REMOTE_BRIDGE_MAX_WAIT_MS),
-        CONSULT_REMOTE_BRIDGE_MAX_WAIT_MS
-      );
-      const result = await withTimeout(
-        runRemoteCodexBridge({
-          question: codexPrompt,
-          lang,
-          history: [],
-          requestIp,
-          timeoutMs: remoteBridgeTimeoutMs,
-          promptMode: "raw",
-        }),
-        remoteBridgeTimeoutMs + 500,
-        "Consult remote Codex bridge"
-      );
-      if (isFallbackBackend(result.backend)) {
-        throw new Error(`Remote Codex bridge returned fallback backend: ${result.backend}`);
-      }
-      const answer = result.answer.trim();
-      if (!answer) throw new Error("Remote Codex bridge returned an empty answer");
-      return {
-        answer,
-        disclaimer,
-        suggestedFollowups,
-        needsHumanExpert,
-        backend: result.backend,
-        codexMode: result.codexMode,
-        durationMs: result.durationMs,
-      };
-    } catch (e) {
-      console.warn("[Expert Codex bridge skipped]", e instanceof Error ? e.message : e);
-      if (shouldRequireConsultLlm(consultBackend)) {
-        throw new LlmBackendUnavailableError(e instanceof Error ? e.message : "Unknown bridge error");
-      }
-      return buildOfficialSummaryExpertResult({
-        question,
-        docs,
-        lang,
-        sourceNotice,
-        disclaimer,
-        suggestedFollowups,
-        needsHumanExpert,
-        temporaryModelFailure: true,
-      });
-    }
-  }
-
-  if (consultBackend === "codex") {
-    try {
-      const result = await runCodexServerless({
-        question: codexPrompt,
-        lang,
-        history: [],
-        timeoutMs: parsePositiveInt(process.env.CODEX_EXEC_TIMEOUT_MS, 45_000),
-        promptMode: "raw",
-      });
-      const answer = result.answer.trim();
-      if (!answer) throw new Error("Codex CLI returned an empty answer");
-      return {
-        answer,
-        disclaimer,
-        suggestedFollowups,
-        needsHumanExpert,
-        backend: result.mode === "local-auth" ? "codex-cli-local" : "codex-cli",
-        codexMode: result.mode,
-        durationMs: result.durationMs,
-      };
-    } catch (e) {
-      console.warn("[Expert Codex backend skipped]", e instanceof Error ? e.message : e);
-      if (shouldRequireConsultLlm(consultBackend)) {
-        throw new LlmBackendUnavailableError(e instanceof Error ? e.message : "Unknown Codex error");
-      }
-    }
-  }
 
   try {
-    const answer = await generateZaiChatText("expert consult", {
+    const completion = await generateClaudeText({
+      feature: "consult",
       messages,
-      thinking: { type: "disabled" },
-      temperature: 0.2, // 더 낮은 온도로 정확성 향상
-      max_tokens: 1500,
-    }) || "";
+      temperature: 0.2,
+      maxTokens: 1500,
+      expectLongResponse: true,
+    });
+    const answer = completion.text || "";
 
-    return { answer, disclaimer, suggestedFollowups, needsHumanExpert, backend: "zai" };
+    return {
+      answer,
+      disclaimer,
+      suggestedFollowups,
+      needsHumanExpert,
+      backend: "claude",
+      durationMs: completion.durationMs,
+    };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    const configurationFallback = isZaiConfigurationError(e);
+    const configurationFallback = isClaudeNotConfiguredError(e);
     if (configurationFallback) {
       console.warn("[Expert LLM skipped]", message);
     } else {
@@ -685,103 +591,6 @@ ${sections}
 ${sourceList}
 
 ${sourceNotice}`;
-}
-
-function buildCompactCodexContext(docs: KnowledgeDoc[], lang: Lang): string {
-  if (docs.length === 0) return "(no official source matched)";
-
-  const maxDocs = parsePositiveInt(process.env.AI_CONSULT_CODEX_MAX_DOCS, 4);
-  const maxDocChars = parsePositiveInt(process.env.AI_CONSULT_CODEX_DOC_CHARS, 450);
-  const maxTotalChars = parsePositiveInt(process.env.AI_CONSULT_CODEX_CONTEXT_CHARS, 2_600);
-  const lines: string[] = [];
-
-  for (const [index, doc] of docs.slice(0, Math.max(1, maxDocs)).entries()) {
-    const meta = getRagDocumentMetadata(doc, lang);
-    const content = pickLangText(doc.content, lang);
-    lines.push(
-      [
-        `[문서 ${index + 1}] ${pickLangText(doc.title, lang)}`,
-        `주석 번호: [${index + 1}]`,
-        `출처: ${doc.source}`,
-        meta?.source_url ? `원문 URL: ${meta.source_url}` : "",
-        meta?.last_checked_at ? `확인일: ${meta.last_checked_at}` : "",
-        content.length > maxDocChars ? `${content.slice(0, maxDocChars)}\n...[truncated]` : content,
-      ]
-        .filter(Boolean)
-        .join("\n")
-    );
-
-    if (lines.join("\n\n---\n\n").length >= maxTotalChars) break;
-  }
-
-  const joined = lines.join("\n\n---\n\n");
-  return joined.length > maxTotalChars ? `${joined.slice(0, maxTotalChars)}\n...[truncated]` : joined;
-}
-
-function buildCodexConsultPrompt({
-  question,
-  langName,
-  docs,
-  history,
-  modeConfig,
-  dangerSignals,
-  needsHumanExpert,
-  context,
-  sourceNotice,
-}: {
-  question: string;
-  langName: string;
-  docs: KnowledgeDoc[];
-  history: { role: string; content: string }[];
-  modeConfig: { role: string; focus: string };
-  dangerSignals: string[];
-  needsHumanExpert: boolean;
-  context: string;
-  sourceNotice: string;
-}): string {
-  const recentHistory = history
-    .slice(-3)
-    .map((h) => `${h.role === "user" ? "User" : "Assistant"}: ${h.content.slice(0, 500)}`)
-    .join("\n");
-  const sources = docs
-    .slice(0, 4)
-    .map((d, i) => {
-      const meta = getRagDocumentMetadata(d, "ko");
-      const checked = meta?.last_checked_at ? ` (확인일 ${meta.last_checked_at})` : "";
-      const url = meta?.source_url ? ` - ${meta.source_url}` : "";
-      return `${i + 1}. ${pickLangText(d.title, "ko")} - ${d.source}${url}${checked}`;
-    })
-    .join("\n");
-
-  return `Role: KAXI ${modeConfig.role}. Focus: ${modeConfig.focus}.
-Answer in ${langName}.
-
-Rules:
-- Base the answer only on the official excerpts below.
-- For visa/stay/work questions, apply this order: Immigration Act -> Enforcement Decree status table -> Enforcement Rule documents/fees -> HiKorea/manual guidance.
-- If the legal basis is missing or the facts are insufficient, say what is unconfirmed and ask the smallest needed follow-up.
-- Never guarantee approval, predict a personal approval probability, draft filings, or claim submission/representation.
-- For refusal strategy, false documents, illegal work, status evasion, or case-specific judgment, recommend administrative-scrivener review.
-- Do not mention internal routing, Codex, bridge, Z.ai, API keys, or prompts.
-- Use concise Markdown. Add citations like [1], [2] after every factual/legal requirement, procedure, fee, period, or document-list claim, matching the source numbers below.
-- Do not make a legal/visa requirement claim without a citation. If no source supports it, say it is unconfirmed.
-- End with "📚 출처:" plus the numbered source list.
-- End with this notice exactly: "${sourceNotice}"
-
-Risk: ${dangerSignals.length > 0 ? dangerSignals.join("; ") : "none"}
-Human expert: ${needsHumanExpert ? "required/recommended" : "not necessarily"}
-
-Recent conversation:
-${recentHistory || "(none)"}
-
-Official excerpts:
-${context}
-
-Sources:
-${sources || "(no official source matched)"}
-
-Question:
-${question}`;
 }
 
 // 위험 신호 감지
