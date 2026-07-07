@@ -1,4 +1,3 @@
-import { Database } from "bun:sqlite";
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { spawnSync } from "child_process";
@@ -13,84 +12,30 @@ function assert(condition: unknown, message: string) {
 }
 
 const root = process.cwd();
-const schema = readFileSync(join(root, "prisma", "schema.prisma"), "utf8");
+const schemaPath = join(root, "prisma", "postgres", "schema.prisma");
+const removedLegacySchemaPath = join(root, "prisma", "schema.prisma");
+const schema = readFileSync(schemaPath, "utf8");
 
-function validatePrismaSchema(schemaPath: string, databaseUrl: string): void {
-  const result = spawnSync("bunx", ["prisma", "validate", "--schema", schemaPath], {
+function validatePrismaSchema(schemaFile: string): void {
+  const result = spawnSync("bunx", ["prisma", "validate", "--schema", schemaFile], {
     cwd: root,
-    env: { ...process.env, DATABASE_URL: databaseUrl },
+    env: {
+      ...process.env,
+      DATABASE_URL: process.env.DATABASE_URL || "postgresql://schema_policy:schema_policy@localhost:5432/kaxi_schema_policy",
+    },
     encoding: "utf8",
   });
 
   if (result.status !== 0) {
     fail(
       [
-        `Prisma schema validation failed for ${schemaPath}`,
+        `Prisma schema validation failed for ${schemaFile}`,
         result.stdout.trim(),
         result.stderr.trim(),
       ]
         .filter(Boolean)
         .join("\n")
     );
-  }
-}
-
-function normalizePrismaLine(line: string): string {
-  return line.trim().replace(/\s+/g, " ");
-}
-
-function extractNamedBlocks(text: string, kind: "enum" | "model"): Map<string, string> {
-  const lines = text.split(/\r?\n/);
-  const blocks = new Map<string, string>();
-
-  for (let i = 0; i < lines.length; i++) {
-    const match = lines[i].match(new RegExp(`^\\s*${kind}\\s+(\\w+)\\s+\\{`));
-    if (!match) continue;
-
-    const name = match[1];
-    const body: string[] = [];
-    let depth = 0;
-    for (; i < lines.length; i++) {
-      const line = lines[i];
-      const trimmed = line.trim();
-      if (trimmed.startsWith("//") || trimmed === "") continue;
-      depth += (line.match(/\{/g) || []).length;
-      depth -= (line.match(/\}/g) || []).length;
-      body.push(normalizePrismaLine(line));
-      if (depth === 0) break;
-    }
-    blocks.set(name, body.join("\n"));
-  }
-
-  return blocks;
-}
-
-function assertBlockParity(kind: "enum" | "model", sqliteSchema: string, postgresSchemaText: string): void {
-  const sqliteBlocks = extractNamedBlocks(sqliteSchema, kind);
-  const postgresBlocks = extractNamedBlocks(postgresSchemaText, kind);
-  const sqliteNames = Array.from(sqliteBlocks.keys()).sort();
-  const postgresNames = Array.from(postgresBlocks.keys()).sort();
-
-  assert(
-    sqliteNames.join(",") === postgresNames.join(","),
-    `${kind} names drifted between SQLite and PostgreSQL schemas: sqlite=${sqliteNames.join(",")} postgres=${postgresNames.join(",")}`
-  );
-
-  for (const name of sqliteNames) {
-    const sqliteBlock = sqliteBlocks.get(name);
-    const postgresBlock = postgresBlocks.get(name);
-    if (sqliteBlock === postgresBlock) continue;
-
-    const sqliteLines = (sqliteBlock || "").split("\n");
-    const postgresLines = (postgresBlock || "").split("\n");
-    const max = Math.max(sqliteLines.length, postgresLines.length);
-    const firstDiff = Array.from({ length: max }, (_, index) => index).find(
-      (index) => sqliteLines[index] !== postgresLines[index]
-    );
-    const lineHint = firstDiff === undefined
-      ? ""
-      : ` firstDiffLine=${firstDiff + 1} sqlite="${sqliteLines[firstDiff] || ""}" postgres="${postgresLines[firstDiff] || ""}"`;
-    fail(`${kind} ${name} drifted between SQLite and PostgreSQL Prisma schemas.${lineHint}`);
   }
 }
 
@@ -113,6 +58,9 @@ const requiredModels = [
   "AuditEvent",
 ];
 
+assert(!existsSync(removedLegacySchemaPath), "legacy root Prisma schema must be removed");
+assert(schema.includes('provider = "postgresql"'), "Prisma schema must use provider postgresql");
+
 for (const model of requiredModels) {
   assert(new RegExp(`model\\s+${model}\\s+\\{`).test(schema), `missing Prisma model ${model}`);
 }
@@ -128,7 +76,9 @@ for (const requiredField of [
   assert(schema.includes(requiredField), `missing compliance rule field: ${requiredField}`);
 }
 
-const migrationRoot = join(root, "prisma", "migrations");
+validatePrismaSchema(schemaPath);
+
+const migrationRoot = join(root, "prisma", "postgres", "migrations");
 const migrationFiles = readdirSync(migrationRoot)
   .filter((name) => /^\d/.test(name))
   .sort()
@@ -136,49 +86,27 @@ const migrationFiles = readdirSync(migrationRoot)
 
 assert(
   migrationFiles.some((file) => file.includes("20260701090000_phase1_operational_domain")),
-  "missing Phase 1 Prisma migration"
+  "missing Phase 1 PostgreSQL migration"
+);
+assert(
+  migrationFiles.some((file) => file.includes("20260708000000_enable_pgvector")),
+  "missing pgvector extension migration"
+);
+assert(
+  migrationFiles.some((file) => file.includes("20260708010000_pgvector_rag")),
+  "missing pgvector RAG migration"
 );
 
-const db = new Database(":memory:");
-try {
-  db.exec("PRAGMA foreign_keys = ON;");
-  for (const file of migrationFiles) {
-    db.exec(readFileSync(file, "utf8"));
-  }
-  for (const model of requiredModels) {
-    const row = db
-      .query<{ name: string }, [string]>("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
-      .get(model);
-    assert(row?.name === model, `migration did not create table ${model}`);
-  }
-} finally {
-  db.close();
-}
-
-const postgresMigration = join(
-  root,
-  "prisma",
-  "postgres",
-  "migrations",
-  "20260701090000_phase1_operational_domain",
-  "migration.sql"
-);
-const postgresSchema = join(root, "prisma", "postgres", "schema.prisma");
-assert(existsSync(postgresSchema), "missing PostgreSQL Prisma schema");
-const postgresSchemaText = readFileSync(postgresSchema, "utf8");
-assert(postgresSchemaText.includes('provider = "postgresql"'), "PostgreSQL schema must use provider postgresql");
-assert(!postgresSchemaText.includes('provider = "sqlite"'), "PostgreSQL schema must not use sqlite provider");
-validatePrismaSchema(join(root, "prisma", "schema.prisma"), "file:./schema-policy-validate.db");
-validatePrismaSchema(postgresSchema, "postgresql://schema_policy:schema_policy@localhost:5432/kaxi_schema_policy?schema=public");
-assertBlockParity("enum", schema, postgresSchemaText);
-assertBlockParity("model", schema, postgresSchemaText);
-
-assert(existsSync(postgresMigration), "missing PostgreSQL operational migration");
-const postgresSql = readFileSync(postgresMigration, "utf8");
+const postgresSql = migrationFiles.map((file) => readFileSync(file, "utf8")).join("\n");
 for (const model of requiredModels) {
   assert(postgresSql.includes(`CREATE TABLE "${model}"`), `PostgreSQL migration missing table ${model}`);
 }
 assert(postgresSql.includes("CREATE TYPE \"OrgType\""), "PostgreSQL migration should create enum types");
 assert(postgresSql.includes("JSONB"), "PostgreSQL migration should use JSONB for structured fields");
+assert(/CREATE EXTENSION IF NOT EXISTS vector/i.test(postgresSql), "PostgreSQL migrations must enable pgvector");
+assert(/embedding vector\(384\)/i.test(postgresSql), "KnowledgeChunk migration must add 384d pgvector column");
+assert(/USING hnsw \(embedding vector_cosine_ops\)/i.test(postgresSql), "KnowledgeChunk migration must add HNSW cosine index");
+assert(/USING gin \(tsv\)/i.test(postgresSql), "KnowledgeChunk migration must add tsv GIN index");
+assert(postgresSql.includes("kaxi_hybrid_knowledge_search"), "missing RRF hybrid search SQL function");
 
-console.log(`PASS DB schema policy: ${requiredModels.length} domain models, Prisma validation, dual schemas, and migrations verified`);
+console.log(`PASS DB schema policy: ${requiredModels.length} domain models, single PostgreSQL schema, pgvector indexes, and RRF function verified`);

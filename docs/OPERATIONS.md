@@ -2,9 +2,8 @@
 
 ## Required Environment Variables
 
-- `DATABASE_URL`: Database URL. Local development may use `file:./db/custom.db`; production must target PostgreSQL after the Phase 1 cutover (`postgresql://...` or `postgres://...`).
+- `DATABASE_URL`: Supabase/PostgreSQL database URL (`postgresql://...` or `postgres://...`). This is required for local development, CI, preview, and production.
 - `SUPABASE_DATABASE_URL`, `SUPABASE_POOLER_URL`, `SUPABASE_DIRECT_URL`: Optional Supabase Postgres aliases. Runtime may use `SUPABASE_DATABASE_URL` or `SUPABASE_POOLER_URL`; Prisma migrations should prefer `SUPABASE_DIRECT_URL`.
-- `RESTORE_SQLITE_DEMO_DB`: Set `false` in CI/hosted builds to avoid depending on the bundled SQLite demo DB. Local demos may leave it unset to restore `runtime-artifacts/db/custom.db`.
 - `ADMIN_API_KEY`: Break-glass admin API key for admin APIs. Prefer session login for day-to-day operations.
 - `MODEL_CACHE_DIR`: Optional local cache path for Transformer models. Defaults to `data/model-cache` locally and `/tmp/kaxi-model-cache` on Vercel/serverless runtimes.
 - `VECTOR_CACHE_FILE`: Optional embedding cache file path. Defaults to `data/vector-store/embeddings-cache.json`.
@@ -14,8 +13,8 @@
 - `AI_CONSULT_BACKEND`: Optional Consult backend override: `remote-bridge`, `codex`, or `zai`. When unset, Consult follows the remote Codex bridge if the Agent backend is configured that way.
 - `AI_AGENT_PREFLIGHT_ENABLED`: Enables deterministic server-side tool/RAG preflight before Codex bridge calls.
 - `AI_AGENT_PREFLIGHT_TIMEOUT_MS`, `AI_AGENT_CONTEXT_MAX_CHARS`, `AI_AGENT_GROUNDED_QUESTION_MAX_CHARS`: Bound preflight latency and context sent to the LLM bridge.
-- `AI_AGENT_LOGGING_ENABLED`: Enables Agent `ChatLog` persistence. It is automatically skipped on hosted SQLite deployments.
-- `AI_AGENT_LEDGER_ENABLED`: Enables per-request Agent cost/quality ledger persistence. It is automatically skipped on hosted SQLite deployments.
+- `AI_AGENT_LOGGING_ENABLED`: Enables Agent `ChatLog` persistence when Postgres is configured.
+- `AI_AGENT_LEDGER_ENABLED`: Enables per-request Agent cost/quality ledger persistence when Postgres is configured.
 - `NEXTAUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`: Required for session-based admin login. Generate the hash with `bun run admin:hash-password -- <password>`.
 - `ADMIN_PASSWORD`: Local/demo fallback only. Do not use plaintext admin passwords in production.
 - `ADMIN_ROLE`: `owner`, `admin`, or `viewer`. `viewer` can read admin dashboards but cannot mutate data.
@@ -50,14 +49,12 @@ Included artifacts:
 
 - `multilingual-e5-small` model cache, stored as gzip files so no single GitHub file exceeds 100 MB.
 - Vector embedding cache for the bundled knowledge base.
-- Sanitized SQLite MVP database with `Synonym` seed data, 50 `School` rows including source metadata, and empty user-generated tables. This artifact is a local/demo convenience only, not an operational production database.
-
 The restore script only creates missing files. It does not overwrite local runtime data.
-On Vercel builds it restores vector/DB artifacts but does not decompress the large ONNX model unless `RESTORE_MODEL_CACHE_ON_INSTALL=true`.
+On Vercel builds it restores the vector cache but does not decompress the large ONNX model unless `RESTORE_MODEL_CACHE_ON_INSTALL=true`.
 
 ## Database Policy
 
-Phase 1 fixes the domain schema and PostgreSQL operating target while keeping the public MVP's SQLite-compatible development schema available during cutover. Production writes must move to PostgreSQL. The checked-in `prisma/postgres/migrations/20260701090000_phase1_operational_domain/migration.sql` is the operational PostgreSQL DDL for the Phase 1 domain model.
+Phase 0 makes Supabase/PostgreSQL the only supported database target. The checked-in `prisma/postgres/migrations/20260701090000_phase1_operational_domain/migration.sql` is the operational PostgreSQL DDL for the Phase 1 domain model.
 
 1. Use Prisma migrations for every schema change.
 2. Do not use `prisma db push` against production.
@@ -69,17 +66,17 @@ Phase 1 fixes the domain schema and PostgreSQL operating target while keeping th
 8. Retention is enforced by `POST /api/privacy/retention` for admins and daily Vercel Cron `GET /api/privacy/retention`; lead consent rows are expired when the linked lead reaches deletion or retention expiry.
 9. Before analytics export, use the redacted ChatLog analysis route or scripts; free-form questions are masked for emails, phone numbers, and private messenger handles.
 
-Hosted Vercel deployments must not rely on bundled SQLite for writes. The bundled DB is a demo seed/read model. Use a reachable managed PostgreSQL database for admin CRUD, lead capture, partner requests, chat logs, Agent ledger persistence, audit logs, retention, compliance evaluations, knowledge governance, escalation cases, and shared rate-limit buckets.
+Hosted Vercel deployments must use a reachable managed PostgreSQL database for admin CRUD, lead capture, partner requests, chat logs, Agent ledger persistence, audit logs, retention, compliance evaluations, knowledge governance, escalation cases, and shared rate-limit buckets.
 
-When `DATABASE_URL` is `postgres://...` or `postgresql://...`, `bun run db:generate` and `postinstall` generate `@prisma/client` from `prisma/postgres/schema.prisma`. Local/CI `file:` URLs continue to generate the SQLite-compatible client from `prisma/schema.prisma`.
+`bun run db:generate` and `postinstall` always generate `@prisma/client` from `prisma/postgres/schema.prisma`.
 
 ### Environment Policy
 
 | environment | database policy | artifact policy |
 | --- | --- | --- |
-| Local demo | `DATABASE_URL=file:./db/custom.db` is allowed. Run `bun run db:prepare-local`, `bun run db:seed:schools`, `bun run db:seed:synonyms`, and `bun run db:seed:rules` when rebuilding from migrations. | `RESTORE_SQLITE_DEMO_DB` may be unset so the demo DB is restored if missing. |
-| CI | Uses SQLite-compatible migration replay for fast tests, with `RESTORE_SQLITE_DEMO_DB=false`; the DB must be created from migrations and seeds, not copied from runtime artifacts. | Runtime vector/model artifacts may be restored; DB artifact is skipped. |
-| Preview/Production | Must configure PostgreSQL as the operational target and pass `/api/readiness` checks before write-bearing features are considered production-ready. | SQLite DB artifact is read-only/demo fallback only and must not be used for production writes. |
+| Local development | Use a local Supabase/PostgreSQL URL and run Postgres migrations/seeds. | Runtime vector/model artifacts may be restored. |
+| CI | Uses a `pgvector/pgvector:pg17` PostgreSQL service and applies `prisma/postgres/migrations`. | Runtime vector/model artifacts may be restored. |
+| Preview/Production | Must configure Supabase/PostgreSQL as the operational target and pass `/api/readiness` checks before write-bearing features are considered production-ready. | Database artifacts are not restored or used. |
 
 Document uploads additionally require durable object storage in hosted environments. Set `DOCUMENT_UPLOAD_STORAGE_BACKEND=blob` and `BLOB_READ_WRITE_TOKEN` before enabling upload URLs. Without durable storage, `/api/documents/upload-intent` returns `DOCUMENT_WORKSPACE_UNAVAILABLE` instead of accepting files into an ephemeral serverless filesystem.
 
@@ -93,6 +90,7 @@ bunx prisma generate
 bun run db:seed:schools
 bun run db:seed:synonyms
 bun run db:seed:rules
+bun run knowledge:pgvector
 bun run db:seed:admin-demo
 ```
 
@@ -103,7 +101,7 @@ bun run db:migrate:deploy
 bun run db:generate
 ```
 
-For PostgreSQL production, provision the database first, load `DATABASE_URL=postgresql://...`, then run `bun run db:migrate:deploy` from a trusted operator machine or CI job. Supabase deployments may instead set `SUPABASE_DIRECT_URL` for migrations and `SUPABASE_POOLER_URL` or `SUPABASE_DATABASE_URL` for runtime; see `docs/SUPABASE_INTEGRATION.md`. This command uses `prisma/postgres/schema.prisma` and `prisma/postgres/migrations`. After migration, run `bun run db:seed:schools`, `bun run db:seed:synonyms`, and `bun run db:seed:rules` with production DB env loaded so `School`, `Synonym`, and approved compliance rule versions are operational tables. `GET /api/readiness` will not pass merely because the env var exists; it also checks connectivity and required production secrets.
+For PostgreSQL production, provision the database first, load `DATABASE_URL=postgresql://...`, then run `bun run db:migrate:deploy` from a trusted operator machine or CI job. Supabase deployments may instead set `SUPABASE_DIRECT_URL` for migrations and `SUPABASE_POOLER_URL` or `SUPABASE_DATABASE_URL` for runtime; see `docs/SUPABASE_INTEGRATION.md`. This command uses `prisma/postgres/schema.prisma` and `prisma/postgres/migrations`. After migration, run `bun run db:seed:schools`, `bun run db:seed:synonyms`, `bun run db:seed:rules`, and `bun run knowledge:pgvector` with production DB env loaded so `School`, `Synonym`, approved compliance rule versions, approved knowledge documents, and pgvector embeddings are operational. `GET /api/readiness` will not pass merely because the env var exists; it also checks connectivity, pgvector embedding presence, and required production secrets.
 
 If a production `DATABASE_URL`, Prisma Accelerate URL, or Blob token is exposed in chat, logs, or a committed file, rotate it before using it in Vercel.
 
@@ -146,9 +144,9 @@ Production/hosted admin login fails closed unless `NEXTAUTH_SECRET`, `ADMIN_EMAI
 
 ## CI Quality Gates
 
-GitHub Actions restores non-DB runtime artifacts during `bun install --frozen-lockfile`, prepares the local test DB from Prisma migrations and seed scripts, then runs typecheck, lint, `test:schema`, `test:vector`, `test:rules`, `test:quality`, `test:governance`, `test:rag-ops`, `test:knowledge-monitor`, `test:privacy`, `test:agent`, `test:planner`, `test:citations`, `test:school-data`, admin/document/readiness checks, and production build.
+GitHub Actions restores non-DB runtime artifacts during `bun install --frozen-lockfile`, prepares the PostgreSQL test DB from Prisma migrations and seed scripts, then runs typecheck, lint, `test:schema`, `test:vector`, `test:rules`, `test:quality`, `test:governance`, `test:rag-ops`, `test:knowledge-monitor`, `test:privacy`, `test:agent`, `test:planner`, `test:citations`, `test:school-data`, admin/document/readiness checks, and production build.
 The workflow calls the package-level `ci:types`, `ci:domain`, and `ci:ops` profiles instead of duplicating each test command. `test:ci-gates` fails if a non-E2E `test:*` script is not reachable from `bun run ci` or if the workflow stops using the CI profiles.
-`test:schema` verifies the Phase 1 domain models, Prisma engine validation for both SQLite and PostgreSQL schemas, SQLite-compatible migration replay, PostgreSQL operational migration DDL, and enum/model parity between `prisma/schema.prisma` and `prisma/postgres/schema.prisma` so dual-schema drift is caught in CI.
+`test:schema` verifies the Phase 1 domain models, Prisma engine validation for the single PostgreSQL schema, PostgreSQL operational migration DDL, and pgvector extension migration.
 `test:vector` verifies the restored model/vector cache can retrieve expected KAXI source documents.
 `/api/readiness` includes `embeddings.cache` as a warning-level check. It reports only safe diagnostics such as cache location class (`project-data`, `serverless-tmp`, or `custom`), cache existence, vector-cache entry count, transformer load state, and coverage; it does not expose absolute local paths.
 `test:rules` verifies the DB-backed D-2/D-4 Compliance Rule Engine, including approved-only execution, effective date windows, required source refs, 20+ golden cases, and `ComplianceEvaluation` persistence.
@@ -159,7 +157,7 @@ The workflow calls the package-level `ci:types`, `ci:domain`, and `ci:ops` profi
 `test:planner` verifies multilingual intent detection, slot filling, budget parsing, safety/partner signals, and exact-school refinements.
 `test:citations` verifies inline answer citation markers link to the visible source cards without rewriting existing Markdown links.
 `test:school-data` verifies public app/components do not import runtime school seed data directly; production-facing UI must use `/api/schools` or repository-backed APIs.
-`test:privacy` verifies consent-gated partner routing, third-party/consignment/overseas consent rows, privacy audit events, deletion/retention consent status changes, PII encryption/redaction behavior, production PII persistence guards, and hosted SQLite write guards.
+`test:privacy` verifies consent-gated partner routing, third-party/consignment/overseas consent rows, privacy audit events, deletion/retention consent status changes, PII encryption/redaction behavior, production PII persistence guards, and hosted non-Postgres write guards.
 `test:privacy-env` verifies the production privacy-environment preflight rejects weak/missing `DATA_ENCRYPTION_KEY`, `PII_HASH_SECRET`, `CRON_SECRET`, enabled plaintext override, invalid retention windows, and never prints secret material.
 `test:agent` verifies Agent status diagnostics, dry-run preflight behavior, and partner-request PII masking.
 `test:admin-dashboard` verifies the Phase 3 admin APIs for cases, case actions, rules, knowledge documents, and audit logs.
@@ -176,7 +174,7 @@ Before production deploys, run `bun run privacy:check-production-env` with the p
 Before treating KAXI as production-ready, `/api/readiness` must report `status: "ready"` for:
 
 - current RAG `reviewAfter` metadata and non-expired school source metadata,
-- PostgreSQL operational database target and reachable managed database instead of bundled SQLite,
+- PostgreSQL operational database target and reachable managed database,
 - `DATA_ENCRYPTION_KEY`, `PII_HASH_SECRET`, retention `CRON_SECRET`,
 - shared database-backed rate limit,
 - hashed admin login, MFA, valid role, and audit-log persistence.
@@ -197,7 +195,7 @@ Planner diagnostics in that context include detected signals, resolved slots, mi
 Partner requests created from the conversational agent stay in dry-run draft mode. Persist actual contact requests through the explicit lead/partner intake flow so consent, retention, and PII controls remain clear.
 
 Keep `AI_AGENT_PREFLIGHT_TIMEOUT_MS` below the total function budget. If preflight times out, the route skips grounding and continues with the original user question.
-Agent `ChatLog` and `AgentRequestLedger` persistence should use a writable production database. Hosted deployments using `DATABASE_URL=file:...` skip Agent log and ledger writes to avoid read-only SQLite failures.
+Agent `ChatLog` and `AgentRequestLedger` persistence should use a writable production database.
 
 The ledger records IP/user id, backend, Codex mode, duration, estimated tokens, grounded/tool count, success/failure, and compact error type/message. It is for cost/debug accounting, not a permanent user profile.
 

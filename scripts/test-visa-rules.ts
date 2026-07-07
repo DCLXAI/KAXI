@@ -1,8 +1,5 @@
-import { mkdtempSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
 import cases from "../quality/visa-rule-golden-cases.json";
-import { prepareLocalDb } from "./prepare-local-db";
+import { prepareTestDb } from "./prepare-test-db";
 import { VISA_COMPLIANCE_RULE_SEEDS } from "../src/lib/rules/visa-rule-seed";
 import { evaluateVisaRules, VISA_RULES, type VisaRuleInput } from "../src/lib/rules/visa-rules";
 
@@ -139,10 +136,7 @@ for (const testCase of staticSpecificCases) {
   }
 }
 
-const tmpDir = mkdtempSync(join(tmpdir(), "kaxi-rule-test-"));
-process.env.DATABASE_URL = `file:${join(tmpDir, "rules.db")}`;
-process.env.RESTORE_SQLITE_DEMO_DB = "false";
-prepareLocalDb(process.env.DATABASE_URL);
+prepareTestDb("visa rules");
 
 const { db } = await import("../src/lib/db");
 const { seedComplianceRules } = await import("./seed-compliance-rules");
@@ -331,5 +325,4 @@ try {
   console.log(`PASS visa DB rules golden cases: ${passed}/${cases.length}; DB pass rate ${dbPassedCount}/${seededTestCount}`);
 } finally {
   await db.$disconnect();
-  rmSync(tmpDir, { recursive: true, force: true });
 }

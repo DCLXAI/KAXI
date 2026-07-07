@@ -2,7 +2,7 @@ import { createHash } from "crypto";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { prepareLocalDb } from "./prepare-local-db";
+import { prepareTestDb } from "./prepare-test-db";
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -58,12 +58,10 @@ async function createKnowledgeDoc(
 }
 
 const tmpDir = mkdtempSync(join(tmpdir(), "kaxi-rag-ops-test-"));
-process.env.DATABASE_URL = `file:${join(tmpDir, "rag-ops.db")}`;
-process.env.RESTORE_SQLITE_DEMO_DB = "false";
 process.env.TRANSFORMERS_ALLOW_REMOTE = "false";
 process.env.KNOWLEDGE_RAG_SOURCE = "governed";
 process.env.VECTOR_CACHE_FILE = join(tmpDir, "vector-cache.json");
-prepareLocalDb(process.env.DATABASE_URL);
+prepareTestDb("RAG ops");
 
 const { db } = await import("../src/lib/db");
 const {
@@ -72,7 +70,8 @@ const {
   listApprovedKnowledgeDocsForRag,
 } = await import("../src/lib/knowledge/repository");
 const { buildRagBasisNotice, getRagDocumentMetadata } = await import("../src/lib/data/knowledge");
-const { hybridSearch, getStoreStats } = await import("../src/lib/embeddings/vector-store");
+const { hybridSearch } = await import("../src/lib/embeddings/vector-store");
+const { getPgvectorStats } = await import("../src/lib/embeddings/pgvector-rag");
 
 try {
   const approvedContent = "phase7-approved-needle 공식 유학생 비자 승인 문서";
@@ -216,8 +215,8 @@ try {
   assert(diff.changed, "changed candidate content should be detected");
   assert(beforeChunks === afterChunks, "diff analysis must not mutate production chunks");
 
-  const stats = getStoreStats();
-  assert(stats.docCount > 0, "vector store should report active docs");
+  const stats = await getPgvectorStats();
+  assert(stats.approvedDocuments > 0, "pgvector store should report approved docs");
   console.log("PASS RAG ops: approved-only search, superseded blocking, source notice, impact, diff-only");
 } finally {
   await db.$disconnect();

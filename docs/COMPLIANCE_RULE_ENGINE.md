@@ -63,7 +63,7 @@ Verify the engine:
 bun run test:rules
 ```
 
-The test creates an isolated SQLite DB, replays Prisma migrations, seeds the five approved D-2/D-4 rule versions, and verifies:
+The test resets an isolated PostgreSQL test DB, replays Prisma migrations, seeds the approved D-2/D-4 rule versions, and verifies:
 
 - golden rule pass rate is 100%
 - at least 20 golden cases are maintained

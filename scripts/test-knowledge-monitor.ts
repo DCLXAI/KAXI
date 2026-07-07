@@ -2,7 +2,7 @@ import { createHash } from "crypto";
 import { mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { prepareLocalDb } from "./prepare-local-db";
+import { prepareTestDb } from "./prepare-test-db";
 import type { OfficialKnowledgeSource } from "../src/lib/knowledge/source-monitor";
 
 function fail(message: string): never {
@@ -19,10 +19,8 @@ function contentHash(value: string): string {
 }
 
 const tmpDir = mkdtempSync(join(tmpdir(), "kaxi-knowledge-monitor-test-"));
-process.env.DATABASE_URL = `file:${join(tmpDir, "knowledge-monitor.db")}`;
-process.env.RESTORE_SQLITE_DEMO_DB = "false";
 process.env.TRANSFORMERS_ALLOW_REMOTE = "false";
-prepareLocalDb(process.env.DATABASE_URL);
+prepareTestDb("knowledge monitor");
 
 const { db } = await import("../src/lib/db");
 const {

@@ -1,8 +1,6 @@
 import { PrismaClient, type Prisma } from "@prisma/client";
-import { PrismaLibSQL } from "@prisma/adapter-libsql/web";
-import { join } from "path";
 
-export type RuntimeDatabaseKind = "missing" | "file" | "libsql" | "postgresql" | "unsupported-managed";
+export type RuntimeDatabaseKind = "missing" | "postgresql" | "unsupported";
 
 export interface RuntimeDatabaseInfo {
   kind: RuntimeDatabaseKind;
@@ -11,14 +9,12 @@ export interface RuntimeDatabaseInfo {
     | "POSTGRES_URL"
     | "SUPABASE_DATABASE_URL"
     | "SUPABASE_POOLER_URL"
-    | "TURSO_DATABASE_URL"
     | "default";
   hostedRuntime: boolean;
   writable: boolean;
   sharedWritable: boolean;
-  libSqlAuthConfigured: boolean;
   postgresqlConfigured: boolean;
-  activePrismaProvider: "sqlite" | "postgresql";
+  activePrismaProvider: "postgresql";
   reason: string;
 }
 
@@ -27,91 +23,46 @@ function configured(value: string | undefined): boolean {
   return Boolean(trimmed) && !/^replace-with-/i.test(trimmed);
 }
 
-function isPlaceholderDatabaseUrl(value: string | undefined): boolean {
-  const trimmed = value?.trim() || "";
-  return !configured(trimmed) || trimmed.includes("/home/z/my-project");
-}
-
 function isHostedRuntime(env: NodeJS.ProcessEnv): boolean {
   return env.VERCEL === "1" || Boolean(env.VERCEL_ENV);
 }
 
-function defaultDatabaseUrl(): string {
-  return `file:${join(process.cwd(), "db", "custom.db")}`;
+function isPostgresUrl(value: string | undefined): value is string {
+  return /^postgres(?:ql)?:\/\//i.test((value || "").trim());
+}
+
+function databaseUrlFromEnv(env: NodeJS.ProcessEnv) {
+  const databaseUrl = env.DATABASE_URL?.trim();
+  const postgresUrl = env.POSTGRES_URL?.trim();
+  const supabaseDatabaseUrl = env.SUPABASE_DATABASE_URL?.trim();
+  const supabasePoolerUrl = env.SUPABASE_POOLER_URL?.trim();
+
+  if (isPostgresUrl(databaseUrl)) return { url: databaseUrl, source: "DATABASE_URL" as const };
+  if (isPostgresUrl(postgresUrl)) return { url: postgresUrl, source: "POSTGRES_URL" as const };
+  if (isPostgresUrl(supabaseDatabaseUrl)) {
+    return { url: supabaseDatabaseUrl, source: "SUPABASE_DATABASE_URL" as const };
+  }
+  if (isPostgresUrl(supabasePoolerUrl)) {
+    return { url: supabasePoolerUrl, source: "SUPABASE_POOLER_URL" as const };
+  }
+  if (configured(databaseUrl)) return { url: databaseUrl || "", source: "DATABASE_URL" as const };
+
+  return { url: "", source: "default" as const };
 }
 
 function normalizeDatabaseEnv() {
-  const databaseUrl = process.env.DATABASE_URL?.trim();
-  const tursoUrl = process.env.TURSO_DATABASE_URL?.trim();
-  const postgresUrl = process.env.POSTGRES_URL?.trim();
-  const supabaseDatabaseUrl = process.env.SUPABASE_DATABASE_URL?.trim();
-  const supabasePoolerUrl = process.env.SUPABASE_POOLER_URL?.trim();
-  if (postgresUrl && (!databaseUrl || databaseUrl.includes("/home/z/my-project"))) {
-    process.env.DATABASE_URL = postgresUrl;
-    return;
-  }
-  if (supabaseDatabaseUrl && isPlaceholderDatabaseUrl(databaseUrl)) {
-    process.env.DATABASE_URL = supabaseDatabaseUrl;
-    return;
-  }
-  if (supabasePoolerUrl && isPlaceholderDatabaseUrl(databaseUrl)) {
-    process.env.DATABASE_URL = supabasePoolerUrl;
-    return;
-  }
-  if (!databaseUrl || databaseUrl.includes("/home/z/my-project")) {
-    process.env.DATABASE_URL = tursoUrl || defaultDatabaseUrl();
+  const { url } = databaseUrlFromEnv(process.env);
+  if (isPostgresUrl(url)) {
+    process.env.DATABASE_URL = url;
   }
 }
 
 normalizeDatabaseEnv();
 
-function databaseUrlFromEnv(env: NodeJS.ProcessEnv) {
-  const tursoUrl = env.TURSO_DATABASE_URL?.trim();
-  const databaseUrl = env.DATABASE_URL?.trim();
-  const postgresUrl = env.POSTGRES_URL?.trim();
-  const supabaseDatabaseUrl = env.SUPABASE_DATABASE_URL?.trim();
-  const supabasePoolerUrl = env.SUPABASE_POOLER_URL?.trim();
-  if (databaseUrl && isPostgresUrl(databaseUrl)) return { url: databaseUrl, source: "DATABASE_URL" as const };
-  if (postgresUrl && (!databaseUrl || databaseUrl.includes("/home/z/my-project") || databaseUrl.startsWith("file:"))) {
-    return { url: postgresUrl, source: "POSTGRES_URL" as const };
-  }
-  if (
-    supabaseDatabaseUrl &&
-    isPostgresUrl(supabaseDatabaseUrl) &&
-    (!databaseUrl || databaseUrl.includes("/home/z/my-project") || databaseUrl.startsWith("file:"))
-  ) {
-    return { url: supabaseDatabaseUrl, source: "SUPABASE_DATABASE_URL" as const };
-  }
-  if (
-    supabasePoolerUrl &&
-    isPostgresUrl(supabasePoolerUrl) &&
-    (!databaseUrl || databaseUrl.includes("/home/z/my-project") || databaseUrl.startsWith("file:"))
-  ) {
-    return { url: supabasePoolerUrl, source: "SUPABASE_POOLER_URL" as const };
-  }
-  if (tursoUrl) return { url: tursoUrl, source: "TURSO_DATABASE_URL" as const };
-  if (databaseUrl) return { url: databaseUrl, source: "DATABASE_URL" as const };
-  return { url: "", source: "default" as const };
-}
-
-function isLibSqlUrl(url: string): boolean {
-  return /^(libsql|wss|https):\/\//i.test(url);
-}
-
-function isPostgresUrl(url: string): boolean {
-  return /^postgres(?:ql)?:\/\//i.test(url);
-}
-
-function activePrismaProviderForUrl(url: string): RuntimeDatabaseInfo["activePrismaProvider"] {
-  return isPostgresUrl(url) ? "postgresql" : "sqlite";
-}
-
 export function getRuntimeDatabaseInfo(env: NodeJS.ProcessEnv = process.env): RuntimeDatabaseInfo {
   const { url, source } = databaseUrlFromEnv(env);
   const hostedRuntime = isHostedRuntime(env);
-  const libSqlAuthConfigured = configured(env.TURSO_AUTH_TOKEN) || configured(env.DATABASE_AUTH_TOKEN);
   const postgresqlConfigured = isPostgresUrl(url);
-  const activePrismaProvider = activePrismaProviderForUrl(url);
 
   if (!url) {
     return {
@@ -120,109 +71,56 @@ export function getRuntimeDatabaseInfo(env: NodeJS.ProcessEnv = process.env): Ru
       hostedRuntime,
       writable: false,
       sharedWritable: false,
-      libSqlAuthConfigured,
-      postgresqlConfigured,
-      activePrismaProvider,
-      reason: "DATABASE_URL or TURSO_DATABASE_URL is not configured.",
+      postgresqlConfigured: false,
+      activePrismaProvider: "postgresql",
+      reason: "PostgreSQL DATABASE_URL or Supabase Postgres alias is not configured.",
     };
   }
 
-  if (url.startsWith("file:")) {
-    const writable = !hostedRuntime;
+  if (!postgresqlConfigured) {
     return {
-      kind: "file",
+      kind: "unsupported",
       source,
       hostedRuntime,
-      writable,
+      writable: false,
       sharedWritable: false,
-      libSqlAuthConfigured,
-      postgresqlConfigured,
-      activePrismaProvider,
-      reason: writable
-        ? "Local SQLite file is writable for development."
-        : "Hosted deployments cannot rely on bundled file SQLite for writes.",
-    };
-  }
-
-  if (isLibSqlUrl(url)) {
-    return {
-      kind: "libsql",
-      source,
-      hostedRuntime,
-      writable: libSqlAuthConfigured,
-      sharedWritable: libSqlAuthConfigured,
-      libSqlAuthConfigured,
-      postgresqlConfigured,
-      activePrismaProvider,
-      reason: libSqlAuthConfigured
-        ? "libSQL/Turso managed database is configured."
-        : "TURSO_AUTH_TOKEN or DATABASE_AUTH_TOKEN is required for managed libSQL writes.",
-    };
-  }
-
-  if (isPostgresUrl(url)) {
-    return {
-      kind: "postgresql",
-      source,
-      hostedRuntime,
-      writable: true,
-      sharedWritable: true,
-      libSqlAuthConfigured,
-      postgresqlConfigured: true,
-      activePrismaProvider,
-      reason: "PostgreSQL operational database is configured.",
+      postgresqlConfigured: false,
+      activePrismaProvider: "postgresql",
+      reason: "KAXI Phase 0 requires Supabase/PostgreSQL; non-PostgreSQL database URLs are not supported.",
     };
   }
 
   return {
-    kind: "unsupported-managed",
+    kind: "postgresql",
     source,
     hostedRuntime,
-    writable: false,
-    sharedWritable: false,
-    libSqlAuthConfigured,
-    postgresqlConfigured,
-    activePrismaProvider,
-    reason:
-      "This build uses the Prisma sqlite provider for local/demo compatibility. Production must target PostgreSQL through the Phase 1 cutover path.",
+    writable: true,
+    sharedWritable: true,
+    postgresqlConfigured: true,
+    activePrismaProvider: "postgresql",
+    reason: "Supabase/PostgreSQL operational database is configured.",
   };
 }
 
 function createPrismaClient() {
   const log: Prisma.LogLevel[] = process.env.DEBUG_PRISMA === "true" ? ["query"] : [];
-  const info = getRuntimeDatabaseInfo();
-
-  if (info.kind === "libsql") {
-    const { url } = databaseUrlFromEnv(process.env);
-    const authToken = process.env.TURSO_AUTH_TOKEN || process.env.DATABASE_AUTH_TOKEN;
-    return new PrismaClient({
-      adapter: new PrismaLibSQL({
-        url,
-        ...(authToken ? { authToken } : {}),
-      }),
-      log,
-    });
-  }
-
   return new PrismaClient({ log });
 }
 
 const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
-}
+  prisma: PrismaClient | undefined;
+};
 
-export const db =
-  globalForPrisma.prisma ??
-  createPrismaClient()
+export const db = globalForPrisma.prisma ?? createPrismaClient();
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
 
 export function canWriteRuntimeDatabase(): boolean {
-  return getRuntimeDatabaseInfo().writable
+  return getRuntimeDatabaseInfo().writable;
 }
 
 export function canUseSharedRuntimeDatabase(): boolean {
-  return getRuntimeDatabaseInfo().sharedWritable
+  return getRuntimeDatabaseInfo().sharedWritable;
 }
 
 export async function checkRuntimeDatabaseConnectivity(): Promise<{ ok: boolean; detail: string }> {

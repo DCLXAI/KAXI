@@ -32,7 +32,7 @@ Each action updates `EscalationCase`, creates `AgentReview`, and writes both `Au
 
 ## Demo Data
 
-The public demo SQLite artifact includes five admin cases across the required queues.
+The admin demo seed creates five admin cases across the required queues.
 
 Rebuild locally:
 

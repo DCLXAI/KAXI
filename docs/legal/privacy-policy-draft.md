@@ -93,7 +93,7 @@ KAXI should maintain:
 - least-privilege admin access;
 - hashed or encrypted sensitive fields;
 - admin audit logging;
-- production database policy preventing accidental local SQLite writes;
+- production database policy preventing accidental non-Postgres writes;
 - retention automation;
 - access review for partner data exports.
 

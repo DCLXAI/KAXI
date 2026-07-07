@@ -22,7 +22,7 @@ Use one of the standard KAXI PostgreSQL variables or the Supabase aliases below.
 | --- | --- |
 | `DATABASE_URL` | Canonical app runtime PostgreSQL URL. Preferred for Vercel runtime. |
 | `POSTGRES_URL` | Compatible alias for managed PostgreSQL providers. |
-| `SUPABASE_DATABASE_URL` | Supabase Postgres URL alias. KAXI treats it as PostgreSQL when `DATABASE_URL` is empty, placeholder, or local `file:`. |
+| `SUPABASE_DATABASE_URL` | Supabase Postgres URL alias. KAXI treats it as PostgreSQL when `DATABASE_URL` is empty or not set to PostgreSQL. |
 | `SUPABASE_POOLER_URL` | Supabase pooler/session URL alias for app runtime. |
 | `SUPABASE_DIRECT_URL` | Direct Supabase DB URL for Prisma migrations. Prefer this for `db:migrate:deploy`. |
 | `PRISMA_SCHEMA_PROVIDER` | Set to `postgresql` in hosted Supabase deployments. |

@@ -75,4 +75,4 @@ This makes blocked transfers, consent capture, actual partner routing, user dele
 - partner routing writes privacy audit events
 - deletion requests withdraw active consents
 - retention expiry marks active consents as `EXPIRED`
-- existing PII encryption, redaction, hosted SQLite, and serializer guards still pass
+- existing PII encryption, redaction, hosted non-Postgres, and serializer guards still pass

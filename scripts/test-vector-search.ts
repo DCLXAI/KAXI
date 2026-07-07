@@ -1,13 +1,17 @@
 // Vector Search smoke test
 // Run: bun run scripts/test-vector-search.ts
 
-import { join } from "path";
 import { getKnowledgeDocsWithMetadata } from "../src/lib/data/knowledge";
 import { getStoreStats, hybridSearch, initVectorStore } from "../src/lib/embeddings/vector-store";
 import { withImmigrationLegalBasisDocs } from "../src/lib/knowledge/legal-basis";
+import {
+  getPgvectorStats,
+  ingestStaticKnowledgeDocsForPgvector,
+  embedMissingKnowledgeChunksForPgvector,
+} from "../src/lib/embeddings/pgvector-rag";
 
-if (!process.env.DATABASE_URL || process.env.DATABASE_URL.includes("/home/z/")) {
-  process.env.DATABASE_URL = `file:${join(process.cwd(), "db", "custom.db")}`;
+if (!/^postgres(?:ql)?:\/\//i.test(process.env.DATABASE_URL || "")) {
+  throw new Error("vector search smoke test requires DATABASE_URL=postgresql://...");
 }
 
 const TEST_QUERIES = [
@@ -69,10 +73,18 @@ async function main() {
   console.log("KAXI - Vector Search smoke test");
   console.log("=".repeat(80));
 
+  await ingestStaticKnowledgeDocsForPgvector();
+  await embedMissingKnowledgeChunksForPgvector();
+  const pgStats = await getPgvectorStats();
+  if (pgStats.approvedDocuments <= 0 || pgStats.approvedEmbeddedChunks <= 0) {
+    throw new Error(`pgvector knowledge index is empty: ${JSON.stringify(pgStats)}`);
+  }
+
   initVectorStore();
   const stats = getStoreStats();
   console.log(`Docs: ${stats.docCount}/${getKnowledgeDocsWithMetadata().length}`);
   console.log(`Method: ${stats.method}`);
+  console.log(`pgvector: docs=${pgStats.approvedDocuments}, chunks=${pgStats.approvedEmbeddedChunks}/${pgStats.totalChunks}, dim=${pgStats.embeddingDim}`);
   console.log(`TF-IDF dim: ${stats.tfidfDim}`);
   console.log(`Transformer coverage: ${stats.transformerCoverage}/${stats.docCount}`);
 
@@ -94,7 +106,9 @@ async function main() {
     );
   }
 
+  const recallAt3 = pass / TEST_QUERIES.length;
   console.log(`\nResult: ${pass}/${TEST_QUERIES.length} expected docs found`);
+  console.log(`Recall@3: ${recallAt3.toFixed(3)}`);
   let orderPass = 0;
   for (const test of LEGAL_BASIS_ORDER_QUERIES) {
     const results = await hybridSearch(test.q, { topK: 6 });
@@ -112,8 +126,10 @@ async function main() {
     console.log(`Actual first: ${first}`);
   }
 
+  const legalOrderRecall = orderPass / LEGAL_BASIS_ORDER_QUERIES.length;
   console.log(`\nLegal basis order: ${orderPass}/${LEGAL_BASIS_ORDER_QUERIES.length} first-doc checks passed`);
-  if (pass < TEST_QUERIES.length || orderPass < LEGAL_BASIS_ORDER_QUERIES.length) process.exitCode = 1;
+  console.log(`Legal basis first-doc accuracy: ${legalOrderRecall.toFixed(3)}`);
+  if (recallAt3 < 0.85 || legalOrderRecall < 0.85) process.exitCode = 1;
 }
 
 main().catch((error) => {

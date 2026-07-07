@@ -1,6 +1,5 @@
-// KAXI Production Prisma Schema
-// PostgreSQL operational schema used when DATABASE_URL is postgres:// or postgresql://.
-// Local and CI SQLite compatibility remains in prisma/schema.prisma.
+// KAXI Prisma Schema
+// Supabase/PostgreSQL is the only supported database target after Phase 0.
 
 generator client {
   provider      = "prisma-client-js"
@@ -595,7 +594,10 @@ model KnowledgeChunk {
   chunkIndex   Int
   content      String
   contentHash  String
+  keywords     String   @default("")
   embeddingJson Json?
+  embedding     Unsupported("vector(384)")?
+  tsv           Unsupported("tsvector")?
   embeddingModel String?
   embeddingDim Int?
   createdAt    DateTime @default(now())

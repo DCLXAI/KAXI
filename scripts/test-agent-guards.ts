@@ -445,7 +445,7 @@ async function testConsultRouteDoesNotRequireSharedLimiterWhenDisabled() {
       NODE_ENV: "production",
       VERCEL_ENV: "production",
       VERCEL: "1",
-      DATABASE_URL: "file:./db/custom.db",
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/kaxi",
       RATE_LIMIT_BACKEND: "auto",
       AI_CONSULT_RATE_LIMIT: "0",
       AI_CONSULT_DAILY_QUOTA: "0",
@@ -453,9 +453,6 @@ async function testConsultRouteDoesNotRequireSharedLimiterWhenDisabled() {
       AI_LLM_TIMEOUT_MS: "1000",
       ZAI_ENABLED: "false",
     });
-    delete process.env.TURSO_DATABASE_URL;
-    delete process.env.TURSO_AUTH_TOKEN;
-    delete process.env.DATABASE_AUTH_TOKEN;
     delete process.env.DATA_ENCRYPTION_KEY;
 
     const route = await import("../src/app/api/ai/consult/route");
@@ -493,7 +490,7 @@ async function testConsultOfficialSummaryPrioritizesQuestionDocuments() {
       NODE_ENV: "production",
       VERCEL_ENV: "production",
       VERCEL: "1",
-      DATABASE_URL: "file:./db/custom.db",
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/kaxi",
       RATE_LIMIT_BACKEND: "auto",
       AI_CONSULT_RATE_LIMIT: "0",
       AI_CONSULT_DAILY_QUOTA: "0",
@@ -502,9 +499,6 @@ async function testConsultOfficialSummaryPrioritizesQuestionDocuments() {
       AI_LLM_TIMEOUT_MS: "1000",
       ZAI_ENABLED: "false",
     });
-    delete process.env.TURSO_DATABASE_URL;
-    delete process.env.TURSO_AUTH_TOKEN;
-    delete process.env.DATABASE_AUTH_TOKEN;
     delete process.env.DATA_ENCRYPTION_KEY;
 
     const route = await import("../src/app/api/ai/consult/route");
@@ -575,7 +569,7 @@ async function testConsultRouteUsesRemoteCodexBridge() {
       NODE_ENV: "test",
       VERCEL_ENV: "",
       VERCEL: "",
-      DATABASE_URL: "file:./db/custom.db",
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/kaxi",
       AI_CONSULT_RATE_LIMIT: "0",
       AI_CONSULT_DAILY_QUOTA: "0",
       AI_CONSULT_BACKEND: "zai",

@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { createHash } from "crypto";
-import { prepareLocalDb } from "./prepare-local-db";
+import { prepareTestDb } from "./prepare-test-db";
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -23,12 +23,10 @@ function sha256(value: Buffer): string {
 }
 
 const tmpDir = mkdtempSync(join(tmpdir(), "kaxi-document-test-"));
-process.env.DATABASE_URL = `file:${join(tmpDir, "documents.db")}`;
 process.env.DOCUMENT_UPLOAD_SIGNING_SECRET = "test-document-upload-secret";
 process.env.DOCUMENT_UPLOAD_DIR = join(tmpDir, "uploads");
 process.env.ADMIN_API_KEY = "test-admin-key";
-process.env.RESTORE_SQLITE_DEMO_DB = "false";
-prepareLocalDb(process.env.DATABASE_URL);
+prepareTestDb("document flow");
 
 const { NextRequest } = await import("next/server");
 const { db } = await import("../src/lib/db");
@@ -63,14 +61,14 @@ try {
   const blockedHostedUpload = getDocumentWorkspaceIssue("upload", {
     ...process.env,
     VERCEL: "1",
-    DATABASE_URL: "file:./db/custom.db",
+    DATABASE_URL: "",
     DOCUMENT_UPLOAD_STORAGE_BACKEND: "local",
     DOCUMENT_UPLOAD_SIGNING_SECRET: "",
   });
-  assert(blockedHostedUpload, "hosted file SQLite upload should report workspace unavailable");
+  assert(blockedHostedUpload, "hosted upload without Postgres should report workspace unavailable");
   assert(
     blockedHostedUpload.metadata.writableDatabase === false,
-    "hosted file SQLite should not be considered writable"
+    "missing hosted Postgres should not be considered writable"
   );
   assert(
     blockedHostedUpload.metadata.storageWritable === false,

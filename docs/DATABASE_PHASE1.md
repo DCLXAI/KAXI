@@ -1,15 +1,15 @@
-# KAXI Phase 1 Database Policy
+# KAXI Database Policy
 
-Status: implemented for Phase 1 schema baseline
-Last updated: 2026-07-01
+Status: Phase 1 pgvector RAG baseline
+Last updated: 2026-07-08
 
 ## Scope
 
-Phase 1 fixes the operational domain schema while keeping the current public MVP local test path stable. The app still has a SQLite-compatible development schema for local/demo tests, but production builds now generate Prisma Client from the PostgreSQL schema whenever `DATABASE_URL` is `postgres://...` or `postgresql://...`.
+KAXI now uses `prisma/postgres/schema.prisma` as the only Prisma schema. Supabase/PostgreSQL is the only supported runtime, local development, and CI database target.
 
-## Implemented Prisma Domain Models
+## Implemented Domain Models
 
-The following Phase 1 core tables are defined in [schema.prisma](../prisma/schema.prisma):
+The core tables are defined in [schema.prisma](../prisma/postgres/schema.prisma):
 
 | domain | models |
 | --- | --- |
@@ -22,88 +22,50 @@ The following Phase 1 core tables are defined in [schema.prisma](../prisma/schem
 | escalation/review | `EscalationCase`, `AgentReview` |
 | audit | `AuditEvent` |
 
-Existing MVP tables (`Lead`, `PartnerRequest`, `School`, `ChatLog`, `Synonym`, `AdminAuditLog`, `RateLimitBucket`, `AgentRequestLedger`) remain for compatibility during migration.
+Existing MVP tables (`Lead`, `PartnerRequest`, `School`, `ChatLog`, `Synonym`, `AdminAuditLog`, `RateLimitBucket`, `AgentRequestLedger`) remain until their Phase 1+ data migrations are complete.
 
 ## Migrations
 
-SQLite-compatible development migration:
+PostgreSQL migrations live under:
 
 ```text
-prisma/migrations/20260701090000_phase1_operational_domain/migration.sql
+prisma/postgres/migrations
 ```
 
-PostgreSQL operational migration:
-
-```text
-prisma/postgres/migrations/20260701090000_phase1_operational_domain/migration.sql
-```
-
-The PostgreSQL migration uses enum types and JSONB fields for compliance rule ASTs, RAG metadata, consent evidence, and audit metadata.
-
-PostgreSQL Prisma schema:
-
-```text
-prisma/postgres/schema.prisma
-```
+`20260708000000_enable_pgvector` enables the `vector` extension.
+`20260708010000_pgvector_rag` adds the native `KnowledgeChunk.embedding vector(384)` column,
+the generated `tsv` search column, HNSW/GIN indexes, and the RRF hybrid search SQL function.
 
 ## Environment Policy
 
 | environment | database | required behavior |
 | --- | --- | --- |
-| Local demo | `DATABASE_URL=file:./db/custom.db` | SQLite-compatible DB may be restored from artifact or rebuilt from migrations. |
-| CI | `DATABASE_URL=file:${GITHUB_WORKSPACE}/db/custom.db` | `RESTORE_SQLITE_DEMO_DB=false`; DB is rebuilt with `db:prepare-local` and seeded. |
-| Preview/Production | `DATABASE_URL=postgresql://...` or Supabase Postgres aliases | Must use PostgreSQL before write-bearing operations are considered production-ready. |
+| Local development | `DATABASE_URL=postgresql://...` or Supabase local URL | Run `bun run db:migrate` or `bun run db:migrate:deploy`, then seed lookup tables. |
+| CI | `pgvector/pgvector:pg17` service with `DATABASE_URL=postgresql://...` | Apply Postgres migrations and run the CI profiles. |
+| Preview/Production | Supabase Postgres runtime URL plus `SUPABASE_DIRECT_URL` for migrations | `/api/readiness` must pass Postgres connectivity and production secret checks. |
 
-## Local Rebuild
-
-```bash
-RESTORE_SQLITE_DEMO_DB=false bun run db:prepare-local
-bun run db:seed:schools
-bun run db:seed:synonyms
-bun run db:seed:rules
-bun run db:seed:admin-demo
-bun run test:schema
-```
-
-## Production Cutover
-
-1. Provision managed PostgreSQL.
-2. Rotate any database URL or API key that has been exposed outside Vercel/Prisma secret storage.
-3. Load `DATABASE_URL=postgresql://...` into the deployment environment. Supabase can also use `SUPABASE_POOLER_URL` or `SUPABASE_DATABASE_URL` for runtime and `SUPABASE_DIRECT_URL` for migrations.
-4. Apply production migrations:
+## Setup
 
 ```bash
 bun run db:migrate:deploy
-```
-
-5. Seed operational lookup tables:
-
-```bash
 bun run db:seed:schools
 bun run db:seed:synonyms
 bun run db:seed:rules
+bun run knowledge:pgvector
+bun run test:schema
 ```
-
-6. Regenerate/check the provider-selected client and verify DB access:
-
-```bash
-bun run db:generate
-bun run db:check-production
-```
-
-7. Confirm `/api/readiness` reports the PostgreSQL target and no production write blockers.
 
 ## Readiness Gate
 
-`test:readiness` and `/api/readiness` now include `database.postgresql_operational`.
-
 Production is considered unfinished when:
 
-- `DATABASE_URL` is `file:...`;
-- the deployment relies on the bundled SQLite artifact;
-- the active runtime provider is not PostgreSQL for a PostgreSQL URL;
+- no Postgres URL is configured;
+- the configured DB URL is not PostgreSQL;
+- Postgres connectivity fails;
+- approved pgvector knowledge embeddings are missing;
 - PII secrets, retention secret, admin MFA, or shared limiter DB are missing.
 
-## RLS / pgvector Notes
+## RLS Notes
 
-The Phase 1 Prisma schema establishes the table boundaries needed for future PostgreSQL Row-Level Security and pgvector work. RLS policies and vector indexes are intentionally separate follow-up migrations because they require the actual production PostgreSQL provider and extension setup.
+The current schema establishes the table boundaries needed for future Supabase RLS work.
+RLS policies are handled in later PRD phases.

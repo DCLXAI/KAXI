@@ -64,7 +64,7 @@ Public reads hide rows whose `reviewAfter` is in the past unless an authenticate
 2. Run `bun run db:seed:schools` against the target database.
 3. Verify `GET /api/schools` returns `source: "db"` and `operational: true`.
 4. Use admin review APIs for re-verification instead of editing production rows ad hoc.
-5. Treat the bundled SQLite DB and seed file as demo artifacts, not production data.
+5. Treat seed files as development fixtures, not production data.
 
 ## Migration Path
 

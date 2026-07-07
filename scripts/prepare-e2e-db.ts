@@ -1,12 +1,24 @@
-import { copyFileSync, existsSync, mkdirSync } from "fs";
-import { dirname, join } from "path";
+import { spawnSync } from "child_process";
 
-const root = process.cwd();
-const source = existsSync(join(root, "db", "custom.db"))
-  ? join(root, "db", "custom.db")
-  : join(root, "runtime-artifacts", "db", "custom.db");
-const target = join(root, "db", "e2e.db");
+function isPostgresUrl(value: string | undefined): value is string {
+  return /^postgres(?:ql)?:\/\//i.test((value || "").trim());
+}
 
-mkdirSync(dirname(target), { recursive: true });
-copyFileSync(source, target);
-console.log(`[prepare-e2e-db] ${source} -> ${target}`);
+if (!isPostgresUrl(process.env.DATABASE_URL)) {
+  console.error("FAIL E2E database preparation requires DATABASE_URL=postgresql://...");
+  process.exit(1);
+}
+
+for (const command of [
+  ["bun", "run", "db:migrate:deploy"],
+  ["bun", "run", "db:seed:schools"],
+  ["bun", "run", "db:seed:synonyms"],
+  ["bun", "run", "db:seed:rules"],
+]) {
+  const result = spawnSync(command[0], command.slice(1), {
+    cwd: process.cwd(),
+    stdio: "inherit",
+    env: process.env,
+  });
+  if (result.status !== 0) process.exit(result.status || 1);
+}

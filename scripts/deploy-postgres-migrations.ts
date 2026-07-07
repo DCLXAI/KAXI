@@ -56,7 +56,6 @@ function summarizeValue(value: string | undefined): string {
   if (!value) return "empty";
   if (isDirectPostgresUrl(value)) return "postgres-direct";
   if (isPrismaAccelerateUrl(value)) return "prisma-accelerate";
-  if (/^file:/i.test(value)) return "sqlite-file";
   return "unsupported";
 }
 

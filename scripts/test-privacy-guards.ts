@@ -1,10 +1,7 @@
 import { NextRequest } from "next/server";
-import { mkdtempSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
 import { canPersistPiiValue, preparePiiField, readPiiField } from "../src/lib/privacy/pii";
 import { serializeLeadForResponse, serializePartnerRequestForResponse } from "../src/lib/privacy/serializers";
-import { prepareLocalDb } from "./prepare-local-db";
+import { prepareTestDb } from "./prepare-test-db";
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -96,11 +93,9 @@ async function postPartnerRequest(
 
 async function testConsentThirdPartyFlow() {
   const snapshot = { ...process.env };
-  const tmpDir = mkdtempSync(join(tmpdir(), "kaxi-privacy-consent-"));
   try {
     Object.assign(process.env, {
       NODE_ENV: "test",
-      DATABASE_URL: `file:${join(tmpDir, "privacy.db")}`,
       DATA_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       PII_HASH_SECRET: "privacy-consent-test-secret",
       RATE_LIMIT_BACKEND: "memory",
@@ -109,7 +104,7 @@ async function testConsentThirdPartyFlow() {
     });
     delete process.env.VERCEL;
     delete process.env.VERCEL_ENV;
-    prepareLocalDb(process.env.DATABASE_URL);
+    prepareTestDb("privacy consent");
 
     const leadsRoute = await import("../src/app/api/leads/route");
     const partnersRoute = await import("../src/app/api/partner-requests/route");
@@ -197,7 +192,6 @@ async function testConsentThirdPartyFlow() {
 
     await db.$disconnect();
   } finally {
-    rmSync(tmpDir, { recursive: true, force: true });
     for (const key of Object.keys(process.env)) {
       if (!(key in snapshot)) delete process.env[key];
     }
@@ -219,7 +213,7 @@ async function testProductionPiiPersistenceRequiresEncryption() {
   try {
     Object.assign(process.env, {
       NODE_ENV: "production",
-      DATABASE_URL: "file:./db/custom.db",
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/kaxi",
     });
     delete process.env.VERCEL;
     delete process.env.VERCEL_ENV;
@@ -349,9 +343,9 @@ async function testPiiResponseSerializersDoNotExposeSecrets() {
   }
 }
 
-async function testHostedSqliteGuards() {
+async function testHostedNonPostgresGuards() {
   process.env.VERCEL = "1";
-  process.env.DATABASE_URL = "file:/tmp/kaxi-no-write.db";
+  process.env.DATABASE_URL = "https://not-a-postgres-database.example";
   delete process.env.DATA_ENCRYPTION_KEY;
 
   const leads = await import("../src/app/api/leads/route");
@@ -395,5 +389,5 @@ await testPiiRoundTripWithKey();
 await testProductionPiiPersistenceRequiresEncryption();
 await testProductionPlaintextOverrideCannotLeak();
 await testPiiResponseSerializersDoNotExposeSecrets();
-await testHostedSqliteGuards();
+  await testHostedNonPostgresGuards();
 console.log("PASS privacy guards");

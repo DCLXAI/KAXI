@@ -3,6 +3,7 @@ import { getAiBackendDiagnostics } from "@/lib/ai/backend-selector";
 import { getKnowledgeSourceAudit } from "@/lib/data/knowledge";
 import { getDocumentUploadSigningSecret } from "@/lib/documents/crypto";
 import { getDocumentStorageInfo } from "@/lib/documents/storage";
+import { getPgvectorStats } from "@/lib/embeddings/pgvector-rag";
 import { getStoreStats } from "@/lib/embeddings/vector-store";
 import { getPrivacyRuntimeReadiness } from "@/lib/privacy/config";
 import { getSchoolSourceAudit } from "@/lib/schools/repository";
@@ -88,6 +89,9 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
   const schoolAudit = await getSchoolSourceAudit();
   const privacyReadiness = getPrivacyRuntimeReadiness(env);
   const embeddingStats = getStoreStats();
+  const pgvectorStats = await getPgvectorStats().catch((error) => ({
+    error: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
+  }));
   const aiBackendDiagnostics = getAiBackendDiagnostics(env);
 
   const managedDatabase = databaseInfo.sharedWritable && databaseConnectivity.ok;
@@ -144,8 +148,8 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
       postgresqlOperationalUrl
         ? "DATABASE_URL is configured with a PostgreSQL URL for the operational database target."
         : production
-          ? "Production must target PostgreSQL for the operational database; bundled SQLite/libSQL is only a transition/demo path."
-          : "Local development may still use SQLite-compatible artifacts while PostgreSQL cutover is prepared.",
+          ? "Production must target Supabase/PostgreSQL for the operational database."
+          : "Local development requires a Supabase/PostgreSQL database URL.",
       {
         databaseUrlKind: databaseInfo.kind,
         databaseUrlSource: databaseInfo.source,
@@ -160,14 +164,13 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
       managedDatabase
         ? "A shared managed runtime database is writable and reachable."
         : production
-          ? "Production writes require a reachable managed operational database; bundled file SQLite is read-only/demo only."
+          ? "Production writes require a reachable Supabase/PostgreSQL operational database."
           : databaseInfo.reason,
       {
         databaseUrlKind: databaseInfo.kind,
         databaseUrlSource: databaseInfo.source,
         writableDatabase: databaseInfo.writable,
         sharedWritableDatabase: databaseInfo.sharedWritable,
-        libSqlAuthConfigured: databaseInfo.libSqlAuthConfigured,
         postgresqlConfigured: databaseInfo.postgresqlConfigured,
         activePrismaProvider: databaseInfo.activePrismaProvider,
         connectivity: databaseConnectivity.ok,
@@ -220,14 +223,19 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
     ),
     check(
       "embeddings.cache",
-      "Embedding and vector cache",
-      !production || embeddingStats.vectorCache.exists || embeddingStats.transformerRuntime.cache.exists,
-      embeddingStats.vectorCache.exists
-        ? "Vector embedding cache artifact is present."
-        : production
-          ? "Production can run with TF-IDF fallback, but vector/model cache artifacts are missing or not restored."
-          : "Local development can rebuild vector/model cache artifacts on demand.",
+      "Embedding and vector index",
+      "approvedEmbeddedChunks" in pgvectorStats
+        ? pgvectorStats.approvedEmbeddedChunks > 0
+        : !production || embeddingStats.vectorCache.exists || embeddingStats.transformerRuntime.cache.exists,
+      "approvedEmbeddedChunks" in pgvectorStats && pgvectorStats.approvedEmbeddedChunks > 0
+        ? "pgvector knowledge embeddings are present."
+        : embeddingStats.vectorCache.exists
+          ? "Vector embedding cache artifact is present."
+          : production
+            ? "Production RAG should have pgvector embeddings before serving grounded answers."
+            : "Local development can rebuild pgvector/model cache artifacts on demand.",
       {
+        pgvector: pgvectorStats,
         storeReady: embeddingStats.ready,
         method: embeddingStats.method,
         knowledgeSource: embeddingStats.knowledgeSource,

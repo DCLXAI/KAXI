@@ -1,6 +1,34 @@
 import { readFileSync } from "fs";
-import { join } from "path";
 import { hybridSearch, initVectorStore, getStoreStats } from "../src/lib/embeddings/vector-store";
+import {
+  embedMissingKnowledgeChunksForPgvector,
+  getPgvectorStats,
+  ingestStaticKnowledgeDocsForPgvector,
+} from "../src/lib/embeddings/pgvector-rag";
+import { db } from "../src/lib/db";
+import { SEED_SYNONYMS } from "../src/lib/data/synonym-seed";
+
+// Earlier ci:domain steps reset the database; synonym expansion is part of the
+// production search path, so evaluate against a seeded synonym table.
+async function seedSynonymsForEvaluation(): Promise<void> {
+  for (const seed of SEED_SYNONYMS) {
+    await db.synonym.upsert({
+      where: { source: seed.source },
+      create: {
+        source: seed.source,
+        targets: JSON.stringify(seed.targets),
+        category: seed.category,
+        origin: seed.origin ?? "manual",
+        enabled: true,
+        autoMeta: seed.autoMeta ? JSON.stringify(seed.autoMeta) : null,
+      },
+      update: {
+        targets: JSON.stringify(seed.targets),
+        category: seed.category,
+      },
+    });
+  }
+}
 
 interface QualityCase {
   id: string;
@@ -11,9 +39,9 @@ interface QualityCase {
   expectedCostFormat: "none" | "itemized-krw";
 }
 
-const datasetPath = join(process.cwd(), "quality", "multilingual-eval-cases.json");
-if (!process.env.DATABASE_URL || process.env.DATABASE_URL.includes("/home/z/")) {
-  process.env.DATABASE_URL = `file:${join(process.cwd(), "db", "custom.db")}`;
+const datasetPath = "quality/multilingual-eval-cases.json";
+if (!/^postgres(?:ql)?:\/\//i.test(process.env.DATABASE_URL || "")) {
+  throw new Error("quality dataset evaluation requires DATABASE_URL=postgresql://...");
 }
 
 const cases = JSON.parse(readFileSync(datasetPath, "utf-8")) as QualityCase[];
@@ -44,10 +72,16 @@ async function main() {
   console.log("KAXI multilingual quality dataset");
   console.log("=".repeat(80));
 
+  await seedSynonymsForEvaluation();
+  await ingestStaticKnowledgeDocsForPgvector();
+  await embedMissingKnowledgeChunksForPgvector();
+  const pgStats = await getPgvectorStats();
+
   initVectorStore();
   const stats = getStoreStats();
   console.log(`Cases: ${cases.length}`);
   console.log(`Store: ${stats.method}, docs=${stats.docCount}, dim=${stats.tfidfDim}`);
+  console.log(`pgvector: docs=${pgStats.approvedDocuments}, chunks=${pgStats.approvedEmbeddedChunks}/${pgStats.totalChunks}, dim=${pgStats.embeddingDim}`);
 
   const langs = new Set(cases.map((item) => item.lang));
   for (const lang of ["ko", "vi", "mn", "en"] as const) {
@@ -77,8 +111,10 @@ async function main() {
     }
   }
 
+  const recallAt5 = pass / cases.length;
   console.log(`\nResult: ${pass}/${cases.length} cases matched expected docs`);
-  if (failures.length > 0) {
+  console.log(`Recall@5: ${recallAt5.toFixed(3)}`);
+  if (failures.length > 0 || recallAt5 < 0.85) {
     console.error("\nFailures:");
     for (const failure of failures) console.error(`- ${failure}`);
     process.exitCode = 1;

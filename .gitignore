@@ -61,4 +61,8 @@ server.log
 /data/model-cache/
 /data/vector-store/
 /db/*.db
+/runtime-artifacts/db/
+/download/
+/upload/
+/tool-results/
 /supabase/.temp/

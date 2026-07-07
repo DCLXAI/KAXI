@@ -120,7 +120,7 @@ function testSchoolDataStrategyDocs() {
     fail("operations policy must link to docs/SCHOOL_DATA_STRATEGY.md");
   }
 
-  for (const schemaFile of ["prisma/schema.prisma", "prisma/postgres/schema.prisma"]) {
+  for (const schemaFile of ["prisma/postgres/schema.prisma"]) {
     const schema = readFileSync(schemaFile, "utf8");
     if (schema.includes("현재는 src/lib/data/schools.ts 사용")) {
       fail(`${schemaFile} still describes schools.ts as the current runtime source`);

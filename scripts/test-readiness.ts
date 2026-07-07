@@ -32,16 +32,13 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
       NODE_ENV: "production",
       VERCEL_ENV: "production",
       VERCEL: "1",
-      DATABASE_URL: "file:./db/custom.db",
+      DATABASE_URL: "https://not-a-postgres-database.example",
       RATE_LIMIT_BACKEND: "auto",
     });
     delete process.env.DATA_ENCRYPTION_KEY;
     delete process.env.PII_HASH_SECRET;
     delete process.env.CRON_SECRET;
     delete process.env.ADMIN_MFA_TOTP_SECRET;
-    delete process.env.TURSO_DATABASE_URL;
-    delete process.env.TURSO_AUTH_TOKEN;
-    delete process.env.DATABASE_AUTH_TOKEN;
     process.env.ADMIN_EMAIL = "admin@example.com";
     process.env.ADMIN_PASSWORD_HASH = "scrypt:salt:hash";
     process.env.ADMIN_PASSWORD = "";
@@ -50,7 +47,7 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
 
     const payload = await getReadinessPayload();
     if (payload.status !== "degraded" || !payload.production) {
-      fail(`production file DB should be degraded: ${JSON.stringify(payload)}`);
+      fail(`production non-Postgres DB should be degraded: ${JSON.stringify(payload)}`);
     }
 
     const byKey = new Map(payload.checks.map((item) => [item.key, item]));
@@ -73,8 +70,8 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
       if (!byKey.has(key)) fail(`missing readiness check: ${key}`);
     }
 
-    if (byKey.get("database.postgresql_operational")?.ok) fail("file SQLite should not pass PostgreSQL operational check");
-    if (byKey.get("database.managed_writable")?.ok) fail("file SQLite should not pass managed DB check");
+    if (byKey.get("database.postgresql_operational")?.ok) fail("non-Postgres DB should not pass PostgreSQL operational check");
+    if (byKey.get("database.managed_writable")?.ok) fail("non-Postgres DB should not pass managed DB check");
     if (byKey.get("privacy.encryption")?.ok) fail("missing PII secrets should not pass encryption check");
     if (!byKey.get("privacy.plaintext_override")?.ok) fail("missing plaintext override should pass plaintext override check");
     if (byKey.get("documents.upload_workspace")?.ok) fail("hosted local document storage should not pass upload workspace check");
@@ -105,7 +102,7 @@ async function testProductionReadinessRejectsWeakPrivacyConfig() {
       NODE_ENV: "production",
       VERCEL_ENV: "production",
       VERCEL: "1",
-      DATABASE_URL: "file:./db/custom.db",
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/kaxi",
       DATA_ENCRYPTION_KEY: "short",
       PII_HASH_SECRET: "short",
       PII_ALLOW_UNENCRYPTED_PLAINTEXT: " true ",
@@ -156,8 +153,6 @@ function testDatabaseRuntimeInfo() {
       VERCEL: "1",
       DATABASE_URL: "postgresql://example.invalid/kaxi",
     });
-    delete process.env.TURSO_DATABASE_URL;
-    delete process.env.TURSO_AUTH_TOKEN;
 
     const postgres = getRuntimeDatabaseInfo();
     if (
@@ -170,27 +165,8 @@ function testDatabaseRuntimeInfo() {
       fail(`postgres URL should be detected as PostgreSQL writable runtime: ${JSON.stringify(postgres)}`);
     }
 
-    process.env.TURSO_DATABASE_URL = "libsql://stale-transition-db.turso.io";
-    process.env.TURSO_AUTH_TOKEN = "stale-token";
-    const postgresWithStaleTurso = getRuntimeDatabaseInfo();
-    if (postgresWithStaleTurso.kind !== "postgresql" || postgresWithStaleTurso.source !== "DATABASE_URL") {
-      fail(`PostgreSQL DATABASE_URL should override stale TURSO_DATABASE_URL: ${JSON.stringify(postgresWithStaleTurso)}`);
-    }
-
-    process.env.DATABASE_URL = "file:./db/custom.db";
-    process.env.TURSO_DATABASE_URL = "libsql://kaxi-example.turso.io";
-    process.env.TURSO_AUTH_TOKEN = "test-token";
-    delete process.env.SUPABASE_DATABASE_URL;
-    delete process.env.SUPABASE_POOLER_URL;
-    const libsql = getRuntimeDatabaseInfo();
-    if (libsql.kind !== "libsql" || !libsql.sharedWritable || !libsql.libSqlAuthConfigured || libsql.postgresqlConfigured) {
-      fail(`libSQL config should be recognized as shared writable: ${JSON.stringify(libsql)}`);
-    }
-
-    process.env.DATABASE_URL = "file:./db/custom.db";
+    process.env.DATABASE_URL = "https://not-a-postgres-database.example";
     delete process.env.POSTGRES_URL;
-    delete process.env.TURSO_DATABASE_URL;
-    delete process.env.TURSO_AUTH_TOKEN;
     process.env.SUPABASE_DATABASE_URL = "postgresql://postgres:password@db.example.supabase.co:5432/postgres";
     const supabase = getRuntimeDatabaseInfo();
     if (
@@ -224,12 +200,9 @@ async function testProductionRateLimitFailsClosedWithoutSharedBackend() {
       NODE_ENV: "production",
       VERCEL_ENV: "production",
       VERCEL: "1",
-      DATABASE_URL: "file:./db/custom.db",
+      DATABASE_URL: "https://not-a-postgres-database.example",
       RATE_LIMIT_BACKEND: "auto",
     });
-    delete process.env.TURSO_DATABASE_URL;
-    delete process.env.TURSO_AUTH_TOKEN;
-    delete process.env.DATABASE_AUTH_TOKEN;
 
     const req = new NextRequest("https://kaxi.local/api/guard", {
       headers: { "x-forwarded-for": "203.0.113.10" },

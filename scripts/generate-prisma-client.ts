@@ -1,66 +1,31 @@
 import { spawnSync } from "child_process";
 
-function isPostgresUrl(value: string | undefined): boolean {
+const POSTGRES_PLACEHOLDER_URL = "postgresql://postgres:postgres@localhost:5432/kaxi";
+
+function isPostgresUrl(value: string | undefined): value is string {
   return /^postgres(?:ql)?:\/\//i.test((value || "").trim());
 }
 
-function isPrismaPostgresUrl(value: string | undefined): boolean {
-  return /^prisma\+postgres:\/\//i.test((value || "").trim());
-}
-
-function providerOverride(): "postgresql" | "sqlite" | null {
-  const value = (
-    process.env.KAXI_PRISMA_PROVIDER ||
-    process.env.PRISMA_SCHEMA_PROVIDER ||
-    ""
-  ).trim().toLowerCase();
-
-  if (value === "postgres" || value === "postgresql") return "postgresql";
-  if (value === "sqlite") return "sqlite";
-  return null;
-}
-
-function databaseUrlForGeneration(): string {
-  const databaseUrl = process.env.DATABASE_URL?.trim();
-  const postgresUrl = process.env.POSTGRES_URL?.trim();
-  const supabaseDatabaseUrl = process.env.SUPABASE_DATABASE_URL?.trim();
-  const supabasePoolerUrl = process.env.SUPABASE_POOLER_URL?.trim();
-  if (postgresUrl && (!databaseUrl || databaseUrl.includes("/home/z/my-project"))) {
-    process.env.DATABASE_URL = postgresUrl;
-    return postgresUrl;
+function canonicalDatabaseUrl(): string {
+  for (const key of [
+    "DATABASE_URL",
+    "POSTGRES_URL",
+    "SUPABASE_DATABASE_URL",
+    "SUPABASE_POOLER_URL",
+    "SUPABASE_DIRECT_URL",
+  ]) {
+    const value = process.env[key]?.trim();
+    if (isPostgresUrl(value)) return value;
   }
 
-  if (supabaseDatabaseUrl && (!databaseUrl || databaseUrl.includes("/home/z/my-project") || databaseUrl.startsWith("file:"))) {
-    process.env.DATABASE_URL = supabaseDatabaseUrl;
-    return supabaseDatabaseUrl;
-  }
-
-  if (supabasePoolerUrl && (!databaseUrl || databaseUrl.includes("/home/z/my-project") || databaseUrl.startsWith("file:"))) {
-    process.env.DATABASE_URL = supabasePoolerUrl;
-    return supabasePoolerUrl;
-  }
-
-  if (databaseUrl) return databaseUrl;
-
-  return "";
+  return POSTGRES_PLACEHOLDER_URL;
 }
 
-const databaseUrl = databaseUrlForGeneration();
-const forcedProvider = providerOverride();
-const provider =
-  forcedProvider ||
-  (isPostgresUrl(databaseUrl) ||
-  isPostgresUrl(process.env.POSTGRES_URL) ||
-  isPostgresUrl(process.env.SUPABASE_DATABASE_URL) ||
-  isPostgresUrl(process.env.SUPABASE_POOLER_URL) ||
-  isPrismaPostgresUrl(process.env.PRISMA_DATABASE_URL)
-    ? "postgresql"
-    : "sqlite");
-const schema = provider === "postgresql" ? "prisma/postgres/schema.prisma" : "prisma/schema.prisma";
+process.env.DATABASE_URL = canonicalDatabaseUrl();
 
-console.log(`[prisma] generating ${provider} client from ${schema}`);
+console.log("[prisma] generating postgresql client from prisma/postgres/schema.prisma");
 
-const result = spawnSync("bunx", ["prisma", "generate", "--schema", schema], {
+const result = spawnSync("bunx", ["prisma", "generate", "--schema", "prisma/postgres/schema.prisma"], {
   stdio: "inherit",
   env: process.env,
 });

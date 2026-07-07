@@ -1,7 +1,4 @@
-import { mkdtempSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
-import { prepareLocalDb } from "./prepare-local-db";
+import { prepareTestDb } from "./prepare-test-db";
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -18,11 +15,8 @@ async function json(res: Response) {
   return body;
 }
 
-const tmpDir = mkdtempSync(join(tmpdir(), "kaxi-admin-test-"));
-process.env.DATABASE_URL = `file:${join(tmpDir, "admin.db")}`;
 process.env.ADMIN_API_KEY = "test-admin-key";
-process.env.RESTORE_SQLITE_DEMO_DB = "false";
-prepareLocalDb(process.env.DATABASE_URL);
+prepareTestDb("admin dashboard");
 
 const { NextRequest } = await import("next/server");
 const { db } = await import("../src/lib/db");
@@ -288,5 +282,4 @@ try {
   console.log("PASS admin dashboard API: cases, actions, rules, knowledge, audit, ops");
 } finally {
   await db.$disconnect();
-  rmSync(tmpDir, { recursive: true, force: true });
 }

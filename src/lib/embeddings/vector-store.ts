@@ -25,6 +25,7 @@ import {
   getTransformerRuntimeInfo,
   type EmbeddingVector,
 } from "./transformer-embedder";
+import { searchPgvectorKnowledge, shouldUsePgvector } from "./pgvector-rag";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -34,7 +35,7 @@ export interface ScoredDoc {
   vectorScore: number;
   keywordScore: number;
   matchedKeywords: string[];
-  method: "transformer" | "tfidf";
+  method: "pgvector" | "transformer" | "tfidf";
 }
 
 interface VectorStore {
@@ -463,8 +464,30 @@ export async function hybridSearch(
   const keywordWeight = options.keywordWeight ?? 0.6;
   const useTransformer = options.useTransformer ?? true;
 
-  await refreshRuntimeKnowledgeDocs();
   if (!query.trim()) return [];
+  if (shouldUsePgvector() && useTransformer) {
+    try {
+      const results = await searchPgvectorKnowledge(query, { topK });
+      return results.map((result) => ({
+        doc: result.doc,
+        score: result.score,
+        vectorScore: result.vectorScore,
+        keywordScore: result.keywordScore,
+        matchedKeywords: result.matchedKeywords,
+        method: "pgvector",
+      }));
+    } catch (error) {
+      // pgvector 검색은 transformer 질의 임베딩이 필요하다. 오프라인/제한
+      // 런타임에서는 기존 인메모리(TF-IDF 폴백 포함) 경로로 강등한다.
+      console.warn(
+        `[vector-store] pgvector search unavailable, falling back to in-memory store: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  await refreshRuntimeKnowledgeDocs();
 
   // Transformer 사용 가능시 비동기 초기화
   if (useTransformer && isTransformerAvailable() && store.method === "tfidf") {
@@ -534,6 +557,7 @@ export function getStoreStats() {
   const sourceAudit = getKnowledgeSourceAudit();
   return {
     ready: store.ready,
+    pgvectorConfigured: shouldUsePgvector(),
     docCount: store.docIds.length,
     totalKnowledgeDocs: sourceAudit.totalDocs,
     expiredDocCount: sourceAudit.expiredDocs.length,

@@ -19,7 +19,6 @@ export interface DocumentWorkspaceIssue {
     sharedWritableDatabase: boolean;
     activePrismaProvider: string;
     postgresqlConfigured: boolean;
-    libSqlAuthConfigured: boolean;
     storageKind?: string;
     storageWritable?: boolean;
     storageDurable?: boolean;
@@ -34,8 +33,7 @@ function uploadSigningConfigured(env: NodeJS.ProcessEnv): boolean {
 
 function databaseRequirements(reason: string): string[] {
   return [
-    "운영 문서 쓰기는 관리형 운영 DB가 필요합니다. 정식 경로는 PostgreSQL 설정, prisma/postgres migration 적용, provider cutover 완료입니다.",
-    "MVP 전환 테스트는 현재 sqlite 호환 빌드에 맞춰 libSQL/Turso URL과 auth token을 설정해 열 수 있습니다.",
+    "운영 문서 쓰기는 Supabase/PostgreSQL 설정과 prisma/postgres migration 적용이 필요합니다.",
     `현재 DB 상태: ${reason}`,
   ];
 }
@@ -88,7 +86,6 @@ export function getDocumentWorkspaceIssue(
       sharedWritableDatabase: database.sharedWritable,
       activePrismaProvider: database.activePrismaProvider,
       postgresqlConfigured: database.postgresqlConfigured,
-      libSqlAuthConfigured: database.libSqlAuthConfigured,
       ...(action === "upload"
         ? {
             storageKind: storage.kind,
