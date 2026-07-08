@@ -210,6 +210,31 @@ export const t = {
   admin_col_action: { ko: "액션", vi: "Hành động", mn: "Үйлдэл", en: "Action" },
   admin_empty: { ko: "아직 리드가 없습니다. 진단을 완료해보세요.", vi: "Chưa có lead.", mn: "Лид байхгүй.", en: "No leads yet." },
 
+  // Supabase Auth / workspace
+  auth_student_title: { ko: "학생 로그인", vi: "Đăng nhập học sinh", mn: "Оюутны нэвтрэлт", en: "Student login" },
+  auth_student_subtitle: { ko: "내 케이스와 서류 상태를 확인합니다.", vi: "Xem hồ sơ và trạng thái giấy tờ.", mn: "Кейс ба баримтын төлөв харах.", en: "View your cases and document status." },
+  auth_partner_title: { ko: "파트너 행정사 로그인", vi: "Đăng nhập đối tác hành chính", mn: "Түншийн нэвтрэлт", en: "Partner agent login" },
+  auth_partner_subtitle: { ko: "초대 토큰이 있는 행정사 사무소 계정만 가입할 수 있습니다.", vi: "Chỉ tài khoản được mời mới đăng ký được.", mn: "Зөвхөн урилгатай данс бүртгүүлнэ.", en: "Only invited partner-office accounts can sign up." },
+  auth_email: { ko: "이메일", vi: "Email", mn: "И-мэйл", en: "Email" },
+  auth_password: { ko: "비밀번호", vi: "Mật khẩu", mn: "Нууц үг", en: "Password" },
+  auth_invite_token: { ko: "초대 토큰", vi: "Mã mời", mn: "Урилгын токен", en: "Invite token" },
+  auth_password_tab: { ko: "비밀번호", vi: "Mật khẩu", mn: "Нууц үг", en: "Password" },
+  auth_otp_tab: { ko: "이메일 OTP", vi: "OTP email", mn: "И-мэйл OTP", en: "Email OTP" },
+  auth_sign_in: { ko: "로그인", vi: "Đăng nhập", mn: "Нэвтрэх", en: "Sign in" },
+  auth_sign_up: { ko: "가입", vi: "Đăng ký", mn: "Бүртгүүлэх", en: "Sign up" },
+  auth_send_otp: { ko: "이메일 링크 보내기", vi: "Gửi liên kết email", mn: "И-мэйл холбоос илгээх", en: "Send email link" },
+  auth_check_email: { ko: "이메일을 확인해 로그인 링크 또는 인증 안내를 완료하세요.", vi: "Kiểm tra email để hoàn tất xác thực.", mn: "Баталгаажуулахын тулд и-мэйлээ шалгана уу.", en: "Check your email to complete authentication." },
+  student_my_page: { ko: "내 페이지", vi: "Trang của tôi", mn: "Миний хуудас", en: "My page" },
+  student_cases: { ko: "내 케이스", vi: "Hồ sơ của tôi", mn: "Миний кейс", en: "My cases" },
+  student_documents: { ko: "서류 상태", vi: "Trạng thái giấy tờ", mn: "Баримтын төлөв", en: "Document status" },
+  partner_workspace: { ko: "파트너 워크스페이스", vi: "Không gian đối tác", mn: "Түншийн талбар", en: "Partner workspace" },
+  partner_assigned_cases: { ko: "배정된 케이스", vi: "Hồ sơ được giao", mn: "Хуваарилсан кейс", en: "Assigned cases" },
+  case_accept: { ko: "수임", vi: "Nhận hồ sơ", mn: "Хүлээн авах", en: "Accept case" },
+  case_comment: { ko: "코멘트", vi: "Bình luận", mn: "Сэтгэгдэл", en: "Comment" },
+  case_request_docs: { ko: "보완 요청", vi: "Yêu cầu bổ sung", mn: "Нэмэлт хүсэх", en: "Request supplement" },
+  case_close: { ko: "종결", vi: "Đóng hồ sơ", mn: "Хаах", en: "Close case" },
+  empty_state: { ko: "표시할 항목이 없습니다.", vi: "Không có mục nào.", mn: "Харуулах зүйл алга.", en: "Nothing to show." },
+
   // 공통
   footer_disclaimer: {
     ko: "본 플랫폼은 공식 정보 기반 가이드를 제공합니다. 비자·체류자격 판단, 행정기관 제출서류 작성·제출 대행은 행정사 등 전문가 영역입니다. 허위서류·불법취업 요청은 서비스 거절 대상입니다.",

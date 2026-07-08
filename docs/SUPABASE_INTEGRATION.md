@@ -34,7 +34,7 @@ Optional future variables:
 | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project API URL for future client SDK usage. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key for future client SDK usage. |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server-only key for future admin/storage jobs. Never expose to the browser. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only key for admin Auth/storage jobs. Never expose to the browser, logs, or JSON responses. |
 | `SUPABASE_STORAGE_BUCKET` | Future document storage bucket, default `kaxi-documents`. |
 
 ## First Cutover
@@ -133,3 +133,62 @@ Next Auth/RLS follow-ups:
 - create an admin-only account-linking flow that writes `User.authUserId`;
 - move direct document downloads to Supabase Storage signed URLs;
 - add write policies only for audited, narrow mutations such as case timeline comments or student profile self-service edits.
+
+### Phase 3 Slice 2: Supabase Auth runtime
+
+Runtime Auth integration uses Supabase Auth for students and partner agents while the existing NextAuth admin login remains unchanged.
+
+Configured variables:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=""
+NEXT_PUBLIC_SUPABASE_ANON_KEY=""
+SUPABASE_SERVICE_ROLE_KEY=""
+SUPABASE_POOLER_URL=""
+SUPABASE_DIRECT_URL=""
+```
+
+Security boundary:
+
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` is browser-safe and may be bundled in client code.
+- `SUPABASE_SERVICE_ROLE_KEY` is server-only. Do not print it, return it from API routes, expose it to client components, or commit it.
+- On machines where the direct Supabase hostname is IPv6-only or DNS-unresolvable, use `SUPABASE_POOLER_URL` for runtime Prisma work. Use direct URLs only from networks that can resolve and reach them.
+
+Auth mapping:
+
+- Supabase `auth.users.id` maps to `public."User"."authUserId"`.
+- Student self-signup maps or creates `User.role = STUDENT` and ensures a `StudentProfile`.
+- Partner agents must have a `PartnerAgentInvite` token. Only `tokenHash` is stored; the plaintext token is delivered out-of-band by an operator.
+- Partner case APIs still call `src/lib/cases/repository.ts`, so assigned-organization scope and `THIRD_PARTY_PROVISION` consent checks remain server-enforced before the later RLS write-policy slice.
+
+Manual Supabase Auth verification:
+
+```bash
+# 1. Install SDK packages if the sandbox did not install them.
+bun add @supabase/supabase-js @supabase/ssr
+
+# 2. Load runtime env without printing values.
+set -a
+source .local/supabase-kaxi-runtime.env
+set +a
+export DATABASE_URL="$SUPABASE_POOLER_URL"
+
+# 3. Apply only forward migrations. Do not reset the remote database.
+bun run db:migrate:deploy
+
+# 4. Start the app and test student OTP/password signup.
+bun run dev
+# Open /student/login, sign up or request an email link, then confirm /student shows the mapped account.
+
+# 5. Create a partner invite through the server helper or an admin script, deliver the plaintext token once,
+# then open /partner/login?invite=<token> and verify /partner lists only cases assigned to that office.
+```
+
+Automated checks:
+
+```bash
+bun run test:supabase-rls
+bun run test:supabase-auth
+bun run ci:types
+bun run lint
+```

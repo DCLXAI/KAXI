@@ -168,7 +168,7 @@ export async function listPartnerCases(organizationId: string) {
     include: {
       organization: true,
       assignedUser: true,
-      studentProfile: { include: { user: true } },
+      studentProfile: { include: { user: true, documents: { include: { file: true } } } },
       reviews: true,
       timelineEvents: { orderBy: { createdAt: "desc" }, take: 20 },
       documentLinks: { include: { documentItem: { include: { file: true } } } },

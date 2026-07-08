@@ -44,6 +44,7 @@ const requiredModels = [
   "User",
   "StudentProfile",
   "Consent",
+  "PartnerAgentInvite",
   "JourneyState",
   "DocumentItem",
   "UploadedFile",

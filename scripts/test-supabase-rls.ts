@@ -12,10 +12,12 @@ function assert(condition: unknown, message: string): asserts condition {
 
 const root = process.cwd();
 const schema = readFileSync(join(root, "prisma", "postgres", "schema.prisma"), "utf8");
-const migration = readFileSync(
-  join(root, "prisma", "postgres", "migrations", "20260708060000_supabase_auth_rls", "migration.sql"),
-  "utf8"
-);
+const migration = [
+  "20260708060000_supabase_auth_rls",
+  "20260708070000_supabase_auth_runtime",
+]
+  .map((name) => readFileSync(join(root, "prisma", "postgres", "migrations", name, "migration.sql"), "utf8"))
+  .join("\n");
 
 assert(
   /authUserId\s+String\?\s+@unique\s+@db\.Uuid/.test(schema),
@@ -37,6 +39,7 @@ for (const fn of [
 const rlsTables = [
   "Organization",
   "User",
+  "PartnerAgentInvite",
   "StudentProfile",
   "Consent",
   "JourneyState",
@@ -65,6 +68,7 @@ for (const policy of [
   "kaxi_knowledge_document_public_read",
   "kaxi_knowledge_chunk_public_read",
   "kaxi_user_self_or_org_read",
+  "kaxi_partner_agent_invite_admin_read",
   "kaxi_student_profile_scoped_read",
   "kaxi_document_item_scoped_read",
   "kaxi_uploaded_file_scoped_read",

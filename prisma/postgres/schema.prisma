@@ -95,6 +95,7 @@ model Organization {
 
   users           User[]
   escalationCases EscalationCase[]
+  partnerAgentInvites PartnerAgentInvite[]
   auditEvents     AuditEvent[]
 
   @@index([type])
@@ -120,6 +121,7 @@ model User {
   assignedCases  EscalationCase[] @relation("AssignedCases")
   agentReviews   AgentReview[] @relation("AgentReviewReviewer")
   caseTimelineEvents CaseTimelineEvent[] @relation("CaseTimelineActor")
+  acceptedPartnerInvites PartnerAgentInvite[] @relation("AcceptedPartnerInvites")
   auditEvents    AuditEvent[] @relation("AuditActor")
 
   @@index([organizationId])
@@ -178,6 +180,28 @@ model Consent {
   @@index([scope])
   @@index([status])
   @@index([grantedAt])
+}
+
+model PartnerAgentInvite {
+  id             String   @id @default(cuid())
+  organizationId String
+  email          String?
+  tokenHash      String   @unique
+  status         String   @default("PENDING")
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  acceptedUserId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  acceptedUser User?        @relation("AcceptedPartnerInvites", fields: [acceptedUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([acceptedUserId])
 }
 
 model JourneyState {
