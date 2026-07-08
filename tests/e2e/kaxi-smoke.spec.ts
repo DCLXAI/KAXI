@@ -1,11 +1,12 @@
 import { expect, test } from "@playwright/test";
 
 test("landing -> diagnosis save -> admin lookup -> Agent question -> RAG consult", async ({ page, request }) => {
-  await page.goto("/");
+  await page.goto("/ko");
   await expect(page.getByText("KAXI").first()).toBeVisible();
   await expect(page.getByText(/브로커 없이|Broker-free/i).first()).toBeVisible();
 
   await page.goto("/diagnose");
+  await expect(page).toHaveURL(/\/ko\/diagnose$/);
   await expect(page.getByText(/진단|Diagnosis/i).first()).toBeVisible();
 
   const nickname = `e2e-${Date.now()}`;

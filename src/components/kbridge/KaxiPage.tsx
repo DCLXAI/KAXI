@@ -15,28 +15,33 @@ import { Consult } from "@/components/kbridge/Consult";
 import { Agent } from "@/components/kbridge/Agent";
 import { AIAssistant } from "@/components/kbridge/AIAssistant";
 import { useLangStore } from "@/store/kbridge";
-import { tr } from "@/lib/i18n/translations";
+import { tr, type Lang } from "@/lib/i18n/translations";
 import { isViewKey, viewToPath, type ViewKey } from "@/lib/kbridge/views";
 
-export function KaxiPage({ view }: { view: ViewKey }) {
+export function KaxiPage({ view, locale }: { view: ViewKey; locale?: Lang }) {
   const router = useRouter();
-  const { lang } = useLangStore();
+  const { lang, setLang } = useLangStore();
+  const activeLang = locale ?? lang;
+
+  useEffect(() => {
+    if (locale && locale !== lang) setLang(locale);
+  }, [lang, locale, setLang]);
 
   useEffect(() => {
     const hash = window.location.hash.replace("#", "");
     if (hash && isViewKey(hash)) {
-      router.replace(viewToPath(hash), { scroll: false });
+      router.replace(viewToPath(hash, locale), { scroll: false });
     }
-  }, [router]);
+  }, [locale, router]);
 
   const navigate = (nextView: string) => {
-    router.push(viewToPath(nextView));
+    router.push(viewToPath(nextView, locale));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <Header currentView={view} />
+      <Header currentView={view} locale={locale} />
 
       <main className="flex-1">
         {view === "home" && <Landing onNavigate={navigate} />}
@@ -55,10 +60,10 @@ export function KaxiPage({ view }: { view: ViewKey }) {
         <footer className="mt-auto border-t bg-muted/30">
           <div className="mx-auto max-w-7xl px-4 py-6 space-y-3">
             <div className="text-xs text-muted-foreground leading-relaxed">
-              ⚠️ {tr("footer_disclaimer", lang)}
+              ⚠️ {tr("footer_disclaimer", activeLang)}
             </div>
             <div className="text-xs text-muted-foreground">
-              📚 {tr("footer_data_source", lang)}
+              📚 {tr("footer_data_source", activeLang)}
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t">
               <div className="text-xs text-muted-foreground">

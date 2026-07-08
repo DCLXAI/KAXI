@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { useLangStore } from "@/store/kbridge";
 import { LANGS, tr, type Lang } from "@/lib/i18n/translations";
@@ -16,10 +17,34 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Globe, LogOut, User } from "lucide-react";
 
-export function LangSwitcher() {
+export function LangSwitcher({
+  currentView,
+  locale,
+}: {
+  currentView?: string;
+  locale?: Lang;
+}) {
   const { lang, setLang } = useLangStore();
+  const router = useRouter();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const current = LANGS.find((l) => l.code === lang) ?? LANGS[0];
+  const activeLang = locale ?? lang;
+  const current = LANGS.find((l) => l.code === activeLang) ?? LANGS[0];
+
+  const switchTo = (nextLang: Lang) => {
+    setLang(nextLang);
+    setOpen(false);
+
+    if (locale && currentView) {
+      router.push(viewToPath(currentView, nextLang));
+      return;
+    }
+
+    const [, maybeLocale, ...rest] = pathname.split("/");
+    if (LANGS.some((item) => item.code === maybeLocale)) {
+      router.push(`/${[nextLang, ...rest].join("/")}`);
+    }
+  };
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -35,14 +60,13 @@ export function LangSwitcher() {
           <DropdownMenuItem
             key={l.code}
             onClick={() => {
-              setLang(l.code as Lang);
-              setOpen(false);
+              switchTo(l.code as Lang);
             }}
             className="gap-2"
           >
             <span className="text-base">{l.flag}</span>
             <span>{l.label}</span>
-            {l.code === lang && <span className="ml-auto text-xs text-muted-foreground">✓</span>}
+            {l.code === activeLang && <span className="ml-auto text-xs text-muted-foreground">✓</span>}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -73,35 +97,44 @@ export function NavItem({
 
 export function Header({
   currentView,
+  locale,
 }: {
   currentView: string;
+  locale?: Lang;
 }) {
   const { lang } = useLangStore();
+  const activeLang = locale ?? lang;
   const { data: session } = useSession();
   const isAdmin = ["owner", "admin", "viewer"].includes(session?.user?.role || "");
 
   const navItems = [
-    { key: "home", label: tr("brand", lang) },
-    { key: "agent", label: lang === "ko" ? "AI 에이전트" : "AI Agent" },
-    { key: "consult", label: lang === "ko" ? "전문 상담" : lang === "vi" ? "Tư vấn" : lang === "mn" ? "Зөвлөгөө" : "Consult" },
-    { key: "diagnose", label: tr("nav_diagnose", lang) },
-    { key: "schools", label: tr("nav_schools", lang) },
-    { key: "cost", label: tr("nav_cost", lang) },
-    { key: "docs", label: tr("nav_docs", lang) },
-    { key: "partners", label: tr("nav_partners", lang) },
+    { key: "home", label: tr("brand", activeLang) },
+    { key: "agent", label: activeLang === "ko" ? "AI 에이전트" : "AI Agent" },
+    { key: "consult", label: activeLang === "ko" ? "전문 상담" : activeLang === "vi" ? "Tư vấn" : activeLang === "mn" ? "Зөвлөгөө" : "Consult" },
+    { key: "diagnose", label: tr("nav_diagnose", activeLang) },
+    { key: "schools", label: tr("nav_schools", activeLang) },
+    { key: "cost", label: tr("nav_cost", activeLang) },
+    { key: "docs", label: tr("nav_docs", activeLang) },
+    { key: "partners", label: tr("nav_partners", activeLang) },
     ...(isAdmin
       ? [
-          { key: "admin", label: tr("nav_admin", lang) },
-          { key: "synonyms", label: lang === "ko" ? "동의어" : "Synonyms" },
+          { key: "admin", label: tr("nav_admin", activeLang) },
+          { key: "synonyms", label: activeLang === "ko" ? "동의어" : "Synonyms" },
         ]
       : []),
   ];
+
+  const hrefFor = (key: string) => {
+    if (key === "admin") return "/admin";
+    if (key === "synonyms") return "/admin/knowledge";
+    return viewToPath(key, locale);
+  };
 
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4">
         <Link
-          href="/"
+          href={viewToPath("home", locale)}
           className="flex items-center gap-2 font-bold"
         >
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-black">
@@ -114,13 +147,13 @@ export function Header({
             <NavItem
               key={item.key}
               active={currentView === item.key}
-              href={viewToPath(item.key)}
+              href={hrefFor(item.key)}
               label={item.label}
             />
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2">
-          <LangSwitcher />
+          <LangSwitcher currentView={currentView} locale={locale} />
           {isAdmin ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -160,7 +193,7 @@ export function Header({
             <NavItem
               key={item.key}
               active={currentView === item.key}
-              href={viewToPath(item.key)}
+              href={hrefFor(item.key)}
               label={item.label}
             />
           ))}

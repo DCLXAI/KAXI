@@ -36,6 +36,7 @@
     "knowledge:metadata": "bun run scripts/enrich-knowledge-metadata.ts",
     "knowledge:quality": "bun run scripts/audit-knowledge-quality.ts",
     "knowledge:pgvector": "bun run scripts/ingest-knowledge-pgvector.ts",
+    "i18n:export": "bun run scripts/export-next-intl-messages.ts",
     "privacy:enforce-retention": "bun run scripts/enforce-retention.ts",
     "privacy:check-production-env": "bun run scripts/check-production-privacy-env.ts",
     "storage:provision:supabase": "bun run scripts/provision-supabase-storage.ts",

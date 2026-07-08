@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
 
 const DEFAULT_AUTH_URL = "https://kaxi.vercel.app";
 
@@ -67,4 +68,6 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["*.space-z.ai", "*.chatglm.cn", "*.z.ai", "127.0.0.1", "localhost"],
 };
 
-export default nextConfig;
+const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
+
+export default withNextIntl(nextConfig);

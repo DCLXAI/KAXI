@@ -1,5 +1,6 @@
-import { KaxiPage } from "@/components/kbridge/KaxiPage";
+import { redirect } from "next/navigation";
+import { localePath, defaultLocale } from "@/i18n/routing";
 
 export default function Home() {
-  return <KaxiPage view="home" />;
+  redirect(localePath(defaultLocale));
 }

@@ -73,6 +73,8 @@ export function isViewKey(value: string): value is ViewKey {
   return (VIEW_KEYS as readonly string[]).includes(value);
 }
 
-export function viewToPath(view: string): string {
-  return isViewKey(view) ? VIEW_PATHS[view] : "/";
+export function viewToPath(view: string, locale?: string): string {
+  const path = isViewKey(view) ? VIEW_PATHS[view] : "/";
+  if (!locale) return path;
+  return path === "/" ? `/${locale}` : `/${locale}${path}`;
 }

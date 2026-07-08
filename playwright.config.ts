@@ -1,7 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 import { join } from "path";
 
-const e2eDb = join(process.cwd(), "db", "e2e.db");
+const e2eDatabaseUrl =
+  process.env.DATABASE_URL || "postgresql://sunsu@localhost:5433/kaxi_phase0?schema=public";
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -25,7 +26,7 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     env: {
-      DATABASE_URL: `file:${e2eDb}`,
+      DATABASE_URL: e2eDatabaseUrl,
       ADMIN_API_KEY: "e2e-admin-key",
       NEXTAUTH_SECRET: "e2e-nextauth-secret",
       AGENT_BACKEND: "tool-fallback",
