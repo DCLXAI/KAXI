@@ -18,7 +18,7 @@ export interface SupabaseSession {
 }
 
 export interface SupabaseAuthResult<T = unknown> {
-  data: T;
+  data: T | null;
   error: { message?: string } | null;
 }
 
@@ -33,6 +33,17 @@ export interface SupabaseAuthClientLike {
 
 export interface SupabaseClientLike {
   auth: SupabaseAuthClientLike;
+  storage: {
+    from(bucket: string): {
+      upload(path: string, fileBody: unknown, options?: Record<string, unknown>): Promise<SupabaseAuthResult<unknown>>;
+      download(path: string): Promise<SupabaseAuthResult<Blob | ArrayBuffer | Uint8Array>>;
+      createSignedUrl(path: string, expiresIn: number): Promise<SupabaseAuthResult<{ signedUrl: string }>>;
+      list?(prefix?: string, options?: Record<string, unknown>): Promise<SupabaseAuthResult<Array<{ name: string }>>>;
+    };
+    getBucket?(bucket: string): Promise<SupabaseAuthResult<unknown>>;
+    createBucket?(bucket: string, options?: Record<string, unknown>): Promise<SupabaseAuthResult<unknown>>;
+    updateBucket?(bucket: string, options?: Record<string, unknown>): Promise<SupabaseAuthResult<unknown>>;
+  };
 }
 
 type SupabaseSsrModule = {

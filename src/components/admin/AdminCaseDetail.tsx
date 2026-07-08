@@ -261,12 +261,13 @@ export function AdminCaseDetail({ caseId }: { caseId: string }) {
                 <div className="py-6 text-sm text-muted-foreground">등록된 서류가 없습니다.</div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[720px] text-sm">
+                  <table className="w-full min-w-[860px] text-sm">
                     <thead>
                       <tr className="border-b text-left text-xs text-muted-foreground">
                         <th className="py-2 pr-3 font-medium">서류</th>
                         <th className="py-2 pr-3 font-medium">업로드</th>
                         <th className="py-2 pr-3 font-medium">검토</th>
+                        <th className="py-2 pr-3 font-medium">OCR</th>
                         <th className="py-2 pr-3 font-medium">만료</th>
                         <th className="py-2 pr-3 font-medium">파일</th>
                         <th className="py-2 font-medium">검수</th>
@@ -278,6 +279,21 @@ export function AdminCaseDetail({ caseId }: { caseId: string }) {
                           <td className="py-2 pr-3 font-medium">{doc.documentType}</td>
                           <td className="py-2 pr-3"><Badge variant="outline">{doc.status}</Badge></td>
                           <td className="py-2 pr-3"><Badge variant="secondary">{doc.reviewStatus}</Badge></td>
+                          <td className="py-2 pr-3 align-top">
+                            {doc.ocrProcessedAt ? (
+                              <details className="max-w-72">
+                                <summary className="cursor-pointer text-xs font-medium">
+                                  {doc.ocrModel || "ocr"} · {formatDate(doc.ocrProcessedAt)}
+                                </summary>
+                                <div className="mt-2 space-y-2">
+                                  <JsonBlock value={doc.ocrExtractedRedacted} />
+                                  <JsonBlock value={doc.ocrValidation} />
+                                </div>
+                              </details>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            )}
+                          </td>
                           <td className="py-2 pr-3 font-mono text-xs">{formatDate(doc.expiresAt)}</td>
                           <td className="py-2 pr-3 text-xs text-muted-foreground">{doc.file?.originalName || "-"}</td>
                           <td className="py-2">

@@ -23,6 +23,7 @@ export interface DocumentWorkspaceIssue {
     storageWritable?: boolean;
     storageDurable?: boolean;
     blobTokenConfigured?: boolean;
+    supabaseConfigured?: boolean;
     uploadSigningConfigured?: boolean;
   };
 }
@@ -40,7 +41,7 @@ function databaseRequirements(reason: string): string[] {
 
 function storageRequirements(reason: string): string[] {
   return [
-    "운영 문서 업로드는 DOCUMENT_UPLOAD_STORAGE_BACKEND=database 같은 공유 DB 저장소 또는 Vercel Blob 같은 영구 object storage와 BLOB_READ_WRITE_TOKEN 설정이 필요합니다.",
+    "운영 문서 업로드는 DOCUMENT_UPLOAD_STORAGE_BACKEND=supabase 또는 database 같은 공유 저장소 설정이 필요합니다.",
     `현재 저장소 상태: ${reason}`,
   ];
 }
@@ -92,6 +93,7 @@ export function getDocumentWorkspaceIssue(
             storageWritable: storage.writable,
             storageDurable: storage.durable,
             blobTokenConfigured: storage.blobTokenConfigured,
+            supabaseConfigured: storage.supabaseConfigured,
             uploadSigningConfigured: Boolean(signingConfigured),
           }
         : {}),

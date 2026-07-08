@@ -74,7 +74,7 @@ export async function getSupabaseAuthUser(): Promise<SupabaseAuthUser | null> {
   try {
     const client = await createSupabaseServerClient();
     const result = await client.auth.getUser();
-    return result.data.user || null;
+    return result.data?.user || null;
   } catch (err) {
     if (err instanceof SupabaseAuthConfigurationError || err instanceof SupabaseSdkUnavailableError) return null;
     throw err;

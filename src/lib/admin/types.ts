@@ -53,6 +53,10 @@ export interface AdminDocumentItem {
   reviewStatus: string;
   reviewNote: string | null;
   expiresAt: string | null;
+  ocrExtractedRedacted: unknown;
+  ocrValidation: unknown;
+  ocrModel: string | null;
+  ocrProcessedAt: string | null;
   file: {
     id: string;
     originalName: string;

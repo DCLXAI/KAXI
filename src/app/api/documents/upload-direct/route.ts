@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getClientIp } from "@/lib/api/security";
 import { getDocumentUploadSigningSecret, verifyDocumentUploadToken } from "@/lib/documents/crypto";
 import { commitDocumentUpload } from "@/lib/documents/repository";
+import { processDocumentOcr } from "@/lib/documents/ocr";
 import { getDocumentWorkspaceIssue } from "@/lib/documents/workspace-availability";
 
 export const runtime = "nodejs";
@@ -38,6 +39,13 @@ export async function PUT(req: NextRequest) {
 
     const arrayBuffer = await req.arrayBuffer();
     const bytes = new Uint8Array(arrayBuffer);
+    const context = {
+      actor: `student:${payload.studentRef}`,
+      actorRole: "student",
+      action: "document.uploaded",
+      ip: getClientIp(req),
+      userAgent: req.headers.get("user-agent"),
+    };
     const item = await commitDocumentUpload(
       {
         studentRef: payload.studentRef,
@@ -49,23 +57,24 @@ export async function PUT(req: NextRequest) {
         storageKey: payload.storageKey,
         bytes,
       },
-      {
-        actor: `student:${payload.studentRef}`,
-        actorRole: "student",
-        action: "document.uploaded",
-        ip: getClientIp(req),
-        userAgent: req.headers.get("user-agent"),
-      }
+      context
     );
+    const processed = await processDocumentOcr(item.id, {
+      actor: context.actor,
+      actorRole: context.actorRole,
+      ip: context.ip,
+      userAgent: context.userAgent,
+    });
 
     return NextResponse.json({
       ok: true,
       document: {
-        id: item.id,
-        documentType: item.documentType,
-        status: item.status,
-        reviewStatus: item.reviewStatus,
-        fileId: item.fileId,
+        id: processed.id,
+        documentType: processed.documentType,
+        status: processed.status,
+        reviewStatus: processed.reviewStatus,
+        reviewNote: processed.reviewNote,
+        fileId: processed.fileId,
       },
     });
   } catch (err) {

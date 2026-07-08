@@ -26,6 +26,8 @@ const tmpDir = mkdtempSync(join(tmpdir(), "kaxi-document-test-"));
 process.env.DOCUMENT_UPLOAD_SIGNING_SECRET = "test-document-upload-secret";
 process.env.DOCUMENT_UPLOAD_DIR = join(tmpDir, "uploads");
 process.env.ADMIN_API_KEY = "test-admin-key";
+process.env.DATA_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+process.env.PII_HASH_SECRET = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 prepareTestDb("document flow");
 
 const { NextRequest } = await import("next/server");
@@ -35,6 +37,12 @@ const intentRoute = await import("../src/app/api/documents/upload-intent/route")
 const directRoute = await import("../src/app/api/documents/upload-direct/route");
 const reviewRoute = await import("../src/app/api/admin/documents/[id]/review/route");
 const { getDocumentWorkspaceIssue } = await import("../src/lib/documents/workspace-availability");
+const {
+  getDocumentStorageInfo,
+  persistSupabaseUploadedBytes,
+  readSupabaseUploadedBytes,
+} = await import("../src/lib/documents/storage");
+const { processDocumentOcr } = await import("../src/lib/documents/ocr");
 
 function request(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers || {});
@@ -82,6 +90,50 @@ try {
     DOCUMENT_UPLOAD_SIGNING_SECRET: "configured",
   });
   assert(!hostedDatabaseUpload, "hosted postgres database document storage should be available");
+  const hostedSupabaseUpload = getDocumentWorkspaceIssue("upload", {
+    ...process.env,
+    VERCEL: "1",
+    DATABASE_URL: "postgres://user:pass@example.com:5432/kaxi",
+    DOCUMENT_UPLOAD_STORAGE_BACKEND: "supabase",
+    NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "test-service-role",
+    SUPABASE_STORAGE_BUCKET: "kaxi-documents",
+    DOCUMENT_UPLOAD_SIGNING_SECRET: "configured",
+  });
+  assert(!hostedSupabaseUpload, "hosted supabase document storage should be available when service role is configured");
+  const supabaseInfo = getDocumentStorageInfo({
+    ...process.env,
+    DOCUMENT_UPLOAD_STORAGE_BACKEND: "supabase",
+    NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "test-service-role",
+  });
+  assert(supabaseInfo.kind === "supabase" && supabaseInfo.writable, "supabase storage backend should be detected");
+
+  const mockObjects = new Map<string, Buffer>();
+  const mockSupabaseClient = {
+    auth: {
+      getUser: async () => ({ data: { user: null }, error: null }),
+    },
+    storage: {
+      from: () => ({
+        upload: async (path: string, fileBody: unknown) => {
+          mockObjects.set(path, Buffer.from(fileBody as Uint8Array));
+          return { data: {}, error: null };
+        },
+        download: async (path: string) => {
+          const data = mockObjects.get(path);
+          return data ? { data, error: null } : { data: null, error: { message: "not found" } };
+        },
+        createSignedUrl: async (path: string, expiresIn: number) => ({
+          data: { signedUrl: `https://signed.example/${path}?exp=${expiresIn}` },
+          error: null,
+        }),
+      }),
+    },
+  };
+  await persistSupabaseUploadedBytes("mock/storage.pdf", Buffer.from("mock"), "application/pdf", mockSupabaseClient);
+  const mockRead = await readSupabaseUploadedBytes("mock/storage.pdf", mockSupabaseClient);
+  assert(mockRead.equals(Buffer.from("mock")), "supabase storage mock should persist and read bytes");
 
   const studentRef = "student-flow-test-001";
   const listBefore = await json(await listRoute.GET(request(`/api/documents?studentRef=${studentRef}`)));
@@ -125,7 +177,8 @@ try {
     )
   );
   assert(upload.ok, `direct upload should succeed: ${JSON.stringify(upload.body)}`);
-  assert(upload.body.document.status === "UPLOADED", "uploaded document status should be UPLOADED");
+  assert(upload.body.document.status === "NEEDS_REVIEW", "missing Claude key should degrade uploaded document to NEEDS_REVIEW");
+  assert(upload.body.document.reviewStatus === "NEEDS_HUMAN_REVIEW", "missing Claude key should require human review");
 
   const uploadedFile = await db.uploadedFile.findFirst({ where: { sha256: hash } });
   assert(uploadedFile, "UploadedFile should be persisted");
@@ -178,13 +231,39 @@ try {
   const uploadedDoc = await db.documentItem.findFirst({
     where: { documentType: "passport" },
   });
-  assert(uploadedDoc?.status === "UPLOADED", "DocumentItem should be UPLOADED after student upload");
-  assert(uploadedDoc.reviewStatus === "PENDING", "DocumentItem review should be PENDING after student upload");
+  assert(uploadedDoc?.status === "NEEDS_REVIEW", "DocumentItem should be NEEDS_REVIEW when OCR is skipped");
+  assert(uploadedDoc.reviewStatus === "NEEDS_HUMAN_REVIEW", "DocumentItem review should require human review when OCR is skipped");
+  assert(uploadedDoc.ocrProcessedAt, "OCR skipped path should still record ocrProcessedAt");
 
   const uploadAudit = await db.auditEvent.findFirst({
     where: { targetId: uploadedDoc.id, action: "document.uploaded" },
   });
   assert(uploadAudit, "student upload should create AuditEvent");
+  const ocrSkippedAudit = await db.auditEvent.findFirst({
+    where: { targetId: uploadedDoc.id, action: "document.ocr_skipped" },
+  });
+  assert(ocrSkippedAudit, "missing Claude key should create OCR skipped AuditEvent");
+
+  process.env.DOCUMENT_OCR_MOCK_RESPONSE_JSON = JSON.stringify({
+    documentType: "passport",
+    confidence: 0.94,
+    passport: {
+      passportNumber: "P1234567",
+      fullName: "KAXI TEST",
+      expirationDate: "2099-12-31",
+    },
+    financialProof: null,
+    common: null,
+  });
+  const ocrDone = await processDocumentOcr(uploadedDoc.id, {
+    actor: "test",
+    actorRole: "test",
+  });
+  assert(ocrDone.status === "OCR_DONE", `mock OCR should complete: ${JSON.stringify(ocrDone)}`);
+  assert(ocrDone.ocrExtractedCiphertext, "mock OCR should persist encrypted extraction");
+  assert(ocrDone.ocrExtractedRedacted, "mock OCR should persist redacted extraction for UI");
+  assert(ocrDone.expiresAt?.getFullYear() === 2099, "mock OCR should update passport expiry");
+  delete process.env.DOCUMENT_OCR_MOCK_RESPONSE_JSON;
 
   const tampered = Buffer.from("not the same file", "utf8");
   const tamperedUpload = await json(

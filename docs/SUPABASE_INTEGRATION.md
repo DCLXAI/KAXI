@@ -192,3 +192,54 @@ bun run test:supabase-auth
 bun run ci:types
 bun run lint
 ```
+
+### Phase 3 Final Slice: Document Storage / OCR
+
+Document byte storage can now use a private Supabase Storage bucket while the legacy database byte backend remains available as a fallback.
+
+Recommended runtime env:
+
+```bash
+DOCUMENT_UPLOAD_STORAGE_BACKEND="supabase"
+SUPABASE_STORAGE_BUCKET="kaxi-documents"
+NEXT_PUBLIC_SUPABASE_URL=""
+SUPABASE_SERVICE_ROLE_KEY=""
+DOCUMENT_UPLOAD_SIGNING_SECRET=""
+```
+
+Security boundary:
+
+- The bucket must be private.
+- Upload, download, migration, and signed URL creation use the server-only service role key.
+- Download links must be generated as short-lived signed URLs. KAXI caps helper-generated document links at 600 seconds.
+- Existing `DocumentFileBlob` rows are not deleted by migration tooling; operators should verify object storage before choosing a separate cleanup plan.
+
+Provision the bucket from a trusted operator machine:
+
+```bash
+set -a
+source .local/supabase-kaxi-runtime.env
+set +a
+export DOCUMENT_UPLOAD_STORAGE_BACKEND="supabase"
+
+bun run storage:provision:supabase
+```
+
+Migrate existing database blobs only after the bucket is provisioned. The script is idempotent and skips objects already present at the same `storageKey`.
+
+```bash
+set -a
+source .local/supabase-kaxi-runtime.env
+set +a
+export DATABASE_URL="$SUPABASE_POOLER_URL"
+export DOCUMENT_UPLOAD_STORAGE_BACKEND="supabase"
+
+bun run storage:migrate:document-blobs
+```
+
+OCR behavior:
+
+- Upload completion transitions `DocumentItem` through `OCR_PROCESSING`.
+- Claude vision extraction uses structured JSON output through `src/lib/ai/claude-gateway.ts`.
+- Sensitive extracted fields are encrypted into `DocumentItem.ocrExtractedCiphertext`; admin UI receives only redacted OCR JSON and validation metadata.
+- If `ANTHROPIC_API_KEY` is not configured, OCR is skipped and the document becomes `NEEDS_REVIEW` / `NEEDS_HUMAN_REVIEW` for manual review.

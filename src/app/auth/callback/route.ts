@@ -16,13 +16,14 @@ export async function GET(req: NextRequest) {
     if (!code) return NextResponse.redirect(new URL("/student/login?error=missing_code", url.origin));
     const client = await createSupabaseServerClient();
     const exchanged = await client.auth.exchangeCodeForSession?.(code);
-    if (!exchanged || exchanged.error || !exchanged.data.session?.user) {
+    const sessionUser = exchanged?.data?.session?.user || null;
+    if (!exchanged || exchanged.error || !sessionUser) {
       return NextResponse.redirect(new URL("/student/login?error=callback_failed", url.origin));
     }
 
     await upsertKaxiUserForAuth({
-      authUserId: exchanged.data.session.user.id,
-      email: exchanged.data.session.user.email,
+      authUserId: sessionUser.id,
+      email: sessionUser.email,
       role,
       inviteToken,
       locale,

@@ -3,10 +3,13 @@ import { redactSensitiveText } from "@/lib/privacy/pii";
 export const DEFAULT_ANTHROPIC_MODEL = "claude-opus-4-8";
 
 export type ClaudeRole = "system" | "user" | "assistant";
+export type ClaudeGatewayContent =
+  | string
+  | Array<Record<string, unknown>>;
 
 export interface ClaudeGatewayMessage {
   role: ClaudeRole;
-  content: string;
+  content: ClaudeGatewayContent;
 }
 
 export interface ClaudeGatewayOptions {
@@ -72,14 +75,14 @@ export function getClaudeGatewayDiagnostics(env: NodeJS.ProcessEnv = process.env
 function sanitizeMessages(messages: ClaudeGatewayMessage[]): ClaudeGatewayMessage[] {
   return messages.map((message) => ({
     role: message.role,
-    content: redactSensitiveText(message.content),
+    content: typeof message.content === "string" ? redactSensitiveText(message.content) : message.content,
   }));
 }
 
-function splitSystem(messages: ClaudeGatewayMessage[]): { system: string; messages: Array<{ role: "user" | "assistant"; content: string }> } {
+function splitSystem(messages: ClaudeGatewayMessage[]): { system: string; messages: Array<{ role: "user" | "assistant"; content: ClaudeGatewayContent }> } {
   const system = messages
     .filter((message) => message.role === "system")
-    .map((message) => message.content)
+    .map((message) => (typeof message.content === "string" ? message.content : JSON.stringify(message.content)))
     .join("\n\n")
     .trim();
   const conversation = messages

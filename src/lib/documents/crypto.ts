@@ -1,4 +1,5 @@
 import { createHash, createHmac, timingSafeEqual } from "crypto";
+import { decryptPii, encryptPii } from "@/lib/privacy/pii";
 
 export interface DocumentUploadTokenPayload {
   studentRef: string;
@@ -61,6 +62,20 @@ export function verifyDocumentUploadToken(token: string, secret: string): Docume
     const payload = JSON.parse(base64UrlDecode(encoded)) as DocumentUploadTokenPayload;
     if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) return null;
     return payload;
+  } catch {
+    return null;
+  }
+}
+
+export function encryptDocumentOcrPayload(value: unknown): string | null {
+  return encryptPii(JSON.stringify(value));
+}
+
+export function decryptDocumentOcrPayload<T = unknown>(ciphertext: string | null | undefined): T | null {
+  const text = decryptPii(ciphertext);
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as T;
   } catch {
     return null;
   }

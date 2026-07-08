@@ -75,6 +75,9 @@ for (const requiredField of [
   "sourceRefs     Json",
   "fallbackPolicy String",
   "reviewStatus   LegalReviewStatus",
+  "ocrExtractedCiphertext String?",
+  "ocrExtractedRedacted Json?",
+  "ocrValidation    Json?",
 ]) {
   assert(schema.includes(requiredField), `missing compliance rule field: ${requiredField}`);
 }

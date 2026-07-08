@@ -14,11 +14,12 @@ export async function POST(req: NextRequest) {
     const role = body.role === "PARTNER_AGENT" ? "PARTNER_AGENT" : "STUDENT";
     const client = await createSupabaseServerClient();
     const auth = await client.auth.getUser();
-    if (!auth.data.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const authUser = auth.data?.user || null;
+    if (!authUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const user = await upsertKaxiUserForAuth({
-      authUserId: auth.data.user.id,
-      email: auth.data.user.email,
+      authUserId: authUser.id,
+      email: authUser.email,
       role,
       inviteToken: body.inviteToken || null,
       locale: body.locale || "ko",

@@ -226,6 +226,11 @@ model DocumentItem {
   fileId           String?
   reviewStatus     ReviewStatus   @default(PENDING)
   reviewNote       String?
+  ocrExtractedCiphertext String?
+  ocrExtractedRedacted Json?
+  ocrValidation    Json?
+  ocrModel         String?
+  ocrProcessedAt   DateTime?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
@@ -237,6 +242,7 @@ model DocumentItem {
   @@index([documentType])
   @@index([status])
   @@index([reviewStatus])
+  @@index([ocrProcessedAt])
   @@index([expiresAt])
 }
 

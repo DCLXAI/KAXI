@@ -38,6 +38,8 @@
     "knowledge:pgvector": "bun run scripts/ingest-knowledge-pgvector.ts",
     "privacy:enforce-retention": "bun run scripts/enforce-retention.ts",
     "privacy:check-production-env": "bun run scripts/check-production-privacy-env.ts",
+    "storage:provision:supabase": "bun run scripts/provision-supabase-storage.ts",
+    "storage:migrate:document-blobs": "bun run scripts/migrate-document-blobs.ts",
     "db:check-production": "bun run scripts/check-production-db.ts",
     "db:migrate:deploy": "prisma migrate deploy --schema prisma/postgres/schema.prisma",
     "admin:hash-password": "bun run scripts/hash-admin-password.ts",

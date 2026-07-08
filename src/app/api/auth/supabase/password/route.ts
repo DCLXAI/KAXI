@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result?.error?.message || "Supabase password auth failed" }, { status: 400 });
     }
 
-    const authUser = result.data.user;
+    const authUser = result.data?.user || null;
     if (authUser) {
       const role = body.role === "PARTNER_AGENT" ? "PARTNER_AGENT" : "STUDENT";
       await upsertKaxiUserForAuth({
@@ -50,8 +50,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      hasSession: Boolean(result.data.session),
-      message: result.data.session
+      hasSession: Boolean(result.data?.session),
+      message: result.data?.session
         ? "Supabase authenticated. Browser clients should persist the returned session."
         : "Check email verification or sign in after confirmation.",
     });

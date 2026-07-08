@@ -123,6 +123,10 @@ export async function listStudentDocuments(studentRef: string) {
       reviewStatus: item?.reviewStatus || ReviewStatus.PENDING,
       reviewNote: item?.reviewNote || null,
       expiresAt: item?.expiresAt?.toISOString() || null,
+      ocrExtractedRedacted: item?.ocrExtractedRedacted || null,
+      ocrValidation: item?.ocrValidation || null,
+      ocrModel: item?.ocrModel || null,
+      ocrProcessedAt: item?.ocrProcessedAt?.toISOString() || null,
       file: item?.file
         ? {
             id: item.file.id,

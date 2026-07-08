@@ -49,7 +49,7 @@ export function SupabaseAuthForm({ role, lang = "ko" }: { role: AuthRole; lang?:
           ? await client.auth.signInWithPassword?.({ email, password })
           : await client.auth.signUp?.({ email, password });
       if (!result || result.error) throw new Error(result?.error?.message || "Supabase password auth failed");
-      if (result.data.session) {
+      if (result.data?.session) {
         await syncUser();
         router.push(home);
         router.refresh();

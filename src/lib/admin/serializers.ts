@@ -145,6 +145,10 @@ function toAdminDocumentItem(doc: CaseWithRelations["studentProfile"]["documents
     reviewStatus: doc.reviewStatus,
     reviewNote: doc.reviewNote,
     expiresAt: iso(doc.expiresAt),
+    ocrExtractedRedacted: doc.ocrExtractedRedacted,
+    ocrValidation: doc.ocrValidation,
+    ocrModel: doc.ocrModel,
+    ocrProcessedAt: iso(doc.ocrProcessedAt),
     file: doc.file
       ? {
           id: doc.file.id,
