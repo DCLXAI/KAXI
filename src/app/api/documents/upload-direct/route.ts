@@ -78,7 +78,10 @@ export async function PUT(req: NextRequest) {
       },
     });
   } catch (err) {
-    if (!isExpectedValidationError(err)) console.error("[PUT /api/documents/upload-direct]", err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Internal error" }, { status: 400 });
+    if (isExpectedValidationError(err)) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Invalid upload" }, { status: 400 });
+    }
+    console.error("[PUT /api/documents/upload-direct]", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

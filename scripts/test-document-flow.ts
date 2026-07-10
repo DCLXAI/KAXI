@@ -34,12 +34,13 @@ prepareTestDb("document flow");
 
 const { NextRequest } = await import("next/server");
 const { db } = await import("../src/lib/db");
-// NOTE: documents/route.ts, upload-intent/route.ts, upload-direct/route.ts still reference
-// the pre-Task-2 studentRef contract and are exercised in Task 2's route-level test coverage.
-// This script tests the Task 1 repository/crypto layer directly instead of importing them.
+// NOTE: Routes now require a student session (Supabase env is absent in tests,
+// so route-level calls assert the 401 contract). Repository/crypto functions
+// and the token-authenticated upload-direct route are exercised directly below.
 const reviewRoute = await import("../src/app/api/admin/documents/[id]/review/route");
 const listRoute = await import("../src/app/api/documents/route");
 const intentRoute = await import("../src/app/api/documents/upload-intent/route");
+const directRoute = await import("../src/app/api/documents/upload-direct/route");
 const { getDocumentWorkspaceIssue } = await import("../src/lib/documents/workspace-availability");
 const {
   getDocumentStorageInfo,
@@ -260,9 +261,9 @@ try {
   const mockRead = await readSupabaseUploadedBytes("mock/storage.pdf", mockSupabaseClient);
   assert(mockRead.equals(Buffer.from("mock")), "supabase storage mock should persist and read bytes");
 
-  // Repository/crypto layer coverage (Task 1): drive commitDocumentUpload directly via a
-  // manually-signed token instead of upload-intent/upload-direct routes, which still speak
-  // the pre-Task-2 studentRef contract and are covered by Task 2's route-level tests.
+  // NOTE: Routes now require a student session (Supabase env is absent in tests,
+  // so route-level calls assert the 401 contract). Repository/crypto functions
+  // and the token-authenticated upload-direct route are exercised directly below.
   const { signDocumentUploadPayload } = await import("../src/lib/documents/crypto");
   const { DOCUMENT_UPLOAD_TOKEN_TTL_SECONDS } = await import("../src/lib/documents/config");
   const { createDocumentStorageKey: makeStorageKey } = await import("../src/lib/documents/repository");
@@ -296,6 +297,51 @@ try {
     verifiedPayload?.studentProfileId === profile.id,
     "signed upload token must round-trip studentProfileId"
   );
+
+  // Route-level coverage: upload-direct is token-authenticated (no Supabase session needed),
+  // so exercise the actual PUT handler with a valid signed token and a tampered one.
+  const routeBytes = Buffer.from("KAXI transcript route-level bytes");
+  const routeSha = sha256(routeBytes);
+  const routeStorageKey = makeStorageKey({
+    studentProfileId: profile.id,
+    documentType: "transcript",
+    originalName: "transcript-route.pdf",
+    sha256: routeSha,
+  });
+  const routePayload = {
+    studentProfileId: profile.id,
+    documentType: "transcript",
+    originalName: "transcript-route.pdf",
+    mimeType: "application/pdf",
+    sizeBytes: routeBytes.byteLength,
+    sha256: routeSha,
+    storageKey: routeStorageKey,
+    exp: Math.floor(Date.now() / 1000) + DOCUMENT_UPLOAD_TOKEN_TTL_SECONDS,
+  };
+  const routeToken = signDocumentUploadPayload(routePayload, "test-document-upload-secret");
+  const routeVerified = (await import("../src/lib/documents/crypto")).verifyDocumentUploadToken(
+    routeToken,
+    "test-document-upload-secret"
+  );
+  assert(routeVerified && routeVerified.studentProfileId === profile.id, "route token must verify");
+  const putRes = await directRoute.PUT(
+    new NextRequest(`http://localhost/api/documents/upload-direct?token=${encodeURIComponent(routeToken)}`, {
+      method: "PUT",
+      headers: {
+        "content-type": routeVerified.mimeType,
+        "x-kaxi-file-sha256": routeVerified.sha256,
+      },
+      body: routeBytes,
+    })
+  );
+  const putBody = await putRes.json();
+  assert(putRes.ok, `upload-direct route must accept a valid signed token, got ${putRes.status}: ${JSON.stringify(putBody)}`);
+  assert(putBody.document?.documentType === "transcript", "route response must carry the committed document");
+
+  const tamperedPutRes = await directRoute.PUT(
+    new NextRequest("http://localhost/api/documents/upload-direct?token=tampered", { method: "PUT" })
+  );
+  assert(tamperedPutRes.status === 401, `upload-direct route must reject a tampered token, got ${tamperedPutRes.status}`);
 
   const committed = await commitUpload(
     {
