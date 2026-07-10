@@ -108,6 +108,11 @@ async function testConsentThirdPartyFlow() {
       RATE_LIMIT_BACKEND: "memory",
       PRIVACY_LEAD_RETENTION_DAYS: "365",
       PRIVACY_PARTNER_REQUEST_RETENTION_DAYS: "180",
+      // canonical chat retention requires Supabase storage credentials; the
+      // canonical test session has no attachments, so a fake project suffices
+      // (same pattern as test-document-flow.ts / test-chat-history.ts)
+      NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "privacy-test-service-role-key",
     });
     delete process.env.VERCEL;
     delete process.env.VERCEL_ENV;
