@@ -26,6 +26,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/kaxi_ci?schema=public
       SUPABASE_DIRECT_URL: postgresql://postgres:postgres@localhost:5432/kaxi_ci?schema=public
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/kaxi_test?schema=public
       MODEL_CACHE_DIR: ${{ github.workspace }}/data/model-cache
       VECTOR_CACHE_FILE: ${{ github.workspace }}/data/vector-store/embeddings-cache.json
       RESTORE_MODEL_CACHE_ON_INSTALL: "true"
@@ -45,6 +46,8 @@ jobs:
           bun-version: 1.3.5
       - name: Install and restore runtime artifacts
         run: bun install --frozen-lockfile
+      - name: Create isolated test database
+        run: psql "postgresql://postgres:postgres@localhost:5432/postgres" -c "CREATE DATABASE kaxi_test;"
       - name: Prepare Supabase-compatible Postgres database
         run: bun run db:migrate:deploy && bun run db:seed:schools && bun run db:seed:synonyms && bun run db:seed:rules && bun run knowledge:pgvector
       - name: Typecheck profiles
