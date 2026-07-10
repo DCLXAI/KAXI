@@ -16,6 +16,8 @@ import { hybridSearch, initVectorStore, initTransformerStore, getStoreStats } fr
 import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
 import { ensureGroundedCitationAnswer } from "@/lib/knowledge/citations";
 import {
+  AI_CHAT_DEFAULT_DAILY_QUOTA,
+  AI_CHAT_DEFAULT_RATE_LIMIT,
   consumeDailyQuota,
   parseLimit,
   parsePositiveInt,
@@ -30,7 +32,7 @@ export async function POST(req: NextRequest) {
   try {
     const limited = await rateLimit(req, {
       key: "ai:chat",
-      limit: parseLimit(process.env.AI_CHAT_RATE_LIMIT, 0),
+      limit: parseLimit(process.env.AI_CHAT_RATE_LIMIT, AI_CHAT_DEFAULT_RATE_LIMIT),
       windowMs: 60 * 1000,
     });
     if (limited) return limited;
@@ -38,7 +40,7 @@ export async function POST(req: NextRequest) {
     const quotaExceeded = await consumeDailyQuota(
       req,
       "ai:chat",
-      parseLimit(process.env.AI_CHAT_DAILY_QUOTA, 0)
+      parseLimit(process.env.AI_CHAT_DAILY_QUOTA, AI_CHAT_DEFAULT_DAILY_QUOTA)
     );
     if (quotaExceeded) return quotaExceeded;
 

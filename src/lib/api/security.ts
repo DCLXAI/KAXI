@@ -317,3 +317,8 @@ export async function withTimeout<T>(
     if (timeout) clearTimeout(timeout);
   }
 }
+
+// /api/ai/chat 기본 한도 — env 미설정 시 무제한이 되지 않도록 하는 보수적 기본값.
+// 운영에서 조정은 AI_CHAT_RATE_LIMIT / AI_CHAT_DAILY_QUOTA env로 (명시적 "unlimited" 허용).
+export const AI_CHAT_DEFAULT_RATE_LIMIT = 10;
+export const AI_CHAT_DEFAULT_DAILY_QUOTA = 100;

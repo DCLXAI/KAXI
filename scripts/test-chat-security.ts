@@ -21,6 +21,11 @@ import {
   issueChatSessionToken,
   verifyChatSessionToken,
 } from "../src/lib/chat/session-token";
+import {
+  AI_CHAT_DEFAULT_RATE_LIMIT,
+  AI_CHAT_DEFAULT_DAILY_QUOTA,
+  parseLimit,
+} from "../src/lib/api/security";
 
 process.env.CHAT_SESSION_SIGNING_SECRET = "chat-security-test-secret-that-is-longer-than-thirty-two-characters";
 
@@ -183,5 +188,13 @@ await assert.rejects(
   ),
   (error: unknown) => error instanceof JsonBodyError && error.status === 400,
 );
+
+assert.equal(AI_CHAT_DEFAULT_RATE_LIMIT, 10);
+assert.equal(AI_CHAT_DEFAULT_DAILY_QUOTA, 100);
+// env 미설정 → 보수적 기본값 (무제한 아님)
+assert.equal(parseLimit(undefined, AI_CHAT_DEFAULT_RATE_LIMIT), 10);
+assert.equal(parseLimit(undefined, AI_CHAT_DEFAULT_DAILY_QUOTA), 100);
+// 명시적 무제한은 여전히 유효
+assert.equal(parseLimit("unlimited", AI_CHAT_DEFAULT_RATE_LIMIT), 0);
 
 console.log("PASS chat security: signed ownership, Typebot gateway auth, bounded JSON, category inference, expiry, tamper protection, and magic-byte allowlist");
