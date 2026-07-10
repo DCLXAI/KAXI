@@ -47,6 +47,20 @@ export function generatePartnerInviteToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
+async function findUserForAuthIdentity(authUserId: string, email: string | null): Promise<User | null> {
+  const [byAuthUserId, byEmail] = await Promise.all([
+    db.user.findUnique({ where: { authUserId } }),
+    email ? db.user.findUnique({ where: { email } }) : Promise.resolve(null),
+  ]);
+  if (byAuthUserId && byEmail && byAuthUserId.id !== byEmail.id) {
+    throw new AuthBridgeError("auth_identity_conflict", "Auth identity and email belong to different accounts", 409);
+  }
+  if (!byAuthUserId && byEmail?.authUserId && byEmail.authUserId !== authUserId) {
+    throw new AuthBridgeError("auth_identity_conflict", "This email is linked to another identity", 409);
+  }
+  return byAuthUserId || byEmail;
+}
+
 export async function createPartnerAgentInvite(input: {
   organizationId: string;
   email?: string | null;
@@ -111,13 +125,14 @@ export async function upsertKaxiUserForAuth(input: {
   if (input.role === "PARTNER_AGENT") {
     if (!input.inviteToken) throw new AuthBridgeError("invite_required", "Partner agent signup requires an invite token", 403);
     const invite = await validatePartnerInviteToken(input.inviteToken, email);
+    const linkedUser = await findUserForAuthIdentity(authUserId, email);
+    if (linkedUser?.role === "PLATFORM_ADMIN") {
+      throw new AuthBridgeError("role_conflict", "Administrator accounts cannot accept partner invites", 409);
+    }
     return db.$transaction(async (tx) => {
-      const existing = await tx.user.findFirst({
-        where: { OR: [{ authUserId }, ...(email ? [{ email }] : [])] },
-      });
-      const user = existing
+      const user = linkedUser
         ? await tx.user.update({
-            where: { id: existing.id },
+            where: { id: linkedUser.id },
             data: {
               authUserId,
               organizationId: invite.organizationId,
@@ -147,13 +162,14 @@ export async function upsertKaxiUserForAuth(input: {
     });
   }
 
+  const linkedUser = await findUserForAuthIdentity(authUserId, email);
   return db.$transaction(async (tx) => {
-    const existing = await tx.user.findFirst({
-      where: { OR: [{ authUserId }, ...(email ? [{ email }] : [])] },
-    });
-    const user = existing
+    if (linkedUser && linkedUser.role !== "STUDENT") {
+      throw new AuthBridgeError("role_conflict", "This account must use its existing role", 409);
+    }
+    const user = linkedUser
       ? await tx.user.update({
-          where: { id: existing.id },
+          where: { id: linkedUser.id },
           data: { authUserId, role: "STUDENT", email, locale },
         })
       : await tx.user.create({
@@ -164,6 +180,49 @@ export async function upsertKaxiUserForAuth(input: {
       update: {},
       create: { userId: user.id, nationality: "VN" },
     });
+    return user;
+  });
+}
+
+export async function syncKaxiUserForAuth(input: {
+  authUserId: string;
+  email?: string | null;
+  locale?: string | null;
+  inviteToken?: string | null;
+}): Promise<User> {
+  const authUserId = normalizeAuthUserId(input.authUserId);
+  const email = normalizeEmail(input.email);
+  const locale = input.locale?.trim().slice(0, 12) || "ko";
+
+  if (input.inviteToken) {
+    return upsertKaxiUserForAuth({
+      authUserId,
+      email,
+      role: "PARTNER_AGENT",
+      inviteToken: input.inviteToken,
+      locale,
+    });
+  }
+
+  const existing = await findUserForAuthIdentity(authUserId, email);
+  if (!existing) {
+    return upsertKaxiUserForAuth({ authUserId, email, role: "STUDENT", locale });
+  }
+  if (existing.role === "PLATFORM_ADMIN") {
+    throw new AuthBridgeError("admin_credentials_required", "Administrators must use MFA credentials", 403);
+  }
+  return db.$transaction(async (tx) => {
+    const user = await tx.user.update({
+      where: { id: existing.id },
+      data: { authUserId, email: email || existing.email, locale },
+    });
+    if (user.role === "STUDENT") {
+      await tx.studentProfile.upsert({
+        where: { userId: user.id },
+        update: {},
+        create: { userId: user.id, nationality: "VN" },
+      });
+    }
     return user;
   });
 }

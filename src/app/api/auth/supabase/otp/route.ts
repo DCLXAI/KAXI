@@ -17,9 +17,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = (await req.json().catch(() => ({}))) as {
       email?: string;
-      role?: "STUDENT" | "PARTNER_AGENT";
-      inviteToken?: string;
       locale?: string;
+      next?: string;
     };
     const email = body.email?.trim().toLowerCase();
     if (!email || !email.includes("@")) return NextResponse.json({ error: "Valid email is required" }, { status: 400 });
@@ -31,17 +30,15 @@ export async function POST(req: NextRequest) {
     const client = createClient(config.url, config.anonKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    const role = body.role === "PARTNER_AGENT" ? "PARTNER_AGENT" : "STUDENT";
-    const next = role === "PARTNER_AGENT" ? "/partner" : "/student";
     const redirect = new URL("/auth/callback", siteOrigin(req));
-    redirect.searchParams.set("next", next);
-    redirect.searchParams.set("role", role);
+    if (body.next?.startsWith("/") && !body.next.startsWith("//")) {
+      redirect.searchParams.set("next", body.next);
+    }
     if (body.locale) redirect.searchParams.set("locale", body.locale.slice(0, 12));
-    if (body.inviteToken) redirect.searchParams.set("inviteToken", body.inviteToken);
 
     const result = await client.auth.signInWithOtp?.({
       email,
-      options: { emailRedirectTo: redirect.toString() },
+      options: { emailRedirectTo: redirect.toString(), shouldCreateUser: false },
     });
     if (result?.error) return NextResponse.json({ error: result.error.message || "OTP request failed" }, { status: 400 });
     return NextResponse.json({ ok: true });

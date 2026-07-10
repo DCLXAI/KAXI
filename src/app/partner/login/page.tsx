@@ -1,10 +1,11 @@
-import { Suspense } from "react";
-import { SupabaseAuthForm } from "@/components/auth/SupabaseAuthForm";
+import { redirect } from "next/navigation";
 
-export default function PartnerLoginPage() {
-  return (
-    <Suspense fallback={<div className="p-8 text-sm text-muted-foreground">Loading...</div>}>
-      <SupabaseAuthForm role="PARTNER_AGENT" />
-    </Suspense>
-  );
+export default async function PartnerLoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ invite?: string | string[] }>;
+}) {
+  const invite = (await searchParams).invite;
+  const token = Array.isArray(invite) ? invite[0] : invite;
+  redirect(token ? `/login?invite=${encodeURIComponent(token)}` : "/login");
 }

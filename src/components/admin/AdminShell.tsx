@@ -57,7 +57,7 @@ function AdminAuthGate({
         </CardHeader>
         <CardContent className="space-y-3">
           <Button className="w-full" asChild>
-            <Link href="/login">관리자 로그인</Link>
+            <Link href="/login?next=/admin/cases">로그인</Link>
           </Button>
           <div className="grid gap-2">
             <Input

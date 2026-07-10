@@ -18,8 +18,21 @@ export function canAccessArea(role: UserRole | null | undefined, area: KaxiAuthA
 }
 
 export function defaultLoginPath(area: KaxiAuthArea): string {
-  if (area === "partner") return "/partner/login";
-  if (area === "student") return "/student/login";
-  if (area === "admin") return "/login";
-  return "/";
+  if (area === "public") return "/";
+  return "/login";
+}
+
+export function defaultHomePath(role: UserRole): string {
+  if (role === "PARTNER_AGENT") return "/partner";
+  if (role === "PLATFORM_ADMIN") return "/admin/cases";
+  return "/student";
+}
+
+export function postLoginPath(role: UserRole, requestedPath?: string | null): string {
+  const fallback = defaultHomePath(role);
+  const requested = requestedPath?.trim() || "";
+  if (!requested.startsWith("/") || requested.startsWith("//")) return fallback;
+
+  const area = areaForPath(requested);
+  return canAccessArea(role, area) ? requested : fallback;
 }

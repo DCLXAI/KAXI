@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AuthBridgeError, upsertKaxiUserForAuth } from "@/lib/supabase/auth";
+import { AuthBridgeError, syncKaxiUserForAuth } from "@/lib/supabase/auth";
+import { postLoginPath } from "@/lib/supabase/policy";
 import { getSupabasePublicConfig } from "@/lib/supabase/config";
 import { loadSupabaseJs } from "@/lib/supabase/dynamic";
 import { isSupabaseAuthUnavailable } from "@/lib/supabase/server";
@@ -12,9 +13,9 @@ export async function POST(req: NextRequest) {
       email?: string;
       password?: string;
       mode?: "sign_up" | "sign_in";
-      role?: "STUDENT" | "PARTNER_AGENT";
       inviteToken?: string;
       locale?: string;
+      next?: string;
     };
     const email = body.email?.trim().toLowerCase();
     const password = body.password || "";
@@ -37,23 +38,24 @@ export async function POST(req: NextRequest) {
     }
 
     const authUser = result.data?.user || null;
-    if (authUser) {
-      const role = body.role === "PARTNER_AGENT" ? "PARTNER_AGENT" : "STUDENT";
-      await upsertKaxiUserForAuth({
+    if (authUser && result.data?.session) {
+      const user = await syncKaxiUserForAuth({
         authUserId: authUser.id,
         email: authUser.email || email,
-        role,
         inviteToken: body.inviteToken || null,
         locale: body.locale || "ko",
+      });
+      return NextResponse.json({
+        ok: true,
+        hasSession: Boolean(result.data?.session),
+        redirectTo: postLoginPath(user.role, body.next),
       });
     }
 
     return NextResponse.json({
       ok: true,
-      hasSession: Boolean(result.data?.session),
-      message: result.data?.session
-        ? "Supabase authenticated. Browser clients should persist the returned session."
-        : "Check email verification or sign in after confirmation.",
+      hasSession: false,
+      message: "Check email verification or sign in after confirmation.",
     });
   } catch (err) {
     if (err instanceof AuthBridgeError) {

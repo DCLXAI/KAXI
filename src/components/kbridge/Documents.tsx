@@ -174,7 +174,7 @@ export function Documents({ onNavigate }: { onNavigate: (v: string) => void }) {
 
   const triggerUpload = (document: StudentDocument) => {
     if (authRequired) {
-      window.location.href = "/student/login";
+      window.location.href = "/login?next=/documents";
       return;
     }
     uploadTarget.current = document;
@@ -254,9 +254,9 @@ export function Documents({ onNavigate }: { onNavigate: (v: string) => void }) {
           <button
             type="button"
             className="mt-2 rounded-md bg-primary px-3 py-1.5 text-primary-foreground"
-            onClick={() => { window.location.href = "/student/login"; }}
+            onClick={() => { window.location.href = "/login?next=/documents"; }}
           >
-            {lang === "ko" ? "학생 로그인" : "Student sign in"}
+            {lang === "ko" ? "로그인" : "Sign in"}
           </button>
         </div>
       )}

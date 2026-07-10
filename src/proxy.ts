@@ -10,6 +10,7 @@ const LOCALE_PREFIX = /^\/(ko|vi|mn|en)(\/|$)/;
 
 function needsSupabaseSession(pathname: string) {
   return (
+    pathname === "/login" ||
     pathname.startsWith("/student") ||
     pathname.startsWith("/partner") ||
     pathname === "/auth/callback" ||
@@ -39,6 +40,7 @@ export const config = {
     "/cost",
     "/docs",
     "/partners",
+    "/login",
     "/student/:path*",
     "/partner/:path*",
     "/auth/callback",

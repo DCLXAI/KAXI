@@ -23,10 +23,11 @@ async function expectAuthError(operation: Promise<unknown>, code: string) {
 prepareTestDb("supabase auth bridge");
 
 const { db } = await import("../src/lib/db");
-const { areaForPath, canAccessArea, defaultLoginPath } = await import("../src/lib/supabase/policy");
+const { areaForPath, canAccessArea, defaultLoginPath, postLoginPath } = await import("../src/lib/supabase/policy");
 const {
   createPartnerAgentInvite,
   hashPartnerInviteToken,
+  syncKaxiUserForAuth,
   upsertKaxiUserForAuth,
   validatePartnerInviteToken,
 } = await import("../src/lib/supabase/auth");
@@ -38,7 +39,15 @@ try {
   assert(!canAccessArea("PARTNER_AGENT", "student"), "PARTNER_AGENT should not access student area");
   assert(canAccessArea("PARTNER_AGENT", "partner"), "PARTNER_AGENT should access partner area");
   assert(!canAccessArea("STUDENT", "partner"), "STUDENT should not access partner area");
-  assert(defaultLoginPath("partner") === "/partner/login", "partner login path should be partner login");
+  assert(defaultLoginPath("partner") === "/login", "partner should use unified login");
+  assert(defaultLoginPath("student") === "/login", "student should use unified login");
+  assert(defaultLoginPath("admin") === "/login", "admin should use unified login");
+  assert(postLoginPath("STUDENT") === "/student", "student should default to student home");
+  assert(postLoginPath("PARTNER_AGENT") === "/partner", "partner should default to partner home");
+  assert(postLoginPath("PLATFORM_ADMIN") === "/admin/cases", "admin should default to admin home");
+  assert(postLoginPath("STUDENT", "/documents") === "/documents", "student may return to a public path");
+  assert(postLoginPath("STUDENT", "/partner") === "/student", "student cannot redirect into partner area");
+  assert(postLoginPath("STUDENT", "//evil.example") === "/student", "protocol-relative redirects must be rejected");
 
   const existingStudent = await db.user.create({
     data: {
@@ -86,6 +95,12 @@ try {
   assert(partner.role === "PARTNER_AGENT", "partner mapping should set PARTNER_AGENT role");
   assert(partner.organizationId === organization.id, "partner mapping should attach organization");
   assert(partner.authUserId === "22222222-2222-4222-8222-222222222222", "partner authUserId should be stored");
+  const returningPartner = await syncKaxiUserForAuth({
+    authUserId: "22222222-2222-4222-8222-222222222222",
+    email: "agent@example.com",
+  });
+  assert(returningPartner.role === "PARTNER_AGENT", "returning partner login must preserve its database role");
+  assert(returningPartner.organizationId === organization.id, "returning partner must preserve its organization");
   const acceptedInvite = await db.partnerAgentInvite.findUnique({ where: { id: created.invite.id } });
   assert(acceptedInvite?.status === "ACCEPTED", "invite should be marked accepted");
   assert(acceptedInvite.acceptedUserId === partner.id, "invite should link accepted user");
@@ -107,7 +122,31 @@ try {
     "invite_required"
   );
 
-  console.log("PASS Supabase Auth bridge: authUserId mapping, partner invites, and route policies verified");
+  const unifiedSignup = await syncKaxiUserForAuth({
+    authUserId: "44444444-4444-4444-8444-444444444444",
+    email: "new-student@example.com",
+    locale: "ko",
+  });
+  assert(unifiedSignup.role === "STUDENT", "new unified signup should create only a student account");
+
+  const conflictingEmailUser = await db.user.create({
+    data: {
+      id: "user_auth_conflicting_email",
+      authUserId: "55555555-5555-4555-8555-555555555555",
+      role: "STUDENT",
+      email: "conflict@example.com",
+    },
+  });
+  assert(Boolean(conflictingEmailUser), "conflicting identity fixture should be created");
+  await expectAuthError(
+    syncKaxiUserForAuth({
+      authUserId: "66666666-6666-4666-8666-666666666666",
+      email: "conflict@example.com",
+    }),
+    "auth_identity_conflict"
+  );
+
+  console.log("PASS unified Auth bridge: role preservation, partner invites, identity conflicts, and redirects verified");
 } finally {
   await db.$disconnect();
 }

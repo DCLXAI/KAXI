@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AuthBridgeError, upsertKaxiUserForAuth } from "@/lib/supabase/auth";
+import { AuthBridgeError, syncKaxiUserForAuth } from "@/lib/supabase/auth";
+import { postLoginPath } from "@/lib/supabase/policy";
 import { createSupabaseServerClient, isSupabaseAuthUnavailable } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -7,20 +8,18 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json().catch(() => ({}))) as {
-      role?: "STUDENT" | "PARTNER_AGENT";
       inviteToken?: string;
       locale?: string;
+      next?: string;
     };
-    const role = body.role === "PARTNER_AGENT" ? "PARTNER_AGENT" : "STUDENT";
     const client = await createSupabaseServerClient();
     const auth = await client.auth.getUser();
     const authUser = auth.data?.user || null;
     if (!authUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const user = await upsertKaxiUserForAuth({
+    const user = await syncKaxiUserForAuth({
       authUserId: authUser.id,
       email: authUser.email,
-      role,
       inviteToken: body.inviteToken || null,
       locale: body.locale || "ko",
     });
@@ -32,6 +31,7 @@ export async function POST(req: NextRequest) {
         organizationId: user.organizationId,
         email: user.email,
       },
+      redirectTo: postLoginPath(user.role, body.next),
     });
   } catch (err) {
     if (err instanceof AuthBridgeError) {
