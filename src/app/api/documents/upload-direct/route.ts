@@ -40,7 +40,7 @@ export async function PUT(req: NextRequest) {
     const arrayBuffer = await req.arrayBuffer();
     const bytes = new Uint8Array(arrayBuffer);
     const context = {
-      actor: `student:${payload.studentRef}`,
+      actor: `student:${payload.studentProfileId}`,
       actorRole: "student",
       action: "document.uploaded",
       ip: getClientIp(req),
@@ -48,7 +48,7 @@ export async function PUT(req: NextRequest) {
     };
     const item = await commitDocumentUpload(
       {
-        studentRef: payload.studentRef,
+        studentProfileId: payload.studentProfileId,
         documentType: payload.documentType,
         originalName: payload.originalName,
         mimeType: payload.mimeType,

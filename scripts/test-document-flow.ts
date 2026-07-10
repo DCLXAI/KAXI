@@ -38,6 +38,8 @@ const { db } = await import("../src/lib/db");
 // the pre-Task-2 studentRef contract and are exercised in Task 2's route-level test coverage.
 // This script tests the Task 1 repository/crypto layer directly instead of importing them.
 const reviewRoute = await import("../src/app/api/admin/documents/[id]/review/route");
+const listRoute = await import("../src/app/api/documents/route");
+const intentRoute = await import("../src/app/api/documents/upload-intent/route");
 const { getDocumentWorkspaceIssue } = await import("../src/lib/documents/workspace-availability");
 const {
   getDocumentStorageInfo,
@@ -74,6 +76,23 @@ function adminRequest(path: string, init: RequestInit = {}) {
 }
 
 try {
+  {
+    const res = await listRoute.GET();
+    const { status, body } = { status: res.status, body: await res.json() };
+    assert(status === 401, `GET /api/documents without session must be 401, got ${status}`);
+    assert(body.code === "forbidden", "401 body must carry AuthBridgeError code");
+    assert(!JSON.stringify(body).includes("studentRef"), "response must not reference studentRef");
+  }
+  {
+    const res = await intentRoute.POST(
+      request("/api/documents/upload-intent", {
+        method: "POST",
+        body: JSON.stringify({ documentType: "passport", originalName: "a.pdf", mimeType: "application/pdf", sizeBytes: 10, sha256: "0".repeat(64) }),
+      })
+    );
+    assert(res.status === 401, `upload-intent without session must be 401, got ${res.status}`);
+  }
+
   const { getStudentProfileForUser, listDocumentsForProfile, commitDocumentUpload: commitUpload, validateDocumentUpload } =
     await import("../src/lib/documents/repository");
 
