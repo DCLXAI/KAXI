@@ -104,7 +104,7 @@ jobs:
           CANARY_URL: ${{ steps.deploy.outputs.url }}
         run: |
           COOKIE_JAR="$RUNNER_TEMP/kaxi-vercel-bypass-cookie"
-          bunx vercel --token="$VERCEL_TOKEN" curl /api/readiness --deployment "$CANARY_URL" -- \
+          bunx vercel curl /api/readiness --deployment "$CANARY_URL" -- \
             --silent --show-error \
             --cookie-jar "$COOKIE_JAR" \
             --header "x-vercel-set-bypass-cookie: true" \
