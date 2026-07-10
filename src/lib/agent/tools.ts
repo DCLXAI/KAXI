@@ -3,9 +3,10 @@
 
 import { getEffectiveSourceMetadata, getRagDocumentMetadata, pickLangText } from "../data/knowledge";
 import { inferDiagnosisVisaType, recommendPath, type DiagnosisInput } from "../data/diagnosis";
-import { hybridSearch } from "../embeddings/vector-store";
+import { hybridSearch, getStoreStats, type ScoredDoc } from "../embeddings/vector-store";
 import { withImmigrationLegalBasisDocs } from "../knowledge/legal-basis";
 import type { Lang } from "../i18n/translations";
+import { isEnvFalse } from "../env";
 import { findSchoolById, listSchools } from "../schools/repository";
 import { createPartnerRequest } from "../partners/repository";
 import { redactSensitiveText } from "../privacy/pii";
@@ -79,6 +80,34 @@ function booleanArg(args: ToolArgs, key: string, fallback = false): boolean {
     if (["false", "no", "0", "n"].includes(normalized)) return false;
   }
   return fallback;
+}
+
+function shouldUseTransformerRag(value: string | undefined | null): boolean {
+  return !isEnvFalse(value);
+}
+
+function retrievalSummary(results: ScoredDoc[], requestedSemantic: boolean) {
+  const storeStats = getStoreStats();
+  const methods = Array.from(new Set(results.map((result) => result.method)));
+  const backend = methods.includes("pgvector")
+    ? "pgvector"
+    : methods.includes("transformer")
+      ? "transformer"
+      : methods.includes("tfidf")
+        ? "tfidf"
+        : "none";
+
+  return {
+    backend,
+    methods,
+    requestedSemantic,
+    pgvectorUsed: backend === "pgvector",
+    pgvectorConfigured: storeStats.pgvectorConfigured,
+    resultCount: results.length,
+    storeMethod: storeStats.method,
+    knowledgeSource: storeStats.knowledgeSource,
+    transformerAvailable: storeStats.transformerAvailable,
+  };
 }
 
 function enumArg<const Values extends readonly string[]>(
@@ -313,10 +342,12 @@ const searchKnowledgeTool: Tool = {
   execute: async (args, ctx) => {
     const query = stringArg(args, "query");
     const requestedTopK = Math.max(1, Math.min(10, Math.round(numberArg(args, "top_k", 3))));
+    const useTransformerRag = shouldUseTransformerRag(process.env.AI_AGENT_USE_TRANSFORMER_RAG);
     const results = await hybridSearch(query, {
       topK: Math.max(requestedTopK, 5),
-      useTransformer: process.env.AI_AGENT_USE_TRANSFORMER_RAG === "true",
+      useTransformer: useTransformerRag,
     });
+    const retrieval = retrievalSummary(results, useTransformerRag);
     const docs = withImmigrationLegalBasisDocs(
       query,
       results.map((r) => r.doc),
@@ -332,8 +363,12 @@ const searchKnowledgeTool: Tool = {
         sourceMeta: getEffectiveSourceMetadata(doc, ctx.lang),
         ragMeta: getRagDocumentMetadata(doc, ctx.lang),
         score: Number((results.find((r) => r.doc.id === doc.id)?.score || 1).toFixed(3)),
+        vectorScore: Number((results.find((r) => r.doc.id === doc.id)?.vectorScore || 0).toFixed(3)),
+        keywordScore: Number((results.find((r) => r.doc.id === doc.id)?.keywordScore || 0).toFixed(3)),
+        retrievalMethod: results.find((r) => r.doc.id === doc.id)?.method || "legal-basis",
+        retrieval,
       })),
-      summary: `${docs.length}개 관련 문서 검색: ${docs.map((doc) => doc.id).join(", ")}`,
+      summary: `${docs.length}개 관련 문서 검색(${retrieval.backend}): ${docs.map((doc) => doc.id).join(", ")}`,
     };
   },
 };

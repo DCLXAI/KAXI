@@ -33,6 +33,20 @@ export interface AgentStatus {
   ok: boolean;
   status: "ready" | "needs_configuration";
   backend: string;
+  llm?: {
+    backend: "kimi" | "claude";
+    apiKeyConfigured: boolean;
+    model: string;
+    baseUrl: string | null;
+    managedApi: boolean;
+  };
+  kimi?: {
+    apiKeyConfigured: boolean;
+    model: string;
+    baseUrl: string;
+    protocol: string;
+    managedApi: boolean;
+  };
   claude?: {
     apiKeyConfigured: boolean;
     model: string;
@@ -107,6 +121,8 @@ export interface AgentMeta {
     grounded: boolean;
     toolCount: number;
     officialSourceCount: number;
+    retrievalBackends?: string[];
+    pgvectorResultCount?: number;
     intentConfidence: "low" | "medium" | "high";
     missingSlotCount: number;
     durationMs?: number;

@@ -15,12 +15,18 @@ async function json(res: Response) {
   return body;
 }
 
+async function responseJson(res: Response) {
+  const body = await res.json();
+  return { ok: res.ok, status: res.status, body };
+}
+
 process.env.ADMIN_API_KEY = "test-admin-key";
 prepareTestDb("admin dashboard");
 
 const { NextRequest } = await import("next/server");
 const { db } = await import("../src/lib/db");
 const { seedAdminDemo } = await import("./seed-admin-demo");
+const { PGVECTOR_EMBEDDING_DIM, PGVECTOR_EMBEDDING_MODEL } = await import("../src/lib/embeddings/pgvector-rag");
 
 function adminRequest(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers || {});
@@ -31,6 +37,10 @@ function adminRequest(path: string, init: RequestInit = {}) {
     headers,
     body: init.body || undefined,
   });
+}
+
+function vectorLiteral(dim: number): string {
+  return `[${Array.from({ length: dim }, (_, index) => (index === 0 ? "1" : "0")).join(",")}]`;
 }
 
 try {
@@ -44,6 +54,7 @@ try {
   const knowledgeMonitorRoute = await import("../src/app/api/knowledge/monitor/route");
   const auditRoute = await import("../src/app/api/admin/audit/route");
   const opsRoute = await import("../src/app/api/admin/ops/route");
+  const handoffsRoute = await import("../src/app/api/admin/handoffs/route");
 
   const caseList = await json(await casesRoute.GET(adminRequest("/api/admin/cases")));
   assert(caseList.counts.total >= 5, `expected at least 5 cases, got ${caseList.counts.total}`);
@@ -106,6 +117,12 @@ try {
 
   const knowledge = await json(await knowledgeRoute.GET(adminRequest("/api/admin/knowledge")));
   assert(knowledge.documents.length >= 1, "admin knowledge should list source documents");
+  assert(knowledge.readiness?.candidateApproval, "admin knowledge should expose candidate approval readiness");
+  assert(knowledge.readiness?.corpus, "admin knowledge should expose production corpus readiness");
+  assert(
+    typeof knowledge.readiness.corpus.approvedEmbeddedChunks === "number",
+    "admin knowledge corpus readiness should include approved embedded chunk count"
+  );
   const docId = knowledge.documents[0].docId;
   const approvedDoc = await json(
     await knowledgeRoute.PATCH(
@@ -177,6 +194,19 @@ try {
     assert(candidateDocId, "admin monitor persist should expose candidate doc id");
     const pendingCandidate = await db.knowledgeDocument.findUnique({ where: { docId: candidateDocId } });
     assert(pendingCandidate?.reviewStatus === "PENDING", "admin monitor candidate must stay pending until approval");
+    const knowledgeWithCandidate = await json(await knowledgeRoute.GET(adminRequest("/api/admin/knowledge")));
+    assert(
+      knowledgeWithCandidate.readiness.candidateApproval.pendingCandidates >= 1,
+      "admin knowledge readiness should count pending candidates"
+    );
+    assert(
+      knowledgeWithCandidate.readiness.candidateApproval.pendingCandidateChunks >= 1,
+      "admin knowledge readiness should count pending candidate chunks"
+    );
+    assert(
+      !knowledgeWithCandidate.readiness.candidateApproval.allPendingCandidateChunksEmbedded,
+      "admin knowledge readiness should show unembedded candidates before pre-embedding"
+    );
 
     const emptyBulkApproved = await json(
       await knowledgeRoute.PATCH(
@@ -190,7 +220,36 @@ try {
     const stillPendingCandidate = await db.knowledgeDocument.findUnique({ where: { docId: candidateDocId } });
     assert(stillPendingCandidate?.reviewStatus === "PENDING", "empty bulk candidate approve must leave candidates pending");
 
-    const bulkApproved = await json(
+    const singleApproveWithoutReviewer = await responseJson(
+      await knowledgeRoute.PATCH(
+        adminRequest("/api/admin/knowledge", {
+          method: "PATCH",
+          body: JSON.stringify({ docId: candidateDocId, action: "approve" }),
+        })
+      )
+    );
+    assert(singleApproveWithoutReviewer.status === 400, "single candidate approve should require reviewer identity");
+
+    const singleApproveWithoutEmbedding = await responseJson(
+      await knowledgeRoute.PATCH(
+        adminRequest("/api/admin/knowledge", {
+          method: "PATCH",
+          body: JSON.stringify({
+            docId: candidateDocId,
+            action: "approve",
+            checkedBy: "김검수 행정사 12-3456",
+            checkedAt: "2026-07-09",
+          }),
+        })
+      )
+    );
+    assert(singleApproveWithoutEmbedding.status === 409, "single candidate approve should require actual pgvector embeddings");
+    assert(
+      JSON.stringify(singleApproveWithoutEmbedding.body).includes("pgvector"),
+      "single candidate approve should explain missing pgvector embeddings"
+    );
+
+    const bulkApproveWithoutReviewer = await responseJson(
       await knowledgeRoute.PATCH(
         adminRequest("/api/admin/knowledge", {
           method: "PATCH",
@@ -198,10 +257,119 @@ try {
         })
       )
     );
+    assert(bulkApproveWithoutReviewer.status === 400, "bulk candidate approve should require reviewer identity");
+
+    const bulkApproveBelowThreshold = await responseJson(
+      await knowledgeRoute.PATCH(
+        adminRequest("/api/admin/knowledge", {
+          method: "PATCH",
+          body: JSON.stringify({
+            action: "bulkApproveCandidates",
+            docIds: [candidateDocId],
+            checkedBy: "김검수 행정사 12-3456",
+            checkedAt: "2026-07-09",
+          }),
+        })
+      )
+    );
+    assert(bulkApproveBelowThreshold.status === 409, "bulk candidate approve should reject unsafe approval before promotion");
+
+    const bulkApproveWithoutEmbedding = await responseJson(
+      await knowledgeRoute.PATCH(
+        adminRequest("/api/admin/knowledge", {
+          method: "PATCH",
+          body: JSON.stringify({
+            action: "bulkApproveCandidates",
+            docIds: [candidateDocId],
+            checkedBy: "김검수 행정사 12-3456",
+            checkedAt: "2026-07-09",
+            minApprovedCandidateChunks: 1,
+          }),
+        })
+      )
+    );
+    assert(bulkApproveWithoutEmbedding.status === 409, "bulk candidate approve should require actual pgvector embeddings");
+    assert(
+      JSON.stringify(bulkApproveWithoutEmbedding.body).includes("pgvector"),
+      "bulk candidate approve should explain missing pgvector embeddings"
+    );
+
+    await db.$executeRawUnsafe(
+      `UPDATE "KnowledgeChunk"
+       SET embedding = $1::vector,
+           "embeddingModel" = $2,
+           "embeddingDim" = $3
+       WHERE "documentId" IN (
+         SELECT id FROM "KnowledgeDocument"
+         WHERE "docId" = $4
+       )`,
+      vectorLiteral(PGVECTOR_EMBEDDING_DIM),
+      PGVECTOR_EMBEDDING_MODEL,
+      PGVECTOR_EMBEDDING_DIM,
+      candidateDocId
+    );
+
+    const bulkApproveProjectionTooLow = await responseJson(
+      await knowledgeRoute.PATCH(
+        adminRequest("/api/admin/knowledge", {
+          method: "PATCH",
+          body: JSON.stringify({
+            action: "bulkApproveCandidates",
+            docIds: [candidateDocId],
+            checkedBy: "김검수 행정사 12-3456",
+            checkedAt: "2026-07-09",
+            minApprovedCandidateChunks: 1,
+          }),
+        })
+      )
+    );
+    assert(bulkApproveProjectionTooLow.status === 409, "bulk candidate approve should enforce projected approved corpus threshold");
+    assert(
+      JSON.stringify(bulkApproveProjectionTooLow.body).includes("projection"),
+      "bulk candidate approve should explain projected corpus threshold failure"
+    );
+
+    const bulkApproved = await json(
+      await knowledgeRoute.PATCH(
+        adminRequest("/api/admin/knowledge", {
+          method: "PATCH",
+          body: JSON.stringify({
+            action: "bulkApproveCandidates",
+            docIds: [candidateDocId],
+            checkedBy: "김검수 행정사 12-3456",
+            checkedAt: "2026-07-09",
+            minApprovedCandidateChunks: 1,
+            minProjectedApprovedChunks: 1,
+          }),
+        })
+      )
+    );
     assert(bulkApproved.processed === 1, "bulk candidate approve should process one candidate");
     assert(bulkApproved.failed === 0, "bulk candidate approve should not fail");
+    assert(bulkApproved.readiness?.projection?.ok, "bulk candidate approve should return pre-approval projection readiness");
+    assert(bulkApproved.readiness?.corpus?.ok, "bulk candidate approve should return post-approval corpus readiness");
     const approvedCandidate = await db.knowledgeDocument.findUnique({ where: { docId: candidateDocId } });
     assert(approvedCandidate?.reviewStatus === "APPROVED", "bulk candidate approve should mark candidate APPROVED");
+    assert(approvedCandidate?.checkedBy === "김검수 행정사 12-3456", "bulk candidate approve should persist legal reviewer identity");
+    const bulkApproveAudit = await db.adminAuditLog.findFirst({
+      where: { action: "knowledge.bulk_approve_candidates", targetType: "knowledgeDocument" },
+      orderBy: { createdAt: "desc" },
+    });
+    assert(bulkApproveAudit, "bulk candidate approve should write an admin audit log");
+    const bulkApproveAuditMetadata = JSON.parse(bulkApproveAudit.metadata || "{}") as Record<string, unknown>;
+    assert(bulkApproveAuditMetadata.docIdCount === 1, "bulk candidate approve audit should record target doc count");
+    assert(Array.isArray(bulkApproveAuditMetadata.docIdsSample), "bulk candidate approve audit should store a bounded doc id sample");
+    assert(!("docIds" in bulkApproveAuditMetadata), "bulk candidate approve audit should avoid unbounded doc id arrays");
+    assert(
+      (bulkApproveAuditMetadata.projection as { projectedApprovedEmbeddedChunks?: number } | null)?.projectedApprovedEmbeddedChunks ===
+        bulkApproved.readiness.projection.projectedApprovedEmbeddedChunks,
+      "bulk candidate approve audit should record projection evidence"
+    );
+    assert(
+      (bulkApproveAuditMetadata.postApprovalCorpus as { approvedEmbeddedChunks?: number } | null)?.approvedEmbeddedChunks ===
+        bulkApproved.readiness.corpus.approvedEmbeddedChunks,
+      "bulk candidate approve audit should record post-approval corpus evidence"
+    );
 
     const discardCandidateDocId = "manual-policy-update__candidate__discard";
     await db.knowledgeDocument.create({
@@ -255,6 +423,17 @@ try {
   assert(Array.isArray(ops.aiBackend.agent.decisionTable), "admin ops should expose agent decision table");
   assert(Array.isArray(ops.aiBackend.consult.decisionTable), "admin ops should expose consult decision table");
   assert(ops.readiness.aiBackendPolicyCheck, "admin ops should expose readiness ai backend policy check");
+  assert(Array.isArray(ops.readiness.checks), "admin ops should expose readiness checks");
+  assert(Array.isArray(ops.openEvents), "admin ops should expose open operations events");
+  const invalidOpsAck = await responseJson(
+    await opsRoute.PATCH(
+      adminRequest("/api/admin/ops", {
+        method: "PATCH",
+        body: JSON.stringify({ eventId: "not-a-uuid" }),
+      })
+    )
+  );
+  assert(invalidOpsAck.status === 400, "admin ops acknowledgement should reject invalid event ids");
   const serializedOps = JSON.stringify(ops);
   for (const secret of ["test-admin-key", process.env.ADMIN_API_KEY]) {
     assert(!serializedOps.includes(String(secret)), "admin ops diagnostics must not leak admin secrets");
@@ -279,7 +458,20 @@ try {
     assert(!serializedOpsAudit.includes(String(secret)), "admin ops audit metadata must not leak admin secrets");
   }
 
-  console.log("PASS admin dashboard API: cases, actions, rules, knowledge, audit, ops");
+  const handoffs = await json(await handoffsRoute.GET(adminRequest("/api/admin/handoffs")));
+  assert(Array.isArray(handoffs.tasks), "admin handoffs should expose a task list");
+  assert(typeof handoffs.counts.active === "number", "admin handoffs should expose queue counts");
+  const invalidHandoffAction = await responseJson(
+    await handoffsRoute.PATCH(
+      adminRequest("/api/admin/handoffs", {
+        method: "PATCH",
+        body: JSON.stringify({ id: "not-a-number", action: "start" }),
+      })
+    )
+  );
+  assert(invalidHandoffAction.status === 400, "admin handoff updates should reject invalid task ids");
+
+  console.log("PASS admin dashboard API: cases, actions, rules, knowledge, audit, ops, handoffs");
 } finally {
   await db.$disconnect();
 }

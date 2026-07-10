@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { AlertCircle, Loader2, Scale, ShieldAlert } from "lucide-react";
+import { AlertCircle, Database, Loader2, Scale, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MessageResponse } from "@/components/ai-elements/message";
 import {
@@ -54,6 +54,12 @@ export function ConsultMessageList({
                       <Badge variant="destructive" className="text-[10px] gap-0.5">
                         <ShieldAlert className="h-2.5 w-2.5" />
                         {locale === "ko" ? "전문가 상담 필요" : "Expert needed"}
+                      </Badge>
+                    )}
+                    {message.retrieval?.backend && (
+                      <Badge variant={message.retrieval.pgvectorUsed ? "default" : "outline"} className="text-[10px] gap-0.5">
+                        <Database className="h-2.5 w-2.5" />
+                        {message.retrieval.backend}
                       </Badge>
                     )}
                   </div>

@@ -68,3 +68,59 @@ test("landing -> diagnosis save -> admin lookup -> Agent question -> RAG consult
   expect(String(consultData.answer || "").length).toBeGreaterThan(20);
   expect(Array.isArray(consultData.retrievedDocs)).toBe(true);
 });
+
+test("KAXI widget receives a server-owned session and rejects a forged session", async ({ page, request }) => {
+  await page.goto("/ko");
+  await page.getByRole("button", { name: "KAXI 상담 열기" }).click();
+  const panel = page.getByRole("region", { name: "KAXI 상담 채팅" });
+  await expect(panel).toBeVisible();
+  await expect(page.getByPlaceholder("KAXI에게 질문해 주세요.")).toBeEnabled();
+
+  const box = await panel.boundingBox();
+  expect(box).not.toBeNull();
+  expect((box?.y || 0) + (box?.height || 0)).toBeLessThanOrEqual(720);
+
+  const cookies = await page.context().cookies();
+  expect(cookies.some((cookie) => cookie.name === "kaxi_chat_session" && cookie.httpOnly)).toBe(true);
+
+  const forged = await request.post("/api/typebot-rag", {
+    data: {
+      question: "D-4 비자 서류는 무엇인가요?",
+      sessionId: "kaxi-00000000-0000-4000-8000-000000000000",
+      source: "kaxi-site",
+      locale: "ko",
+    },
+  });
+  expect(forged.status()).toBe(401);
+});
+
+test("KAXI widget localizes its controls and stays usable on a small mobile viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto("/en");
+  await page.getByRole("button", { name: "Open KAXI chat" }).click();
+
+  const panel = page.getByRole("region", { name: "KAXI consultation chat" });
+  await expect(panel).toBeVisible();
+  await expect(page.getByText("Hello! Nice to meet you 👋")).toBeVisible();
+  const textbox = page.getByRole("textbox", { name: "Question for KAXI" });
+  await expect(textbox).toHaveAttribute("placeholder", "Ask KAXI a question.");
+  await expect(textbox).toBeEnabled();
+
+  const panelBox = await panel.boundingBox();
+  const textboxBox = await textbox.boundingBox();
+  const attachmentBox = await page.getByRole("button", { name: "Attach file" }).boundingBox();
+  const disclaimer = page.getByText("KAXI provides guidance grounded in official sources.");
+  await expect(disclaimer).toBeVisible();
+  const disclaimerBox = await disclaimer.boundingBox();
+  expect(panelBox).not.toBeNull();
+  expect((panelBox?.x || 0) + (panelBox?.width || 0)).toBeLessThanOrEqual(320);
+  expect((panelBox?.y || 0) + (panelBox?.height || 0)).toBeLessThanOrEqual(568);
+  expect(textboxBox).not.toBeNull();
+  expect(attachmentBox).not.toBeNull();
+  expect(disclaimerBox).not.toBeNull();
+  expect((textboxBox?.y || 0) + (textboxBox?.height || 0)).toBeLessThanOrEqual(attachmentBox?.y || 0);
+  expect((disclaimerBox?.y || 0) + (disclaimerBox?.height || 0)).toBeLessThanOrEqual(568);
+  expect((disclaimerBox?.y || 0) + (disclaimerBox?.height || 0)).toBeLessThanOrEqual(
+    (panelBox?.y || 0) + (panelBox?.height || 0),
+  );
+});

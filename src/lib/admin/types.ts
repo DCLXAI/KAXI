@@ -200,6 +200,48 @@ export interface AdminKnowledgeItem {
   diff?: AdminKnowledgeDiff;
 }
 
+export interface AdminKnowledgeReadiness {
+  candidateApproval: {
+    ok: boolean;
+    checkedAt: string;
+    pendingCandidates: number;
+    pendingCandidateChunks: number;
+    pendingCandidateEmbeddedChunks: number;
+    pendingOfficialCandidates: number;
+    pendingOfficialCandidateChunks: number;
+    pendingOfficialCandidateEmbeddedChunks: number;
+    allPendingCandidateChunksEmbedded: boolean;
+    allPendingOfficialCandidateChunksEmbedded: boolean;
+    projectedApprovedChunks: number;
+    projectedApprovedEmbeddedChunks: number;
+    projectedApprovedOfficialChunks: number;
+    projectedApprovedOfficialEmbeddedChunks: number;
+    projectedSupersededApprovedDocuments: number;
+    minCandidateChunks: number;
+    minProjectedApprovedChunks: number;
+    reasons: string[];
+  };
+  corpus: {
+    ok: boolean;
+    checkedAt: string;
+    approvedDocuments: number;
+    approvedChunks: number;
+    approvedEmbeddedChunks: number;
+    approvedOfficialDocuments: number;
+    approvedOfficialChunks: number;
+    approvedOfficialEmbeddedChunks: number;
+    pendingCandidates: number;
+    pendingCandidateChunks: number;
+    pendingOfficialCandidates: number;
+    pendingOfficialCandidateChunks: number;
+    minApprovedChunks: number;
+    minApprovedEmbeddedChunks: number;
+    minApprovedOfficialChunks: number;
+    minApprovedOfficialEmbeddedChunks: number;
+    reasons: string[];
+  };
+}
+
 export interface AdminKnowledgeImpact {
   sourceDocIds: string[];
   ruleCount: number;

@@ -7,6 +7,8 @@ function fail(message: string): never {
 
 const guardedFiles = [
   "src/lib/ai/claude-gateway.ts",
+  "src/lib/ai/openai-compatible-gateway.ts",
+  "src/lib/ai/llm-gateway.ts",
   "src/lib/agent/agent.ts",
   "src/app/api/ai/chat/route.ts",
   "src/app/api/ai/consult/route.ts",

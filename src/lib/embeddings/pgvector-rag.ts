@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
-import { Prisma } from "@prisma/client";
-import { db } from "../db";
+import { LegalReviewStatus, Prisma } from "@prisma/client";
+import { db, getRuntimeDatabaseInfo } from "../db";
 import {
   getKnowledgeDocsWithMetadata,
   getRagDocumentMetadata,
@@ -10,6 +10,8 @@ import {
 } from "../data/knowledge";
 import type { Lang } from "../i18n/translations";
 import { embedBatch, embedText, getEmbedDim, getTransformerRuntimeInfo, type EmbeddingVector } from "./transformer-embedder";
+import { knowledgeReviewAfterDate, knowledgeReviewMaxAgeDays } from "@/lib/knowledge/freshness";
+import { isOfficialKnowledgeSource } from "@/lib/knowledge/official-source";
 
 export const PGVECTOR_EMBEDDING_MODEL = "Xenova/multilingual-e5-small";
 export const PGVECTOR_EMBEDDING_DIM = 384;
@@ -27,6 +29,13 @@ export interface PgvectorEmbeddingResult {
   embeddedChunks: number;
   skippedChunks: number;
   failedChunks: number;
+}
+
+export interface PgvectorEmbeddingOptions {
+  force?: boolean;
+  batchSize?: number;
+  reviewStatuses?: LegalReviewStatus[];
+  candidateOnly?: boolean;
 }
 
 export interface PgvectorSearchResult {
@@ -79,12 +88,8 @@ type ChunkForEmbedding = {
   };
 };
 
-function isPostgresUrl(value: string | undefined): boolean {
-  return /^postgres(?:ql)?:\/\//i.test((value || "").trim());
-}
-
 export function shouldUsePgvector(): boolean {
-  return isPostgresUrl(process.env.DATABASE_URL);
+  return getRuntimeDatabaseInfo().postgresqlConfigured;
 }
 
 function hashText(value: string): string {
@@ -99,6 +104,20 @@ function toDate(value: string | null | undefined, fallback: Date): Date {
   if (!value) return fallback;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? fallback : date;
+}
+
+function legalReviewStatusFromRagStatus(status: string): "PENDING" | "APPROVED" | "REJECTED" {
+  if (status === "approved") return "APPROVED";
+  if (status === "deprecated") return "REJECTED";
+  return "PENDING";
+}
+
+function reviewFieldsFromMetadata(meta: RagDocumentMetadata, fallbackDate: Date) {
+  return {
+    lastCheckedAt: toDate(meta.last_checked_at, fallbackDate),
+    checkedBy: meta.checked_by,
+    reviewStatus: legalReviewStatusFromRagStatus(meta.review_status),
+  };
 }
 
 function sameLangText(value: string) {
@@ -202,6 +221,15 @@ export async function ingestStaticKnowledgeDocsForPgvector(): Promise<PgvectorIn
       where: { docId: doc.id },
       include: { chunks: { orderBy: { chunkIndex: "asc" } } },
     });
+    const metadataReview = reviewFieldsFromMetadata(meta, now);
+    const reviewFields =
+      existing && existing.checkedBy !== metadataReview.checkedBy
+        ? {
+            lastCheckedAt: existing.lastCheckedAt,
+            checkedBy: existing.checkedBy,
+            reviewStatus: existing.reviewStatus,
+          }
+        : metadataReview;
 
     const saved = await db.knowledgeDocument.upsert({
       where: { docId: doc.id },
@@ -214,9 +242,7 @@ export async function ingestStaticKnowledgeDocsForPgvector(): Promise<PgvectorIn
         topic: meta.topic,
         validFrom: toDate(meta.valid_from, now),
         validTo: meta.valid_to ? toDate(meta.valid_to, now) : null,
-        lastCheckedAt: toDate(meta.last_checked_at, now),
-        checkedBy: meta.checked_by,
-        reviewStatus: "APPROVED",
+        ...reviewFields,
         supersedes: inputJson(meta.supersedes),
         supersededBy: meta.superseded_by,
       },
@@ -230,9 +256,7 @@ export async function ingestStaticKnowledgeDocsForPgvector(): Promise<PgvectorIn
         topic: meta.topic,
         validFrom: toDate(meta.valid_from, now),
         validTo: meta.valid_to ? toDate(meta.valid_to, now) : null,
-        lastCheckedAt: toDate(meta.last_checked_at, now),
-        checkedBy: meta.checked_by,
-        reviewStatus: "APPROVED",
+        ...metadataReview,
         supersedes: inputJson(meta.supersedes),
         supersededBy: meta.superseded_by,
       },
@@ -282,14 +306,19 @@ export async function ingestStaticKnowledgeDocsForPgvector(): Promise<PgvectorIn
   return result;
 }
 
-export async function embedMissingKnowledgeChunksForPgvector(options: { force?: boolean; batchSize?: number } = {}): Promise<PgvectorEmbeddingResult> {
+export async function embedMissingKnowledgeChunksForPgvector(options: PgvectorEmbeddingOptions = {}): Promise<PgvectorEmbeddingResult> {
   const batchSize = options.batchSize ?? 8;
+  const reviewStatuses = options.reviewStatuses?.length ? options.reviewStatuses : [LegalReviewStatus.APPROVED];
+  const documentWhere = {
+    reviewStatus: { in: reviewStatuses },
+    ...(options.candidateOnly ? { docId: { contains: "__candidate__" } } : {}),
+  };
   const where = options.force
     ? {
-        document: { reviewStatus: "APPROVED" as const },
+        document: documentWhere,
       }
     : {
-        document: { reviewStatus: "APPROVED" as const },
+        document: documentWhere,
         OR: [
           { embeddingModel: null },
           { embeddingDim: null },
@@ -383,13 +412,17 @@ function stripKoreanParticle(token: string): string {
 // OR + prefix semantics: raw prose under AND semantics matched almost nothing
 // (the 'simple' config keeps stopwords), silently disabling the keyword axis.
 function buildKeywordTsquery(expandedQuery: string): string {
+  const compactVisaCodes = Array.from(
+    expandedQuery.toLowerCase().matchAll(/\b([a-z])[-\s]?(\d{1,2})(?:-\d+)?\b/g),
+    (match) => `${match[1]}${match[2]}`,
+  );
   const tokens = expandedQuery
     .toLowerCase()
     .split(/[^\p{L}\p{N}]+/u)
     .filter((token) => token.length >= 2)
     .map(stripKoreanParticle)
     .filter((token) => token.length >= 2);
-  return Array.from(new Set(tokens))
+  return Array.from(new Set([...tokens, ...compactVisaCodes]))
     .map((token) => `${token}:*`)
     .join(" | ");
 }
@@ -417,7 +450,7 @@ function metadataFromRow(row: SearchRow): RagDocumentMetadata {
     review_status: row.review_status === "APPROVED" ? "approved" : row.review_status === "REJECTED" ? "deprecated" : "needs_review",
     supersedes: [],
     superseded_by: row.superseded_by,
-    review_after: dateOnly(row.last_checked_at) || "1970-01-01",
+    review_after: dateOnly(knowledgeReviewAfterDate(row.last_checked_at)) || "1970-01-01",
     source_label: row.source_url.includes("law.go.kr")
       ? "국가법령정보센터"
       : row.source_url.includes("hikorea.go.kr")
@@ -425,7 +458,10 @@ function metadataFromRow(row: SearchRow): RagDocumentMetadata {
         : row.source_url.includes("studyinkorea")
           ? "Study in Korea"
           : row.title,
-    owner: row.source_type.startsWith("official_") ? "official" : "internal",
+    owner: isOfficialKnowledgeSource({
+      sourceType: row.source_type,
+      sourceUrl: row.source_url,
+    }) ? "official" : "internal",
   };
 }
 
@@ -470,14 +506,16 @@ export async function searchPgvectorKnowledge(query: string, options: { topK?: n
        40,
        40,
        $5,
-       $6::int
+       $6::int,
+       $7::int
      )`,
     vectorLiteral(embedded.vector),
     buildKeywordTsquery(expandedQuery),
     options.languages || ["ko"],
     topK * 4,
     PGVECTOR_EMBEDDING_MODEL,
-    PGVECTOR_EMBEDDING_DIM
+    PGVECTOR_EMBEDDING_DIM,
+    knowledgeReviewMaxAgeDays()
   );
 
   // Chunk-level ranking can surface several chunks of the same document;

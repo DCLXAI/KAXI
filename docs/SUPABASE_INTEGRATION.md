@@ -63,6 +63,7 @@ bun run scripts/deploy-postgres-migrations.ts
 bun run db:seed:schools
 bun run db:seed:synonyms
 bun run db:seed:rules
+bun run db:seed:visa-docs
 ```
 
 6. Verify:
@@ -240,6 +241,6 @@ bun run storage:migrate:document-blobs
 OCR behavior:
 
 - Upload completion transitions `DocumentItem` through `OCR_PROCESSING`.
-- Claude vision extraction uses structured JSON output through `src/lib/ai/claude-gateway.ts`.
+- Image extraction uses structured JSON output through the provider-neutral `src/lib/ai/llm-gateway.ts`; the default provider is Kimi's OpenAI-compatible API.
 - Sensitive extracted fields are encrypted into `DocumentItem.ocrExtractedCiphertext`; admin UI receives only redacted OCR JSON and validation metadata.
-- If `ANTHROPIC_API_KEY` is not configured, OCR is skipped and the document becomes `NEEDS_REVIEW` / `NEEDS_HUMAN_REVIEW` for manual review.
+- If the selected managed LLM key is not configured, OCR is skipped and the document becomes `NEEDS_REVIEW` / `NEEDS_HUMAN_REVIEW` for manual review.

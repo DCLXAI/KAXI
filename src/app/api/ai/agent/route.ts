@@ -6,8 +6,8 @@ import { runFallbackAgent } from "@/lib/agent/fallback";
 import type { ToolContext } from "@/lib/agent/tools";
 import { buildAgentMeta } from "@/lib/agent/meta";
 import { runAgentPreflight, type AgentPreflightResult } from "@/lib/agent/preflight";
-import { getAiBackendDiagnostics, shouldRequireAgentLlm } from "@/lib/ai/backend-selector";
-import { isClaudeNotConfiguredError } from "@/lib/ai/claude-gateway";
+import { getAgentBackend, getAiBackendDiagnostics, shouldRequireAgentLlm } from "@/lib/ai/backend-selector";
+import { isLlmNotConfiguredError } from "@/lib/ai/llm-gateway";
 import {
   consumeDailyQuota,
   getClientIp,
@@ -29,7 +29,7 @@ function llmUnavailableResponse(message: string) {
   return NextResponse.json(
     {
       error: "LLM backend unavailable",
-      message: "Claude LLM gateway is unavailable. Built-in tool fallback is disabled for this deployment.",
+      message: "The configured LLM gateway is unavailable. Built-in tool fallback is disabled for this deployment.",
       detail: message.slice(0, 500),
       backend: "llm-unavailable",
     },
@@ -184,6 +184,8 @@ export async function GET() {
       vercelEnv: process.env.VERCEL_ENV || null,
       maxDuration,
     },
+    llm: backendPolicy.llm,
+    kimi: backendPolicy.kimi,
     claude: backendPolicy.claude,
     preflight: {
       enabled: isEnvTrue(process.env.AI_AGENT_PREFLIGHT_ENABLED),
@@ -252,7 +254,8 @@ export async function POST(req: NextRequest) {
     ledgerContext.preflight = preflight;
 
     let result;
-    let backend = "claude";
+    const selectedLlmBackend = getAgentBackend();
+    let backend: string = selectedLlmBackend;
     let errorType: string | undefined;
     let errorMessage: string | undefined;
 
@@ -260,10 +263,10 @@ export async function POST(req: NextRequest) {
       result = await withTimeout(
         runAgent(preflight.groundedQuestion, lang, history, ctx),
         parsePositiveInt(process.env.AI_AGENT_TIMEOUT_MS, 45_000),
-        "Claude Agent execution"
+        "LLM Agent execution"
       );
     } catch (agentErr) {
-      console.warn("[Claude Agent fallback]", agentErr instanceof Error ? agentErr.message : agentErr);
+      console.warn("[LLM Agent fallback]", agentErr instanceof Error ? agentErr.message : agentErr);
       if (shouldRequireAgentLlm()) {
         await persistAgentLedger({
           req,
@@ -272,22 +275,22 @@ export async function POST(req: NextRequest) {
           backend: "llm-unavailable",
           durationMs: Date.now() - requestStartedAt,
           success: false,
-          errorType: isClaudeNotConfiguredError(agentErr) ? "claude_not_configured" : "claude_backend_unavailable",
-          errorMessage: agentErr instanceof Error ? agentErr.message : "Unknown Claude error",
+          errorType: isLlmNotConfiguredError(agentErr) ? "llm_not_configured" : "llm_backend_unavailable",
+          errorMessage: agentErr instanceof Error ? agentErr.message : "Unknown LLM error",
           preflight,
           toolCount: preflight.toolResults.length,
         });
-        return llmUnavailableResponse(agentErr instanceof Error ? agentErr.message : "Unknown Claude error");
+        return llmUnavailableResponse(agentErr instanceof Error ? agentErr.message : "Unknown LLM error");
       }
 
       backend = "tool-fallback";
-      errorType = isClaudeNotConfiguredError(agentErr) ? "claude_not_configured_fallback" : "claude_backend_fallback";
-      errorMessage = agentErr instanceof Error ? agentErr.message : "Unknown Claude error";
+      errorType = isLlmNotConfiguredError(agentErr) ? "llm_not_configured_fallback" : "llm_backend_fallback";
+      errorMessage = agentErr instanceof Error ? agentErr.message : "Unknown LLM error";
       result = await runFallbackAgent(question, lang, ctx);
     }
 
-    const steps = backend === "claude" ? [...preflight.steps, ...result.steps] : result.steps;
-    const toolResults = backend === "claude" ? [...preflight.toolResults, ...result.toolResults] : result.toolResults;
+    const steps = backend === selectedLlmBackend ? [...preflight.steps, ...result.steps] : result.steps;
+    const toolResults = backend === selectedLlmBackend ? [...preflight.toolResults, ...result.toolResults] : result.toolResults;
 
     await persistAgentLog({
       lang,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin, withTimeout } from "@/lib/api/security";
-import { generateClaudeJson, isClaudeNotConfiguredError } from "@/lib/ai/claude-gateway";
+import { generateLlmJson, isLlmNotConfiguredError } from "@/lib/ai/llm-gateway";
 import { safeChatQuestionForAnalytics } from "@/lib/privacy/chat-log";
 
 // POST /api/synonyms/suggest - LLM 기반 동의어 후보 자동 추천
@@ -156,7 +156,7 @@ ${candidatesText}
 
 JSON 배열로 응답:`;
 
-    const suggestions = await generateClaudeJson<Array<{
+    const suggestions = await generateLlmJson<Array<{
       source: string;
       targets: string[];
       category: string;
@@ -193,7 +193,7 @@ JSON 배열로 응답:`;
     return Array.isArray(suggestions) ? suggestions : [];
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    if (isClaudeNotConfiguredError(e)) {
+    if (isLlmNotConfiguredError(e)) {
       console.warn("[LLM synonym suggestion skipped]", message);
     } else {
       console.error("[LLM synonym suggestion error]", e);

@@ -5,6 +5,7 @@ import {
   upsertPendingKnowledgeCandidate,
   type KnowledgeDiffSummary,
 } from "./repository";
+import type { OfficialSourceExtractionMethod } from "./harvest-metadata";
 import type { KnowledgeDoc, SourceType } from "../data/knowledge";
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -28,8 +29,13 @@ export interface OfficialKnowledgeMonitorResult {
   sourceUrl: string;
   status: "changed" | "unchanged" | "failed";
   contentHash?: string;
+  byteLength?: number;
+  extractionMethod?: OfficialSourceExtractionMethod;
+  extractedCharCount?: number;
+  extractionError?: string;
   candidateDocId?: string;
   candidatePersisted?: boolean;
+  candidateChunkCount?: number;
   diff?: KnowledgeDiffSummary;
   error?: string;
 }
@@ -960,6 +966,18 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
   },
 ];
 
+export const DEFAULT_CRON_KNOWLEDGE_SOURCE_IDS = [
+  "immigration-law-recent-promulgations",
+  "immigration-law-interpretation-hierarchy",
+  "immigration-decree-current-text",
+  "immigration-rule-stay-permission-review-criteria",
+  "hikorea-homepage-urgent-notices",
+  "hikorea-policy-notice-monitor",
+  "moj-immigration-policy-news",
+  "accredited-university",
+  "visa-portal-visa-types",
+] as const;
+
 function sha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -998,6 +1016,49 @@ function normalizeText(value: string): string {
     .trim();
 }
 
+type PdfParseParser = {
+  getText: () => Promise<{ text?: string }>;
+  destroy?: () => Promise<void> | void;
+};
+
+type PdfParseModule = {
+  PDFParse: new (options: { data: Uint8Array }) => PdfParseParser;
+};
+
+function isPdfOfficialSource(contentType: string, sourceUrl: string): boolean {
+  return /pdf/i.test(contentType) || /\.pdf(?:[?#]|$)/i.test(sourceUrl);
+}
+
+function isBinaryOfficialSource(contentType: string, sourceUrl: string): boolean {
+  return isPdfOfficialSource(contentType, sourceUrl) || /excel|spreadsheet|hwp|octet-stream|zip/i.test(contentType);
+}
+
+function buildBinarySourceMetadata(input: {
+  contentType: string;
+  byteHash: string;
+  byteLength: number;
+  extractionError?: string;
+}): string {
+  return [
+    "Binary official source detected.",
+    `content_type: ${input.contentType || "unknown"}`,
+    `byte_sha256: ${input.byteHash}`,
+    `byte_length: ${input.byteLength}`,
+    input.extractionError ? `extraction_error: ${input.extractionError}` : undefined,
+  ].filter(Boolean).join("\n");
+}
+
+async function extractPdfText(buffer: Buffer): Promise<string> {
+  const { PDFParse } = await import("pdf-parse") as unknown as PdfParseModule;
+  const parser = new PDFParse({ data: new Uint8Array(buffer) });
+  try {
+    const result = await parser.getText();
+    return normalizeText(result.text || "");
+  } finally {
+    await parser.destroy?.();
+  }
+}
+
 async function fetchWithTimeout(
   fetchImpl: FetchLike,
   url: string,
@@ -1021,7 +1082,14 @@ async function fetchWithTimeout(
 export async function fetchOfficialKnowledgeSource(
   source: OfficialKnowledgeSource,
   options: { fetchImpl?: FetchLike; timeoutMs?: number; maxChars?: number } = {}
-): Promise<{ content: string; contentHash: string; byteLength: number }> {
+): Promise<{
+  content: string;
+  contentHash: string;
+  byteLength: number;
+  extractionMethod: OfficialSourceExtractionMethod;
+  extractedCharCount: number;
+  extractionError?: string;
+}> {
   const fetchImpl = options.fetchImpl || fetch;
   const timeoutMs = options.timeoutMs || 15_000;
   const maxChars = options.maxChars || 80_000;
@@ -1033,13 +1101,51 @@ export async function fetchOfficialKnowledgeSource(
   const contentType = response.headers.get("content-type") || "";
   const buffer = Buffer.from(await response.arrayBuffer());
   const byteHash = sha256(buffer);
-  const looksBinary = /pdf|excel|spreadsheet|hwp|octet-stream|zip/i.test(contentType);
   const rawText = buffer.toString("utf8");
-  const normalized = looksBinary
-    ? `Binary official source detected.\ncontent_type: ${contentType}\nbyte_sha256: ${byteHash}\nbyte_length: ${buffer.length}`
-    : contentType.includes("html") || /<html|<!doctype/i.test(rawText)
-      ? normalizeHtml(rawText)
-      : normalizeText(rawText);
+  const isPdf = isPdfOfficialSource(contentType, source.sourceUrl);
+  const looksBinary = isBinaryOfficialSource(contentType, source.sourceUrl);
+  let extractionMethod: OfficialSourceExtractionMethod = "plain_text";
+  let extractionError: string | undefined;
+  let normalized = "";
+
+  if (isPdf) {
+    try {
+      const pdfText = await extractPdfText(buffer);
+      if (!pdfText) {
+        throw new Error("empty_pdf_text");
+      }
+      extractionMethod = "pdf_text";
+      normalized = [
+        "PDF official source extracted.",
+        `content_type: ${contentType || "application/pdf"}`,
+        `byte_sha256: ${byteHash}`,
+        `byte_length: ${buffer.length}`,
+        "extraction_method: pdf-parse",
+        `extracted_chars: ${pdfText.length}`,
+        "",
+        pdfText,
+      ].join("\n");
+    } catch (err) {
+      extractionMethod = "binary_metadata";
+      extractionError = err instanceof Error ? err.message : String(err);
+      normalized = buildBinarySourceMetadata({
+        contentType,
+        byteHash,
+        byteLength: buffer.length,
+        extractionError,
+      });
+    }
+  } else if (looksBinary) {
+    extractionMethod = "binary_metadata";
+    normalized = buildBinarySourceMetadata({ contentType, byteHash, byteLength: buffer.length });
+  } else if (contentType.includes("html") || /<html|<!doctype/i.test(rawText)) {
+    extractionMethod = "html";
+    normalized = normalizeHtml(rawText);
+  } else {
+    extractionMethod = "plain_text";
+    normalized = normalizeText(rawText);
+  }
+
   const clipped = normalized.slice(0, maxChars);
   const content = [
     `# ${source.title}`,
@@ -1049,14 +1155,23 @@ export async function fetchOfficialKnowledgeSource(
     `legal_priority: ${source.legalPriority || "unclassified"}`,
     `monitor_cadence: ${source.monitorCadence || "daily"}`,
     `change_signals: ${(source.changeSignals || []).join(", ") || "content_hash"}`,
+    `extraction_method: ${extractionMethod}`,
+    `content_type: ${contentType || "unknown"}`,
+    `byte_sha256: ${byteHash}`,
+    `byte_length: ${buffer.length}`,
+    `extracted_chars: ${normalized.length}`,
+    extractionError ? `extraction_error: ${extractionError}` : undefined,
     "",
     clipped,
-  ].join("\n");
+  ].filter((line): line is string => typeof line === "string").join("\n");
 
   return {
     content,
     contentHash: sha256(content),
     byteLength: buffer.length,
+    extractionMethod,
+    extractedCharCount: normalized.length,
+    extractionError,
   };
 }
 
@@ -1081,6 +1196,19 @@ export function getOfficialKnowledgeSourceWatchlist(): OfficialKnowledgeSource[]
   return sources.slice(0, maxSources);
 }
 
+export function getCronOfficialKnowledgeSources(env: NodeJS.ProcessEnv = process.env) {
+  const configuredIds = (env.KNOWLEDGE_MONITOR_CRON_SOURCE_IDS || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const ids = configuredIds.length > 0 ? configuredIds : [...DEFAULT_CRON_KNOWLEDGE_SOURCE_IDS];
+  const byId = new Map(OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST.map((source) => [source.docId, source]));
+  return ids.flatMap((id) => {
+    const source = byId.get(id);
+    return source ? [source] : [];
+  });
+}
+
 export async function runOfficialKnowledgeSourceMonitor(
   options: {
     actor?: string;
@@ -1088,6 +1216,9 @@ export async function runOfficialKnowledgeSourceMonitor(
     sources?: OfficialKnowledgeSource[];
     fetchImpl?: FetchLike;
     timeoutMs?: number;
+    maxChars?: number;
+    chunkMaxChars?: number;
+    concurrency?: number;
     now?: Date;
   } = {}
 ): Promise<OfficialKnowledgeMonitorSummary> {
@@ -1095,13 +1226,15 @@ export async function runOfficialKnowledgeSourceMonitor(
   const persistCandidates = options.persistCandidates ?? true;
   const actor = options.actor || "knowledge-monitor";
   const sources = options.sources || getOfficialKnowledgeSourceWatchlist();
-  const results: OfficialKnowledgeMonitorResult[] = [];
+  const configuredConcurrency = parsePositiveInt(process.env.KNOWLEDGE_MONITOR_CONCURRENCY, 4);
+  const concurrency = Math.min(Math.max(options.concurrency || configuredConcurrency, 1), 12);
 
-  for (const source of sources) {
+  const inspectSource = async (source: OfficialKnowledgeSource): Promise<OfficialKnowledgeMonitorResult> => {
     try {
       const fetched = await fetchOfficialKnowledgeSource(source, {
         fetchImpl: options.fetchImpl,
         timeoutMs: options.timeoutMs,
+        maxChars: options.maxChars,
       });
       const diff = await analyzeKnowledgeDocumentDiff({
         docId: source.docId,
@@ -1113,6 +1246,7 @@ export async function runOfficialKnowledgeSourceMonitor(
         language: source.language || "ko",
         jurisdiction: source.jurisdiction || "KR",
         topic: source.topic,
+        chunkMaxChars: options.chunkMaxChars,
         now,
       });
       const candidateDocId = candidateDocIdFor(source.docId, fetched.contentHash);
@@ -1134,32 +1268,52 @@ export async function runOfficialKnowledgeSourceMonitor(
             jurisdiction: source.jurisdiction || "KR",
             topic: source.topic,
             supersedes: [source.docId],
+            chunkMaxChars: options.chunkMaxChars,
             now,
           });
           candidatePersisted = true;
         }
       }
 
-      results.push({
+      return {
         docId: source.docId,
         title: source.title,
         sourceUrl: source.sourceUrl,
         status: diff.changed ? "changed" : "unchanged",
         contentHash: fetched.contentHash,
+        byteLength: fetched.byteLength,
+        extractionMethod: fetched.extractionMethod,
+        extractedCharCount: fetched.extractedCharCount,
+        extractionError: fetched.extractionError,
         candidateDocId: diff.changed ? candidateDocId : undefined,
         candidatePersisted,
+        candidateChunkCount: diff.candidateChunkCount,
         diff,
-      });
+      };
     } catch (err) {
-      results.push({
+      return {
         docId: source.docId,
         title: source.title,
         sourceUrl: source.sourceUrl,
         status: "failed",
         error: err instanceof Error ? err.message : String(err),
-      });
+      };
     }
-  }
+  };
+
+  const resultSlots = new Array<OfficialKnowledgeMonitorResult | undefined>(sources.length);
+  let nextIndex = 0;
+  const worker = async () => {
+    while (nextIndex < sources.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      resultSlots[index] = await inspectSource(sources[index]);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, sources.length) }, () => worker()),
+  );
+  const results = resultSlots.filter((result): result is OfficialKnowledgeMonitorResult => Boolean(result));
 
   return {
     checkedAt: now.toISOString(),

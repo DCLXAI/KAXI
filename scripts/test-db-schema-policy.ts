@@ -47,6 +47,8 @@ const requiredModels = [
   "PartnerAgentInvite",
   "JourneyState",
   "DocumentItem",
+  "DocumentVerificationFeedback",
+  "VisaDocumentRequirement",
   "UploadedFile",
   "ComplianceRule",
   "ComplianceRuleVersion",
@@ -67,6 +69,8 @@ assert(schema.includes('provider = "postgresql"'), "Prisma schema must use provi
 for (const model of requiredModels) {
   assert(new RegExp(`model\\s+${model}\\s+\\{`).test(schema), `missing Prisma model ${model}`);
 }
+assert(/model\s+ChatAttachmentJob\s+\{/.test(schema), "missing Prisma ChatAttachmentJob model");
+assert(schema.includes('@@map("chat_attachment_jobs")'), "ChatAttachmentJob must map to the server-only queue table");
 
 for (const requiredField of [
   "conditionAst   Json",
@@ -78,8 +82,10 @@ for (const requiredField of [
   "ocrExtractedCiphertext String?",
   "ocrExtractedRedacted Json?",
   "ocrValidation    Json?",
+  "validationRules  Json",
 ]) {
-  assert(schema.includes(requiredField), `missing compliance rule field: ${requiredField}`);
+  const fieldPattern = requiredField.trim().split(/\s+/).map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+");
+  assert(new RegExp(`^\\s*${fieldPattern}(?:\\s+@.*)?\\s*$`, "m").test(schema), `missing compliance rule field: ${requiredField}`);
 }
 
 validatePrismaSchema(schemaPath);
@@ -102,6 +108,10 @@ assert(
   migrationFiles.some((file) => file.includes("20260708010000_pgvector_rag")),
   "missing pgvector RAG migration"
 );
+assert(
+  migrationFiles.some((file) => file.includes("20260708090000_visa_document_matrix")),
+  "missing Phase 0 visa document matrix migration"
+);
 
 const postgresSql = migrationFiles.map((file) => readFileSync(file, "utf8")).join("\n");
 for (const model of requiredModels) {
@@ -114,5 +124,9 @@ assert(/embedding vector\(384\)/i.test(postgresSql), "KnowledgeChunk migration m
 assert(/USING hnsw \(embedding vector_cosine_ops\)/i.test(postgresSql), "KnowledgeChunk migration must add HNSW cosine index");
 assert(/USING gin \(tsv\)/i.test(postgresSql), "KnowledgeChunk migration must add tsv GIN index");
 assert(postgresSql.includes("kaxi_hybrid_knowledge_search"), "missing RRF hybrid search SQL function");
+assert(postgresSql.includes("kaxi_claim_chat_attachment_jobs"), "missing durable chat attachment claim function");
+assert(postgresSql.includes("CREATE TABLE IF NOT EXISTS public.chat_attachment_jobs"), "missing durable chat attachment jobs table");
+assert(postgresSql.includes("kaxi_sanitize_n8n_audit_content"), "missing metadata-only n8n audit sanitizer");
+assert(postgresSql.includes("kaxi_visa_document_requirement_public_read"), "missing visa document matrix RLS policy");
 
 console.log(`PASS DB schema policy: ${requiredModels.length} domain models, single PostgreSQL schema, pgvector indexes, and RRF function verified`);

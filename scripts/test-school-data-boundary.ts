@@ -1,11 +1,14 @@
 import { readdirSync, readFileSync, statSync } from "fs";
 import { join } from "path";
 import { NextRequest } from "next/server";
-import { db } from "../src/lib/db";
-import {
-  isSchoolOperationalDatabaseError,
-  listSchoolsWithProvenance,
-} from "../src/lib/schools/repository";
+import { prepareTestDb } from "./prepare-test-db";
+
+prepareTestDb("school data boundary");
+
+const { db } = await import("../src/lib/db");
+const { isSchoolOperationalDatabaseError, listSchoolsWithProvenance } = await import(
+  "../src/lib/schools/repository"
+);
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);

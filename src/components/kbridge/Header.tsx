@@ -86,7 +86,7 @@ export function NavItem({
   return (
     <Link
       href={href}
-      className={`text-sm font-medium transition-colors hover:text-foreground ${
+      className={`whitespace-nowrap text-sm font-medium transition-colors hover:text-foreground ${
         active ? "text-foreground" : "text-muted-foreground"
       }`}
     >

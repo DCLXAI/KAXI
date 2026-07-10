@@ -4,6 +4,7 @@
 // 간단한 키워드 기반 retrieval + LLM 답변 생성
 
 import type { Lang } from "../i18n/translations";
+import { isOfficialKnowledgeSource } from "../knowledge/official-source";
 
 export interface KnowledgeDoc {
   id: string;
@@ -962,14 +963,14 @@ export const SOURCE_METADATA: Record<string, SourceMetadata> = {
   },
   "KAXI 분석 (공식 학사운영 지침 기반)": {
     label: "KAXI internal analysis",
-    url: "internal://kaxi/cost-analysis",
+    url: "https://kaxi.vercel.app/sources/cost-analysis",
     verifiedAt: DEFAULT_VERIFIED_AT,
     reviewAfter: DEFAULT_REVIEW_AFTER,
     owner: "internal",
   },
   "KAXI 안전 가이드라인": {
     label: "KAXI safety guideline",
-    url: "internal://kaxi/safety-guideline",
+    url: "https://kaxi.vercel.app/sources/safety-guideline",
     verifiedAt: DEFAULT_VERIFIED_AT,
     reviewAfter: DEFAULT_REVIEW_AFTER,
     owner: "internal",
@@ -1044,10 +1045,18 @@ export function getRagDocumentMetadata(doc: KnowledgeDoc, lang: Lang): RagDocume
       title: pickLangText(doc.title, lang),
       language: lang,
       topic: doc.category,
+      owner: isOfficialKnowledgeSource({
+        sourceType: doc.ragMeta.source_type,
+        sourceUrl: doc.ragMeta.source_url,
+      }) ? "official" : "internal",
     };
   }
 
   const meta = getSourceMetadata(doc.source);
+  const owner = isOfficialKnowledgeSource({
+    sourceType: meta.sourceType,
+    sourceUrl: meta.url,
+  }) ? "official" : "internal";
   return {
     doc_id: doc.id,
     title: pickLangText(doc.title, lang),
@@ -1065,7 +1074,7 @@ export function getRagDocumentMetadata(doc: KnowledgeDoc, lang: Lang): RagDocume
     superseded_by: meta.supersededBy,
     review_after: meta.reviewAfter,
     source_label: meta.label,
-    owner: meta.owner,
+    owner,
   };
 }
 
@@ -1211,6 +1220,41 @@ export const KNOWLEDGE_DOCS: KnowledgeDoc[] = [
       en: "D-4 is for non-degree programs (Korean language institutes, exchange students, researchers). No TOPIK required. In 2025, 4 language programs are under strict review, with 1-year visa restriction from 2026 semester 2.",
     },
     source: "Study in Korea · 교육부",
+  },
+  {
+    id: "d10-overview",
+    category: "visa",
+    title: {
+      ko: "D-10 구직·창업준비 체류자격 개요",
+      vi: "Tổng quan tư cách D-10 tìm việc và chuẩn bị khởi nghiệp",
+      mn: "D-10 ажил хайх ба стартап бэлтгэлийн ангиллын тойм",
+      en: "D-10 Job-Seeking and Startup-Preparation Overview",
+    },
+    keywords: [
+      "d-10",
+      "d10",
+      "d-10-1",
+      "d-10-2",
+      "구직",
+      "졸업 후 구직",
+      "창업 준비",
+      "job seeker",
+      "job seeking after graduation",
+      "startup preparation",
+      "tìm việc",
+      "sau khi tốt nghiệp",
+      "chuẩn bị khởi nghiệp",
+      "ажил хайх",
+      "төгсөөд ажил хайх",
+      "стартап бэлтгэл",
+    ],
+    content: {
+      ko: "Korea Visa Portal은 전문인력 범주에서 구직(D-10-1)과 기술창업준비(D-10-2)를 구분합니다. D-10은 단순히 졸업하면 자동으로 부여되는 자격이 아니며, 목표 활동이 E계열 전문분야 구직·연수인지 또는 기술창업 준비인지, 현재 체류자격과 만료일, 학력·경력·구직활동 계획, 국내 변경 가능 여부를 확인해야 합니다. 실제 허가 요건과 제출서류는 출입국관리법·시행령·시행규칙 및 최신 HiKorea 체류자격별 안내를 우선 확인합니다.",
+      vi: "Korea Visa Portal phân biệt D-10-1 dành cho tìm việc và D-10-2 dành cho chuẩn bị khởi nghiệp công nghệ. D-10 không tự động được cấp chỉ vì đã tốt nghiệp. Cần kiểm tra hoạt động mục tiêu có thuộc tìm việc/đào tạo trong lĩnh vực chuyên môn nhóm E hay chuẩn bị khởi nghiệp, tư cách hiện tại và ngày hết hạn, học lực/kinh nghiệm/kế hoạch tìm việc, cùng khả năng đổi tư cách trong Hàn Quốc. Điều kiện và hồ sơ thực tế phải ưu tiên Luật, Nghị định, Quy tắc thi hành và hướng dẫn HiKorea mới nhất.",
+      mn: "Korea Visa Portal нь ажил хайх D-10-1 ба технологийн стартап бэлтгэх D-10-2-ыг ялгадаг. Сургуулиа төгссөнөөр D-10 автоматаар олгогдохгүй. Зорилго нь E ангиллын мэргэжлийн ажил хайх/дадлага эсвэл стартап бэлтгэл мөн эсэх, одоогийн ангилал ба дуусах өдөр, боловсрол/туршлага/ажил хайх төлөвлөгөө, Солонгост ангилал өөрчлөх боломжийг шалгана. Бодит нөхцөл, материалыг хууль, журам, дүрэм болон хамгийн сүүлийн HiKorea заавраас баталгаажуулна.",
+      en: "The Korea Visa Portal distinguishes Job Seeker (D-10-1) from Business Startup preparation (D-10-2). D-10 is not granted automatically upon graduation. Review whether the target activity is job seeking or training in an E-series professional field, or technology-startup preparation; the current status and expiry date; education, experience, and job-search plan; and whether domestic change is available. Confirm actual eligibility and documents against the Immigration Act, Enforcement Decree, Enforcement Rule, and current HiKorea status guidance.",
+    },
+    source: "Korea Visa Portal · Visa Types",
   },
   {
     id: "visa-documents",
@@ -1743,6 +1787,14 @@ export const KNOWLEDGE_DOCS: KnowledgeDoc[] = [
       "inadmissible",
       "public safety",
       "deportation",
+      "cấm nhập cảnh",
+      "từ chối nhập cảnh",
+      "bị trục xuất",
+      "tiền sử trục xuất",
+      "нэвтрэх хориг",
+      "нэвтрэхээс татгалзах",
+      "албадан гаргах",
+      "албадан гаргуулсан",
     ],
     content: {
       ko: "출입국관리법 제11조는 법무부장관이 특정 외국인에 대해 입국을 금지하거나 거부할 수 있는 위험 사유를 둡니다. 공중위생상 위해, 공공의 안전·대한민국의 이익 침해 우려, 경제질서·사회질서·선량한 풍속 침해 우려, 국내체류비용 부담 능력 부족, 강제퇴거명령으로 출국 후 일정 기간이 지나지 않은 경우 등이 입국 단계의 핵심 리스크입니다. KAXI는 비자 발급 가능성이나 입국 가능성을 단정하지 않고, 과거 강제퇴거·출국명령·범죄·감염병·체류비용·초청 경위가 있으면 관할 재외공관 또는 출입국외국인관서 확인과 행정사 검토를 우선 안내해야 합니다.",
@@ -2975,7 +3027,7 @@ export const KNOWLEDGE_DOCS: KnowledgeDoc[] = [
       mn: "HiKorea оршин суух хугацаа сунгах",
       en: "HiKorea stay extension guidance",
     },
-    keywords: ["체류기간연장", "연장", "extension", "gia hạn", "сунгах", "만료일", "expiry", "범칙금", "overstay"],
+    keywords: ["체류기간연장", "연장", "extension", "gia hạn", "сунгах", "сунгалт", "оршин суух хугацаа", "дуусах", "만료일", "expiry", "범칙금", "overstay"],
     content: {
       ko: "체류기간을 초과해 계속 체류하려는 외국인은 체류기간연장허가를 받아야 합니다. 하이코리아 안내 기준으로 연장 신청은 현재 체류기간 만료 전 4개월부터 만료 당일까지 가능하며, 만료일 이후 신청하면 범칙금이 부과될 수 있습니다. 기본 제출 축은 체류기간연장허가 신청서, 여권, 해당자의 외국인등록증, 체류자격별 첨부서류, 수수료입니다. 해외 체류 중 민원신청이나 대리 신청은 불가할 수 있으므로 신청 당일 국내 체류 여부를 확인합니다.",
       vi: "Người muốn ở quá thời hạn đã được cho phép phải xin gia hạn. Theo HiKorea, có thể nộp từ 4 tháng trước ngày hết hạn đến đúng ngày hết hạn; nộp sau hạn có thể bị phạt. Hồ sơ cơ bản gồm đơn gia hạn, hộ chiếu, thẻ đăng ký người nước ngoài nếu có, tài liệu theo tư cách lưu trú và phí. Cần kiểm tra người nộp có đang ở Hàn Quốc vào ngày nộp hay không.",

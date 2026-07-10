@@ -6,6 +6,7 @@ import {
   getKnowledgeSourceAudit,
   getSourceMetadata,
 } from "../src/lib/data/knowledge";
+import { isOfficialKnowledgeSource } from "../src/lib/knowledge/official-source";
 import {
   SCHOOLS,
   isSchoolReviewCurrent,
@@ -40,6 +41,13 @@ for (const [source, meta] of Object.entries(SOURCE_METADATA)) {
   assertHttpOrInternal(resolved.url, `${source}.url`);
   if (resolved.owner === "official" && resolved.url.startsWith("internal://")) {
     fail(`${source} is official but points to internal URL`);
+  }
+  if (resolved.owner === "official" && !isOfficialKnowledgeSource({
+    sourceType: resolved.sourceType,
+    sourceUrl: resolved.url,
+    owner: resolved.owner,
+  })) {
+    fail(`${source} is marked official but does not use an approved official HTTPS source URL`);
   }
   if (new Date(resolved.verifiedAt).getTime() > new Date(resolved.reviewAfter).getTime()) {
     fail(`${source} reviewAfter must be >= verifiedAt`);

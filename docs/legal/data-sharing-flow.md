@@ -58,7 +58,7 @@ flowchart TD
 | User requests administrative-scrivener consultation | Third-party provision to independent partner | contact/lead ID, visa type, consultation topic, relevant profile facts | recipient/items/purpose/retention notice before transfer | partner request record + audit log |
 | KAXI uses hosting/database/email vendor | Processing consignment | service records, logs, notification data | privacy policy consignment disclosure | vendor register |
 | KAXI sends prompt to overseas AI API | Overseas transfer plus possible consignment/third-party analysis depending contract | prompt, retrieved context, answer | overseas-transfer disclosure and AI notice | AI request log/minimized record |
-| KAXI sends prompt to Anthropic Claude API | Overseas transfer plus possible consignment/third-party analysis depending contract | redacted prompt, retrieved context, generated answer | overseas-transfer disclosure and AI notice | AI request log/minimized record |
+| KAXI sends prompt or OCR media to the selected managed AI API (Kimi/Moonshot by default; Anthropic optional) | Overseas transfer plus possible consignment/third-party analysis depending contract | redacted prompt, retrieved context, document media for requested OCR, generated answer | overseas-transfer disclosure and AI notice naming the active provider | AI request log/minimized record |
 | Privacy deletion request | Internal legal obligation/rights handling | contact or exact question hash, request metadata | privacy rights notice | rights-handling record |
 
 ## Minimum Runtime Controls

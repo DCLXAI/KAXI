@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { AlertTriangle, BookMarked, ClipboardList, FileClock, KeyRound, LogOut, Scale, ShieldCheck } from "lucide-react";
+import { Activity, AlertTriangle, BookMarked, ClipboardList, FileClock, FileSearch, Headphones, KeyRound, LogOut, Scale, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 
 interface AdminContextValue {
   hasAdminAccess: boolean;
+  canManageOps: boolean;
   adminFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 }
 
@@ -25,8 +26,11 @@ export function useAdminApi() {
 
 const navItems = [
   { href: "/admin/cases", label: "케이스", icon: ClipboardList },
+  { href: "/admin/documents", label: "서류검증", icon: FileSearch },
   { href: "/admin/rules", label: "룰", icon: Scale },
   { href: "/admin/knowledge", label: "지식", icon: BookMarked },
+  { href: "/admin/handoffs", label: "상담전환", icon: Headphones },
+  { href: "/admin/ops", label: "운영", icon: Activity },
   { href: "/admin/audit", label: "감사", icon: FileClock },
 ];
 
@@ -84,6 +88,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const role = session?.user?.role || "";
   const isSessionAdmin = ["owner", "admin", "viewer"].includes(role);
   const hasAdminAccess = isSessionAdmin || Boolean(adminKey);
+  const canManageOps = Boolean(adminKey) || ["owner", "admin"].includes(role);
 
   const adminFetch = useCallback(
     (input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -96,8 +101,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
   );
 
   const context = useMemo<AdminContextValue>(
-    () => ({ hasAdminAccess, adminFetch }),
-    [adminFetch, hasAdminAccess]
+    () => ({ hasAdminAccess, canManageOps, adminFetch }),
+    [adminFetch, canManageOps, hasAdminAccess]
   );
 
   if (!hasAdminAccess) {

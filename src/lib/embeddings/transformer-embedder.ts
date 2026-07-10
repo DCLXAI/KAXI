@@ -1,9 +1,9 @@
 // Transformer 기반 다국어 Sentence Embedder
-// @xenova/transformers + multilingual-e5-small (100+ 언어 지원, 384차원)
+// @huggingface/transformers + multilingual-e5-small (100+ 언어 지원, 384차원)
 // TF-IDF 방식보다 의미적 유사도 파악에 훨씬 우수
 // 폴백: 모델 로드 실패시 기존 vectorizer.ts 사용
 
-import type { FeatureExtractionPipeline } from "@xenova/transformers";
+import type { FeatureExtractionPipeline } from "@huggingface/transformers";
 import { vectorize as tfidfVectorize, type Vectorizer as TFIDFVectorizer } from "./vectorizer";
 import * as path from "path";
 import * as fs from "fs";
@@ -26,6 +26,17 @@ type ModelCacheEnv = Partial<
   >
 >;
 
+type TransformersEnv = {
+  backends?: {
+    onnx?: {
+      wasm?: {
+        numThreads?: number;
+        proxy?: boolean;
+      };
+    };
+  };
+};
+
 export function resolveModelCacheDir(env: ModelCacheEnv = process.env): string {
   const configured = env.MODEL_CACHE_DIR?.trim();
   if (configured) return configured;
@@ -34,7 +45,7 @@ export function resolveModelCacheDir(env: ModelCacheEnv = process.env): string {
     return path.join("/tmp", "kaxi-model-cache");
   }
 
-  return path.join(process.cwd(), "data", "model-cache");
+  return path.join(/*turbopackIgnore: true*/ process.cwd(), "data", "model-cache");
 }
 
 function modelCacheLocation(env: ModelCacheEnv = process.env): "custom" | "serverless-tmp" | "project-data" {
@@ -45,7 +56,7 @@ function modelCacheLocation(env: ModelCacheEnv = process.env): "custom" | "serve
 
 function cachePathExists(cacheDir: string): boolean {
   try {
-    return fs.existsSync(cacheDir);
+    return fs.existsSync(/*turbopackIgnore: true*/ cacheDir);
   } catch {
     return false;
   }
@@ -92,15 +103,20 @@ export async function getEmbedder(): Promise<FeatureExtractionPipeline | null> {
     lastLoadError = null;
     extractorPromise = (async () => {
       try {
-        const { pipeline, env } = await import("@xenova/transformers");
+        const { pipeline, env } = await import("@huggingface/transformers");
+        const transformerEnv = env as TransformersEnv;
         env.cacheDir = resolveModelCacheDir();
         env.allowRemoteModels = process.env.TRANSFORMERS_ALLOW_REMOTE !== "false";
         env.allowLocalModels = process.env.TRANSFORMERS_ALLOW_LOCAL === "true";
+        if (transformerEnv.backends?.onnx?.wasm) {
+          transformerEnv.backends.onnx.wasm.proxy = false;
+          transformerEnv.backends.onnx.wasm.numThreads = 1;
+        }
 
         console.log(`[TransformerEmbedder] Loading model: ${MODEL_NAME}`);
         const t0 = Date.now();
         const extractor = await pipeline("feature-extraction", MODEL_NAME, {
-          quantized: true,
+          dtype: "q8",
         });
         lastLoadDurationMs = Date.now() - t0;
         loadState = "ready";

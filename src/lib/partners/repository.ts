@@ -39,7 +39,7 @@ export type PartnerRequestResult = PartnerRequest | UnpersistedPartnerRequest;
 const PARTNER_TYPES = new Set(["admin", "translation", "academy", "admission", "settlement"]);
 
 async function createAnonymousLead() {
-  return db.lead.create({
+  return db.diagnosisLead.create({
     data: {
       nickname: "익명",
       nationality: "unknown",

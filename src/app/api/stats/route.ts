@@ -9,27 +9,27 @@ export async function GET(req: NextRequest) {
     if (unauthorized) return unauthorized;
 
     const [totalLeads, totalRequests, pendingRequests, brokerUsers] = await Promise.all([
-      db.lead.count(),
+      db.diagnosisLead.count(),
       db.partnerRequest.count(),
       db.partnerRequest.count({ where: { status: "pending" } }),
-      db.lead.count({ where: { usingBroker: true } }),
+      db.diagnosisLead.count({ where: { usingBroker: true } }),
     ]);
 
     // 국적별 분포
-    const byNationality = await db.lead.groupBy({
+    const byNationality = await db.diagnosisLead.groupBy({
       by: ["nationality"],
       _count: true,
     });
 
     // 경로별 분포
-    const byPath = await db.lead.groupBy({
+    const byPath = await db.diagnosisLead.groupBy({
       by: ["pathKey"],
       _count: true,
     });
 
     // 최근 7일 리드
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const recentLeads = await db.lead.count({
+    const recentLeads = await db.diagnosisLead.count({
       where: { createdAt: { gte: sevenDaysAgo } },
     });
 

@@ -16,6 +16,7 @@ if (!/^postgres(?:ql)?:\/\//i.test(process.env.DATABASE_URL || "")) {
 
 const TEST_QUERIES = [
   { q: "D-2 비자 서류", expect: "visa-documents" },
+  { q: "졸업 후 한국에서 구직하려면 D-10 체류자격은 어떤 경우에 검토하나요?", expect: "d10-overview" },
   { q: "한국에서 얼마나 돈이 필요해요?", expect: "cost-breakdown" },
   { q: "허위 잔고증명 쓰면 어떻게 되나요", expect: "fake-documents-warning" },
   { q: "I want to study Korean language, what visa?", expect: "d4-overview" },

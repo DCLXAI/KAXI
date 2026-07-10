@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from "fs/promises";
-import { dirname, join } from "path";
+import { dirname, isAbsolute, join, relative, resolve } from "path";
 import { getRuntimeDatabaseInfo, db } from "@/lib/db";
 import { getSupabaseServerConfig } from "@/lib/supabase/config";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
@@ -168,8 +168,26 @@ export async function createSupabaseSignedDownloadUrl(storageKey: string, expire
 }
 
 export function localUploadPath(storageKey: string): string {
-  const root = process.env.DOCUMENT_UPLOAD_DIR || join(process.cwd(), "data", "uploads");
-  return join(root, storageKey);
+  const normalizedKey = storageKey.trim().replaceAll("\\", "/");
+  if (
+    !normalizedKey ||
+    normalizedKey.startsWith("/") ||
+    normalizedKey.split("/").some((segment) => !segment || segment === "." || segment === "..")
+  ) {
+    throw new Error("Invalid local document storage key.");
+  }
+
+  const configuredRoot = process.env.DOCUMENT_UPLOAD_DIR?.trim();
+  const root = resolve(
+    /*turbopackIgnore: true*/ configuredRoot ||
+      join(/*turbopackIgnore: true*/ process.cwd(), "data", "uploads"),
+  );
+  const filePath = resolve(/*turbopackIgnore: true*/ root, normalizedKey);
+  const relativePath = relative(root, filePath);
+  if (!relativePath || /^\.\.(?:[\\/]|$)/.test(relativePath) || isAbsolute(relativePath)) {
+    throw new Error("Local document storage key escapes the upload root.");
+  }
+  return filePath;
 }
 
 export async function persistUploadedBytes(storageKey: string, bytes: Uint8Array, mimeType: string) {
@@ -210,8 +228,8 @@ export async function persistUploadedBytes(storageKey: string, bytes: Uint8Array
   }
 
   const filePath = localUploadPath(storageKey);
-  await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(filePath, bytes);
+  await mkdir(/*turbopackIgnore: true*/ dirname(filePath), { recursive: true });
+  await writeFile(/*turbopackIgnore: true*/ filePath, bytes);
 }
 
 export async function readUploadedBytes(storageKey: string): Promise<Buffer> {
@@ -227,7 +245,7 @@ export async function readUploadedBytes(storageKey: string): Promise<Buffer> {
 
   if (storage.kind === "local") {
     const { readFile } = await import("fs/promises");
-    return readFile(localUploadPath(storageKey));
+    return readFile(/*turbopackIgnore: true*/ localUploadPath(storageKey));
   }
 
   if (storage.kind === "blob") {

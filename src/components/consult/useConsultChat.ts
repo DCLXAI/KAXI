@@ -51,6 +51,8 @@ export function useConsultChat() {
           text: data.answer,
           disclaimer: data.disclaimer,
           retrievedDocs: data.retrievedDocs,
+          retrieval: data.retrieval,
+          searchMeta: data.searchMeta,
           suggestedFollowups: data.suggestedFollowups,
           needsHumanExpert: data.needsHumanExpert,
           backend: data.backend,

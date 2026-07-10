@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { canWriteRuntimeDatabase, db } from "@/lib/db";
+import { JsonBodyError, readJsonBody } from "@/lib/api/json-body";
 import { recordRequestAudit } from "@/lib/audit";
 import { withdrawLeadConsentsForPrivacyRequest } from "@/lib/privacy/consent";
 import { hashPii } from "@/lib/privacy/pii";
@@ -10,7 +11,7 @@ export async function POST(req: NextRequest) {
     const limited = await rateLimit(req, { key: "privacy:delete-request", limit: 5, windowMs: 60 * 60 * 1000 });
     if (limited) return limited;
 
-    const body = await req.json().catch(() => ({}));
+    const body = await readJsonBody<Record<string, unknown>>(req, 16 * 1024);
     const leadId = typeof body.leadId === "string" ? body.leadId.trim() : "";
     const contact = typeof body.contact === "string" ? body.contact.trim() : "";
     const question = typeof body.question === "string" ? body.question.trim() : "";
@@ -27,28 +28,39 @@ export async function POST(req: NextRequest) {
     const now = new Date();
     let matched = 0;
     const consentLeadIds = new Set<string>();
+    const canonicalSessionKeys = new Set<string>();
     if (leadId) {
-      const result = await db.lead.updateMany({
+      const result = await db.diagnosisLead.updateMany({
         where: { id: leadId },
         data: { deleteRequestedAt: now },
       });
       matched += result.count;
       if (result.count > 0) consentLeadIds.add(leadId);
+      const handoffLead = await db.handoffLead.findUnique({
+        where: { id: leadId },
+        select: { sessionKey: true },
+      });
+      if (handoffLead) canonicalSessionKeys.add(handoffLead.sessionKey);
     }
 
     if (contact) {
       const contactHash = hashPii(contact);
       if (contactHash) {
-        const leads = await db.lead.findMany({
+        const leads = await db.diagnosisLead.findMany({
           where: { contactHash },
           select: { id: true },
         });
         leads.forEach((lead) => consentLeadIds.add(lead.id));
-        const result = await db.lead.updateMany({
+        const result = await db.diagnosisLead.updateMany({
           where: { contactHash },
           data: { deleteRequestedAt: now },
         });
         matched += result.count;
+        const handoffContacts = await db.handoffLeadContact.findMany({
+          where: { contactHash },
+          select: { sessionKey: true },
+        });
+        handoffContacts.forEach((item) => canonicalSessionKeys.add(item.sessionKey));
       }
     }
 
@@ -71,7 +83,21 @@ export async function POST(req: NextRequest) {
           }),
         ]);
         matched += chatLogs.count + partnerRequests.count;
+        const [canonicalMessages, handoffLeads] = await Promise.all([
+          db.chatMessage.findMany({ where: { questionHash }, select: { sessionKey: true } }),
+          db.handoffLead.findMany({ where: { questionHash }, select: { sessionKey: true } }),
+        ]);
+        canonicalMessages.forEach((item) => canonicalSessionKeys.add(item.sessionKey));
+        handoffLeads.forEach((item) => canonicalSessionKeys.add(item.sessionKey));
       }
+    }
+
+    if (canonicalSessionKeys.size > 0) {
+      const result = await db.chatSession.updateMany({
+        where: { sessionKey: { in: [...canonicalSessionKeys] } },
+        data: { deleteRequestedAt: now },
+      });
+      matched += result.count;
     }
 
     const consentWithdrawal = await withdrawLeadConsentsForPrivacyRequest({
@@ -96,12 +122,16 @@ export async function POST(req: NextRequest) {
         contactProvided: Boolean(contact),
         questionProvided: Boolean(question),
         consentLeadIds: consentLeadIds.size,
+        canonicalSessions: canonicalSessionKeys.size,
         consentsWithdrawn: consentWithdrawal.consents,
       },
     });
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    if (err instanceof JsonBodyError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error("[POST /api/privacy/delete-request]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

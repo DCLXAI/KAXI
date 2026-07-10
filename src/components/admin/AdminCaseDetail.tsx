@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   Building2,
   CheckCircle2,
+  FileSearch,
   FileWarning,
   MessageSquare,
   RefreshCw,
@@ -40,6 +41,74 @@ function JsonBlock({ value }: { value: unknown }) {
   );
 }
 
+interface AdminDocumentVerification {
+  status?: string;
+  severity?: string;
+  requirementCode?: string | null;
+  layers?: Record<string, string>;
+  issues?: Array<{
+    code?: string;
+    message?: string;
+  }>;
+  sources?: Array<{
+    docId?: string;
+    title?: string;
+    sourceUrl?: string;
+    sourceType?: string | null;
+    reviewStatus?: string | null;
+    lastCheckedAt?: string | null;
+    acceptedBy?: Array<"vector" | "keyword">;
+    score?: number;
+    vectorScore?: number;
+    keywordScore?: number;
+  }>;
+  basis?: {
+    notice?: string;
+    acceptedSourceCount?: number;
+    officialSourceCount?: number;
+    latestCheckedAt?: string | null;
+    sourceLabels?: string[];
+    requirementLastCheckedAt?: string | null;
+  };
+  layerDetails?: {
+    rag?: {
+      llm?: {
+        status?: string;
+      };
+    };
+  };
+  requiresHumanReview?: boolean;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function asVerification(value: unknown): AdminDocumentVerification | null {
+  const record = asRecord(value);
+  if (!record.status || !record.layers) return null;
+  return record as unknown as AdminDocumentVerification;
+}
+
+function layerLabel(layer: string) {
+  if (layer === "rule") return "Rule";
+  if (layer === "rag") return "RAG";
+  if (layer === "cross_document") return "Cross";
+  return layer;
+}
+
+function StatusBadge({ value }: { value: string | undefined }) {
+  if (!value) return <Badge variant="outline">-</Badge>;
+  if (value === "pass" || value === "APPROVED") return <Badge>{value}</Badge>;
+  if (value === "fail" || value === "critical" || value === "REJECTED") return <Badge variant="destructive">{value}</Badge>;
+  if (value === "warning" || value === "major" || value === "NEEDS_HUMAN_REVIEW") return <Badge className="bg-amber-600">{value}</Badge>;
+  return <Badge variant="outline">{value}</Badge>;
+}
+
+function formatScore(value: number | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(3) : "-";
+}
+
 function statusBadge(status: string, risk: string) {
   if (status === "CLOSED") return <Badge className="bg-slate-700">종결</Badge>;
   if (status === "APPROVED") return <Badge className="bg-emerald-600">수임/승인</Badge>;
@@ -69,6 +138,9 @@ export function AdminCaseDetail({ caseId }: { caseId: string }) {
   const [loading, setLoading] = useState(true);
   const [savingAction, setSavingAction] = useState<AdminCaseAction | null>(null);
   const [savingDocumentId, setSavingDocumentId] = useState<string | null>(null);
+  const [verifyingDocumentId, setVerifyingDocumentId] = useState<string | null>(null);
+  const [feedbackDocumentId, setFeedbackDocumentId] = useState<string | null>(null);
+  const [verifyingAll, setVerifyingAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [partnerOfficeId, setPartnerOfficeId] = useState("");
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
@@ -118,6 +190,73 @@ export function AdminCaseDetail({ caseId }: { caseId: string }) {
     setSelectedDocumentIds((current) =>
       current.includes(documentId) ? current.filter((id) => id !== documentId) : [...current, documentId]
     );
+  };
+
+  const verifyDocument = async (documentId: string, enableLlm = false) => {
+    setVerifyingDocumentId(documentId);
+    setError(null);
+    try {
+      const res = await adminFetch(`/api/admin/documents/${documentId}/verify`, {
+        method: "POST",
+        body: JSON.stringify({
+          enableRag: true,
+          enableLlm,
+          persist: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "서류 AI 검증을 실행하지 못했습니다.");
+      await loadCase();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setVerifyingDocumentId(null);
+    }
+  };
+
+  const verifyDocumentSet = async () => {
+    setVerifyingAll(true);
+    setError(null);
+    try {
+      const res = await adminFetch("/api/admin/documents/verify-batch", {
+        method: "POST",
+        body: JSON.stringify({
+          caseId,
+          enableRag: true,
+          enableLlm: false,
+          persist: true,
+          createMissingPlaceholders: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "케이스 서류 묶음 검증을 실행하지 못했습니다.");
+      await loadCase();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setVerifyingAll(false);
+    }
+  };
+
+  const recordVerificationFeedback = async (
+    documentId: string,
+    label: "ACCURATE" | "FALSE_POSITIVE" | "FALSE_NEGATIVE" | "NEEDS_REVIEW"
+  ) => {
+    setFeedbackDocumentId(documentId);
+    setError(null);
+    try {
+      const res = await adminFetch(`/api/admin/documents/${documentId}/verification-feedback`, {
+        method: "POST",
+        body: JSON.stringify({ label }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "검증 피드백을 저장하지 못했습니다.");
+      await loadCase();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setFeedbackDocumentId(null);
+    }
   };
 
   const reviewDocument = async (
@@ -254,102 +393,216 @@ export function AdminCaseDetail({ caseId }: { caseId: string }) {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">업로드 서류</CardTitle>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <CardTitle className="text-base">업로드 서류</CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={verifyDocumentSet}
+                  disabled={verifyingAll || caseItem.documents.length === 0}
+                >
+                  {verifyingAll ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <FileSearch className="h-3.5 w-3.5" />}
+                  전체 AI 검증
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {caseItem.documents.length === 0 ? (
                 <div className="py-6 text-sm text-muted-foreground">등록된 서류가 없습니다.</div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[860px] text-sm">
+                  <table className="w-full min-w-[1240px] text-sm">
                     <thead>
                       <tr className="border-b text-left text-xs text-muted-foreground">
                         <th className="py-2 pr-3 font-medium">서류</th>
                         <th className="py-2 pr-3 font-medium">업로드</th>
                         <th className="py-2 pr-3 font-medium">검토</th>
                         <th className="py-2 pr-3 font-medium">OCR</th>
+                        <th className="py-2 pr-3 font-medium">AI 검증</th>
                         <th className="py-2 pr-3 font-medium">만료</th>
                         <th className="py-2 pr-3 font-medium">파일</th>
                         <th className="py-2 font-medium">검수</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {caseItem.documents.map((doc) => (
-                        <tr key={doc.id} className="border-b last:border-0">
-                          <td className="py-2 pr-3 font-medium">{doc.documentType}</td>
-                          <td className="py-2 pr-3"><Badge variant="outline">{doc.status}</Badge></td>
-                          <td className="py-2 pr-3"><Badge variant="secondary">{doc.reviewStatus}</Badge></td>
-                          <td className="py-2 pr-3 align-top">
-                            {doc.ocrProcessedAt ? (
-                              <details className="max-w-72">
-                                <summary className="cursor-pointer text-xs font-medium">
-                                  {doc.ocrModel || "ocr"} · {formatDate(doc.ocrProcessedAt)}
-                                </summary>
-                                <div className="mt-2 space-y-2">
-                                  <JsonBlock value={doc.ocrExtractedRedacted} />
-                                  <JsonBlock value={doc.ocrValidation} />
+                      {caseItem.documents.map((doc) => {
+                        const verification = asVerification(doc.ocrValidation);
+                        const isBusy = savingDocumentId === doc.id || verifyingDocumentId === doc.id || feedbackDocumentId === doc.id;
+                        return (
+                          <tr key={doc.id} className="border-b last:border-0 align-top">
+                            <td className="py-2 pr-3 font-medium">{doc.documentType}</td>
+                            <td className="py-2 pr-3"><Badge variant="outline">{doc.status}</Badge></td>
+                            <td className="py-2 pr-3"><Badge variant="secondary">{doc.reviewStatus}</Badge></td>
+                            <td className="py-2 pr-3 align-top">
+                              {doc.ocrProcessedAt ? (
+                                <details className="max-w-72">
+                                  <summary className="cursor-pointer text-xs font-medium">
+                                    {doc.ocrModel || "ocr"} · {formatDate(doc.ocrProcessedAt)}
+                                  </summary>
+                                  <div className="mt-2 space-y-2">
+                                    <JsonBlock value={doc.ocrExtractedRedacted} />
+                                    <JsonBlock value={doc.ocrValidation} />
+                                  </div>
+                                </details>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">-</span>
+                              )}
+                            </td>
+                            <td className="max-w-[360px] py-2 pr-3">
+                              <div className="space-y-2">
+                                {verification ? (
+                                  <>
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      <StatusBadge value={verification.status} />
+                                      <StatusBadge value={verification.severity} />
+                                      {verification.requiresHumanReview && <Badge className="bg-amber-600">human review</Badge>}
+                                    </div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {Object.entries(verification.layers || {}).map(([layer, value]) => (
+                                        <Badge key={layer} variant="outline">
+                                          {layerLabel(layer)}:{value}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      {verification.requirementCode || "requirement 없음"} · 출처 {verification.sources?.length || 0}개
+                                      {verification.layerDetails?.rag?.llm?.status
+                                        ? ` · LLM ${verification.layerDetails.rag.llm.status}`
+                                        : ""}
+                                    </div>
+                                    {verification.basis?.notice && (
+                                      <div className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1.5 text-xs leading-relaxed text-blue-950">
+                                        {verification.basis.notice}
+                                      </div>
+                                    )}
+                                    {(verification.issues?.length || 0) > 0 && (
+                                      <details>
+                                        <summary className="cursor-pointer text-xs font-medium">
+                                          이슈 {verification.issues?.length || 0}개
+                                        </summary>
+                                        <div className="mt-2 space-y-1">
+                                          {verification.issues?.slice(0, 5).map((item, index) => (
+                                            <div key={`${item.code}-${index}`} className="rounded border px-2 py-1 text-xs">
+                                              <div className="font-medium">{item.code || "issue"}</div>
+                                              <div className="text-muted-foreground">{item.message || "-"}</div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </details>
+                                    )}
+                                    {(verification.sources?.length || 0) > 0 && (
+                                      <details>
+                                        <summary className="cursor-pointer text-xs font-medium">근거 출처</summary>
+                                        <div className="mt-2 space-y-1">
+                                          {verification.sources?.slice(0, 5).map((source, index) => (
+                                            <a
+                                              key={`${source.docId}-${index}`}
+                                              href={source.sourceUrl || "#"}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              className="block rounded border px-2 py-1 text-xs hover:bg-muted"
+                                            >
+                                              <div className="font-medium">{source.title || source.docId || "source"}</div>
+                                              <div className="text-muted-foreground">
+                                                {source.docId} · {source.lastCheckedAt || "checkedAt 없음"} · {source.sourceType || "source"}
+                                              </div>
+                                              <div className="text-muted-foreground">
+                                                {source.reviewStatus || "status 없음"} · {source.acceptedBy?.join("+") || "accepted"} · s {formatScore(source.score)}
+                                                {" "}v {formatScore(source.vectorScore)} k {formatScore(source.keywordScore)}
+                                              </div>
+                                            </a>
+                                          ))}
+                                        </div>
+                                      </details>
+                                    )}
+                                  </>
+                                ) : (
+                                  <div className="text-xs text-muted-foreground">AI 검증 전</div>
+                                )}
+                                <div className="flex flex-wrap gap-1">
+                                  <Button size="sm" variant="outline" disabled={isBusy} onClick={() => verifyDocument(doc.id, false)}>
+                                    {verifyingDocumentId === doc.id ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <FileSearch className="h-3.5 w-3.5" />}
+                                    AI 검증
+                                  </Button>
+                                  <Button size="sm" variant="outline" disabled={isBusy} onClick={() => verifyDocument(doc.id, true)}>
+                                    LLM 판단
+                                  </Button>
                                 </div>
-                              </details>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">-</span>
-                            )}
-                          </td>
-                          <td className="py-2 pr-3 font-mono text-xs">{formatDate(doc.expiresAt)}</td>
-                          <td className="py-2 pr-3 text-xs text-muted-foreground">{doc.file?.originalName || "-"}</td>
-                          <td className="py-2">
-                            <div className="flex flex-wrap gap-1">
-                              <Button
-                                size="sm"
-                                variant={selectedDocumentIds.includes(doc.id) ? "secondary" : "outline"}
-                                disabled={savingDocumentId === doc.id}
-                                onClick={() => toggleDocumentSelection(doc.id)}
-                              >
-                                선택
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={savingDocumentId === doc.id}
-                                onClick={() => reviewDocument(doc.id, "OCR_PROCESSING", "PENDING", "OCR 비동기 처리 대기")}
-                              >
-                                OCR
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={savingDocumentId === doc.id}
-                                onClick={() => reviewDocument(doc.id, "OCR_DONE", "PENDING", "OCR 처리 완료")}
-                              >
-                                완료
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={savingDocumentId === doc.id}
-                                onClick={() => reviewDocument(doc.id, "NEEDS_REVIEW", "NEEDS_HUMAN_REVIEW", "추가 검토 필요")}
-                              >
-                                보완
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={savingDocumentId === doc.id}
-                                onClick={() => reviewDocument(doc.id, "APPROVED", "APPROVED", "행정사 검수 승인")}
-                              >
-                                승인
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                disabled={savingDocumentId === doc.id}
-                                onClick={() => reviewDocument(doc.id, "REJECTED", "REJECTED", "서류 반려")}
-                              >
-                                반려
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                                {verification && (
+                                  <div className="flex flex-wrap gap-1 border-t pt-2">
+                                    <Button size="sm" variant="outline" disabled={isBusy} onClick={() => recordVerificationFeedback(doc.id, "ACCURATE")}>
+                                      정확
+                                    </Button>
+                                    <Button size="sm" variant="outline" disabled={isBusy} onClick={() => recordVerificationFeedback(doc.id, "FALSE_POSITIVE")}>
+                                      오탐
+                                    </Button>
+                                    <Button size="sm" variant="outline" disabled={isBusy} onClick={() => recordVerificationFeedback(doc.id, "FALSE_NEGATIVE")}>
+                                      과탐
+                                    </Button>
+                                    <Button size="sm" variant="outline" disabled={isBusy} onClick={() => recordVerificationFeedback(doc.id, "NEEDS_REVIEW")}>
+                                      재검토
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-2 pr-3 font-mono text-xs">{formatDate(doc.expiresAt)}</td>
+                            <td className="py-2 pr-3 text-xs text-muted-foreground">{doc.file?.originalName || "-"}</td>
+                            <td className="py-2">
+                              <div className="flex flex-wrap gap-1">
+                                <Button
+                                  size="sm"
+                                  variant={selectedDocumentIds.includes(doc.id) ? "secondary" : "outline"}
+                                  disabled={isBusy}
+                                  onClick={() => toggleDocumentSelection(doc.id)}
+                                >
+                                  선택
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={isBusy}
+                                  onClick={() => reviewDocument(doc.id, "OCR_PROCESSING", "PENDING", "OCR 비동기 처리 대기")}
+                                >
+                                  OCR
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={isBusy}
+                                  onClick={() => reviewDocument(doc.id, "OCR_DONE", "PENDING", "OCR 처리 완료")}
+                                >
+                                  완료
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={isBusy}
+                                  onClick={() => reviewDocument(doc.id, "NEEDS_REVIEW", "NEEDS_HUMAN_REVIEW", "추가 검토 필요")}
+                                >
+                                  보완
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={isBusy}
+                                  onClick={() => reviewDocument(doc.id, "APPROVED", "APPROVED", "행정사 검수 승인")}
+                                >
+                                  승인
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  disabled={isBusy}
+                                  onClick={() => reviewDocument(doc.id, "REJECTED", "REJECTED", "서류 반려")}
+                                >
+                                  반려
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

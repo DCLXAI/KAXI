@@ -3,6 +3,7 @@ import { recordRequestAudit } from "@/lib/audit";
 import { getAdminContext, jsonError, requireAdmin } from "@/lib/api/security";
 import { canWriteRuntimeDatabase } from "@/lib/db";
 import {
+  getCronOfficialKnowledgeSources,
   getOfficialKnowledgeSourceWatchlist,
   runOfficialKnowledgeSourceMonitor,
 } from "@/lib/knowledge/source-monitor";
@@ -48,6 +49,11 @@ function jsonNoStore(body: unknown, init?: ResponseInit) {
   return response;
 }
 
+function positiveInt(value: string | undefined, fallback: number) {
+  const parsed = Number.parseInt(value || "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 export async function GET(req: NextRequest) {
   if (!canWriteRuntimeDatabase()) {
     return jsonNoStore({
@@ -62,6 +68,9 @@ export async function GET(req: NextRequest) {
   const result = await runOfficialKnowledgeSourceMonitor({
     actor: "vercel-cron",
     persistCandidates: process.env.KNOWLEDGE_MONITOR_PERSIST_CANDIDATES !== "false",
+    sources: getCronOfficialKnowledgeSources(),
+    timeoutMs: positiveInt(process.env.KNOWLEDGE_MONITOR_FETCH_TIMEOUT_MS, 8_000),
+    concurrency: positiveInt(process.env.KNOWLEDGE_MONITOR_CONCURRENCY, 4),
   });
   const alert = await sendKnowledgeMonitorAlert(result, {
     actor: "vercel-cron",
@@ -102,6 +111,8 @@ export async function POST(req: NextRequest) {
     actor: actor?.actor || "admin",
     persistCandidates: body.persistCandidates === true,
     sources,
+    timeoutMs: positiveInt(process.env.KNOWLEDGE_MONITOR_FETCH_TIMEOUT_MS, 8_000),
+    concurrency: positiveInt(process.env.KNOWLEDGE_MONITOR_CONCURRENCY, 4),
   });
   const alert = await sendKnowledgeMonitorAlert(result, {
     actor: actor?.actor || "admin",

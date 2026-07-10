@@ -82,6 +82,7 @@ export const SLOT_TO_DRAFT_KEY: Record<string, OptionKey | null> = {
 
 export function backendLabel(backend?: string): string {
   if (!backend) return "Agent";
+  if (backend === "kimi") return "Kimi";
   if (backend === "claude") return "Claude";
   if (backend === "tool-fallback") return "KAXI Tools";
   return backend;
@@ -89,8 +90,9 @@ export function backendLabel(backend?: string): string {
 
 export function statusText(locale: AgentLocale, status: AgentStatus | null): string {
   if (!status) return locale === "ko" ? "상태 확인 중" : "Checking";
-  if (status.backend === "claude" && !status.claude?.apiKeyConfigured) {
-    return locale === "ko" ? "Claude 미설정 · 도구 fallback" : "Claude fallback";
+  if (!status.llm?.apiKeyConfigured) {
+    const provider = backendLabel(status.backend);
+    return locale === "ko" ? `${provider} 미설정 · 도구 fallback` : `${provider} fallback`;
   }
   return backendLabel(status.backend);
 }

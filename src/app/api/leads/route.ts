@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
         }
       : {};
 
-    const leads = await db.lead.findMany({
+    const leads = await db.diagnosisLead.findMany({
       where,
       orderBy: { createdAt: "desc" },
       take: limit,
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
       kind: "contact",
       maxPlainLength: 160,
     });
-    const lead = await db.lead.create({
+    const lead = await db.diagnosisLead.create({
       data: {
         nickname: String(nickname),
         nationality: String(nationality),

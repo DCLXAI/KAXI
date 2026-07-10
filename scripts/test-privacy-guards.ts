@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { canPersistPiiValue, preparePiiField, readPiiField } from "../src/lib/privacy/pii";
+import { canPersistPiiValue, preparePiiField, readPiiField, redactSensitiveText } from "../src/lib/privacy/pii";
 import { serializeLeadForResponse, serializePartnerRequestForResponse } from "../src/lib/privacy/serializers";
 import { prepareTestDb } from "./prepare-test-db";
 
@@ -21,6 +21,13 @@ async function testPiiRedactionWithoutKey() {
   }
   if (protectedField.ciphertext) fail("ciphertext should not exist without DATA_ENCRYPTION_KEY");
   if (!protectedField.hash || !protectedField.redacted) fail("hash/redacted flags missing");
+}
+
+function testPiiRedactionPreservesOfficialSourceDates() {
+  const redacted = redactSensitiveText("확인일 2026-07-02, 연락처 +82 10-1234-5678, user@example.com");
+  if (!redacted.includes("2026-07-02")) fail(`official source date was redacted: ${redacted}`);
+  if (!redacted.includes("[redacted-phone]")) fail(`phone number was not redacted: ${redacted}`);
+  if (!redacted.includes("[redacted-email]")) fail(`email was not redacted: ${redacted}`);
 }
 
 async function readJson(res: Response) {
@@ -179,12 +186,70 @@ async function testConsentThirdPartyFlow() {
     if (retentionAllowed.status !== 201) fail("retention consent setup should persist partner request");
     const retentionUser = await db.user.findUnique({ where: { zaloUid: `lead:${retentionLeadId}` } });
     if (!retentionUser) fail("retention lead consent user missing");
-    await db.lead.update({
+    await db.diagnosisLead.update({
       where: { id: retentionLeadId },
       data: { retentionUntil: new Date(Date.now() - 1000) },
     });
+
+    const canonicalSessionKey = "kaxi-privacy-retention-session";
+    const canonicalQuestion = "D-4 상담 결과를 user@example.com으로 보내주세요";
+    const protectedCanonicalQuestion = preparePiiField(canonicalQuestion, { kind: "text", maxPlainLength: 1_200 });
+    const protectedCanonicalAnswer = preparePiiField("담당자 검토 후 안내드릴게요.", { kind: "text", maxPlainLength: 8_000 });
+    await db.chatSession.create({ data: { sessionKey: canonicalSessionKey } });
+    const canonicalMessage = await db.chatMessage.create({
+      data: {
+        sessionKey: canonicalSessionKey,
+        question: protectedCanonicalQuestion.plaintext || "",
+        questionCiphertext: protectedCanonicalQuestion.ciphertext,
+        questionHash: protectedCanonicalQuestion.hash,
+        questionRedacted: protectedCanonicalQuestion.redacted,
+        answer: protectedCanonicalAnswer.plaintext || "",
+        answerCiphertext: protectedCanonicalAnswer.ciphertext,
+        answerHash: protectedCanonicalAnswer.hash,
+        answerRedacted: protectedCanonicalAnswer.redacted,
+      },
+    });
+    const audit = await db.n8nAuditMessage.create({
+      data: {
+        requestId: "215b87ff-c1ac-4f8c-a749-2131e23f88b2",
+        sourceChatMessageId: canonicalMessage.id,
+        sessionKey: canonicalSessionKey,
+        question: canonicalQuestion,
+        questionHash: protectedCanonicalQuestion.hash,
+        answer: "담당자 검토 후 안내드릴게요.",
+        answerHash: protectedCanonicalAnswer.hash,
+        sourcesJson: JSON.stringify([{ title: "must not be duplicated" }]),
+      },
+    });
+    if (
+      audit.question !== "[canonical-chat-message]" ||
+      audit.answer !== "[canonical-chat-message]" ||
+      !audit.questionRedacted ||
+      !audit.answerRedacted ||
+      audit.sourcesJson !== "[]"
+    ) {
+      fail("n8n audit trigger must retain metadata and scrub duplicated conversation content");
+    }
+    const canonicalDelete = await readJson(
+      await deleteRoute.POST(
+        apiRequest("/api/privacy/delete-request", {
+          method: "POST",
+          body: JSON.stringify({ question: canonicalQuestion }),
+        }),
+      ),
+    );
+    if (!canonicalDelete.ok) fail(`canonical chat delete request failed: ${canonicalDelete.status}`);
+    const markedCanonicalSession = await db.chatSession.findUnique({ where: { sessionKey: canonicalSessionKey } });
+    if (!markedCanonicalSession?.deleteRequestedAt) fail("canonical chat session was not marked for privacy deletion");
+
     const retention = await enforcePrivacyRetention();
     if (retention.consentsExpired < 3) fail(`retention should expire active consents, got ${retention.consentsExpired}`);
+    if (retention.canonicalChatSessionsDeleted < 1) {
+      fail(`retention should delete canonical chat sessions, got ${retention.canonicalChatSessionsDeleted}`);
+    }
+    if (await db.chatSession.findUnique({ where: { sessionKey: canonicalSessionKey } })) {
+      fail("canonical chat session survived retention deletion");
+    }
     const expired = await db.consent.count({
       where: { userId: retentionUser.id, status: "EXPIRED" },
     });
@@ -384,6 +449,7 @@ async function testHostedNonPostgresGuards() {
 }
 
 await testConsentThirdPartyFlow();
+testPiiRedactionPreservesOfficialSourceDates();
 await testPiiRedactionWithoutKey();
 await testPiiRoundTripWithKey();
 await testProductionPiiPersistenceRequiresEncryption();

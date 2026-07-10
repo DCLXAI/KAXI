@@ -30,6 +30,8 @@ const {
 } = await import("../src/lib/knowledge/repository");
 const {
   OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST,
+  DEFAULT_CRON_KNOWLEDGE_SOURCE_IDS,
+  getCronOfficialKnowledgeSources,
   runOfficialKnowledgeSourceMonitor,
 } = await import("../src/lib/knowledge/source-monitor");
 const {
@@ -157,6 +159,50 @@ try {
   assert(
     OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST.some((item) => item.docId === "immigration-law-recent-promulgations" && item.legalPriority === 1),
     "recent promulgation monitor must be top legal priority"
+  );
+  const cronSources = getCronOfficialKnowledgeSources({ NODE_ENV: "test" } as NodeJS.ProcessEnv);
+  assert(
+    cronSources.length === DEFAULT_CRON_KNOWLEDGE_SOURCE_IDS.length,
+    "daily Vercel cron should use the bounded critical-source set",
+  );
+  const configuredCronSources = getCronOfficialKnowledgeSources({
+    NODE_ENV: "test",
+    KNOWLEDGE_MONITOR_CRON_SOURCE_IDS: "visa-portal-visa-types,unknown-source",
+  } as NodeJS.ProcessEnv);
+  assert(
+    configuredCronSources.length === 1 && configuredCronSources[0]?.docId === "visa-portal-visa-types",
+    "cron source override should preserve known IDs and ignore unknown IDs",
+  );
+
+  let activeFetches = 0;
+  let maxActiveFetches = 0;
+  const concurrencySources: OfficialKnowledgeSource[] = ["a", "b", "c"].map((suffix) => ({
+    docId: `monitor-concurrency-${suffix}`,
+    title: `Monitor concurrency ${suffix}`,
+    sourceUrl: `https://www.law.go.kr/monitor-concurrency-${suffix}`,
+    sourceType: "official_law",
+    topic: "legal",
+  }));
+  const concurrencyRun = await runOfficialKnowledgeSourceMonitor({
+    actor: "test-monitor",
+    persistCandidates: false,
+    sources: concurrencySources,
+    concurrency: 2,
+    fetchImpl: async () => {
+      activeFetches += 1;
+      maxActiveFetches = Math.max(maxActiveFetches, activeFetches);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      activeFetches -= 1;
+      return new Response("<html><body>concurrency test</body></html>", {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    },
+  });
+  assert(maxActiveFetches === 2, "knowledge monitor should honor bounded concurrency");
+  assert(
+    concurrencyRun.results.map((result) => result.docId).join(",") === concurrencySources.map((source) => source.docId).join(","),
+    "concurrent monitor should preserve source result order",
   );
 
   const source: OfficialKnowledgeSource = {

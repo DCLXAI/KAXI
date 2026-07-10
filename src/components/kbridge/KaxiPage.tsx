@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Header } from "@/components/kbridge/Header";
 import { Landing } from "@/components/kbridge/Landing";
 import { Diagnosis } from "@/components/kbridge/Diagnosis";
@@ -13,15 +14,16 @@ import { Admin } from "@/components/kbridge/Admin";
 import { Synonyms } from "@/components/kbridge/Synonyms";
 import { Consult } from "@/components/kbridge/Consult";
 import { Agent } from "@/components/kbridge/Agent";
-import { AIAssistant } from "@/components/kbridge/AIAssistant";
 import { useLangStore } from "@/store/kbridge";
 import { tr, type Lang } from "@/lib/i18n/translations";
 import { isViewKey, viewToPath, type ViewKey } from "@/lib/kbridge/views";
+import { publicLegalCopy } from "@/lib/legal/public-legal-copy";
 
 export function KaxiPage({ view, locale }: { view: ViewKey; locale?: Lang }) {
   const router = useRouter();
   const { lang, setLang } = useLangStore();
   const activeLang = locale ?? lang;
+  const legalCopy = publicLegalCopy(activeLang);
 
   useEffect(() => {
     if (locale && locale !== lang) setLang(locale);
@@ -69,15 +71,15 @@ export function KaxiPage({ view, locale }: { view: ViewKey; locale?: Lang }) {
               <div className="text-xs text-muted-foreground">
                 © 2026 KAXI · Broker-free Korea Study Preparation
               </div>
-              <div className="text-xs text-muted-foreground">
-                MVP Demo · 7/22 deadline
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+                <Link href={`/${activeLang}/privacy`} className="hover:text-foreground hover:underline">{legalCopy.privacyLink}</Link>
+                <Link href={`/${activeLang}/terms`} className="hover:text-foreground hover:underline">{legalCopy.termsLink}</Link>
               </div>
             </div>
           </div>
         </footer>
       )}
 
-      {view !== "consult" && view !== "agent" && <AIAssistant />}
     </div>
   );
 }

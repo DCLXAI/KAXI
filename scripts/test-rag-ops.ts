@@ -26,6 +26,7 @@ async function createKnowledgeDoc(
     reviewStatus: "APPROVED" | "REJECTED" | "PENDING";
     supersededBy?: string | null;
     sourceUrl?: string;
+    lastCheckedAt?: Date;
   }
 ) {
   return db.knowledgeDocument.create({
@@ -39,7 +40,7 @@ async function createKnowledgeDoc(
       topic: "visa",
       validFrom: new Date("2026-01-01T00:00:00.000Z"),
       validTo: null,
-      lastCheckedAt: new Date("2026-07-01T00:00:00.000Z"),
+      lastCheckedAt: input.lastCheckedAt || new Date("2026-07-01T00:00:00.000Z"),
       checkedBy: "test_agent",
       reviewStatus: input.reviewStatus,
       supersedes: [],
@@ -71,12 +72,17 @@ const {
 } = await import("../src/lib/knowledge/repository");
 const { buildRagBasisNotice, getRagDocumentMetadata } = await import("../src/lib/data/knowledge");
 const { hybridSearch } = await import("../src/lib/embeddings/vector-store");
-const { getPgvectorStats } = await import("../src/lib/embeddings/pgvector-rag");
+const { getPgvectorStats, PGVECTOR_EMBEDDING_DIM, PGVECTOR_EMBEDDING_MODEL } = await import("../src/lib/embeddings/pgvector-rag");
+
+function vectorLiteral(dim: number): string {
+  return `[${Array.from({ length: dim }, (_, index) => (index === 0 ? "1" : "0")).join(",")}]`;
+}
 
 try {
   const approvedContent = "phase7-approved-needle 공식 유학생 비자 승인 문서";
   const rejectedContent = "phase7-rejected-needle 폐기된 문서는 검색되면 안 됩니다";
   const supersededContent = "phase7-superseded-needle 대체된 문서는 검색되면 안 됩니다";
+  const staleContent = "phase7-stale-needle 오래된 공식 문서는 검색되면 안 됩니다";
 
   await createKnowledgeDoc(db, {
     docId: "phase7-approved-doc",
@@ -97,6 +103,26 @@ try {
     reviewStatus: "APPROVED",
     supersededBy: "phase7-approved-doc",
   });
+  await createKnowledgeDoc(db, {
+    docId: "phase7-stale-doc",
+    title: "Phase 7 stale RAG document",
+    content: staleContent,
+    reviewStatus: "APPROVED",
+    lastCheckedAt: new Date("2026-01-01T00:00:00.000Z"),
+  });
+  await db.$executeRawUnsafe(
+    `UPDATE "KnowledgeChunk"
+     SET embedding = $1::vector,
+         "embeddingModel" = $2,
+         "embeddingDim" = $3
+     WHERE "documentId" IN (
+       SELECT id FROM "KnowledgeDocument"
+       WHERE "docId" IN ('phase7-approved-doc', 'phase7-stale-doc')
+     )`,
+    vectorLiteral(PGVECTOR_EMBEDDING_DIM),
+    PGVECTOR_EMBEDDING_MODEL,
+    PGVECTOR_EMBEDDING_DIM
+  );
 
   const rule = await db.complianceRule.create({
     data: {
@@ -145,6 +171,7 @@ try {
   assert(approvedDocs.some((doc) => doc.id === "phase7-approved-doc"), "approved document should be production RAG eligible");
   assert(!approvedDocs.some((doc) => doc.id === "phase7-rejected-doc"), "rejected document must not be production RAG eligible");
   assert(!approvedDocs.some((doc) => doc.id === "phase7-superseded-doc"), "superseded document must not be production RAG eligible");
+  assert(!approvedDocs.some((doc) => doc.id === "phase7-stale-doc"), "stale approved document must not be production RAG eligible");
 
   const approvedResults = await hybridSearch("phase7-approved-needle", { topK: 5 });
   assert(
@@ -161,6 +188,32 @@ try {
     !supersededResults.some((result) => result.doc.id === "phase7-superseded-doc"),
     "superseded document must not be searchable"
   );
+  const staleResults = await hybridSearch("phase7-stale-needle", { topK: 5 });
+  assert(
+    !staleResults.some((result) => result.doc.id === "phase7-stale-doc"),
+    "stale approved document must not be searchable"
+  );
+  const pgvectorRows = await db.$queryRawUnsafe<Array<{ doc_id: string }>>(
+    `SELECT doc_id
+     FROM kaxi_hybrid_knowledge_search(
+       $1::vector,
+       $2,
+       ARRAY['ko']::text[],
+       10,
+       40,
+       40,
+       $3,
+       $4::int,
+       92
+     )`,
+    vectorLiteral(PGVECTOR_EMBEDDING_DIM),
+    "phase7:* | approved:* | stale:* | needle:*",
+    PGVECTOR_EMBEDDING_MODEL,
+    PGVECTOR_EMBEDDING_DIM
+  );
+  const pgvectorDocIds = pgvectorRows.map((row) => row.doc_id);
+  assert(pgvectorDocIds.includes("phase7-approved-doc"), "fresh approved document should be pgvector searchable");
+  assert(!pgvectorDocIds.includes("phase7-stale-doc"), "stale approved document must be excluded by pgvector freshness guard");
 
   const approvedDoc = approvedDocs.find((doc) => doc.id === "phase7-approved-doc");
   assert(approvedDoc, "approved document should be loaded");
@@ -217,7 +270,7 @@ try {
 
   const stats = await getPgvectorStats();
   assert(stats.approvedDocuments > 0, "pgvector store should report approved docs");
-  console.log("PASS RAG ops: approved-only search, superseded blocking, source notice, impact, diff-only");
+  console.log("PASS RAG ops: approved-only search, stale/superseded blocking, source notice, impact, diff-only");
 } finally {
   await db.$disconnect();
   rmSync(tmpDir, { recursive: true, force: true });

@@ -66,7 +66,7 @@ let store: VectorStore = {
 
 const CACHE_FILE =
   process.env.VECTOR_CACHE_FILE ||
-  path.join(process.cwd(), "data", "vector-store", "embeddings-cache.json");
+  path.join(/*turbopackIgnore: true*/ process.cwd(), "data", "vector-store", "embeddings-cache.json");
 
 function vectorCacheLocation(): "custom" | "project-data" {
   return process.env.VECTOR_CACHE_FILE?.trim() ? "custom" : "project-data";
@@ -83,7 +83,7 @@ function sanitizeDiagnosticText(value: unknown): string {
 
 function getVectorCacheDiagnostics() {
   try {
-    if (!fs.existsSync(CACHE_FILE)) {
+    if (!fs.existsSync(/*turbopackIgnore: true*/ CACHE_FILE)) {
       return {
         configured: Boolean(process.env.VECTOR_CACHE_FILE?.trim()),
         location: vectorCacheLocation(),
@@ -93,8 +93,8 @@ function getVectorCacheDiagnostics() {
       };
     }
 
-    const stat = fs.statSync(CACHE_FILE);
-    const parsed = JSON.parse(fs.readFileSync(CACHE_FILE, "utf-8"));
+    const stat = fs.statSync(/*turbopackIgnore: true*/ CACHE_FILE);
+    const parsed = JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ CACHE_FILE, "utf-8"));
     const entries = parsed && typeof parsed === "object" && !Array.isArray(parsed)
       ? Object.keys(parsed).length
       : 0;
@@ -234,8 +234,8 @@ async function embedDoc(doc: KnowledgeDoc): Promise<EmbeddingVector> {
 // 캐시에서 로드
 function loadCache(): Record<string, number[]> | null {
   try {
-    if (fs.existsSync(CACHE_FILE)) {
-      const data = fs.readFileSync(CACHE_FILE, "utf-8");
+    if (fs.existsSync(/*turbopackIgnore: true*/ CACHE_FILE)) {
+      const data = fs.readFileSync(/*turbopackIgnore: true*/ CACHE_FILE, "utf-8");
       return JSON.parse(data);
     }
   } catch (e) {
@@ -247,8 +247,8 @@ function loadCache(): Record<string, number[]> | null {
 // 캐시에 저장
 function saveCache(cache: Record<string, number[]>): void {
   try {
-    fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true });
-    fs.writeFileSync(CACHE_FILE, JSON.stringify(cache));
+    fs.mkdirSync(path.dirname(/*turbopackIgnore: true*/ CACHE_FILE), { recursive: true });
+    fs.writeFileSync(/*turbopackIgnore: true*/ CACHE_FILE, JSON.stringify(cache));
     console.log(`[VectorStore] Cache saved: ${Object.keys(cache).length} embeddings`);
   } catch (e) {
     console.error("[VectorStore] Cache save error:", e);

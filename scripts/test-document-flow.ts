@@ -28,6 +28,8 @@ process.env.DOCUMENT_UPLOAD_DIR = join(tmpDir, "uploads");
 process.env.ADMIN_API_KEY = "test-admin-key";
 process.env.DATA_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 process.env.PII_HASH_SECRET = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+process.env.AI_PROVIDER = "kimi";
+process.env.OPENAI_API_KEY = "";
 prepareTestDb("document flow");
 
 const { NextRequest } = await import("next/server");
@@ -39,10 +41,16 @@ const reviewRoute = await import("../src/app/api/admin/documents/[id]/review/rou
 const { getDocumentWorkspaceIssue } = await import("../src/lib/documents/workspace-availability");
 const {
   getDocumentStorageInfo,
+  localUploadPath,
   persistSupabaseUploadedBytes,
   readSupabaseUploadedBytes,
 } = await import("../src/lib/documents/storage");
 const { processDocumentOcr } = await import("../src/lib/documents/ocr");
+const { VISA_DOCUMENT_REQUIREMENT_SEEDS } = await import("../src/lib/documents/visa-document-matrix");
+
+function cloneJson(value: unknown) {
+  return JSON.parse(JSON.stringify(value));
+}
 
 function request(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers || {});
@@ -66,6 +74,76 @@ function adminRequest(path: string, init: RequestInit = {}) {
 }
 
 try {
+  await db.chatSession.create({
+    data: {
+      id: "queue-session-row",
+      sessionKey: "queue-session-test",
+      source: "kaxi-site",
+      channel: "kaxi-site",
+    },
+  });
+  await db.chatAttachment.create({
+    data: {
+      id: "queue-attachment-test",
+      sessionKey: "queue-session-test",
+      bucket: "test-private-bucket",
+      storageKey: "chat-attachments/quarantine/queue-test.pdf",
+      originalName: "queue-test.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 128,
+      sha256: "a".repeat(64),
+    },
+  });
+  await db.chatAttachmentJob.create({
+    data: { attachmentId: "queue-attachment-test" },
+  });
+  const firstClaim = await db.$queryRaw<Array<{ status: string; attempts: number; lock_token: string | null }>>`
+    SELECT status, attempts, lock_token
+    FROM public.kaxi_claim_chat_attachment_jobs(1, 120)
+  `;
+  assert(
+    firstClaim.length === 1 && firstClaim[0]?.status === "processing" && firstClaim[0]?.attempts === 1 && firstClaim[0]?.lock_token,
+    "attachment queue should atomically claim a queued job with a lease token",
+  );
+  const duplicateClaim = await db.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM public.kaxi_claim_chat_attachment_jobs(1, 120)
+  `;
+  assert(duplicateClaim.length === 0, "freshly leased attachment job must not be claimed twice");
+  await db.chatAttachmentJob.update({
+    where: { attachmentId: "queue-attachment-test" },
+    data: { lockedAt: new Date(Date.now() - 5 * 60 * 1000) },
+  });
+  const reclaimed = await db.$queryRaw<Array<{ attempts: number }>>`
+    SELECT attempts FROM public.kaxi_claim_chat_attachment_jobs(1, 30)
+  `;
+  assert(reclaimed[0]?.attempts === 2, "expired attachment job lease should be reclaimable");
+  await db.chatSession.delete({ where: { sessionKey: "queue-session-test" } });
+
+  assert(
+    localUploadPath("student/passport.pdf").startsWith(process.env.DOCUMENT_UPLOAD_DIR!),
+    "local storage keys should resolve inside the upload root",
+  );
+  let traversalBlocked = false;
+  try {
+    localUploadPath("../outside.pdf");
+  } catch {
+    traversalBlocked = true;
+  }
+  assert(traversalBlocked, "local storage should reject path traversal keys");
+
+  const passportRequirement = VISA_DOCUMENT_REQUIREMENT_SEEDS.find((seed) => seed.code === "d2_issuance_passport");
+  assert(passportRequirement, "test setup should include D-2 passport requirement seed");
+  await db.visaDocumentRequirement.create({
+    data: {
+      ...passportRequirement,
+      reviewStatus: "APPROVED",
+      lastCheckedAt: new Date(passportRequirement.lastCheckedAt),
+      sourceRefs: cloneJson(passportRequirement.sourceRefs),
+      requiredFields: cloneJson(passportRequirement.requiredFields),
+      validationRules: cloneJson(passportRequirement.validationRules),
+    },
+  });
+
   const blockedHostedUpload = getDocumentWorkspaceIssue("upload", {
     ...process.env,
     VERCEL: "1",

@@ -2,13 +2,14 @@ import { DocumentStatus, Prisma, ReviewStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { recordAuditLog } from "@/lib/audit";
 import {
-  ClaudeNotConfiguredError,
-  generateClaudeJson,
-  getAnthropicModel,
-  isClaudeNotConfiguredError,
-} from "@/lib/ai/claude-gateway";
+  LlmNotConfiguredError,
+  generateLlmJson,
+  getLlmModel,
+  isLlmNotConfiguredError,
+} from "@/lib/ai/llm-gateway";
 import { encryptDocumentOcrPayload } from "@/lib/documents/crypto";
 import { readUploadedBytes } from "@/lib/documents/storage";
+import { verifyDocumentItem } from "@/lib/documents/verification";
 
 export interface DocumentOcrContext {
   actor: string;
@@ -27,6 +28,7 @@ export interface OcrExtraction {
   } | null;
   financialProof?: {
     bankName?: string | null;
+    holderName?: string | null;
     balanceAmount?: number | null;
     currency?: string | null;
     issueDate?: string | null;
@@ -81,6 +83,7 @@ function redactedExtraction(extraction: OcrExtraction) {
     financialProof: extraction.financialProof
       ? {
           bankName: extraction.financialProof.bankName || null,
+          holderName: redactName(extraction.financialProof.holderName),
           balanceAmount: extraction.financialProof.balanceAmount ?? null,
           currency: extraction.financialProof.currency || null,
           issueDate: extraction.financialProof.issueDate || null,
@@ -208,6 +211,7 @@ const OCR_SCHEMA = {
           additionalProperties: false,
           properties: {
             bankName: { type: ["string", "null"] },
+            holderName: { type: ["string", "null"] },
             balanceAmount: { type: ["number", "null"] },
             currency: { type: ["string", "null"] },
             issueDate: { type: ["string", "null"], description: "YYYY-MM-DD when visible" },
@@ -233,7 +237,7 @@ const OCR_SCHEMA = {
   },
 };
 
-async function extractWithClaude(input: {
+async function extractWithLlm(input: {
   documentType: string;
   mimeType: string;
   bytes: Buffer;
@@ -251,7 +255,7 @@ async function extractWithClaude(input: {
     },
   };
 
-  return generateClaudeJson<OcrExtraction>({
+  return generateLlmJson<OcrExtraction>({
     feature: "structured",
     maxTokens: 1000,
     temperature: 0,
@@ -299,7 +303,7 @@ export async function processDocumentOcr(documentItemId: string, context: Docume
 
   try {
     const bytes = await readUploadedBytes(existing.file.storageKey);
-    const extraction = await extractWithClaude({
+    const extraction = await extractWithLlm({
       documentType: existing.documentType,
       mimeType: existing.file.mimeType,
       bytes,
@@ -322,11 +326,19 @@ export async function processDocumentOcr(documentItemId: string, context: Docume
         ocrExtractedCiphertext: ciphertext,
         ocrExtractedRedacted: jsonValue(redactedExtraction(extraction)),
         ocrValidation: jsonValue(validation),
-        ocrModel: process.env.DOCUMENT_OCR_MOCK_RESPONSE_JSON ? "mock" : getAnthropicModel(),
+        ocrModel: process.env.DOCUMENT_OCR_MOCK_RESPONSE_JSON ? "mock" : getLlmModel(),
         ocrProcessedAt: new Date(),
       },
       include: { file: true },
     });
+    const verification = await verifyDocumentItem(updated.id, {
+      persist: true,
+      enableLlm: false,
+      enableRag: false,
+    }).catch((error) => ({
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    }));
     await auditDocumentOcr({
       documentItemId,
       studentProfileId: existing.studentProfileId,
@@ -334,13 +346,13 @@ export async function processDocumentOcr(documentItemId: string, context: Docume
       status: updated.status,
       reviewStatus: updated.reviewStatus,
       context,
-      metadata: { validation, model: updated.ocrModel },
+      metadata: { validation, verification, model: updated.ocrModel },
     });
-    return updated;
+    return db.documentItem.findUniqueOrThrow({ where: { id: documentItemId }, include: { file: true } });
   } catch (err) {
-    const missingClaude = err instanceof ClaudeNotConfiguredError || isClaudeNotConfiguredError(err);
-    const message = missingClaude
-      ? "OCR skipped: ANTHROPIC_API_KEY is not configured"
+    const missingLlm = err instanceof LlmNotConfiguredError || isLlmNotConfiguredError(err);
+    const message = missingLlm
+      ? "OCR skipped: the selected LLM API key is not configured"
       : `OCR needs manual review: ${err instanceof Error ? err.message : String(err)}`.slice(0, 1000);
     const updated = await db.documentItem.update({
       where: { id: documentItemId },
@@ -350,10 +362,10 @@ export async function processDocumentOcr(documentItemId: string, context: Docume
         reviewNote: message,
         ocrValidation: jsonValue({
           ok: false,
-          issues: [missingClaude ? "anthropic_not_configured" : "ocr_processing_failed"],
+          issues: [missingLlm ? "llm_not_configured" : "ocr_processing_failed"],
           checkedAt: new Date().toISOString(),
         }),
-        ocrModel: missingClaude ? null : getAnthropicModel(),
+        ocrModel: missingLlm ? null : getLlmModel(),
         ocrProcessedAt: new Date(),
       },
       include: { file: true },
@@ -361,7 +373,7 @@ export async function processDocumentOcr(documentItemId: string, context: Docume
     await auditDocumentOcr({
       documentItemId,
       studentProfileId: existing.studentProfileId,
-      action: missingClaude ? "document.ocr_skipped" : "document.ocr_failed",
+      action: missingLlm ? "document.ocr_skipped" : "document.ocr_failed",
       status: updated.status,
       reviewStatus: updated.reviewStatus,
       context,

@@ -1,7 +1,7 @@
-// @xenova/transformers 로드 테스트
+// @huggingface/transformers 로드 테스트
 // 다국어 sentence-transformer 모델 다운로드 + 임베딩 생성 검증
 
-import { pipeline, env } from "@xenova/transformers";
+import { pipeline, env } from "@huggingface/transformers";
 import { resolveModelCacheDir } from "../src/lib/embeddings/transformer-embedder";
 
 // 로컬 캐시 사용 (재다운로드 방지)
@@ -27,7 +27,7 @@ async function main() {
     const extractor = await pipeline(
       "feature-extraction",
       modelName,
-      { quantized: true } // 양자화 버전 (용량 절반, 속도 빠름)
+      { dtype: "q8" } // 양자화 버전 (용량 절반, 속도 빠름)
     );
     const loadTime = ((Date.now() - startTime) / 1000).toFixed(2);
     console.log(`✅ 모델 로드 완료 (${loadTime}s)\n`);

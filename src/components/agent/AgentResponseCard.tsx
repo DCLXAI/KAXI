@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, BookOpen, Bot, Brain, Sparkles, Wrench } from "lucide-react";
+import { ArrowRight, BookOpen, Bot, Brain, Database, Sparkles, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MessageResponse } from "@/components/ai-elements/message";
 import {
@@ -54,6 +54,15 @@ export function AgentResponseCard({
           <Badge variant="outline" className="text-[10px] gap-0.5">
             <Sparkles className="h-2.5 w-2.5" />
             {backendLabel(message.backend)}
+          </Badge>
+        )}
+        {message.meta?.quality.retrievalBackends && message.meta.quality.retrievalBackends.length > 0 && (
+          <Badge
+            variant={message.meta.quality.retrievalBackends.includes("pgvector") ? "default" : "outline"}
+            className="text-[10px] gap-0.5"
+          >
+            <Database className="h-2.5 w-2.5" />
+            {message.meta.quality.retrievalBackends.join("/")}
           </Badge>
         )}
         {message.grounded && (

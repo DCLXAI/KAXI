@@ -58,6 +58,7 @@ server.log
 /skills/
 
 # local runtime artifacts
+/.tmp/
 /data/model-cache/
 /data/vector-store/
 /db/*.db

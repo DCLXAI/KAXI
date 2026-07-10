@@ -54,18 +54,12 @@ type SupabaseJsModule = {
   createClient: (...args: unknown[]) => SupabaseClientLike;
 };
 
-async function loadModule<T>(moduleName: string): Promise<T> {
-  try {
-    return (await import(moduleName)) as T;
-  } catch {
-    throw new SupabaseSdkUnavailableError(moduleName);
-  }
-}
-
 export async function loadSupabaseSsr(): Promise<SupabaseSsrModule> {
-  return loadModule<SupabaseSsrModule>("@supabase/ssr");
+  return { createServerClient: createServerClient as unknown as SupabaseSsrModule["createServerClient"] };
 }
 
 export async function loadSupabaseJs(): Promise<SupabaseJsModule> {
-  return loadModule<SupabaseJsModule>("@supabase/supabase-js");
+  return { createClient: createClient as unknown as SupabaseJsModule["createClient"] };
 }
+import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";

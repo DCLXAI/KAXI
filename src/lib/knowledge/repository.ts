@@ -12,6 +12,8 @@ import {
   type ReviewStatus,
   type SourceType,
 } from "@/lib/data/knowledge";
+import { isKnowledgeReviewCurrent, knowledgeReviewAfterDate } from "@/lib/knowledge/freshness";
+import { isOfficialKnowledgeSource } from "@/lib/knowledge/official-source";
 
 type KnowledgeDocumentWithChunks = Prisma.KnowledgeDocumentGetPayload<{
   include: { chunks: true };
@@ -74,6 +76,7 @@ interface KnowledgeMutationInput {
   topic?: string;
   supersedes?: unknown;
   supersededBy?: string | null;
+  chunkMaxChars?: number;
   now?: Date;
 }
 
@@ -130,15 +133,8 @@ function toDateOnly(value: Date | string | null | undefined): string | null {
   return dateInKorea(date);
 }
 
-function addDays(date: Date, days: number): Date {
-  const next = new Date(date);
-  next.setUTCDate(next.getUTCDate() + days);
-  return next;
-}
-
 function reviewAfterDate(lastCheckedAt: Date): string {
-  const days = Number.parseInt(process.env.KNOWLEDGE_REVIEW_AFTER_DAYS || "92", 10);
-  return toDateOnly(addDays(lastCheckedAt, Number.isFinite(days) && days > 0 ? days : 92)) || "2099-12-31";
+  return toDateOnly(knowledgeReviewAfterDate(lastCheckedAt)) || "2099-12-31";
 }
 
 function normalizeSourceType(value: string | null | undefined): SourceType {
@@ -226,8 +222,8 @@ function sourceLabelFromUrl(sourceUrl: string, fallback: string): string {
   return fallback;
 }
 
-function sourceOwner(sourceType: SourceType): "official" | "internal" {
-  return sourceType.startsWith("official_") ? "official" : "internal";
+function sourceOwner(sourceType: SourceType, sourceUrl: string): "official" | "internal" {
+  return isOfficialKnowledgeSource({ sourceType, sourceUrl }) ? "official" : "internal";
 }
 
 const MONITOR_CANDIDATE_SUFFIX_RE = /__candidate__[a-f0-9]{12,}$/i;
@@ -270,7 +266,7 @@ export function toRagMetadataFromDocument(
     superseded_by: document.supersededBy,
     review_after: reviewAfterDate(document.lastCheckedAt),
     source_label: sourceLabelFromUrl(document.sourceUrl, document.title),
-    owner: sourceOwner(sourceType),
+    owner: sourceOwner(sourceType, document.sourceUrl),
   };
 }
 
@@ -319,6 +315,7 @@ function isApprovedCurrent(document: KnowledgeDocumentWithChunks, now = new Date
     !document.supersededBy &&
     document.validFrom.getTime() <= now.getTime() &&
     (!document.validTo || document.validTo.getTime() >= now.getTime()) &&
+    isKnowledgeReviewCurrent(document.lastCheckedAt, now) &&
     document.chunks.length > 0
   );
 }
@@ -395,6 +392,21 @@ function existingDocumentContent(document: KnowledgeDocumentWithChunks | null | 
     .map((chunk) => chunk.content.trim())
     .filter(Boolean)
     .join("\n\n") || undefined;
+}
+
+function candidateChunksFor(
+  input: KnowledgeMutationInput,
+  candidate: KnowledgeCandidate,
+  existing?: KnowledgeDocumentWithChunks | null
+): string[] {
+  if (input.content === undefined && input.chunkMaxChars === undefined && existing?.chunks.length) {
+    return existing.chunks
+      .slice()
+      .sort((a, b) => a.chunkIndex - b.chunkIndex)
+      .map((chunk) => chunk.content.trim())
+      .filter(Boolean);
+  }
+  return splitKnowledgeChunks(candidate.content, input.chunkMaxChars);
 }
 
 function candidateFromInput(
@@ -511,7 +523,7 @@ export async function analyzeKnowledgeDocumentDiff(input: KnowledgeMutationInput
     include: { chunks: { orderBy: { chunkIndex: "asc" } } },
   });
   const candidate = candidateFromInput(input, existing);
-  const candidateChunks = splitKnowledgeChunks(candidate.content);
+  const candidateChunks = candidateChunksFor(input, candidate, existing);
   const candidateHashes = new Set(candidateChunks.map(hashText));
   const currentHashes = new Set((existing?.chunks || []).map((chunk) => chunk.contentHash));
   const addedChunks = Array.from(candidateHashes).filter((hash) => !currentHashes.has(hash)).length;
@@ -552,7 +564,7 @@ export async function upsertPendingKnowledgeCandidate(input: KnowledgeMutationIn
     };
   }
   const candidate = candidateFromInput({ ...input, now }, existing);
-  const chunks = splitKnowledgeChunks(candidate.content);
+  const chunks = candidateChunksFor(input, candidate, existing);
   const diff = await analyzeKnowledgeDocumentDiff({ ...input, now });
 
   const document = await db.$transaction(async (tx) => {
@@ -620,8 +632,15 @@ export async function approveKnowledgeDocument(input: KnowledgeMutationInput): P
     include: { chunks: { orderBy: { chunkIndex: "asc" } } },
   });
   const candidate = candidateFromInput({ ...input, now }, existing);
-  const chunks = splitKnowledgeChunks(candidate.content);
+  const chunks = candidateChunksFor(input, candidate, existing);
   const diff = await analyzeKnowledgeDocumentDiff({ ...input, now });
+  const canReuseExistingChunks = Boolean(
+    existing?.chunks.length &&
+      input.content === undefined &&
+      input.chunkMaxChars === undefined &&
+      existing.chunks.length === chunks.length &&
+      existing.chunks.every((chunk, index) => chunk.contentHash === hashText(chunks[index]))
+  );
 
   const document = await db.$transaction(async (tx) => {
     const saved = await tx.knowledgeDocument.upsert({
@@ -659,15 +678,17 @@ export async function approveKnowledgeDocument(input: KnowledgeMutationInput): P
       },
     });
 
-    await tx.knowledgeChunk.deleteMany({ where: { documentId: saved.id } });
-    await tx.knowledgeChunk.createMany({
-      data: chunks.map((content, chunkIndex) => ({
-        documentId: saved.id,
-        chunkIndex,
-        content,
-        contentHash: hashText(content),
-      })),
-    });
+    if (!canReuseExistingChunks || existing?.id !== saved.id) {
+      await tx.knowledgeChunk.deleteMany({ where: { documentId: saved.id } });
+      await tx.knowledgeChunk.createMany({
+        data: chunks.map((content, chunkIndex) => ({
+          documentId: saved.id,
+          chunkIndex,
+          content,
+          contentHash: hashText(content),
+        })),
+      });
+    }
 
     if (candidate.supersedes.length > 0) {
       const rows = await tx.knowledgeDocument.findMany({

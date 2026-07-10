@@ -88,7 +88,9 @@ export function redactSensitiveText(value: string | null | undefined): string {
   const text = value || "";
   return text
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted-email]")
-    .replace(/\b(?:\+?\d[\d\s().-]{7,}\d)\b/g, "[redacted-phone]")
+    .replace(/\b(?:\+?\d[\d\s().-]{7,}\d)\b/g, (candidate) =>
+      /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : "[redacted-phone]"
+    )
     .replace(/\b(?:zalo|wechat|telegram|kakao|line)\s*[:：]?\s*[\w@.+-]{3,}/gi, "[redacted-contact]");
 }
 

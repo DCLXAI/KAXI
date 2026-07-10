@@ -1,12 +1,31 @@
 name: Vercel Production Deploy
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: kaxi-production
+  cancel-in-progress: false
+
 jobs:
+  verify-manual-deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    uses: ./.github/workflows/ci.yml
+
   deploy:
+    needs: [verify-manual-deploy]
+    if: >-
+      ${{
+        always() &&
+        (
+          (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+          (github.event_name == 'workflow_dispatch' && needs.verify-manual-deploy.result == 'success')
+        )
+      }}
     runs-on: ubuntu-latest
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -18,6 +37,7 @@ jobs:
       NEXTAUTH_URL: https://kaxi.vercel.app
       NEXTAUTH_URL_INTERNAL: https://kaxi.vercel.app
       KAXI_PRISMA_PROVIDER: postgresql
+      EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
     steps:
       - name: Require Vercel deployment secrets
         if: ${{ env.VERCEL_TOKEN == '' || env.VERCEL_ORG_ID == '' || env.VERCEL_PROJECT_ID == '' }}
@@ -37,6 +57,13 @@ jobs:
           [ -z "$PRISMA_DATABASE_URL" ] || echo "::add-mask::$PRISMA_DATABASE_URL"
       - uses: actions/checkout@v4
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      - name: Verify deployment commit
+        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
       - uses: oven-sh/setup-bun@v2
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
         with:
@@ -44,6 +71,9 @@ jobs:
       - name: Install dependencies
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
         run: bun install --frozen-lockfile
+      - name: Verify reproducible release source
+        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
+        run: bun run release:check:source -- --expected-sha "$EXPECTED_SHA"
       - name: Pull Vercel production environment
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
         run: bunx vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
@@ -59,6 +89,15 @@ jobs:
       - name: Inject runtime environment into prebuilt functions
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
         run: bun run scripts/inject-vercel-runtime-env.ts
-      - name: Deploy prebuilt output to production
+      - name: Deploy production canary without assigning domains
+        id: deploy
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
-        run: bunx vercel deploy --prebuilt --archive=tgz --prod --token="$VERCEL_TOKEN"
+        run: |
+          DEPLOYMENT_URL="$(bunx vercel deploy --prebuilt --archive=tgz --prod --skip-domain --meta "kaxiReleaseSha=$EXPECTED_SHA" --meta "kaxiSourceClean=1" --token="$VERCEL_TOKEN")"
+          echo "url=$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
+      - name: Verify production canary end to end
+        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
+        run: bun run release:check:backend -- --base-url "${{ steps.deploy.outputs.url }}"
+      - name: Promote verified canary to production domains
+        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
+        run: bunx vercel promote "${{ steps.deploy.outputs.url }}" --yes --token="$VERCEL_TOKEN"

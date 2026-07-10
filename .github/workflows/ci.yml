@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
 
 jobs:
   verify:
@@ -30,6 +31,10 @@ jobs:
       RESTORE_MODEL_CACHE_ON_INSTALL: "true"
       TRANSFORMERS_ALLOW_REMOTE: "false"
       TRANSFORMERS_ALLOW_LOCAL: "true"
+      AI_PROVIDER: "kimi"
+      OPENAI_API_KEY: ""
+      OPENAI_BASE_URL: "https://api.moonshot.ai/v1"
+      OPENAI_MODEL: "kimi-k2.6"
       ANTHROPIC_API_KEY: ""
       ANTHROPIC_MODEL: "claude-opus-4-8"
       AI_ALLOW_LLM_FALLBACK: "true"

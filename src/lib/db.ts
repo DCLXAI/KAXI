@@ -31,6 +31,30 @@ function isPostgresUrl(value: string | undefined): value is string {
   return /^postgres(?:ql)?:\/\//i.test((value || "").trim());
 }
 
+function postgresHostname(value: string) {
+  try {
+    return new URL(value).hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+export function isSharedPostgresUrl(value: string | undefined) {
+  if (!isPostgresUrl(value)) return false;
+  const hostname = postgresHostname(value);
+  if (!hostname) return false;
+  if (
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname === "::1" ||
+    hostname === "0.0.0.0" ||
+    /^127(?:\.\d{1,3}){3}$/.test(hostname)
+  ) {
+    return false;
+  }
+  return hostname.includes(".") || hostname.includes(":") || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname);
+}
+
 function databaseUrlFromEnv(env: NodeJS.ProcessEnv) {
   const databaseUrl = env.DATABASE_URL?.trim();
   const postgresUrl = env.POSTGRES_URL?.trim();
@@ -90,15 +114,21 @@ export function getRuntimeDatabaseInfo(env: NodeJS.ProcessEnv = process.env): Ru
     };
   }
 
+  const sharedWritable = isSharedPostgresUrl(url);
+  const writable = !hostedRuntime || sharedWritable;
   return {
     kind: "postgresql",
     source,
     hostedRuntime,
-    writable: true,
-    sharedWritable: true,
+    writable,
+    sharedWritable,
     postgresqlConfigured: true,
     activePrismaProvider: "postgresql",
-    reason: "Supabase/PostgreSQL operational database is configured.",
+    reason: sharedWritable
+      ? "A shared PostgreSQL operational database is configured."
+      : hostedRuntime
+        ? "Hosted runtimes cannot use loopback or local-only PostgreSQL targets."
+        : "A local PostgreSQL development database is configured; it is not a shared operational database.",
   };
 }
 

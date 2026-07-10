@@ -6,7 +6,7 @@ import { useAdminApi } from "@/components/admin/AdminShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { AdminKnowledgeItem } from "@/lib/admin/types";
+import type { AdminKnowledgeItem, AdminKnowledgeReadiness } from "@/lib/admin/types";
 
 interface MonitorResult {
   checkedAt: string;
@@ -40,9 +40,14 @@ function formatDate(value: string | null) {
   return new Intl.DateTimeFormat("ko-KR", { year: "2-digit", month: "2-digit", day: "2-digit" }).format(new Date(value));
 }
 
+function todayDateInputValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export function AdminKnowledge() {
   const { adminFetch } = useAdminApi();
   const [documents, setDocuments] = useState<AdminKnowledgeItem[]>([]);
+  const [readiness, setReadiness] = useState<AdminKnowledgeReadiness | null>(null);
   const [diffByDocId, setDiffByDocId] = useState<Record<string, NonNullable<AdminKnowledgeItem["diff"]>>>({});
   const [source, setSource] = useState<"db" | "static">("db");
   const [loading, setLoading] = useState(true);
@@ -61,6 +66,7 @@ export function AdminKnowledge() {
       if (!res.ok) throw new Error(data.error || "지식 문서를 불러오지 못했습니다.");
       setDocuments(data.documents || []);
       setSource(data.source || "db");
+      setReadiness(data.readiness || null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -72,13 +78,23 @@ export function AdminKnowledge() {
     loadDocuments();
   }, [loadDocuments]);
 
+  const requestCandidateReview = () => {
+    const checkedBy = window.prompt("행정사 검수자 성명/자격번호를 입력하세요.");
+    if (!checkedBy?.trim()) return null;
+    const checkedAt = window.prompt("검수 확인일을 입력하세요. (YYYY-MM-DD)", todayDateInputValue());
+    if (!checkedAt?.trim()) return null;
+    return { checkedBy: checkedBy.trim(), checkedAt: checkedAt.trim() };
+  };
+
   const updateDocument = async (docId: string, action: "approve" | "discard" | "recheck" | "diff") => {
+    const review = action === "approve" && docId.includes("__candidate__") ? requestCandidateReview() : null;
+    if (action === "approve" && docId.includes("__candidate__") && !review) return;
     setSavingDocId(docId);
     setError(null);
     try {
       const res = await adminFetch("/api/admin/knowledge", {
         method: "PATCH",
-        body: JSON.stringify({ docId, action }),
+        body: JSON.stringify({ docId, action, ...review }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "문서 상태를 변경하지 못했습니다.");
@@ -123,8 +139,19 @@ export function AdminKnowledge() {
   const bulkUpdateCandidates = async (action: "approve" | "discard") => {
     const docIds = pendingCandidates.map((doc) => doc.docId);
     if (docIds.length === 0) return;
+    const review = action === "approve" ? requestCandidateReview() : null;
+    if (action === "approve" && !review) return;
+    const candidateReadiness = readiness?.candidateApproval;
     const message = action === "approve"
-      ? `검수 대기 후보 ${docIds.length}개를 production RAG에 승인 반영할까요?`
+      ? [
+          `검수 대기 후보 ${docIds.length}개를 production RAG에 승인 반영할까요?`,
+          "",
+          `후보 청크: ${candidateReadiness?.pendingCandidateEmbeddedChunks ?? "?"}/${candidateReadiness?.pendingCandidateChunks ?? "?"} embedded`,
+          `공식 후보 청크: ${candidateReadiness?.pendingOfficialCandidateEmbeddedChunks ?? "?"}/${candidateReadiness?.pendingOfficialCandidateChunks ?? "?"} embedded`,
+          `승인 후 예상 production 공식 청크: ${candidateReadiness?.projectedApprovedOfficialEmbeddedChunks ?? "?"}/${candidateReadiness?.minProjectedApprovedChunks ?? 500}`,
+          "",
+          "서버가 pending 후보 전체 포함, 실제 pgvector 임베딩, 500+ 공식 후보 청크 기준을 다시 검증합니다.",
+        ].join("\n")
       : `검수 대기 후보 ${docIds.length}개를 폐기할까요?`;
     if (!window.confirm(message)) return;
 
@@ -136,6 +163,7 @@ export function AdminKnowledge() {
         body: JSON.stringify({
           action: action === "approve" ? "bulkApproveCandidates" : "bulkDiscardCandidates",
           docIds,
+          ...review,
         }),
       });
       const data = await res.json();
@@ -152,6 +180,10 @@ export function AdminKnowledge() {
   const changedResults = monitorResult?.results.filter((item) => item.status === "changed") || [];
   const failedResults = monitorResult?.results.filter((item) => item.status === "failed") || [];
   const pendingCandidates = documents.filter((doc) => doc.reviewStatus === "PENDING" && doc.docId.includes("__candidate__"));
+  const candidateReadiness = readiness?.candidateApproval;
+  const corpusReadiness = readiness?.corpus;
+  const candidateReadyForBulkApproval = Boolean(candidateReadiness?.ok);
+  const productionCorpusReady = Boolean(corpusReadiness?.ok);
 
   return (
     <div className="space-y-5">
@@ -194,13 +226,50 @@ export function AdminKnowledge() {
             <div>
               <div className="font-medium">검수 대기 공식 후보 {pendingCandidates.length}개</div>
               <div className="mt-1 text-xs">승인하면 기존 문서를 supersede하고 production RAG에 반영됩니다. 폐기하면 검색 대상에서 제외됩니다.</div>
+              {candidateReadiness && (
+                <div className="mt-2 grid gap-1 text-xs sm:grid-cols-2 lg:grid-cols-5">
+                  <div>
+                    후보 청크 <span className="font-medium">{candidateReadiness.pendingCandidateChunks}</span>
+                  </div>
+                  <div>
+                    후보 임베딩 <span className={candidateReadiness.allPendingCandidateChunksEmbedded ? "font-medium text-emerald-700" : "font-medium text-destructive"}>
+                      {candidateReadiness.pendingCandidateEmbeddedChunks}/{candidateReadiness.pendingCandidateChunks}
+                    </span>
+                  </div>
+                  <div>
+                    공식 후보 <span className={candidateReadiness.allPendingOfficialCandidateChunksEmbedded ? "font-medium text-emerald-700" : "font-medium text-destructive"}>
+                      {candidateReadiness.pendingOfficialCandidateEmbeddedChunks}/{candidateReadiness.pendingOfficialCandidateChunks}
+                    </span>
+                  </div>
+                  <div>
+                    승인 후 공식 RAG <span className={candidateReadiness.projectedApprovedOfficialEmbeddedChunks >= candidateReadiness.minProjectedApprovedChunks ? "font-medium text-emerald-700" : "font-medium text-destructive"}>
+                      {candidateReadiness.projectedApprovedOfficialEmbeddedChunks}/{candidateReadiness.minProjectedApprovedChunks}
+                    </span>
+                  </div>
+                  <div>
+                    supersede <span className="font-medium">{candidateReadiness.projectedSupersededApprovedDocuments}</span>개
+                  </div>
+                </div>
+              )}
+              {candidateReadiness && !candidateReadiness.ok && (
+                <div className="mt-2 text-xs text-destructive">
+                  후보 승인 readiness 미충족: {candidateReadiness.reasons.join(", ")}
+                </div>
+              )}
+              {corpusReadiness && (
+                <div className={productionCorpusReady ? "mt-2 text-xs text-emerald-700" : "mt-2 text-xs text-amber-800"}>
+                  현재 production RAG: 공식 승인 임베딩 {corpusReadiness.approvedOfficialEmbeddedChunks}/{corpusReadiness.minApprovedOfficialEmbeddedChunks}
+                  <span className="ml-2 text-muted-foreground">(전체 {corpusReadiness.approvedEmbeddedChunks}/{corpusReadiness.minApprovedEmbeddedChunks})</span>
+                  {productionCorpusReady ? " 충족" : " 미충족"}
+                </div>
+              )}
             </div>
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => bulkUpdateCandidates("approve")}
-                disabled={Boolean(bulkAction)}
+                disabled={Boolean(bulkAction) || !candidateReadyForBulkApproval}
               >
                 <CheckCircle2 className={`h-3.5 w-3.5 ${bulkAction === "approve" ? "animate-pulse" : ""}`} />
                 후보 전체 승인

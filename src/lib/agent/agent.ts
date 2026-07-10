@@ -4,7 +4,7 @@
 
 import { TOOL_MAP, getToolsDescription, parseToolCall, sanitizeToolArgsForDisplay, type ToolArgs, type ToolResult, type ToolContext } from "./tools";
 import type { Lang } from "../i18n/translations";
-import { ClaudeNotConfiguredError, generateClaudeText, type ClaudeGatewayMessage } from "../ai/claude-gateway";
+import { LlmNotConfiguredError, generateLlmText, type LlmGatewayMessage } from "../ai/llm-gateway";
 
 export interface AgentStep {
   type: "thinking" | "tool_call" | "tool_result" | "final_answer" | "error";
@@ -121,7 +121,7 @@ ${getToolsDescription()}
 - 사용자 ID: ${ctx.leadId || "익명"}`;
 
   // 메시지 히스토리 구성
-  const messages: ClaudeGatewayMessage[] = [
+  const messages: LlmGatewayMessage[] = [
     { role: "system", content: systemPrompt },
     ...history.slice(-4).map((h) => ({
       role: h.role === "user" ? ("user" as const) : ("assistant" as const),
@@ -138,7 +138,7 @@ ${getToolsDescription()}
     iteration++;
 
     try {
-      const completion = await generateClaudeText({
+      const completion = await generateLlmText({
         feature: "agent",
         messages,
         temperature: 0.2,
@@ -216,7 +216,7 @@ ${getToolsDescription()}
       });
       break;
     } catch (e) {
-      if (e instanceof ClaudeNotConfiguredError) {
+      if (e instanceof LlmNotConfiguredError) {
         // 키/SDK 부재는 여기서 삼키지 않고 라우트의 deterministic tool
         // fallback으로 승격시킨다.
         throw e;

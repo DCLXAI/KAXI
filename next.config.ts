@@ -63,8 +63,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
-  serverExternalPackages: ["@xenova/transformers", "onnxruntime-web"],
+  serverExternalPackages: ["@huggingface/transformers", "onnxruntime-web", "pdf-parse"],
   reactStrictMode: true,
+  devIndicators: false,
   allowedDevOrigins: ["*.space-z.ai", "*.chatglm.cn", "*.z.ai", "127.0.0.1", "localhost"],
 };
 

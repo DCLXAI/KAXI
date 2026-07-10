@@ -21,14 +21,10 @@ function needsI18nRouting(pathname: string) {
   return PUBLIC_LEGACY_PATHS.has(pathname) || LOCALE_PREFIX.test(pathname);
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (needsSupabaseSession(pathname)) {
-    return updateSupabaseSession(req);
-  }
-  if (needsI18nRouting(pathname)) {
-    return handleI18nRouting(req);
-  }
+  if (needsSupabaseSession(pathname)) return updateSupabaseSession(req);
+  if (needsI18nRouting(pathname)) return handleI18nRouting(req);
   return NextResponse.next();
 }
 

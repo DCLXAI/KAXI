@@ -1,8 +1,12 @@
 import { isEnvTrue } from "@/lib/env";
-import { getClaudeGatewayDiagnostics } from "@/lib/ai/claude-gateway";
+import {
+  getConfiguredLlmBackend,
+  getLlmGatewayDiagnostics,
+  type LlmBackend,
+} from "@/lib/ai/llm-gateway";
 
-export type AgentBackend = "claude";
-export type ConsultBackend = "claude";
+export type AgentBackend = LlmBackend;
+export type ConsultBackend = LlmBackend;
 export type AiBackendFeature = "agent" | "consult";
 export type AiBackendDecisionOutcome = "selected" | "skipped" | "applied";
 
@@ -37,6 +41,20 @@ export interface AiBackendDiagnostics {
   };
   agent: AiFeatureBackendDiagnostics<AgentBackend>;
   consult: AiFeatureBackendDiagnostics<ConsultBackend>;
+  llm: {
+    backend: LlmBackend;
+    apiKeyConfigured: boolean;
+    model: string;
+    baseUrl: string | null;
+    managedApi: true;
+  };
+  kimi: {
+    apiKeyConfigured: boolean;
+    model: string;
+    baseUrl: string;
+    protocol: "openai-chat-completions";
+    managedApi: true;
+  };
   claude: {
     apiKeyConfigured: boolean;
     model: string;
@@ -90,48 +108,57 @@ function legacyWarnings(env: NodeJS.ProcessEnv): string[] {
   });
   if (configured.length === 0) return [];
   return [
-    `Legacy Codex/remote-bridge/Z.ai backend env vars are ignored by Phase 2 Claude gateway: ${configured.join(", ")}.`,
+    `Legacy Codex/remote-bridge/Z.ai backend env vars are ignored by the managed LLM gateway: ${configured.join(", ")}.`,
   ];
 }
 
-function decision(feature: AiBackendFeature, env: NodeJS.ProcessEnv): AiBackendDecision<"claude"> {
-  const raw = configuredValue(feature === "agent" ? env.AGENT_BACKEND : env.AI_CONSULT_BACKEND);
+function decision(feature: AiBackendFeature, env: NodeJS.ProcessEnv): AiBackendDecision<LlmBackend> {
+  const backend = getConfiguredLlmBackend(env);
+  const legacyOverride = configuredValue(feature === "agent" ? env.AGENT_BACKEND : env.AI_CONSULT_BACKEND);
+  const configuredProvider = configuredValue(env.AI_PROVIDER);
   const table: AiBackendDecisionStep[] = [];
-  if (raw) {
+  if (legacyOverride) {
     table.push(
       applied(
         `${feature}.backend.legacy_override_ignored`,
-        "Phase 2 removes backend selection; Claude managed API is the only LLM backend."
+        "AGENT_BACKEND and AI_CONSULT_BACKEND are legacy settings; use AI_PROVIDER for the managed LLM gateway."
       )
     );
   } else {
     table.push(skipped(`${feature}.backend.legacy_override_ignored`, "No legacy backend override configured."));
   }
-  table.push(selected(`${feature}.backend.claude`, "Using Anthropic Claude through the managed LLM gateway."));
+  table.push(
+    selected(
+      `${feature}.backend.${backend}`,
+      backend === "kimi"
+        ? "Using Kimi through its OpenAI-compatible managed API."
+        : "Using Anthropic Claude through the managed LLM gateway."
+    )
+  );
 
   const strict = requireLlm(env);
   table.push(
     strict
-      ? selected(`${feature}.require.strict_llm`, "AI_REQUIRE_LLM=true requires Claude API availability.")
-      : applied(`${feature}.require.fallback_allowed`, "Claude API may fall back to deterministic tools/official summaries.")
+      ? selected(`${feature}.require.strict_llm`, "AI_REQUIRE_LLM=true requires the selected LLM API to be available.")
+      : applied(`${feature}.require.fallback_allowed`, "The selected LLM may fall back to deterministic tools/official summaries.")
   );
 
   return {
     feature,
-    backend: "claude",
-    configuredValue: raw ? "unsupported" : null,
+    backend,
+    configuredValue: configuredProvider && configuredProvider !== "auto" ? backend : null,
     requireLlm: strict,
     fallbackAllowed: fallbackAllowed(env),
     decisionTable: table,
   };
 }
 
-export function getAgentBackend(): AgentBackend {
-  return "claude";
+export function getAgentBackend(env: NodeJS.ProcessEnv = process.env): AgentBackend {
+  return getConfiguredLlmBackend(env);
 }
 
-export function getConsultBackend(): ConsultBackend {
-  return "claude";
+export function getConsultBackend(env: NodeJS.ProcessEnv = process.env): ConsultBackend {
+  return getConfiguredLlmBackend(env);
 }
 
 export function explainAgentBackendDecision(env: NodeJS.ProcessEnv = process.env): AiBackendDecision<AgentBackend> {
@@ -142,30 +169,37 @@ export function explainConsultBackendDecision(env: NodeJS.ProcessEnv = process.e
   return decision("consult", env);
 }
 
-export function shouldRequireAgentLlm(_backend: AgentBackend = "claude", env: NodeJS.ProcessEnv = process.env): boolean {
+export function shouldRequireAgentLlm(_backend?: AgentBackend, env: NodeJS.ProcessEnv = process.env): boolean {
   return requireLlm(env);
 }
 
-export function shouldRequireConsultLlm(_backend: ConsultBackend = "claude", env: NodeJS.ProcessEnv = process.env): boolean {
+export function shouldRequireConsultLlm(_backend?: ConsultBackend, env: NodeJS.ProcessEnv = process.env): boolean {
   return requireLlm(env);
 }
 
 export function getAiBackendDiagnostics(env: NodeJS.ProcessEnv = process.env): AiBackendDiagnostics {
   const hosted = isHostedRuntime(env);
-  const claude = getClaudeGatewayDiagnostics(env);
+  const gateway = getLlmGatewayDiagnostics(env);
+  const { claude, kimi } = gateway;
   const agentDecision = explainAgentBackendDecision(env);
   const consultDecision = explainConsultBackendDecision(env);
   const issues: string[] = [];
   const warnings = legacyWarnings(env);
 
-  if (!claude.apiKeyConfigured) {
+  if (!gateway.apiKeyConfigured) {
+    const keyName = gateway.backend === "kimi" ? "OPENAI_API_KEY/KIMI_API_KEY" : "ANTHROPIC_API_KEY";
     const message = requireLlm(env)
-      ? "ANTHROPIC_API_KEY is not configured while AI_REQUIRE_LLM=true."
-      : "ANTHROPIC_API_KEY is not configured; Claude calls will use deterministic fallback.";
+      ? `${keyName} is not configured for ${gateway.backend} while AI_REQUIRE_LLM=true.`
+      : `${keyName} is not configured for ${gateway.backend}; LLM calls will use deterministic fallback.`;
     (requireLlm(env) ? issues : warnings).push(message);
   }
 
-  const ready = claude.apiKeyConfigured || fallbackAllowed(env);
+  const requested = env.AI_PROVIDER?.trim().toLowerCase();
+  if (requested && !["auto", "kimi", "moonshot", "openai", "openai-compatible", "claude", "anthropic"].includes(requested)) {
+    warnings.push(`Unsupported AI_PROVIDER=${requested}; automatic provider selection was applied.`);
+  }
+
+  const ready = gateway.apiKeyConfigured || fallbackAllowed(env);
 
   return {
     runtime: {
@@ -173,7 +207,7 @@ export function getAiBackendDiagnostics(env: NodeJS.ProcessEnv = process.env): A
       vercelEnv: env.VERCEL_ENV || null,
     },
     agent: {
-      backend: "claude",
+      backend: gateway.backend,
       configuredValue: agentDecision.configuredValue,
       requireLlm: agentDecision.requireLlm,
       fallbackAllowed: agentDecision.fallbackAllowed,
@@ -181,12 +215,26 @@ export function getAiBackendDiagnostics(env: NodeJS.ProcessEnv = process.env): A
       decisionTable: agentDecision.decisionTable,
     },
     consult: {
-      backend: "claude",
+      backend: gateway.backend,
       configuredValue: consultDecision.configuredValue,
       requireLlm: consultDecision.requireLlm,
       fallbackAllowed: consultDecision.fallbackAllowed,
       ready,
       decisionTable: consultDecision.decisionTable,
+    },
+    llm: {
+      backend: gateway.backend,
+      apiKeyConfigured: gateway.apiKeyConfigured,
+      model: gateway.model,
+      baseUrl: gateway.baseUrl,
+      managedApi: true,
+    },
+    kimi: {
+      apiKeyConfigured: kimi.apiKeyConfigured,
+      model: kimi.model,
+      baseUrl: kimi.baseUrl,
+      protocol: kimi.protocol,
+      managedApi: true,
     },
     claude: {
       apiKeyConfigured: claude.apiKeyConfigured,

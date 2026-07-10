@@ -2,6 +2,7 @@ import type { Lang } from "@/lib/i18n/translations";
 import type { ToolResult } from "@/lib/agent/tools";
 import { analyzeAgentIntent, type AgentIntentEvidence, type AgentMissingSlot } from "@/lib/agent/planner";
 import { buildRagBasisNoticeFromMetadata, type RagDocumentMetadata } from "@/lib/data/knowledge";
+import { isOfficialKnowledgeSource } from "@/lib/knowledge/official-source";
 
 export interface AgentSource {
   id: string;
@@ -53,6 +54,8 @@ export interface AgentMeta {
     grounded: boolean;
     toolCount: number;
     officialSourceCount: number;
+    retrievalBackends: string[];
+    pgvectorResultCount: number;
     intentConfidence: "low" | "medium" | "high";
     missingSlotCount: number;
     durationMs?: number;
@@ -304,6 +307,23 @@ function extractRagMetadata(toolResults: ToolResult[]): RagDocumentMetadata[] {
   return metas;
 }
 
+function extractRetrievalQuality(toolResults: ToolResult[]): { backends: string[]; pgvectorResultCount: number } {
+  const backends = new Set<string>();
+  let pgvectorResultCount = 0;
+
+  for (const item of toolResults) {
+    if (item.tool !== "search_knowledge" || !Array.isArray(item.result)) continue;
+    for (const doc of item.result) {
+      const method = typeof doc?.retrievalMethod === "string" ? doc.retrievalMethod : undefined;
+      if (!method) continue;
+      backends.add(method);
+      if (method === "pgvector") pgvectorResultCount += 1;
+    }
+  }
+
+  return { backends: Array.from(backends), pgvectorResultCount };
+}
+
 function buildPlan(toolResults: ToolResult[], lang: Lang): string[] {
   const uniqueTools = Array.from(new Set(toolResults.map((item) => item.tool)));
   const plan = uniqueTools
@@ -362,7 +382,15 @@ export function buildAgentMeta({
   const analysis = analyzeAgentIntent(question, safeLang);
   const sources = extractSources(toolResults);
   const sourceNotice = buildRagBasisNoticeFromMetadata(safeLang, extractRagMetadata(toolResults));
-  const officialSourceCount = sources.filter((source) => source.owner === "official" || source.kind === "school").length;
+  const retrieval = extractRetrievalQuality(toolResults);
+  const officialSourceCount = sources.filter((source) =>
+    source.kind === "school" ||
+    isOfficialKnowledgeSource({
+      sourceType: source.sourceType,
+      sourceUrl: source.url,
+      owner: source.owner,
+    })
+  ).length;
 
   return {
     summary: SUMMARIES[safeLang](toolResults.length, sources.length),
@@ -385,6 +413,8 @@ export function buildAgentMeta({
       grounded,
       toolCount: toolResults.length,
       officialSourceCount,
+      retrievalBackends: retrieval.backends,
+      pgvectorResultCount: retrieval.pgvectorResultCount,
       intentConfidence: analysis.confidence,
       missingSlotCount: analysis.missingSlots.length,
       durationMs,

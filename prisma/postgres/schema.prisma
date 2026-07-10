@@ -3,7 +3,7 @@
 
 generator client {
   provider      = "prisma-client-js"
-  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+  binaryTargets = ["native", "rhel-openssl-3.0.x", "linux-arm64-openssl-3.0.x"]
 }
 
 datasource db {
@@ -93,10 +93,10 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users           User[]
-  escalationCases EscalationCase[]
+  users               User[]
+  escalationCases     EscalationCase[]
   partnerAgentInvites PartnerAgentInvite[]
-  auditEvents     AuditEvent[]
+  auditEvents         AuditEvent[]
 
   @@index([type])
   @@index([createdAt])
@@ -114,15 +114,16 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  studentProfile StudentProfile?
-  consents       Consent[]
-  uploadedFiles  UploadedFile[] @relation("UploadedFileOwner")
-  assignedCases  EscalationCase[] @relation("AssignedCases")
-  agentReviews   AgentReview[] @relation("AgentReviewReviewer")
-  caseTimelineEvents CaseTimelineEvent[] @relation("CaseTimelineActor")
-  acceptedPartnerInvites PartnerAgentInvite[] @relation("AcceptedPartnerInvites")
-  auditEvents    AuditEvent[] @relation("AuditActor")
+  organization                  Organization?                  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  studentProfile                StudentProfile?
+  consents                      Consent[]
+  uploadedFiles                 UploadedFile[]                 @relation("UploadedFileOwner")
+  assignedCases                 EscalationCase[]               @relation("AssignedCases")
+  agentReviews                  AgentReview[]                  @relation("AgentReviewReviewer")
+  documentVerificationFeedbacks DocumentVerificationFeedback[] @relation("DocumentVerificationFeedbackReviewer")
+  caseTimelineEvents            CaseTimelineEvent[]            @relation("CaseTimelineActor")
+  acceptedPartnerInvites        PartnerAgentInvite[]           @relation("AcceptedPartnerInvites")
+  auditEvents                   AuditEvent[]                   @relation("AuditActor")
 
   @@index([organizationId])
   @@index([role])
@@ -130,22 +131,22 @@ model User {
 }
 
 model StudentProfile {
-  id                   String   @id @default(cuid())
-  userId               String   @unique
-  nationality          String   @default("VN")
-  visaType             String?
-  visaExpiryDate       DateTime?
-  alienRegistrationNo  String?
+  id                    String    @id @default(cuid())
+  userId                String    @unique
+  nationality           String    @default("VN")
+  visaType              String?
+  visaExpiryDate        DateTime?
+  alienRegistrationNo   String?
   alienRegistrationHash String?
-  passportNo           String?
-  passportHash         String?
-  schoolName           String?
-  programType          String?
-  semesterStatus       String?
-  topikLevel           Int?
-  partTimePermitStatus String?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  passportNo            String?
+  passportHash          String?
+  schoolName            String?
+  programType           String?
+  semesterStatus        String?
+  topikLevel            Int?
+  partTimePermitStatus  String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   journeyState          JourneyState?
@@ -183,16 +184,16 @@ model Consent {
 }
 
 model PartnerAgentInvite {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   organizationId String
   email          String?
-  tokenHash      String   @unique
-  status         String   @default("PENDING")
+  tokenHash      String    @unique
+  status         String    @default("PENDING")
   expiresAt      DateTime
   acceptedAt     DateTime?
   acceptedUserId String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   acceptedUser User?        @relation("AcceptedPartnerInvites", fields: [acceptedUserId], references: [id], onDelete: SetNull)
@@ -217,26 +218,27 @@ model JourneyState {
 }
 
 model DocumentItem {
-  id               String         @id @default(cuid())
-  studentProfileId String
-  documentType     String
-  required         Boolean        @default(true)
-  status           DocumentStatus @default(NOT_UPLOADED)
-  expiresAt        DateTime?
-  fileId           String?
-  reviewStatus     ReviewStatus   @default(PENDING)
-  reviewNote       String?
+  id                     String         @id @default(cuid())
+  studentProfileId       String
+  documentType           String
+  required               Boolean        @default(true)
+  status                 DocumentStatus @default(NOT_UPLOADED)
+  expiresAt              DateTime?
+  fileId                 String?
+  reviewStatus           ReviewStatus   @default(PENDING)
+  reviewNote             String?
   ocrExtractedCiphertext String?
-  ocrExtractedRedacted Json?
-  ocrValidation    Json?
-  ocrModel         String?
-  ocrProcessedAt   DateTime?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  ocrExtractedRedacted   Json?
+  ocrValidation          Json?
+  ocrModel               String?
+  ocrProcessedAt         DateTime?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
 
-  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
-  file           UploadedFile?  @relation(fields: [fileId], references: [id], onDelete: SetNull)
-  caseLinks      CaseDocumentLink[]
+  studentProfile        StudentProfile                 @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  file                  UploadedFile?                  @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  caseLinks             CaseDocumentLink[]
+  verificationFeedbacks DocumentVerificationFeedback[]
 
   @@index([studentProfileId])
   @@index([documentType])
@@ -246,16 +248,71 @@ model DocumentItem {
   @@index([expiresAt])
 }
 
+model DocumentVerificationFeedback {
+  id                   String   @id @default(cuid())
+  documentItemId       String
+  reviewerUserId       String?
+  reviewerActor        String
+  reviewerRole         String
+  label                String
+  issueCodes           Json
+  layerStatuses        Json
+  verificationSnapshot Json?
+  note                 String?
+  createdAt            DateTime @default(now())
+
+  documentItem DocumentItem @relation(fields: [documentItemId], references: [id], onDelete: Cascade)
+  reviewer     User?        @relation("DocumentVerificationFeedbackReviewer", fields: [reviewerUserId], references: [id], onDelete: SetNull)
+
+  @@index([documentItemId])
+  @@index([reviewerUserId])
+  @@index([label])
+  @@index([createdAt])
+}
+
+model VisaDocumentRequirement {
+  id               String            @id @default(cuid())
+  code             String            @unique
+  visaType         String
+  stayAction       String
+  applicantContext String            @default("general")
+  documentType     String
+  labelKo          String
+  labelEn          String
+  required         Boolean           @default(true)
+  validityDays     Int?
+  issuer           String
+  requiredFields   Json
+  validationRules  Json
+  sourceRefs       Json
+  sourceUrl        String
+  sourceType       String
+  lastCheckedAt    DateTime
+  checkedBy        String
+  reviewStatus     LegalReviewStatus @default(PENDING)
+  notes            String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@unique([visaType, stayAction, applicantContext, documentType])
+  @@index([visaType])
+  @@index([stayAction])
+  @@index([documentType])
+  @@index([issuer])
+  @@index([reviewStatus])
+  @@index([lastCheckedAt])
+}
+
 model UploadedFile {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   ownerUserId  String
-  storageKey   String   @unique
+  storageKey   String    @unique
   originalName String
   mimeType     String
   sizeBytes    Int
   sha256       String
   piiClass     String
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
   deletedAt    DateTime?
 
   owner     User           @relation("UploadedFileOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
@@ -268,14 +325,14 @@ model UploadedFile {
 }
 
 model DocumentFileBlob {
-  id         String   @id @default(cuid())
-  storageKey String   @unique
+  id         String    @id @default(cuid())
+  storageKey String    @unique
   mimeType   String
   sizeBytes  Int
   sha256     String
   bytes      Bytes
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
   deletedAt  DateTime?
 
   @@index([sha256])
@@ -283,38 +340,38 @@ model DocumentFileBlob {
 }
 
 // 유학 경로 진단을 완료한 사용자 (리드)
-model Lead {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model DiagnosisLead {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // 기본 정보
   nickname    String
-  nationality String   // vn, mn, cn, uz, other
+  nationality String // vn, mn, cn, uz, other
   age         Int
-  education   String   // highschool, college, university, master
-  koreanLevel String   // none, topik1, topik2, topik3
-  goal        String   // language, degree, transfer, career, unsure
-  budget      Int      // KRW
-  region      String   // seoul, gyeonggi, ...
-  usingBroker Boolean  @default(false)
-  brokerCost  Int      @default(0)
-  hasHistory  Boolean  @default(false)
+  education   String // highschool, college, university, master
+  koreanLevel String // none, topik1, topik2, topik3
+  goal        String // language, degree, transfer, career, unsure
+  budget      Int // KRW
+  region      String // seoul, gyeonggi, ...
+  usingBroker Boolean @default(false)
+  brokerCost  Int     @default(0)
+  hasHistory  Boolean @default(false)
 
   // 진단 결과 (snapshot)
-  pathKey        String  // goal_language, goal_degree, ...
-  estimatedCost  Int     // KRW
-  prepTime       String
-  requiredDocs   String  // JSON array of translation keys
-  warningsJson   String  // JSON array of {ko,vi,mn,en}
+  pathKey         String // goal_language, goal_degree, ...
+  estimatedCost   Int // KRW
+  prepTime        String
+  requiredDocs    String // JSON array of translation keys
+  warningsJson    String // JSON array of {ko,vi,mn,en}
   nextActionsJson String // JSON array
 
   // 연락처 (선택)
-  contact     String?
-  contactType String? // email, zalo, wechat, telegram
+  contact           String?
+  contactType       String? // email, zalo, wechat, telegram
   contactCiphertext String?
   contactHash       String?
-  contactRedacted   Boolean  @default(false)
+  contactRedacted   Boolean   @default(false)
   deleteRequestedAt DateTime?
   deletedAt         DateTime?
   retentionUntil    DateTime?
@@ -328,25 +385,26 @@ model Lead {
   @@index([contactHash])
   @@index([deleteRequestedAt])
   @@index([retentionUntil])
+  @@map("diagnosis_leads")
 }
 
 // 파트너 상담 요청
 model PartnerRequest {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
 
-  leadId      String
-  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId String
+  lead   DiagnosisLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
-  partnerType String   // admin, translation, academy, admission, settlement
-  question    String?
+  partnerType        String // admin, translation, academy, admission, settlement
+  question           String?
   questionCiphertext String?
   questionHash       String?
-  questionRedacted   Boolean  @default(false)
+  questionRedacted   Boolean   @default(false)
   deleteRequestedAt  DateTime?
   deletedAt          DateTime?
   retentionUntil     DateTime?
-  status      String   @default("pending") // pending, contacted, closed
+  status             String    @default("pending") // pending, contacted, closed
 
   @@index([leadId])
   @@index([partnerType])
@@ -356,35 +414,99 @@ model PartnerRequest {
   @@index([retentionUntil])
 }
 
+model HandoffLead {
+  id                 String   @id
+  sessionKey         String   @unique @map("session_id")
+  tenantId           String   @default("default") @map("tenant_id")
+  locale             String   @default("ko")
+  source             String   @default("typebot")
+  status             String   @default("contact_received")
+  leadStage          String   @default("review") @map("lead_stage")
+  riskLevel          String   @default("medium") @map("risk_level")
+  name               String?
+  nameCiphertext     String?  @map("name_ciphertext")
+  nameRedacted       Boolean  @default(true) @map("name_redacted")
+  question           String?
+  questionCiphertext String?  @map("question_ciphertext")
+  questionHash       String?  @map("question_hash")
+  questionRedacted   Boolean  @default(false) @map("question_redacted")
+  answer             String?
+  answerCiphertext   String?  @map("answer_ciphertext")
+  answerHash         String?  @map("answer_hash")
+  answerRedacted     Boolean  @default(false) @map("answer_redacted")
+  notes              String?
+  notesCiphertext    String?  @map("notes_ciphertext")
+  notesHash          String?  @map("notes_hash")
+  notesRedacted      Boolean  @default(false) @map("notes_redacted")
+  lastHandoffTaskId  BigInt?  @map("last_handoff_task_id")
+  metadata           Json     @default("{}")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  contacts HandoffLeadContact[]
+
+  @@index([tenantId, status, createdAt])
+  @@index([source])
+  @@index([leadStage, riskLevel])
+  @@map("leads")
+}
+
+model HandoffLeadContact {
+  id                String   @id
+  leadId            String   @map("lead_id")
+  sessionKey        String   @map("session_id")
+  name              String?
+  nameCiphertext    String?  @map("name_ciphertext")
+  nameRedacted      Boolean  @default(true) @map("name_redacted")
+  contactType       String   @default("unknown") @map("contact_type")
+  contactValue      String?  @map("contact_value")
+  contactCiphertext String?  @map("contact_ciphertext")
+  contactHash       String   @map("contact_hash")
+  contactRedacted   Boolean  @default(true) @map("contact_redacted")
+  isPrimary         Boolean  @default(true) @map("is_primary")
+  status            String   @default("received")
+  metadata          Json     @default("{}")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  lead HandoffLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([leadId, contactHash])
+  @@index([sessionKey])
+  @@index([contactHash])
+  @@index([status])
+  @@map("lead_contacts")
+}
+
 // 학교 데이터 (수동 시드 — 운영시 관리자 페이지에서 편집)
 // Operational source of truth for school data. src/lib/data/schools.ts is a local seed/fallback fixture only.
 model School {
-  id                  String   @id
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id        String   @id
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  nameKo              String
-  nameVi              String
-  nameMn              String
-  nameEn              String
+  nameKo String
+  nameVi String
+  nameMn String
+  nameEn String
 
-  region              String
-  program             String
-  tuitionPerSemester  Int
-  dormitoryAvailable  Boolean  @default(false)
-  dormitoryCost       Int?
-  koreanRequirement   String
-  accreditation       String   // accredited, standard, caution
-  topikLevel          Int?
-  intake              String   // JSON array
-  officialUrl         String
-  sourceUrl           String   @default("")
-  verifiedAt          DateTime @default(now())
-  reviewAfter         DateTime @default(now())
-  notesKo             String
-  notesVi             String
-  notesMn             String
-  notesEn             String
+  region             String
+  program            String
+  tuitionPerSemester Int
+  dormitoryAvailable Boolean  @default(false)
+  dormitoryCost      Int?
+  koreanRequirement  String
+  accreditation      String // accredited, standard, caution
+  topikLevel         Int?
+  intake             String // JSON array
+  officialUrl        String
+  sourceUrl          String   @default("")
+  verifiedAt         DateTime @default(now())
+  reviewAfter        DateTime @default(now())
+  notesKo            String
+  notesVi            String
+  notesMn            String
+  notesEn            String
 
   @@index([region])
   @@index([program])
@@ -397,17 +519,17 @@ model ChatLog {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
 
-  lang      String
-  question  String
+  lang               String
+  question           String
   questionCiphertext String?
   questionHash       String?
-  questionRedacted   Boolean  @default(false)
+  questionRedacted   Boolean   @default(false)
   deleteRequestedAt  DateTime?
   deletedAt          DateTime?
   retentionUntil     DateTime?
-  answer    String
-  source    String   // rule, rag, hybrid
-  retrievedDocs String? // JSON
+  answer             String
+  source             String // rule, rag, hybrid
+  retrievedDocs      String? // JSON
 
   @@index([createdAt])
   @@index([lang])
@@ -416,26 +538,278 @@ model ChatLog {
   @@index([retentionUntil])
 }
 
+model ChatSession {
+  id                String    @id @default(cuid())
+  sessionKey        String    @unique @map("session_key")
+  tenantId          String    @default("default") @map("tenant_id")
+  locale            String    @default("ko")
+  source            String    @default("kaxi-site")
+  channel           String    @default("kaxi-site")
+  typebotResultId   String?   @unique @map("typebot_result_id")
+  status            String    @default("active")
+  startedAt         DateTime  @default(now()) @map("started_at")
+  lastMessageAt     DateTime  @default(now()) @map("last_message_at")
+  metadata          Json?
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  endedAt           DateTime? @map("ended_at")
+  retentionUntil    DateTime  @default(dbgenerated("now() + interval '90 days'")) @map("retention_until")
+  deleteRequestedAt DateTime? @map("delete_requested_at")
+  deletedAt         DateTime? @map("deleted_at")
+
+  attachments   ChatAttachment[]
+  handoffConsents HandoffConsentEvidence[]
+  messages      ChatMessage[]
+  retrievalRuns RetrievalRun[]
+
+  @@index([tenantId])
+  @@index([locale])
+  @@index([source])
+  @@index([status])
+  @@index([lastMessageAt])
+  @@index([createdAt])
+  @@map("chat_sessions")
+}
+
+model HandoffConsentEvidence {
+  id               String    @id @default(uuid()) @db.Uuid
+  sessionKey       String    @map("session_id")
+  typebotResultId  String?   @map("typebot_result_id")
+  scope            String    @default("HANDOFF_CONTACT_COLLECTION")
+  noticeVersion    String    @map("notice_version")
+  accepted         Boolean
+  acceptedAt       DateTime? @map("accepted_at")
+  source           String    @default("typebot")
+  locale           String    @default("ko")
+  requestIpHash    String?   @map("request_ip_hash")
+  requestUaHash    String?   @map("request_ua_hash")
+  evidence         Json      @default("{}")
+  retentionUntil   DateTime  @default(dbgenerated("now() + interval '90 days'")) @map("retention_until")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  session ChatSession @relation(fields: [sessionKey], references: [sessionKey], onDelete: Cascade)
+
+  @@unique([sessionKey, scope, noticeVersion])
+  @@index([typebotResultId])
+  @@index([acceptedAt])
+  @@index([retentionUntil])
+  @@map("handoff_consent_evidence")
+}
+
+model ChatMessage {
+  id                 BigInt   @id @default(autoincrement())
+  sessionKey         String   @map("session_id")
+  requestId          String   @unique @default(uuid()) @map("request_id") @db.Uuid
+  idempotencyKey     String?  @unique @map("idempotency_key")
+  tenantId           String   @default("default") @map("tenant_id")
+  question           String
+  questionCiphertext String?  @map("question_ciphertext")
+  questionHash       String?  @map("question_hash")
+  questionRedacted   Boolean  @default(false) @map("question_redacted")
+  answer             String
+  answerCiphertext   String?  @map("answer_ciphertext")
+  answerHash         String?  @map("answer_hash")
+  answerRedacted     Boolean  @default(false) @map("answer_redacted")
+  riskLevel          String   @default("low") @map("risk_level")
+  needsHuman         Boolean  @default(false) @map("needs_human")
+  sourcesJson        String   @default("[]") @map("sources_json")
+  source             String   @default("kaxi-site")
+  channel            String   @default("kaxi-site")
+  locale             String   @default("ko")
+  executionId        String?  @map("execution_id")
+  status             String   @default("completed")
+  errorCode          String?  @map("error_code")
+  n8nRequest         Json?    @map("n8n_request")
+  n8nResponse        Json?    @map("n8n_response")
+  sources            Json?
+  searchMeta         Json?    @map("search_meta")
+  leadStage          String?  @map("lead_stage")
+  nextStep           String?  @map("next_step")
+  latencyMs          Int?     @map("latency_ms")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  attachments  ChatAttachment[]
+  session      ChatSession      @relation(fields: [sessionKey], references: [sessionKey], onDelete: Cascade)
+  retrievalRun RetrievalRun?
+  auditMessage N8nAuditMessage?
+
+  @@index([sessionKey])
+  @@index([tenantId])
+  @@index([source])
+  @@index([locale])
+  @@index([riskLevel])
+  @@index([needsHuman])
+  @@index([createdAt])
+  @@map("chat_messages")
+}
+
+model RetrievalRun {
+  id                    String   @id @default(uuid()) @db.Uuid
+  requestId             String   @unique @map("request_id") @db.Uuid
+  messageId             BigInt   @unique @map("message_id")
+  sessionKey            String   @map("session_id")
+  executionId           String?  @map("execution_id")
+  query                 String
+  queryCiphertext       String?  @map("query_ciphertext")
+  queryHash             String?  @map("query_hash")
+  queryRedacted         Boolean  @default(false) @map("query_redacted")
+  retrievalType         String   @default("hybrid") @map("retrieval_type")
+  category              String   @default("general")
+  similarityThreshold   Float?   @map("similarity_threshold")
+  topScore              Float?   @map("top_score")
+  retrievedCount        Int      @default(0) @map("retrieved_count")
+  rejectedCitationCount Int      @default(0) @map("rejected_citation_count")
+  noContext             Boolean  @default(false) @map("no_context")
+  noContextReason       String?  @map("no_context_reason")
+  sources               Json     @default("[]")
+  searchMeta            Json     @default("{}") @map("search_meta")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  session ChatSession @relation(fields: [sessionKey], references: [sessionKey], onDelete: Cascade)
+
+  @@index([sessionKey, createdAt])
+  @@index([executionId])
+  @@index([noContext, createdAt])
+  @@map("retrieval_runs")
+}
+
+model N8nAuditMessage {
+  id                  BigInt   @id @default(autoincrement())
+  executionId         String?  @unique @map("execution_id")
+  workflowId          String?  @map("workflow_id")
+  sourceChatMessageId BigInt?  @unique @map("source_chat_message_id")
+  requestId           String?  @unique @map("request_id") @db.Uuid
+  idempotencyKey      String?  @map("idempotency_key")
+  sessionKey          String   @map("session_id")
+  tenantId            String   @default("default") @map("tenant_id")
+  locale              String   @default("ko")
+  source              String   @default("typebot")
+  channel             String   @default("typebot")
+  question            String   @default("[canonical-chat-message]")
+  questionHash        String?  @map("question_hash")
+  questionRedacted    Boolean  @default(true) @map("question_redacted")
+  answer              String   @default("[canonical-chat-message]")
+  answerHash          String?  @map("answer_hash")
+  answerRedacted      Boolean  @default(true) @map("answer_redacted")
+  riskLevel           String   @default("low") @map("risk_level")
+  needsHuman          Boolean  @default(false) @map("needs_human")
+  leadStage           String?  @map("lead_stage")
+  nextStep            String?  @map("next_step")
+  sourcesJson         String   @default("[]") @map("sources_json")
+  auditSource         String   @default("n8n-runtime") @map("audit_source")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  sourceChatMessage ChatMessage? @relation(fields: [sourceChatMessageId], references: [id], onDelete: SetNull)
+
+  @@index([sessionKey, createdAt])
+  @@index([tenantId, createdAt])
+  @@index([channel])
+  @@index([riskLevel, needsHuman])
+  @@map("n8n_audit_messages")
+}
+
+model ChatAttachment {
+  id               String    @id @default(cuid())
+  sessionKey       String    @map("session_id")
+  messageId        BigInt?   @map("message_id")
+  bucket           String
+  storageKey       String    @unique @map("storage_key")
+  originalName     String    @map("original_name")
+  mimeType         String    @map("mime_type")
+  sizeBytes        Int       @map("size_bytes")
+  sha256           String
+  status           String    @default("quarantined")
+  detectedMimeType String?   @map("detected_mime_type")
+  processingStatus String    @default("quarantined") @map("processing_status")
+  processedAt      DateTime? @map("processed_at")
+  retentionUntil   DateTime  @default(dbgenerated("now() + interval '30 days'")) @map("retention_until")
+  deletedAt        DateTime? @map("deleted_at")
+  metadata         Json?
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  session       ChatSession               @relation(fields: [sessionKey], references: [sessionKey], onDelete: Cascade)
+  message       ChatMessage?              @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  extraction    ChatAttachmentExtraction?
+  processingJob ChatAttachmentJob?
+
+  @@index([sessionKey])
+  @@index([messageId])
+  @@index([sha256])
+  @@index([mimeType])
+  @@index([status])
+  @@index([processingStatus, createdAt])
+  @@index([retentionUntil])
+  @@index([createdAt])
+  @@map("chat_attachments")
+}
+
+model ChatAttachmentJob {
+  id           String    @id @default(uuid()) @db.Uuid
+  attachmentId String    @unique @map("attachment_id")
+  status       String    @default("queued")
+  attempts     Int       @default(0)
+  maxAttempts  Int       @default(5) @map("max_attempts")
+  availableAt  DateTime  @default(now()) @map("available_at")
+  lockedAt     DateTime? @map("locked_at")
+  lockToken    String?   @map("lock_token") @db.Uuid
+  lastError    String?   @map("last_error")
+  completedAt  DateTime? @map("completed_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  attachment ChatAttachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+
+  @@index([status, availableAt])
+  @@index([lockedAt])
+  @@map("chat_attachment_jobs")
+}
+
+model ChatAttachmentExtraction {
+  attachmentId    String    @id @map("attachment_id")
+  status          String    @default("pending")
+  textCiphertext  String?   @map("text_ciphertext")
+  textSha256      String?   @map("text_sha256")
+  redactedPreview String?   @map("redacted_preview")
+  documentType    String?   @map("document_type")
+  language        String?
+  confidence      Float?
+  pageCount       Int?      @map("page_count")
+  provider        String?
+  model           String?
+  errorCode       String?   @map("error_code")
+  processedAt     DateTime? @map("processed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  attachment ChatAttachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+
+  @@map("chat_attachment_extractions")
+}
+
 // AI Agent 요청 비용/품질 원장
 model AgentRequestLedger {
-  id            String   @id @default(cuid())
-  createdAt     DateTime @default(now())
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
 
   ip            String?
   userId        String?
   questionChars Int
-  answerChars   Int      @default(0)
+  answerChars   Int     @default(0)
 
   backend       String
   codexMode     String?
   durationMs    Int?
   tokenEstimate Int
 
-  success       Boolean
-  errorType     String?
-  errorMessage  String?
-  grounded      Boolean  @default(false)
-  toolCount     Int      @default(0)
+  success      Boolean
+  errorType    String?
+  errorMessage String?
+  grounded     Boolean @default(false)
+  toolCount    Int     @default(0)
 
   @@index([createdAt])
   @@index([ip])
@@ -453,23 +827,23 @@ model Synonym {
 
   // 원본 표현 (사용자가 실제로 입력하는 단어/구)
   // 예: "돈", "얼마", "비싸", "거절"
-  source    String   @unique
+  source String @unique
 
   // 동의어/확장어 (공식 용어 리스트, JSON 배열)
   // 예: ["비용", "cost", "chi phí", "зардал"]
-  targets   String   // JSON array
+  targets String // JSON array
 
   // 카테고리 (관리 편의)
-  category  String   @default("general") // cost, visa, documents, school, warning, general
+  category String @default("general") // cost, visa, documents, school, warning, general
 
   // 출처 — 자동 추출 or 관리자 수동 등록
-  origin    String   @default("manual") // manual, auto, chatlog
+  origin String @default("manual") // manual, auto, chatlog
 
   // 활성화 여부 (비활성시 검색에 사용 안 함)
-  enabled   Boolean  @default(true)
+  enabled Boolean @default(true)
 
   // 자동 추출 메타데이터
-  autoMeta  String?  // JSON: { frequency, confidence, suggestedAt, chatLogIds }
+  autoMeta String? // JSON: { frequency, confidence, suggestedAt, chatLogIds }
 
   @@index([category])
   @@index([enabled])
@@ -478,17 +852,17 @@ model Synonym {
 
 // 관리자 및 개인정보 운영 감사 로그
 model AdminAuditLog {
-  id         String   @id @default(cuid())
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
 
   actor      String
-  actorRole  String   @default("admin")
+  actorRole  String  @default("admin")
   action     String
   targetType String
   targetId   String?
   ip         String?
   userAgent  String?
-  success    Boolean  @default(true)
+  success    Boolean @default(true)
   metadata   String?
 
   @@index([createdAt])
@@ -541,7 +915,7 @@ model ComplianceRuleVersion {
   reviewedAt     DateTime?
   createdAt      DateTime          @default(now())
 
-  rule        ComplianceRule        @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  rule        ComplianceRule         @relation(fields: [ruleId], references: [id], onDelete: Cascade)
   tests       ComplianceRuleTest[]
   evaluations ComplianceEvaluation[]
 
@@ -569,7 +943,7 @@ model ComplianceRuleTest {
 }
 
 model ComplianceEvaluation {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   studentProfileId String
   ruleVersionId    String
   inputSnapshot    Json
@@ -577,7 +951,7 @@ model ComplianceEvaluation {
   riskLevel        RiskLevel @default(UNKNOWN)
   inputHash        String
   outputHash       String
-  evaluatedAt      DateTime @default(now())
+  evaluatedAt      DateTime  @default(now())
 
   studentProfile StudentProfile        @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
   ruleVersion    ComplianceRuleVersion @relation(fields: [ruleVersionId], references: [id], onDelete: Restrict)
@@ -622,19 +996,19 @@ model KnowledgeDocument {
 }
 
 model KnowledgeChunk {
-  id           String   @id @default(cuid())
-  documentId   String
-  chunkIndex   Int
-  content      String
-  contentHash  String
-  keywords     String   @default("")
-  embeddingJson Json?
-  embedding     Unsupported("vector(384)")?
-  tsv           Unsupported("tsvector")?
+  id             String                      @id @default(cuid())
+  documentId     String
+  chunkIndex     Int
+  content        String
+  contentHash    String
+  keywords       String                      @default("")
+  embeddingJson  Json?
+  embedding      Unsupported("vector(384)")?
+  tsv            Unsupported("tsvector")?
   embeddingModel String?
-  embeddingDim Int?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  embeddingDim   Int?
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
 
   document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
@@ -644,27 +1018,27 @@ model KnowledgeChunk {
 }
 
 model EscalationCase {
-  id               String           @id @default(cuid())
-  organizationId   String?
-  studentProfileId String
-  assignedUserId   String?
-  status           EscalationStatus @default(NEW)
-  riskLevel        RiskLevel        @default(UNKNOWN)
-  category         String
-  summary          String
+  id                  String           @id @default(cuid())
+  organizationId      String?
+  studentProfileId    String
+  assignedUserId      String?
+  status              EscalationStatus @default(NEW)
+  riskLevel           RiskLevel        @default(UNKNOWN)
+  category            String
+  summary             String
   conversationSummary String?
-  ruleSnapshot     Json?
-  aiDraft          String?
-  matchedAt        DateTime?
-  acceptedAt       DateTime?
-  closedReason     String?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  closedAt         DateTime?
+  ruleSnapshot        Json?
+  aiDraft             String?
+  matchedAt           DateTime?
+  acceptedAt          DateTime?
+  closedReason        String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  closedAt            DateTime?
 
-  organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
-  assignedUser   User?          @relation("AssignedCases", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  organization   Organization?       @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  studentProfile StudentProfile      @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  assignedUser   User?               @relation("AssignedCases", fields: [assignedUserId], references: [id], onDelete: SetNull)
   reviews        AgentReview[]
   timelineEvents CaseTimelineEvent[]
   documentLinks  CaseDocumentLink[]
@@ -754,7 +1128,7 @@ model AuditEvent {
   createdAt      DateTime @default(now())
 
   organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  actor       User?          @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actor        User?         @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([actorUserId])

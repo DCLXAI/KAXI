@@ -1,7 +1,15 @@
-import { recommendPath, type DiagnosisInput } from "../src/lib/data/diagnosis";
-import { KNOWLEDGE_DOCS } from "../src/lib/data/knowledge";
-import { TOOL_MAP, isRecord } from "../src/lib/agent/tools";
-import { evaluateVisaRules } from "../src/lib/rules/visa-rules";
+import type { DiagnosisInput } from "../src/lib/data/diagnosis";
+import { prepareTestDb } from "./prepare-test-db";
+
+prepareTestDb("diagnosis rules");
+
+const [{ recommendPath }, { KNOWLEDGE_DOCS }, { TOOL_MAP, isRecord }, { evaluateVisaRules }] =
+  await Promise.all([
+    import("../src/lib/data/diagnosis"),
+    import("../src/lib/data/knowledge"),
+    import("../src/lib/agent/tools"),
+    import("../src/lib/rules/visa-rules"),
+  ]);
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);

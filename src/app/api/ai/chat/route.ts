@@ -11,7 +11,7 @@ import {
 import type { Lang } from "@/lib/i18n/translations";
 import { findFAQ, AI_DEFAULT_REPLY } from "@/lib/data/faq";
 import { db } from "@/lib/db";
-import { generateClaudeText, isClaudeNotConfiguredError, type ClaudeGatewayMessage } from "@/lib/ai/claude-gateway";
+import { generateLlmText, isLlmNotConfiguredError, type LlmGatewayMessage } from "@/lib/ai/llm-gateway";
 import { hybridSearch, initVectorStore, initTransformerStore, getStoreStats } from "@/lib/embeddings/vector-store";
 import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
 import { ensureGroundedCitationAnswer } from "@/lib/knowledge/citations";
@@ -240,7 +240,7 @@ async function generateWithLLM(
 컨텍스트 문서 (Vector Search + Keyword Match로 검색됨):
 ${context}`;
 
-    const messages: ClaudeGatewayMessage[] = [
+    const messages: LlmGatewayMessage[] = [
       { role: "system", content: systemPrompt },
       ...history.slice(-4).map((h) => ({
         role: h.role === "user" ? ("user" as const) : ("assistant" as const),
@@ -249,7 +249,7 @@ ${context}`;
       { role: "user", content: question },
     ];
 
-    const completion = await generateClaudeText({
+    const completion = await generateLlmText({
       feature: "consult",
       messages,
       temperature: 0.3,
@@ -258,7 +258,7 @@ ${context}`;
     return completion.text;
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    if (isClaudeNotConfiguredError(e)) {
+    if (isLlmNotConfiguredError(e)) {
       console.warn("[LLM generation skipped]", message);
     } else {
       console.error("[LLM generation error]", e);

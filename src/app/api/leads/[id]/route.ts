@@ -14,7 +14,7 @@ export async function GET(
     if (unauthorized) return unauthorized;
 
     const { id } = await params;
-    const lead = await db.lead.findUnique({
+    const lead = await db.diagnosisLead.findUnique({
       where: { id },
       include: { partnerRequests: true },
     });
@@ -39,7 +39,7 @@ export async function DELETE(
     const actor = await getAdminContext(_req);
 
     const { id } = await params;
-    await db.lead.delete({ where: { id } });
+    await db.diagnosisLead.delete({ where: { id } });
     await recordRequestAudit(_req, {
       actor: actor?.actor || "unknown",
       actorRole: actor?.role || "admin",

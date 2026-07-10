@@ -1,0 +1,15 @@
+<View>
+  <Header value="$title" />
+  <View style="border:1px solid #ddd; padding:12px; margin-bottom:12px;">
+    <Text name="metadata" value="$metadata" />
+  </View>
+  <Text name="content" value="$chunks_markdown" />
+  <Choices name="decision" toName="content" choice="single" required="true">
+    <Choice value="APPROVED" />
+    <Choice value="PENDING" />
+    <Choice value="REJECTED" />
+  </Choices>
+  <TextArea name="checked_by" toName="content" required="true" placeholder="검수자 성명/자격번호 예: 김검수 행정사 12-3456" />
+  <TextArea name="checked_at" toName="content" required="true" placeholder="YYYY-MM-DD" />
+  <TextArea name="notes" toName="content" placeholder="수정 요청, 반려 사유, 검수 메모" />
+</View>

@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { hasOfficialKnowledgeSourceUrl, isOfficialKnowledgeSource } from "@/lib/knowledge/official-source";
 
 export type KnowledgeQualityGrade = "approve_ready" | "needs_cleaning" | "reject";
 
@@ -293,14 +294,14 @@ function keywordHits(text: string, keywords: readonly string[], regex = false): 
 }
 
 function isOfficialLaw(input: KnowledgeQualityInput): boolean {
-  return input.sourceType === "official_law" || input.sourceUrl.includes("law.go.kr");
+  return input.sourceType === "official_law" && hasOfficialKnowledgeSourceUrl(input.sourceUrl);
 }
 
 function isOfficialGovernment(input: KnowledgeQualityInput): boolean {
-  return (
-    input.sourceType === "official_government" ||
-    /hikorea\.go\.kr|immigration\.go\.kr|studyinkorea\.go\.kr|visa\.go\.kr|moe\.go\.kr/.test(input.sourceUrl)
-  );
+  return isOfficialKnowledgeSource({
+    sourceType: input.sourceType,
+    sourceUrl: input.sourceUrl,
+  });
 }
 
 function sourceUrlKeyword(sourceUrl: string): string {

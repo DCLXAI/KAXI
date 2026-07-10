@@ -9,9 +9,31 @@ export interface ConsultMessage {
   text: string;
   disclaimer?: string;
   retrievedDocs?: RetrievedDoc[];
+  retrieval?: RetrievalDiagnostics;
+  searchMeta?: SearchMeta[];
   suggestedFollowups?: string[];
   needsHumanExpert?: boolean;
   backend?: string;
+}
+
+export interface RetrievalDiagnostics {
+  backend?: string;
+  methods?: string[];
+  requestedSemantic?: boolean;
+  pgvectorUsed?: boolean;
+  pgvectorConfigured?: boolean;
+  resultCount?: number;
+}
+
+export interface SearchMeta {
+  id: string;
+  title?: string;
+  score?: number;
+  vectorScore?: number;
+  keywordScore?: number;
+  method?: string;
+  category?: string;
+  docSource?: string;
 }
 
 export interface RetrievedDoc {

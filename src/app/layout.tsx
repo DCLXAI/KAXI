@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Providers } from "@/components/providers";
+import { TypebotBubble } from "@/components/typebot/TypebotBubble";
 
 export const metadata: Metadata = {
   title: "KAXI · 브로커 없이 준비하는 한국 유학",
@@ -53,6 +54,7 @@ export default function RootLayout({
       <body className="antialiased bg-background text-foreground">
         <Providers>
           {children}
+          <TypebotBubble />
           <Toaster />
         </Providers>
       </body>

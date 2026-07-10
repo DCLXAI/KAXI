@@ -1,9 +1,15 @@
 import { readFileSync } from "node:fs";
-import { runAgentPreflight } from "../src/lib/agent/preflight";
-import { runFallbackAgent } from "../src/lib/agent/fallback";
-import { buildAgentMeta } from "../src/lib/agent/meta";
-import { analyzeAgentIntent, type AgentMissingSlot } from "../src/lib/agent/planner";
-import {
+import type { AgentMissingSlot } from "../src/lib/agent/planner";
+import { NextRequest } from "next/server";
+import { prepareTestDb } from "./prepare-test-db";
+
+prepareTestDb("agent guards");
+
+const { runAgentPreflight } = await import("../src/lib/agent/preflight");
+const { runFallbackAgent } = await import("../src/lib/agent/fallback");
+const { buildAgentMeta } = await import("../src/lib/agent/meta");
+const { analyzeAgentIntent } = await import("../src/lib/agent/planner");
+const {
   explainAgentBackendDecision,
   explainConsultBackendDecision,
   getAgentBackend,
@@ -11,10 +17,11 @@ import {
   getConsultBackend,
   shouldRequireAgentLlm,
   shouldRequireConsultLlm,
-} from "../src/lib/ai/backend-selector";
-import { getTransformerRuntimeInfo, resolveModelCacheDir } from "../src/lib/embeddings/transformer-embedder";
-import { TOOL_MAP } from "../src/lib/agent/tools";
-import { NextRequest } from "next/server";
+} = await import("../src/lib/ai/backend-selector");
+const { getTransformerRuntimeInfo, resolveModelCacheDir } = await import(
+  "../src/lib/embeddings/transformer-embedder"
+);
+const { TOOL_MAP } = await import("../src/lib/agent/tools");
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -63,6 +70,7 @@ function testBackendSelectorContracts() {
   const snapshot = { ...process.env };
   try {
     Object.assign(process.env, {
+      AI_PROVIDER: "claude",
       ANTHROPIC_API_KEY: "anthropic-secret",
       ANTHROPIC_MODEL: "claude-opus-4-8",
       AI_REQUIRE_LLM: "false",
@@ -98,15 +106,41 @@ function testBackendSelectorContracts() {
     }
 
     Object.assign(process.env, {
+      AI_PROVIDER: "kimi",
+      OPENAI_API_KEY: "kimi-secret",
+      OPENAI_BASE_URL: "https://api.moonshot.ai/v1",
+      OPENAI_MODEL: "kimi-k2.6",
+      ANTHROPIC_API_KEY: "",
+    });
+    const kimiDiagnostics = getAiBackendDiagnostics();
+    if (
+      getAgentBackend() !== "kimi" ||
+      getConsultBackend() !== "kimi" ||
+      kimiDiagnostics.llm.backend !== "kimi" ||
+      !kimiDiagnostics.kimi.apiKeyConfigured ||
+      kimiDiagnostics.llm.model !== "kimi-k2.6"
+    ) {
+      fail(`Kimi diagnostics should expose the OpenAI-compatible backend: ${JSON.stringify(kimiDiagnostics)}`);
+    }
+    if (
+      !kimiDiagnostics.agent.decisionTable.some(
+        (item) => item.code === "agent.backend.kimi" && item.outcome === "selected"
+      )
+    ) {
+      fail(`Kimi decision path missing: ${JSON.stringify(kimiDiagnostics)}`);
+    }
+
+    Object.assign(process.env, {
       VERCEL: "1",
       VERCEL_ENV: "production",
-      ANTHROPIC_API_KEY: "",
+      AI_PROVIDER: "kimi",
+      OPENAI_API_KEY: "",
       AI_REQUIRE_LLM: "false",
       AI_ALLOW_LLM_FALLBACK: "true",
     });
 
     const hostedDiagnostics = getAiBackendDiagnostics();
-    if (!hostedDiagnostics.warnings.some((item) => item.includes("ANTHROPIC_API_KEY")) || hostedDiagnostics.issues.length !== 0) {
+    if (!hostedDiagnostics.warnings.some((item) => item.includes("OPENAI_API_KEY")) || hostedDiagnostics.issues.length !== 0) {
       fail(`hosted fallback diagnostics should warn, not fail strict readiness: ${JSON.stringify(hostedDiagnostics)}`);
     }
 
@@ -322,24 +356,26 @@ async function testAgentStatusRoute() {
   const snapshot = { ...process.env };
   try {
     Object.assign(process.env, {
-      ANTHROPIC_API_KEY: "anthropic-secret-key",
-      ANTHROPIC_MODEL: "claude-opus-4-8",
+      AI_PROVIDER: "kimi",
+      OPENAI_API_KEY: "kimi-secret-key",
+      OPENAI_BASE_URL: "https://api.moonshot.ai/v1",
+      OPENAI_MODEL: "kimi-k2.6",
     });
 
     const route = await import("../src/app/api/ai/agent/route");
     const res = await route.GET();
     if (res.status !== 200) fail(`agent status expected 200, got ${res.status}`);
     const body = await res.json();
-    if (!body.backend || !body.preflight || !body.limits || !body.claude) {
+    if (!body.backend || !body.preflight || !body.limits || !body.llm || !body.kimi) {
       fail(`agent status shape incomplete: ${JSON.stringify(body)}`);
     }
     if (!body.backendPolicy?.agent || !body.backendPolicy?.consult || !body.backendPolicy?.fallbackPolicy) {
       fail(`agent status should expose backend policy diagnostics: ${JSON.stringify(body)}`);
     }
-    if (body.backend !== "claude" || !body.claude.apiKeyConfigured) {
-      fail(`agent status should expose Claude backend metadata: ${JSON.stringify(body)}`);
+    if (body.backend !== "kimi" || !body.llm.apiKeyConfigured || !body.kimi.apiKeyConfigured) {
+      fail(`agent status should expose Kimi backend metadata: ${JSON.stringify(body)}`);
     }
-    for (const secret of ["anthropic-secret-key"]) {
+    for (const secret of ["kimi-secret-key"]) {
       const serialized = JSON.stringify(body);
       if (serialized.includes(secret)) fail(`agent status leaked secret material: ${secret}`);
     }
@@ -352,7 +388,8 @@ async function testClaudeMissingKeyFallsBackToTools() {
   const snapshot = { ...process.env };
   try {
     Object.assign(process.env, {
-      ANTHROPIC_API_KEY: "",
+      AI_PROVIDER: "kimi",
+      OPENAI_API_KEY: "",
       AI_REQUIRE_LLM: "false",
       AI_ALLOW_LLM_FALLBACK: "true",
       AI_AGENT_RATE_LIMIT: "0",
@@ -387,7 +424,8 @@ async function testClaudeStrictModeBlocksWithoutKey() {
   const snapshot = { ...process.env };
   try {
     Object.assign(process.env, {
-      ANTHROPIC_API_KEY: "",
+      AI_PROVIDER: "kimi",
+      OPENAI_API_KEY: "",
       AI_REQUIRE_LLM: "true",
       AI_ALLOW_LLM_FALLBACK: "false",
       AI_AGENT_RATE_LIMIT: "0",
@@ -431,7 +469,8 @@ async function testConsultRouteDoesNotRequireSharedLimiterWhenDisabled() {
       AI_CONSULT_DAILY_QUOTA: "0",
       AI_EMBEDDING_INIT_TIMEOUT_MS: "1",
       AI_LLM_TIMEOUT_MS: "1000",
-      ANTHROPIC_API_KEY: "",
+      AI_PROVIDER: "kimi",
+      OPENAI_API_KEY: "",
       AI_REQUIRE_LLM: "false",
       AI_ALLOW_LLM_FALLBACK: "true",
     });
@@ -478,7 +517,8 @@ async function testConsultOfficialSummaryPrioritizesQuestionDocuments() {
       AI_CONSULT_DAILY_QUOTA: "0",
       AI_EMBEDDING_INIT_TIMEOUT_MS: "1",
       AI_LLM_TIMEOUT_MS: "1000",
-      ANTHROPIC_API_KEY: "",
+      AI_PROVIDER: "kimi",
+      OPENAI_API_KEY: "",
       AI_REQUIRE_LLM: "false",
       AI_ALLOW_LLM_FALLBACK: "true",
     });

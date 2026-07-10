@@ -9,8 +9,9 @@ import {
 import type { Lang } from "@/lib/i18n/translations";
 import { db } from "@/lib/db";
 import { getConsultBackend, shouldRequireConsultLlm } from "@/lib/ai/backend-selector";
-import { generateClaudeText, isClaudeNotConfiguredError, type ClaudeGatewayMessage } from "@/lib/ai/claude-gateway";
-import { hybridSearch, initVectorStore } from "@/lib/embeddings/vector-store";
+import { generateLlmText, getLlmModel, isLlmNotConfiguredError, type LlmGatewayMessage } from "@/lib/ai/llm-gateway";
+import { hybridSearch, initVectorStore, getStoreStats, type ScoredDoc } from "@/lib/embeddings/vector-store";
+import { isEnvFalse } from "@/lib/env";
 import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
 import { withImmigrationLegalBasisDocs } from "@/lib/knowledge/legal-basis";
 import { ensureGroundedCitationAnswer } from "@/lib/knowledge/citations";
@@ -42,7 +43,7 @@ function llmUnavailableResponse(message: string) {
   return NextResponse.json(
     {
       error: "LLM backend unavailable",
-      message: "Claude LLM gateway is unavailable. Official-summary fallback is disabled for this deployment.",
+      message: "The configured LLM gateway is unavailable. Official-summary fallback is disabled for this deployment.",
       detail: message.slice(0, 500),
       backend: "llm-unavailable",
     },
@@ -57,6 +58,51 @@ interface ExpertAnswerResult {
   needsHumanExpert: boolean;
   backend: string;
   durationMs?: number;
+}
+
+function shouldUseTransformerRag(value: string | undefined | null): boolean {
+  return !isEnvFalse(value);
+}
+
+function searchMetaFromResults(results: ScoredDoc[], lang: Lang) {
+  return results.map((r) => ({
+    id: r.doc.id,
+    title: pickLangText(r.doc.title, lang),
+    score: Number(r.score.toFixed(3)),
+    vectorScore: Number(r.vectorScore.toFixed(3)),
+    keywordScore: Number(r.keywordScore.toFixed(3)),
+    method: r.method,
+    category: r.doc.category,
+    docSource: r.doc.source,
+  }));
+}
+
+function retrievalDiagnostics(results: ScoredDoc[], requestedSemantic: boolean) {
+  const storeStats = getStoreStats();
+  const methods = Array.from(new Set(results.map((result) => result.method)));
+  const backend = methods.includes("pgvector")
+    ? "pgvector"
+    : methods.includes("transformer")
+      ? "transformer"
+      : methods.includes("tfidf")
+        ? "tfidf"
+        : "none";
+
+  return {
+    backend,
+    methods,
+    requestedSemantic,
+    pgvectorUsed: backend === "pgvector",
+    pgvectorConfigured: storeStats.pgvectorConfigured,
+    resultCount: results.length,
+    store: {
+      ready: storeStats.ready,
+      method: storeStats.method,
+      knowledgeSource: storeStats.knowledgeSource,
+      transformerAvailable: storeStats.transformerAvailable,
+      transformerCoverage: storeStats.transformerCoverage,
+    },
+  };
 }
 
 function consultDisclaimer(lang: Lang): string {
@@ -116,10 +162,13 @@ export async function POST(req: NextRequest) {
     initVectorStore();
 
     // 2. RAG 검색 (전문 상담은 더 많은 문서 검색)
+    const useTransformerRag = shouldUseTransformerRag(process.env.AI_CONSULT_USE_TRANSFORMER_RAG);
     const searchResults = await hybridSearch(question, {
       topK: 6,
-      useTransformer: process.env.AI_CONSULT_USE_TRANSFORMER_RAG === "true",
+      useTransformer: useTransformerRag,
     });
+    const searchMeta = searchMetaFromResults(searchResults, lang);
+    const retrieval = retrievalDiagnostics(searchResults, useTransformerRag);
     const docs: KnowledgeDoc[] = withImmigrationLegalBasisDocs(
       question,
       searchResults.map((r) => r.doc),
@@ -153,11 +202,8 @@ export async function POST(req: NextRequest) {
             source: "expert",
             retrievedDocs: JSON.stringify({
               docIds: docs.map((d) => d.id),
-              searchMeta: searchResults.map((r) => ({
-                id: r.doc.id,
-                score: Number(r.score.toFixed(3)),
-                vectorScore: Number(r.vectorScore.toFixed(3)),
-              })),
+              searchMeta,
+              retrieval,
               mode,
               expert: true,
               backend: result.backend,
@@ -181,6 +227,7 @@ export async function POST(req: NextRequest) {
           backend: result.backend,
           docIds: docs.map((doc) => doc.id),
           sourceNotice,
+          retrieval,
         },
         aiDraft: answer,
         source: "consult",
@@ -205,8 +252,10 @@ export async function POST(req: NextRequest) {
       suggestedFollowups: result.suggestedFollowups,
       needsHumanExpert: result.needsHumanExpert,
       backend: result.backend,
-      model: result.backend === "claude" ? process.env.ANTHROPIC_MODEL || "claude-opus-4-8" : null,
+      model: result.backend === "kimi" || result.backend === "claude" ? getLlmModel() : null,
       sourceNotice,
+      searchMeta,
+      retrieval,
     });
   } catch (e) {
     console.error("[POST /api/ai/consult]", e);
@@ -307,7 +356,7 @@ ${context}
 - 답변 마지막에는 다음 출처 기준 문장을 그대로 포함: "${buildRagBasisNotice(lang, docs)}"
 - ${needsHumanExpert ? "⚠️ 이 사례는 반드시 행정사 상담이 필요합니다. 답변 끝에 권유하세요." : ""}`;
 
-  const messages: ClaudeGatewayMessage[] = [
+  const messages: LlmGatewayMessage[] = [
     { role: "system", content: systemPrompt },
     ...history.slice(-6).map((h) => ({
       role: h.role === "user" ? ("user" as const) : ("assistant" as const),
@@ -322,7 +371,7 @@ ${context}
   const consultBackend = getConsultBackend();
 
   try {
-    const completion = await generateClaudeText({
+    const completion = await generateLlmText({
       feature: "consult",
       messages,
       temperature: 0.2,
@@ -336,12 +385,12 @@ ${context}
       disclaimer,
       suggestedFollowups,
       needsHumanExpert,
-      backend: "claude",
+      backend: completion.backend,
       durationMs: completion.durationMs,
     };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    const configurationFallback = isClaudeNotConfiguredError(e);
+    const configurationFallback = isLlmNotConfiguredError(e);
     if (configurationFallback) {
       console.warn("[Expert LLM skipped]", message);
     } else {

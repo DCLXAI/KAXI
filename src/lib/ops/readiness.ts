@@ -7,6 +7,9 @@ import { getPgvectorStats } from "@/lib/embeddings/pgvector-rag";
 import { getStoreStats } from "@/lib/embeddings/vector-store";
 import { getPrivacyRuntimeReadiness } from "@/lib/privacy/config";
 import { getSchoolSourceAudit } from "@/lib/schools/repository";
+import { isTypebotGatewayAuthConfigured } from "@/lib/typebot/gateway-auth";
+import { checkProductionSchemaParity } from "@/lib/ops/schema-parity";
+import { getChatAttachmentSecurityDiagnostics } from "@/lib/chat/attachment-security";
 
 export type ReadinessStatus = "ready" | "degraded";
 
@@ -38,6 +41,19 @@ function configured(value: string | undefined): boolean {
 
 function adminRoleValid(value: string | undefined): boolean {
   return value === "owner" || value === "admin" || value === "viewer";
+}
+
+function strongSecret(value: string | undefined) {
+  const text = value?.trim() || "";
+  return text.length >= 32 && !/^replace-with-/i.test(text);
+}
+
+function httpsUrl(value: string | undefined) {
+  try {
+    return new URL(value || "").protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function check(
@@ -82,6 +98,15 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
   const production = isProductionEnv(env);
   const databaseInfo = getRuntimeDatabaseInfo(env);
   const databaseConnectivity = await checkRuntimeDatabaseConnectivity();
+  const schemaParity =
+    databaseInfo.kind === "postgresql" && databaseConnectivity.ok
+      ? await checkProductionSchemaParity()
+      : {
+          ok: false,
+          latestMigration: null,
+          missing: ["database_connection"],
+          detail: "Schema parity requires a reachable PostgreSQL operational database.",
+        };
   const documentStorage = getDocumentStorageInfo(env);
   const documentSigningConfigured = Boolean(getDocumentUploadSigningSecret(env));
   const rateLimitBackend = (env.RATE_LIMIT_BACKEND || "auto").trim().toLowerCase();
@@ -93,6 +118,14 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
     error: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
   }));
   const aiBackendDiagnostics = getAiBackendDiagnostics(env);
+  const n8nUrlsReady = [
+    env.N8N_TYPEBOT_RAG_WEBHOOK_URL,
+    env.N8N_RAG_INGESTION_WEBHOOK_URL,
+    env.N8N_TYPEBOT_HANDOFF_WEBHOOK_URL,
+  ].every(httpsUrl);
+  const chatGatewaySecurityReady = strongSecret(env.N8N_WEBHOOK_SIGNING_SECRET) && strongSecret(env.CHAT_SESSION_SIGNING_SECRET);
+  const chatImageOcrReady = aiBackendDiagnostics.llm.apiKeyConfigured;
+  const attachmentSecurity = getChatAttachmentSecurityDiagnostics(env);
 
   const managedDatabase = databaseInfo.sharedWritable && databaseConnectivity.ok;
   const postgresqlOperationalUrl = databaseInfo.kind === "postgresql" && databaseInfo.postgresqlConfigured;
@@ -112,6 +145,60 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
     (!production || schoolAudit.source === "db");
 
   const checks: ReadinessCheck[] = [
+    check(
+      "rag.gateway_security",
+      "RAG gateway signing and endpoints",
+      n8nUrlsReady && chatGatewaySecurityReady,
+      n8nUrlsReady && chatGatewaySecurityReady
+        ? "All n8n entry points use HTTPS and KAXI owns strong webhook/session signing secrets."
+        : "Configure all n8n HTTPS webhook URLs plus separate 32-byte webhook and chat-session signing secrets.",
+      { n8nUrlsReady, webhookSigningReady: strongSecret(env.N8N_WEBHOOK_SIGNING_SECRET), chatSessionSigningReady: strongSecret(env.CHAT_SESSION_SIGNING_SECRET) },
+    ),
+    check(
+      "typebot.public_endpoint",
+      "Published Typebot endpoint",
+      httpsUrl(env.TYPEBOT_PUBLIC_URL) && configured(env.TYPEBOT_PUBLIC_ID),
+      "TYPEBOT_PUBLIC_URL and TYPEBOT_PUBLIC_ID identify the published customer flow for daily health checks.",
+      { publicUrlConfigured: httpsUrl(env.TYPEBOT_PUBLIC_URL), publicIdConfigured: configured(env.TYPEBOT_PUBLIC_ID) },
+    ),
+    check(
+      "typebot.gateway_auth",
+      "Typebot gateway authentication",
+      isTypebotGatewayAuthConfigured(env),
+      isTypebotGatewayAuthConfigured(env)
+        ? "Typebot server-side webhooks authenticate to the KAXI gateway with a separate strong secret."
+        : "Configure a separate 32-byte TYPEBOT_GATEWAY_SECRET in KAXI and both Typebot webhook headers.",
+      { gatewaySecretConfigured: isTypebotGatewayAuthConfigured(env) },
+    ),
+    check(
+      "chat.attachments_storage",
+      "Chat attachment private storage",
+      configured(env.NEXT_PUBLIC_SUPABASE_URL) && configured(env.SUPABASE_SERVICE_ROLE_KEY) && configured(env.SUPABASE_CHAT_ATTACHMENTS_BUCKET || env.SUPABASE_STORAGE_BUCKET),
+      "Chat attachment processing requires the Supabase service role and a private bucket.",
+      { supabaseUrlConfigured: configured(env.NEXT_PUBLIC_SUPABASE_URL), serviceRoleConfigured: configured(env.SUPABASE_SERVICE_ROLE_KEY), bucketConfigured: configured(env.SUPABASE_CHAT_ATTACHMENTS_BUCKET || env.SUPABASE_STORAGE_BUCKET) },
+    ),
+    check(
+      "chat.attachment_ocr_provider",
+      "Chat image OCR provider",
+      chatImageOcrReady,
+      chatImageOcrReady
+        ? `${aiBackendDiagnostics.llm.backend} vision is configured for JPEG, PNG, and WebP chat attachment extraction.`
+        : "The selected managed LLM API key is required to process image attachments.",
+      { provider: aiBackendDiagnostics.llm.backend, configured: chatImageOcrReady },
+      production ? "required" : "warning"
+    ),
+    check(
+      "chat.attachment_malware_scanner",
+      "Chat attachment malware scanning",
+      attachmentSecurity.ready,
+      !attachmentSecurity.uploadsRequested
+        ? "Chat attachment uploads are disabled until a managed malware scanner is configured and explicitly enabled."
+        : attachmentSecurity.externalScannerConfigured
+        ? "Managed malware scanning runs before private storage; images are also decoded and re-encoded, and active PDF content is rejected."
+        : "The configured managed malware scanner is unavailable, so attachment uploads fail closed.",
+      attachmentSecurity,
+      attachmentSecurity.uploadsRequested && attachmentSecurity.externalScannerRequired ? "required" : "warning",
+    ),
     check(
       "rag.review_after",
       "RAG review freshness",
@@ -175,6 +262,17 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
         activePrismaProvider: databaseInfo.activePrismaProvider,
         connectivity: databaseConnectivity.ok,
       }
+    ),
+    check(
+      "database.schema_parity",
+      "Canonical database schema parity",
+      schemaParity.ok,
+      schemaParity.detail,
+      {
+        latestMigration: schemaParity.latestMigration,
+        missing: schemaParity.missing,
+      },
+      production ? "required" : "warning",
     ),
     check(
       "privacy.encryption",
@@ -257,6 +355,8 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
         runtime: aiBackendDiagnostics.runtime,
         agent: aiBackendDiagnostics.agent,
         consult: aiBackendDiagnostics.consult,
+        llm: aiBackendDiagnostics.llm,
+        kimi: aiBackendDiagnostics.kimi,
         claude: aiBackendDiagnostics.claude,
         fallbackPolicy: aiBackendDiagnostics.fallbackPolicy,
         warningCount: aiBackendDiagnostics.warnings.length,

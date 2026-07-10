@@ -50,7 +50,7 @@ Draft consignment table:
 | --- | --- | --- | --- |
 | Vercel or hosting provider | web/API hosting, logs, deployment | request metadata, service logs | overseas possible depending on hosting region |
 | Database/storage provider | application database/storage | user/lead/chat/partner request records | configured deployment region |
-| Anthropic Claude API provider | answer generation and structured extraction | redacted prompt text and retrieved context sent for generation | provider/API processing region |
+| Selected managed AI API provider (Kimi/Moonshot by default; Anthropic optional) | answer generation and structured extraction | redacted prompt text, retrieved context, and document media when OCR is requested | provider/API processing region |
 | Email/SMS provider | notifications and partner routing | contact, message template | depends on provider |
 
 ## 6. Overseas Transfer
@@ -65,7 +65,7 @@ Draft overseas-transfer register:
 | [insert AI provider if used] | [insert country] | prompt, context, generated output | AI generation | API request when user asks AI | provider policy / KAXI retention | offer non-AI or partner route where feasible |
 | [insert email/SMS provider] | [insert country] | contact, notification content | notices and partner routing | API request when notification is sent | provider policy / KAXI retention | alternative contact where feasible |
 
-The current deployment must keep this table environment-specific. Phase 2 uses the managed Anthropic Claude API path for LLM calls, so overseas-transfer disclosure must cover prompt/context transmission whenever personal information can be included after redaction.
+The current deployment must keep this table environment-specific. The managed LLM gateway defaults to Kimi/Moonshot and can optionally select Anthropic, so the production overseas-transfer register must name the provider actually configured and cover prompt/context transmission plus document media sent for OCR.
 
 ## 7. Retention and Deletion
 

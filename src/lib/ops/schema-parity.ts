@@ -1,0 +1,96 @@
+import { db } from "@/lib/db";
+
+export const REQUIRED_PRODUCTION_MIGRATION = "20260710190000_handoff_consent_evidence";
+
+const REQUIRED_SCHEMA_OBJECTS = [
+  "migration_ledger",
+  "attachment_jobs",
+  "session_retention",
+  "message_ciphertext",
+  "retrieval_ciphertext",
+  "handoff_content_ciphertext",
+  "handoff_source_message",
+  "audit_hashes",
+  "attachment_claim_function",
+  "session_retention_function",
+  "handoff_content_function",
+  "audit_sanitizer_function",
+  "handoff_consent_evidence",
+] as const;
+
+type RequiredSchemaObject = (typeof REQUIRED_SCHEMA_OBJECTS)[number];
+type SchemaParityRow = Record<RequiredSchemaObject, boolean>;
+
+export interface SchemaParityResult {
+  ok: boolean;
+  latestMigration: string;
+  missing: RequiredSchemaObject[];
+  detail: string;
+}
+
+function safeError(error: unknown) {
+  return (error instanceof Error ? error.message : String(error)).replace(/postgres(?:ql)?:\/\/[^\s]+/gi, "[database-url]").slice(0, 240);
+}
+
+export async function checkProductionSchemaParity(): Promise<SchemaParityResult> {
+  try {
+    const rows = await db.$queryRaw<SchemaParityRow[]>`
+      SELECT
+        EXISTS (
+          SELECT 1
+          FROM public._prisma_migrations
+          WHERE migration_name = ${REQUIRED_PRODUCTION_MIGRATION}
+            AND finished_at IS NOT NULL
+            AND rolled_back_at IS NULL
+        ) AS migration_ledger,
+        to_regclass('public.chat_attachment_jobs') IS NOT NULL AS attachment_jobs,
+        EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'chat_sessions' AND column_name = 'retention_until'
+        ) AS session_retention,
+        EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'chat_messages' AND column_name = 'question_ciphertext'
+        ) AS message_ciphertext,
+        EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'retrieval_runs' AND column_name = 'query_ciphertext'
+        ) AS retrieval_ciphertext,
+        EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'handoff_updates' AND column_name = 'question_ciphertext'
+        ) AS handoff_content_ciphertext,
+        EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'handoff_tasks' AND column_name = 'source_chat_message_id'
+        ) AS handoff_source_message,
+        EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'n8n_audit_messages' AND column_name = 'question_hash'
+        ) AS audit_hashes,
+        to_regprocedure('public.kaxi_claim_chat_attachment_jobs(integer,integer)') IS NOT NULL AS attachment_claim_function,
+        to_regprocedure('public.kaxi_extend_chat_session_retention()') IS NOT NULL AS session_retention_function,
+        to_regprocedure('public.kaxi_propagate_handoff_content_privacy()') IS NOT NULL AS handoff_content_function,
+        to_regprocedure('public.kaxi_sanitize_n8n_audit_content()') IS NOT NULL AS audit_sanitizer_function,
+        to_regclass('public.handoff_consent_evidence') IS NOT NULL AS handoff_consent_evidence
+    `;
+    const row = rows[0];
+    const missing = REQUIRED_SCHEMA_OBJECTS.filter((key) => row?.[key] !== true);
+    return {
+      ok: missing.length === 0,
+      latestMigration: REQUIRED_PRODUCTION_MIGRATION,
+      missing,
+      detail:
+        missing.length === 0
+          ? `Migration ${REQUIRED_PRODUCTION_MIGRATION} and all canonical runtime objects are present.`
+          : `Database schema is missing required runtime objects: ${missing.join(", ")}.`,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      latestMigration: REQUIRED_PRODUCTION_MIGRATION,
+      missing: [...REQUIRED_SCHEMA_OBJECTS],
+      detail: `Database schema parity could not be verified: ${safeError(error)}`,
+    };
+  }
+}
