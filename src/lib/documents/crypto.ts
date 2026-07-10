@@ -2,7 +2,7 @@ import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { decryptPii, encryptPii } from "@/lib/privacy/pii";
 
 export interface DocumentUploadTokenPayload {
-  studentRef: string;
+  studentProfileId: string;
   documentType: string;
   originalName: string;
   mimeType: string;

@@ -1,4 +1,4 @@
-import { DocumentStatus, Prisma, ReviewStatus, UserRole } from "@prisma/client";
+import { DocumentStatus, Prisma, ReviewStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { recordAuditLog } from "@/lib/audit";
 import {
@@ -19,7 +19,7 @@ export interface DocumentValidationInput {
 }
 
 export interface DocumentUploadCommitInput extends DocumentValidationInput {
-  studentRef: string;
+  studentProfileId: string;
   documentType: string;
   storageKey: string;
   bytes: Uint8Array;
@@ -35,14 +35,6 @@ export interface DocumentAuditContext {
 
 function jsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
-}
-
-function normalizeStudentRef(value: string): string {
-  const trimmed = value.trim();
-  if (!/^[a-zA-Z0-9._:-]{8,120}$/.test(trimmed)) {
-    throw new Error("Invalid studentRef.");
-  }
-  return trimmed;
 }
 
 function safeFileName(name: string): string {
@@ -64,49 +56,27 @@ export function validateDocumentUpload(input: DocumentValidationInput) {
 }
 
 export function createDocumentStorageKey(input: {
-  studentRef: string;
+  studentProfileId: string;
   documentType: string;
   originalName: string;
   sha256: string;
 }): string {
-  const studentHash = sha256Hex(input.studentRef).slice(0, 20);
+  const studentHash = sha256Hex(input.studentProfileId).slice(0, 20);
   const docType = input.documentType.replace(/[^\w.\-]+/g, "_").slice(0, 64);
   return `uploads/${studentHash}/${docType}/${Date.now()}-${input.sha256.slice(0, 16)}-${safeFileName(input.originalName)}`;
 }
 
-export async function ensureStudentProfile(studentRef: string) {
-  const ref = normalizeStudentRef(studentRef);
-  const studentHash = sha256Hex(ref);
-  const zaloUid = `doc:${studentHash.slice(0, 48)}`;
-  const email = `${studentHash.slice(0, 16)}@student.kaxi.local`;
-
-  const user = await db.user.upsert({
-    where: { zaloUid },
-    update: { role: UserRole.STUDENT, locale: "ko" },
-    create: {
-      role: UserRole.STUDENT,
-      locale: "ko",
-      email,
-      zaloUid,
-    },
-    include: { studentProfile: true },
-  });
-
-  if (user.studentProfile) return user.studentProfile;
-
-  return db.studentProfile.create({
-    data: {
-      userId: user.id,
-      nationality: "VN",
-      programType: "unknown",
-    },
+export async function getStudentProfileForUser(userId: string) {
+  return db.studentProfile.upsert({
+    where: { userId },
+    update: {},
+    create: { userId, nationality: "VN" },
   });
 }
 
-export async function listStudentDocuments(studentRef: string) {
-  const profile = await ensureStudentProfile(studentRef);
+export async function listDocumentsForProfile(studentProfileId: string) {
   const existing = await db.documentItem.findMany({
-    where: { studentProfileId: profile.id },
+    where: { studentProfileId },
     include: { file: true },
     orderBy: [{ required: "desc" }, { documentType: "asc" }],
   });
@@ -204,7 +174,9 @@ export async function commitDocumentUpload(input: DocumentUploadCommitInput, con
     throw new Error("Uploaded file hash does not match signed sha256.");
   }
 
-  const profile = await ensureStudentProfile(input.studentRef);
+  const profile = await db.studentProfile.findUniqueOrThrow({
+    where: { id: input.studentProfileId },
+  });
   await persistUploadedBytes(input.storageKey, input.bytes, input.mimeType);
 
   const result = await db.$transaction(async (tx) => {

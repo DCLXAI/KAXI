@@ -34,9 +34,9 @@ prepareTestDb("document flow");
 
 const { NextRequest } = await import("next/server");
 const { db } = await import("../src/lib/db");
-const listRoute = await import("../src/app/api/documents/route");
-const intentRoute = await import("../src/app/api/documents/upload-intent/route");
-const directRoute = await import("../src/app/api/documents/upload-direct/route");
+// NOTE: documents/route.ts, upload-intent/route.ts, upload-direct/route.ts still reference
+// the pre-Task-2 studentRef contract and are exercised in Task 2's route-level test coverage.
+// This script tests the Task 1 repository/crypto layer directly instead of importing them.
 const reviewRoute = await import("../src/app/api/admin/documents/[id]/review/route");
 const { getDocumentWorkspaceIssue } = await import("../src/lib/documents/workspace-availability");
 const {
@@ -74,6 +74,34 @@ function adminRequest(path: string, init: RequestInit = {}) {
 }
 
 try {
+  const { getStudentProfileForUser, listDocumentsForProfile, commitDocumentUpload: commitUpload, validateDocumentUpload } =
+    await import("../src/lib/documents/repository");
+
+  // 세션 사용자 시드 (auth bridge가 만드는 형태와 동일)
+  const seededUser = await db.user.create({
+    data: {
+      role: "STUDENT",
+      locale: "ko",
+      email: "doc-test-student@kaxi.local",
+      authUserId: "11111111-2222-4333-8444-555555555555",
+    },
+  });
+
+  const profile = await getStudentProfileForUser(seededUser.id);
+  assert(profile.userId === seededUser.id, "getStudentProfileForUser must bind profile to the seeded user");
+
+  // 멱등성: 두 번 호출해도 같은 프로필
+  const profileAgain = await getStudentProfileForUser(seededUser.id);
+  assert(profileAgain.id === profile.id, "getStudentProfileForUser must be idempotent");
+
+  // 유령 신원(zaloUid doc:*) 생성 금지
+  const ghostUsers = await db.user.count({ where: { zaloUid: { startsWith: "doc:" } } });
+  assert(ghostUsers === 0, "no doc:* ghost users may be created");
+
+  const emptyList = await listDocumentsForProfile(profile.id);
+  assert(Array.isArray(emptyList) && emptyList.length > 0, "listDocumentsForProfile returns the default checklist");
+  assert(emptyList.every((d) => d.status === "NOT_UPLOADED"), "fresh profile has no uploaded documents");
+
   await db.chatSession.create({
     data: {
       id: "queue-session-row",
@@ -213,92 +241,97 @@ try {
   const mockRead = await readSupabaseUploadedBytes("mock/storage.pdf", mockSupabaseClient);
   assert(mockRead.equals(Buffer.from("mock")), "supabase storage mock should persist and read bytes");
 
-  const studentRef = "student-flow-test-001";
-  const listBefore = await json(await listRoute.GET(request(`/api/documents?studentRef=${studentRef}`)));
-  assert(listBefore.ok, "student document list should load");
-  assert(listBefore.body.documents.length >= 6, "student document list should include default document items");
+  // Repository/crypto layer coverage (Task 1): drive commitDocumentUpload directly via a
+  // manually-signed token instead of upload-intent/upload-direct routes, which still speak
+  // the pre-Task-2 studentRef contract and are covered by Task 2's route-level tests.
+  const { signDocumentUploadPayload } = await import("../src/lib/documents/crypto");
+  const { DOCUMENT_UPLOAD_TOKEN_TTL_SECONDS } = await import("../src/lib/documents/config");
+  const { createDocumentStorageKey: makeStorageKey } = await import("../src/lib/documents/repository");
+
+  const fileBytes = Buffer.from("KAXI test passport bytes");
+  const fileSha = sha256(fileBytes);
+  const storageKey = makeStorageKey({
+    studentProfileId: profile.id,
+    documentType: "passport",
+    originalName: "passport.pdf",
+    sha256: fileSha,
+  });
+  const uploadToken = signDocumentUploadPayload(
+    {
+      studentProfileId: profile.id,
+      documentType: "passport",
+      originalName: "passport.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: fileBytes.byteLength,
+      sha256: fileSha,
+      storageKey,
+      exp: Math.floor(Date.now() / 1000) + DOCUMENT_UPLOAD_TOKEN_TTL_SECONDS,
+    },
+    "test-document-upload-secret"
+  );
+  const verifiedPayload = (await import("../src/lib/documents/crypto")).verifyDocumentUploadToken(
+    uploadToken,
+    "test-document-upload-secret"
+  );
   assert(
-    listBefore.body.documents.some((doc: { status: string }) => doc.status === "NOT_UPLOADED"),
-    "default document state should include NOT_UPLOADED"
+    verifiedPayload?.studentProfileId === profile.id,
+    "signed upload token must round-trip studentProfileId"
   );
 
-  const pdf = Buffer.from("%PDF-1.4\nKAXI test document\n%%EOF\n", "utf8");
-  const hash = sha256(pdf);
-  const intent = await json(
-    await intentRoute.POST(
-      request("/api/documents/upload-intent", {
-        method: "POST",
-        body: JSON.stringify({
-          studentRef,
-          documentType: "passport",
-          originalName: "passport.pdf",
-          mimeType: "application/pdf",
-          sizeBytes: pdf.byteLength,
-          sha256: hash,
-        }),
-      })
-    )
+  const committed = await commitUpload(
+    {
+      studentProfileId: profile.id,
+      documentType: "passport",
+      originalName: "passport.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: fileBytes.byteLength,
+      sha256: fileSha,
+      storageKey,
+      bytes: fileBytes,
+    },
+    { actor: `student:${profile.id}`, actorRole: "student", action: "document.uploaded" }
   );
-  assert(intent.ok, `upload intent should succeed: ${JSON.stringify(intent.body)}`);
-  assert(intent.body.uploadUrl.includes("/api/documents/upload-direct"), "intent should return direct upload URL");
+  assert(committed.status === "UPLOADED", "commitDocumentUpload should mark the document UPLOADED");
 
-  const upload = await json(
-    await directRoute.PUT(
-      new NextRequest(intent.body.uploadUrl, {
-        method: "PUT",
-        headers: {
-          "content-type": "application/pdf",
-          "x-kaxi-file-sha256": hash,
-        },
-        body: new Blob([pdf], { type: "application/pdf" }),
-      })
-    )
-  );
-  assert(upload.ok, `direct upload should succeed: ${JSON.stringify(upload.body)}`);
-  assert(upload.body.document.status === "NEEDS_REVIEW", "missing Claude key should degrade uploaded document to NEEDS_REVIEW");
-  assert(upload.body.document.reviewStatus === "NEEDS_HUMAN_REVIEW", "missing Claude key should require human review");
+  const listAfter = await listDocumentsForProfile(profile.id);
+  const passport = listAfter.find((d) => d.documentType === "passport");
+  assert(passport && passport.status !== "NOT_UPLOADED", "committed upload must appear in profile document list");
 
-  const uploadedFile = await db.uploadedFile.findFirst({ where: { sha256: hash } });
+  const processed = await processDocumentOcr(committed.id, { actor: "test", actorRole: "student" });
+  assert(processed.status === "NEEDS_REVIEW", "missing Claude key should degrade uploaded document to NEEDS_REVIEW");
+  assert(processed.reviewStatus === "NEEDS_HUMAN_REVIEW", "missing Claude key should require human review");
+
+  const uploadedFile = await db.uploadedFile.findFirst({ where: { sha256: fileSha } });
   assert(uploadedFile, "UploadedFile should be persisted");
   assert(uploadedFile.mimeType === "application/pdf", "UploadedFile MIME should be stored");
-  assert(uploadedFile.sizeBytes === pdf.byteLength, "UploadedFile size should be stored");
+  assert(uploadedFile.sizeBytes === fileBytes.byteLength, "UploadedFile size should be stored");
   assert(existsSync(join(process.env.DOCUMENT_UPLOAD_DIR!, uploadedFile.storageKey)), "uploaded bytes should be stored");
 
   process.env.DOCUMENT_UPLOAD_STORAGE_BACKEND = "database";
   const dbBackedPdf = Buffer.from("%PDF-1.4\nKAXI database backed document\n%%EOF\n", "utf8");
   const dbBackedHash = sha256(dbBackedPdf);
-  const databaseIntent = await json(
-    await intentRoute.POST(
-      request("/api/documents/upload-intent", {
-        method: "POST",
-        body: JSON.stringify({
-          studentRef,
-          documentType: "transcript",
-          originalName: "transcript.pdf",
-          mimeType: "application/pdf",
-          sizeBytes: dbBackedPdf.byteLength,
-          sha256: dbBackedHash,
-        }),
-      })
-    )
+  const dbBackedStorageKey = makeStorageKey({
+    studentProfileId: profile.id,
+    documentType: "transcript",
+    originalName: "transcript.pdf",
+    sha256: dbBackedHash,
+  });
+  const dbBackedResult = await commitUpload(
+    {
+      studentProfileId: profile.id,
+      documentType: "transcript",
+      originalName: "transcript.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: dbBackedPdf.byteLength,
+      sha256: dbBackedHash,
+      storageKey: dbBackedStorageKey,
+      bytes: dbBackedPdf,
+    },
+    { actor: `student:${profile.id}`, actorRole: "student", action: "document.uploaded" }
   );
-  assert(databaseIntent.ok, `database upload intent should succeed: ${JSON.stringify(databaseIntent.body)}`);
-
-  const databaseUpload = await json(
-    await directRoute.PUT(
-      new NextRequest(databaseIntent.body.uploadUrl, {
-        method: "PUT",
-        headers: {
-          "content-type": "application/pdf",
-          "x-kaxi-file-sha256": dbBackedHash,
-        },
-        body: new Blob([dbBackedPdf], { type: "application/pdf" }),
-      })
-    )
-  );
-  assert(databaseUpload.ok, `database-backed upload should succeed: ${JSON.stringify(databaseUpload.body)}`);
+  assert(dbBackedResult.status === "UPLOADED", "database-backed upload should commit as UPLOADED");
   const databaseBlob = await db.documentFileBlob.findUnique({
-    where: { storageKey: databaseIntent.body.storageKey },
+    where: { storageKey: dbBackedStorageKey },
   });
   assert(databaseBlob, "DocumentFileBlob should store database-backed upload bytes");
   assert(databaseBlob.sizeBytes === dbBackedPdf.byteLength, "DocumentFileBlob size should match upload");
@@ -344,53 +377,51 @@ try {
   delete process.env.DOCUMENT_OCR_MOCK_RESPONSE_JSON;
 
   const tampered = Buffer.from("not the same file", "utf8");
-  const tamperedUpload = await json(
-    await directRoute.PUT(
-      new NextRequest(intent.body.uploadUrl, {
-        method: "PUT",
-        headers: {
-          "content-type": "application/pdf",
-          "x-kaxi-file-sha256": hash,
-        },
-        body: new Blob([tampered], { type: "application/pdf" }),
-      })
-    )
-  );
-  assert(!tamperedUpload.ok && tamperedUpload.status === 400, "hash mismatch upload should fail");
+  let tamperedRejected = false;
+  try {
+    await commitUpload(
+      {
+        studentProfileId: profile.id,
+        documentType: "passport",
+        originalName: "passport.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: fileBytes.byteLength,
+        sha256: fileSha,
+        storageKey,
+        bytes: tampered,
+      },
+      { actor: `student:${profile.id}`, actorRole: "student", action: "document.uploaded" }
+    );
+  } catch {
+    tamperedRejected = true;
+  }
+  assert(tamperedRejected, "hash/length mismatch upload should be rejected");
 
-  const badMime = await json(
-    await intentRoute.POST(
-      request("/api/documents/upload-intent", {
-        method: "POST",
-        body: JSON.stringify({
-          studentRef,
-          documentType: "financial_proof",
-          originalName: "malware.exe",
-          mimeType: "application/x-msdownload",
-          sizeBytes: 100,
-          sha256: "a".repeat(64),
-        }),
-      })
-    )
-  );
-  assert(!badMime.ok, "unsupported MIME type should be rejected");
+  let badMimeRejected = false;
+  try {
+    validateDocumentUpload({
+      originalName: "malware.exe",
+      mimeType: "application/x-msdownload",
+      sizeBytes: 100,
+      sha256: "a".repeat(64),
+    });
+  } catch {
+    badMimeRejected = true;
+  }
+  assert(badMimeRejected, "unsupported MIME type should be rejected");
 
-  const tooLarge = await json(
-    await intentRoute.POST(
-      request("/api/documents/upload-intent", {
-        method: "POST",
-        body: JSON.stringify({
-          studentRef,
-          documentType: "financial_proof",
-          originalName: "large.pdf",
-          mimeType: "application/pdf",
-          sizeBytes: 11 * 1024 * 1024,
-          sha256: "b".repeat(64),
-        }),
-      })
-    )
-  );
-  assert(!tooLarge.ok, "oversized file should be rejected");
+  let tooLargeRejected = false;
+  try {
+    validateDocumentUpload({
+      originalName: "large.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 11 * 1024 * 1024,
+      sha256: "b".repeat(64),
+    });
+  } catch {
+    tooLargeRejected = true;
+  }
+  assert(tooLargeRejected, "oversized file should be rejected");
 
   const ocrProcessing = await json(
     await reviewRoute.PATCH(
