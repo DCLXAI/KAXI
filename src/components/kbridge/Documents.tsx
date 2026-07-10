@@ -118,35 +118,31 @@ async function sha256File(file: File): Promise<string> {
     .join("");
 }
 
-function getStudentRef() {
-  const key = "kaxiDocumentStudentRef";
-  const existing = localStorage.getItem(key);
-  if (existing) return existing;
-  const created = crypto.randomUUID();
-  localStorage.setItem(key, created);
-  return created;
-}
-
 export function Documents({ onNavigate }: { onNavigate: (v: string) => void }) {
   const { lang } = useLangStore();
   const fileRef = useRef<HTMLInputElement>(null);
   const uploadTarget = useRef<StudentDocument | null>(null);
-  const [studentRef, setStudentRef] = useState<string | null>(null);
   const [documents, setDocuments] = useState<StudentDocument[]>(FALLBACK_DOCS);
   const [loading, setLoading] = useState(true);
   const [uploadingType, setUploadingType] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [serverBacked, setServerBacked] = useState(false);
   const [workspaceIssue, setWorkspaceIssue] = useState<DocumentWorkspaceIssue | null>(null);
+  const [authRequired, setAuthRequired] = useState(false);
 
-  const loadDocuments = useCallback(async (ref = studentRef) => {
-    if (!ref) return;
+  const loadDocuments = useCallback(async () => {
     setLoading(true);
     setError(null);
     setWorkspaceIssue(null);
     try {
-      const res = await fetch(`/api/documents?studentRef=${encodeURIComponent(ref)}`);
+      const res = await fetch("/api/documents");
       const data = await res.json();
+      if (res.status === 401 || res.status === 403) {
+        setAuthRequired(true);
+        setServerBacked(false);
+        setDocuments(FALLBACK_DOCS);
+        return;
+      }
       if (!res.ok) {
         setServerBacked(false);
         setWorkspaceIssue({
@@ -159,6 +155,7 @@ export function Documents({ onNavigate }: { onNavigate: (v: string) => void }) {
         setDocuments(FALLBACK_DOCS);
         return;
       }
+      setAuthRequired(false);
       setDocuments(data.documents || []);
       setServerBacked(true);
     } catch (err) {
@@ -169,18 +166,17 @@ export function Documents({ onNavigate }: { onNavigate: (v: string) => void }) {
     } finally {
       setLoading(false);
     }
-  }, [studentRef]);
-
-  useEffect(() => {
-    setStudentRef(getStudentRef());
   }, []);
 
   useEffect(() => {
-    if (!studentRef) return;
-    void loadDocuments(studentRef);
-  }, [loadDocuments, studentRef]);
+    void loadDocuments();
+  }, [loadDocuments]);
 
   const triggerUpload = (document: StudentDocument) => {
+    if (authRequired) {
+      window.location.href = "/student/login";
+      return;
+    }
     uploadTarget.current = document;
     fileRef.current?.click();
   };
@@ -188,7 +184,7 @@ export function Documents({ onNavigate }: { onNavigate: (v: string) => void }) {
   const onFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     const target = uploadTarget.current;
-    if (!file || !target || !studentRef) return;
+    if (!file || !target) return;
 
     setUploadingType(target.documentType);
     setError(null);
@@ -198,7 +194,6 @@ export function Documents({ onNavigate }: { onNavigate: (v: string) => void }) {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          studentRef,
           documentType: target.documentType,
           originalName: file.name,
           mimeType: file.type || "application/octet-stream",
@@ -224,7 +219,7 @@ export function Documents({ onNavigate }: { onNavigate: (v: string) => void }) {
       });
       const uploadResult = await uploadRes.json();
       if (!uploadRes.ok) throw new Error(uploadResult.error || "파일 업로드에 실패했습니다.");
-      await loadDocuments(studentRef);
+      await loadDocuments();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -245,11 +240,26 @@ export function Documents({ onNavigate }: { onNavigate: (v: string) => void }) {
           <h1 className="text-3xl font-bold">{tr("docs_title", lang)}</h1>
           <p className="text-muted-foreground mt-2">{tr("docs_subtitle", lang)}</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => loadDocuments()} disabled={loading || !studentRef}>
+        <Button variant="outline" size="sm" onClick={() => loadDocuments()} disabled={loading}>
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
           {lang === "ko" ? "새로고침" : "Refresh"}
         </Button>
       </div>
+
+      {authRequired && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm">
+          <p className="font-medium">
+            {lang === "ko" ? "문서 업로드는 로그인 후 이용할 수 있습니다." : "Sign in to upload documents."}
+          </p>
+          <button
+            type="button"
+            className="mt-2 rounded-md bg-primary px-3 py-1.5 text-primary-foreground"
+            onClick={() => { window.location.href = "/student/login"; }}
+          >
+            {lang === "ko" ? "학생 로그인" : "Student sign in"}
+          </button>
+        </div>
+      )}
 
       <Card className={serverBacked ? "border-blue-200 bg-blue-50" : "border-amber-200 bg-amber-50"}>
         <CardContent className="flex items-start gap-3 py-4">
@@ -345,7 +355,7 @@ export function Documents({ onNavigate }: { onNavigate: (v: string) => void }) {
                     size="sm"
                     variant={doc.file ? "outline" : "default"}
                     onClick={() => triggerUpload(doc)}
-                    disabled={!serverBacked || uploading}
+                    disabled={(!serverBacked && !authRequired) || uploading}
                   >
                     {uploading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
                     {doc.file ? "교체" : tr("docs_upload", lang)}
