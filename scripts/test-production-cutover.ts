@@ -1,5 +1,9 @@
 import { strict as assert } from "assert";
+import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import {
+  cookieHeaderFromNetscapeFile,
   declaredRequiredMigration,
   latestMigrationName,
   readinessGateErrors,
@@ -72,4 +76,24 @@ assert.match(
   /runtime failure/,
 );
 
-console.log("PASS production cutover gates: source migration parity, backend readiness, safe attachment posture, and Typebot consent flow");
+const cookieDir = mkdtempSync(join(tmpdir(), "kaxi-cutover-cookie-"));
+const cookieFile = join(cookieDir, "cookies.txt");
+writeFileSync(
+  cookieFile,
+  [
+    "# Netscape HTTP Cookie File",
+    "#HttpOnly_kaxi-canary.vercel.app\tFALSE\t/\tTRUE\t4102444800\t_vercel_jwt\tfake-test-token",
+  ].join("\n"),
+  "utf8",
+);
+assert.equal(
+  cookieHeaderFromNetscapeFile(cookieFile, "https://kaxi-canary.vercel.app/api/readiness"),
+  "_vercel_jwt=fake-test-token",
+);
+assert.throws(
+  () => cookieHeaderFromNetscapeFile(cookieFile, "https://another-project.vercel.app/api/readiness"),
+  /no cookie for the canary URL/,
+);
+rmSync(cookieDir, { recursive: true, force: true });
+
+console.log("PASS production cutover gates: source migration parity, protected canary auth, backend readiness, safe attachment posture, and Typebot consent flow");

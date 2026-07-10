@@ -100,7 +100,16 @@ jobs:
           echo "url=$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
       - name: Verify production canary end to end
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
-        run: bun run release:check:backend -- --base-url "${{ steps.deploy.outputs.url }}"
+        env:
+          CANARY_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          COOKIE_JAR="$RUNNER_TEMP/kaxi-vercel-bypass-cookie"
+          bunx vercel curl /api/readiness --deployment "$CANARY_URL" --token="$VERCEL_TOKEN" -- \
+            --silent --show-error \
+            --cookie-jar "$COOKIE_JAR" \
+            --header "x-vercel-set-bypass-cookie: true" \
+            --output /dev/null
+          bun run release:check:backend -- --base-url "$CANARY_URL" --cookie-file "$COOKIE_JAR"
       - name: Promote verified canary to production domains
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
         run: bunx vercel promote "${{ steps.deploy.outputs.url }}" --yes --token="$VERCEL_TOKEN"

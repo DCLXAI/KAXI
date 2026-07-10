@@ -28,6 +28,53 @@ function argument(name: string) {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
+export function cookieHeaderFromNetscapeFile(pathname: string | undefined, requestUrl: string) {
+  if (!pathname) return "";
+
+  let content = "";
+  try {
+    content = readFileSync(pathname, "utf8");
+  } catch {
+    throw new Error("Vercel protection bypass cookie file could not be read");
+  }
+
+  const url = new URL(requestUrl);
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const cookies: string[] = [];
+
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.startsWith("#HttpOnly_") ? rawLine.slice("#HttpOnly_".length) : rawLine;
+    if (!line || line.startsWith("#")) continue;
+
+    const [domain, , cookiePath, secure, expiresAt, name, value] = line.split("\t");
+    if (!domain || !name || value === undefined) continue;
+
+    const normalizedDomain = domain.replace(/^\./, "");
+    const domainMatches = url.hostname === normalizedDomain || url.hostname.endsWith(`.${normalizedDomain}`);
+    const pathMatches = url.pathname.startsWith(cookiePath || "/");
+    const secureMatches = secure !== "TRUE" || url.protocol === "https:";
+    const expiry = Number.parseInt(expiresAt || "0", 10);
+    const unexpired = !Number.isFinite(expiry) || expiry === 0 || expiry > nowSeconds;
+    if (domainMatches && pathMatches && secureMatches && unexpired) {
+      cookies.push(`${name}=${value}`);
+    }
+  }
+
+  if (!cookies.length) {
+    throw new Error("Vercel protection bypass cookie file has no cookie for the canary URL");
+  }
+  return cookies.join("; ");
+}
+
+function withCutoverAuth(url: string, init?: RequestInit): RequestInit {
+  const cookie = cookieHeaderFromNetscapeFile(argument("cookie-file"), url);
+  if (!cookie) return init || {};
+
+  const headers = new Headers(init?.headers);
+  headers.set("cookie", cookie);
+  return { ...init, headers };
+}
+
 function git(...args: string[]) {
   return execFileSync("git", args, { cwd: ROOT, encoding: "utf8" }).trim();
 }
@@ -86,7 +133,7 @@ function safeBaseUrl(value: string) {
 }
 
 async function fetchJson(url: string, init?: RequestInit, timeoutMs = 60_000) {
-  const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+  const response = await fetch(url, withCutoverAuth(url, { ...init, signal: AbortSignal.timeout(timeoutMs) }));
   const payload = await response.json().catch(() => null);
   return { response, payload };
 }
@@ -141,7 +188,8 @@ async function runBackendGate() {
     `/${locale}/terms`,
   ]);
   const legalResults = await Promise.all(legalPaths.map(async (path) => {
-    const response = await fetch(`${baseUrl}${path}`, { signal: AbortSignal.timeout(20_000) });
+    const url = `${baseUrl}${path}`;
+    const response = await fetch(url, withCutoverAuth(url, { signal: AbortSignal.timeout(20_000) }));
     return { path, status: response.status };
   }));
   const failedLegal = legalResults.filter((result) => result.status !== 200);
@@ -151,18 +199,29 @@ async function runBackendGate() {
     { name: "agent", path: "/api/ai/agent", question: "D-10 비자 전환의 기본 서류를 출처와 함께 짧게 알려주세요." },
     { name: "consult", path: "/api/ai/consult", question: "D-4 체류기간 연장 준비 서류를 짧게 알려주세요." },
   ];
-  const aiResults: Array<{ name: string; status: number; answerChars: number }> = [];
+  const aiResults: Array<{ name: string; status: number; answerChars: number; attempts: number }> = [];
   for (const check of aiChecks) {
-    const result = await fetchJson(`${baseUrl}${check.path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ question: check.question, locale: "ko" }),
-    });
-    const answer = responseAnswer(result.payload);
-    if (!result.response.ok || answer.length < 20 || FAILURE_TEXT.test(answer)) {
-      throw new Error(`${check.name} smoke failed with HTTP ${result.response.status}`);
+    let lastStatus = 0;
+    let lastAnswer = "";
+    let passed = false;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const result = await fetchJson(`${baseUrl}${check.path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ question: check.question, locale: "ko" }),
+      });
+      lastStatus = result.response.status;
+      lastAnswer = responseAnswer(result.payload);
+      if (result.response.ok && lastAnswer.length >= 20 && !FAILURE_TEXT.test(lastAnswer)) {
+        aiResults.push({ name: check.name, status: lastStatus, answerChars: lastAnswer.length, attempts: attempt });
+        passed = true;
+        break;
+      }
+      if (attempt < 3) await Bun.sleep(2_000);
     }
-    aiResults.push({ name: check.name, status: result.response.status, answerChars: answer.length });
+    if (!passed) {
+      throw new Error(`${check.name} smoke failed after 3 attempts with HTTP ${lastStatus || "network-error"}`);
+    }
   }
   return { stage: "backend", baseUrl, expectedMigration, legalPages: legalResults.length, ai: aiResults };
 }
