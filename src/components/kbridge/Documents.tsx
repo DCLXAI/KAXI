@@ -435,7 +435,7 @@ export function Documents({ onNavigate }: { onNavigate: (view: string) => void }
       {authRequired && (
         <div className="flex flex-col items-center gap-3 rounded-md border border-amber-300 bg-amber-50 p-4 text-center text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between sm:text-left">
           <div className="flex flex-col items-center gap-2 sm:flex-row sm:items-center sm:gap-3">
-            <KaxiCat state="nap" size={40} label={copy.loginRequired} />
+            <KaxiCat state="nap" size={40} />
             <p className="font-medium">{copy.loginRequired}</p>
           </div>
           <Button size="sm" onClick={() => { window.location.href = loginHref; }} className="self-center sm:self-auto">
