@@ -408,6 +408,49 @@ async function testDiagnosisApiTransferUsesD4ToD2ComplianceRule() {
   );
 }
 
+async function testDiagnosisApiZodValidation() {
+  const { NextRequest } = await import("next/server");
+  const { POST } = await import("../src/app/api/diagnosis/route");
+  const req = (body: unknown) =>
+    new NextRequest("http://localhost/api/diagnosis", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  // 1. Comma-formatted budget string must be parsed exactly like the old
+  // hand-rolled numberField helper (regression guard for the zod migration).
+  const commaResponse = await POST(
+    req({ ...base, goal: "language", budget: "6,000,000" })
+  );
+  const commaBody = await commaResponse.json();
+  assert(commaResponse.status === 200, `comma-formatted budget should be accepted: ${JSON.stringify(commaBody)}`);
+  assert(
+    commaBody.warnings.some((w: { ko?: string }) => typeof w.ko === "string" && w.ko.includes("2,000,000")),
+    `budget "6,000,000" should be parsed as 6,000,000 KRW, producing a 2,000,000 KRW gap warning: ${JSON.stringify(commaBody.warnings)}`
+  );
+
+  // 2. Missing required enum field (education) -> 400 with structured issues.
+  const { education: _education, ...withoutEducation } = base;
+  const missingResponse = await POST(req(withoutEducation));
+  const missingBody = await missingResponse.json();
+  assert(missingResponse.status === 400, `missing education should be rejected: ${missingResponse.status}`);
+  assert(Array.isArray(missingBody.issues), `400 response should include structured issues: ${JSON.stringify(missingBody)}`);
+
+  // 3. Invalid enum value (goal) -> 400.
+  const invalidEnumResponse = await POST(req({ ...base, goal: "not-a-real-goal" }));
+  assert(invalidEnumResponse.status === 400, `invalid goal enum should be rejected: ${invalidEnumResponse.status}`);
+
+  // 4. Non-required fields with garbage values fall back exactly like the
+  // old helpers instead of erroring (region typo -> "any", non-numeric
+  // brokerCost -> 0, boolean-ish string usingBroker -> true).
+  const fallbackResponse = await POST(
+    req({ ...base, region: "not-a-real-region", brokerCost: "abc", usingBroker: "yes" })
+  );
+  const fallbackBody = await fallbackResponse.json();
+  assert(fallbackResponse.status === 200, `garbage optional fields should fall back, not 400: ${JSON.stringify(fallbackBody)}`);
+}
+
 testLanguagePathKeepsCoreOutputShape();
 testReadinessScoreIsComputed();
 testReadinessBlockedReasonsForceHighRisk();
@@ -421,4 +464,5 @@ await testDiagnoseToolReturnsComplianceMeta();
 await testDiagnoseToolReturnsD10CoveragePolicy();
 await testDiagnosisApiReturnsPublicReadinessPayload();
 await testDiagnosisApiTransferUsesD4ToD2ComplianceRule();
+await testDiagnosisApiZodValidation();
 console.log("PASS diagnosis rules");
