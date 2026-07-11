@@ -51,9 +51,20 @@ export function jsonError(message: string, status = 400) {
 }
 
 export function getClientIp(req: NextRequest): string {
+  // Prefer headers the Vercel edge computes and overwrites (it strips
+  // client-supplied values to prevent IP spoofing). x-vercel-forwarded-for is
+  // documented to always hold Vercel's computed client IP even when a proxy
+  // sits on top of Vercel; x-real-ip is the same value in the standard setup.
+  // Only x-forwarded-for's leftmost token is client-appendable, so if we ever
+  // fall back to it we take the rightmost (nearest-proxy) token instead.
+  const trusted = req.headers.get("x-vercel-forwarded-for")?.trim() || req.headers.get("x-real-ip")?.trim();
+  if (trusted) return trusted;
   const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim();
-  return req.headers.get("x-real-ip") || "unknown";
+  if (forwarded) {
+    const parts = forwarded.split(",").map((p) => p.trim()).filter(Boolean);
+    if (parts.length > 0) return parts[parts.length - 1];
+  }
+  return "unknown";
 }
 
 function roleAllowed(role: AdminRole, allowed: AdminRole[]): boolean {
@@ -95,9 +106,16 @@ export async function getAdminContext(
     return null;
   }
 
+  const apiKeyRole: AdminRole =
+    process.env.ADMIN_API_KEY_ROLE === "owner"
+      ? "owner"
+      : process.env.ADMIN_API_KEY_ROLE === "viewer"
+        ? "viewer"
+        : "admin";
+
   return {
     actor: "admin-api-key",
-    role: "owner",
+    role: apiKeyRole,
     authType: "api-key",
     mfaVerified: true,
   };
@@ -291,15 +309,22 @@ export function sanitizeAiBody(
 
   const lang = typeof body.lang === "string" && LANGS.has(body.lang) ? body.lang : "ko";
   const rawHistory = Array.isArray(body.history) ? body.history : [];
-  const history = rawHistory.slice(-options.maxHistoryItems).map((item) => {
-    const record = item && typeof item === "object" ? (item as JsonBody) : {};
-    const role = record.role === "user" ? "user" : "assistant";
-    const content =
-      typeof record.content === "string"
-        ? record.content.slice(0, options.maxHistoryItemLength)
-        : "";
-    return { role, content };
-  }).filter((item) => item.content);
+  // Client-supplied history is untrusted in these stateless endpoints: a forged
+  // role:"assistant" turn would let a caller inject fake "prior model output"
+  // (prompt injection). Only accept user turns; assistant context cannot be
+  // authenticated here, so it is dropped rather than trusted.
+  const history = rawHistory
+    .filter((item) => item && typeof item === "object" && (item as JsonBody).role === "user")
+    .slice(-options.maxHistoryItems)
+    .map((item) => {
+      const record = item as JsonBody;
+      const content =
+        typeof record.content === "string"
+          ? record.content.slice(0, options.maxHistoryItemLength)
+          : "";
+      return { role: "user" as const, content };
+    })
+    .filter((item) => item.content);
 
   const mode =
     typeof body.mode === "string" && options.allowedModes?.includes(body.mode)

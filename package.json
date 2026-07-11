@@ -53,6 +53,7 @@
     "test:chat-security": "bun run scripts/test-chat-security.ts",
     "test:chat-history": "bun run scripts/test-chat-history.ts",
     "test:lead-privacy": "bun run scripts/test-lead-domain-privacy.ts",
+    "test:api-security": "bun run scripts/test-api-security.ts",
     "rag:evaluation:seed": "bun run scripts/seed-rag-evaluation-cases.ts",
     "rag:evaluation:run": "bun run scripts/run-rag-evaluation.ts",
     "release:check:source": "bun run scripts/check-production-cutover.ts --stage source",
