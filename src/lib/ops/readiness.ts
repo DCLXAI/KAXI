@@ -387,13 +387,12 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
       }
     ),
     check(
-      "admin.mfa_role",
-      "Admin MFA and linked role",
+      "admin.role_link",
+      "Linked admin role",
       production ? linkedAdminCount > 0 : true,
-      "Admin API access requires a linked PLATFORM_ADMIN user and a Supabase aal2 session.",
+      "Admin API access requires a Supabase account linked to a PLATFORM_ADMIN user.",
       {
         linkedAdminCount,
-        aalRequired: "aal2",
       }
     ),
     check(

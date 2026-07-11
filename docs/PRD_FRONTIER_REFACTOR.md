@@ -207,7 +207,7 @@ group by id order by rrf desc limit $4;
 - **Supabase Auth 도입** (SUPABASE_INTEGRATION.md Phase 4 실행):
   - 외국인: 이메일/전화 + 소셜(Zalo/Google) — User.zaloUid 필드 기존 존재.
   - 행정사: 사무소(Organization, type=PARTNER_AGENT_OFFICE) 초대 기반 가입, 운영자 승인.
-  - 관리자: 기존 NextAuth+TOTP를 Supabase Auth MFA로 이관.
+  - 관리자: 기존 NextAuth 계정을 Supabase Auth와 `PLATFORM_ADMIN` 역할 연결 방식으로 이관.
 - **RLS 정책** (DATABASE_PHASE1.md에 예고된 후속작업):
   - 학생 데이터(StudentProfile/DocumentItem/UploadedFile): 본인 + 케이스 배정된 사무소만 (제3자 제공 동의 GRANTED 조건).
   - EscalationCase: 배정 조직 스코프. KnowledgeDocument: 운영자 쓰기, 전체 읽기(APPROVED만 공개 뷰).

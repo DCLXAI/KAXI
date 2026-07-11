@@ -186,9 +186,9 @@ Visa, immigration, school-accreditation, and cost guidance are time-sensitive.
 
 ## Admin Access
 
-Admin APIs require a linked `PLATFORM_ADMIN` Supabase session at `aal2`, or the server-to-server break-glass `x-admin-key: $ADMIN_API_KEY` / `Authorization: Bearer $ADMIN_API_KEY`.
+Admin APIs require a linked `PLATFORM_ADMIN` Supabase session, or the server-to-server break-glass `x-admin-key: $ADMIN_API_KEY` / `Authorization: Bearer $ADMIN_API_KEY`.
 Do not expose admin navigation in public product surfaces. Admin UI routes such as `/admin` and `/synonyms` are real Next.js routes, but server-side API guards remain mandatory.
-The browser never accepts an admin API key. Create and confirm the Supabase account, then run `bun run admin:bootstrap-supabase -- --email=admin@example.com` to bind its UUID to `User.role=PLATFORM_ADMIN`. For a new operator, add `--invite` to send a Supabase setup email and atomically link the invited UUID. The first admin visit enrolls a TOTP factor; API access remains closed until the session reaches `aal2`. Admin actions and privacy operations are written to `AdminAuditLog`; inspect with `GET /api/audit-logs`.
+The browser never accepts an admin API key. Create and confirm the Supabase account, then run `bun run admin:bootstrap-supabase -- --email=admin@example.com` to bind its UUID to `User.role=PLATFORM_ADMIN`. For a new operator, add `--invite` to send a Supabase setup email and atomically link the invited UUID. Admin actions and privacy operations are written to `AdminAuditLog`; inspect with `GET /api/audit-logs`.
 
 ## CI Quality Gates
 
@@ -226,7 +226,7 @@ Production deployment is triggered by the successful `CI` workflow run for the e
 `test:rag-serving` verifies canonical eligibility, category fallback, no-context behavior, citation requirements, legacy quarantine, and the transactional cutover gate.
 `test:chat-security` verifies signed session ownership, expiry/tamper protection, and attachment magic-byte allowlists.
 `test:lead-privacy` verifies diagnosis/handoff separation and encrypted lead-contact persistence contracts.
-`test:readiness` verifies that production readiness fails closed when managed DB, canonical migration/object parity, PII secrets, MFA, retention, or shared limiter settings are missing.
+`test:readiness` verifies that production readiness fails closed when managed DB, canonical migration/object parity, PII secrets, a linked administrator, retention, or shared limiter settings are missing.
 `test:cutover` verifies the source migration gate, backend readiness contract, fail-closed attachment posture, and published Typebot consent-flow contract.
 
 `test:chat-history` runs against an isolated fake PostgREST boundary and verifies signed-session ownership, server-side decryption, canonical message ordering, HTTPS-only citations, failed-request retry identity, and refresh recovery for pending/failed attachments without touching a live Supabase project.
@@ -254,7 +254,7 @@ Before treating KAXI as production-ready, `/api/readiness` must report `status: 
 - PostgreSQL operational database target and reachable managed database,
 - `DATA_ENCRYPTION_KEY`, `PII_HASH_SECRET`, retention `CRON_SECRET`,
 - shared database-backed rate limit,
-- hashed admin login, MFA, valid role, and audit-log persistence.
+- Supabase admin login, valid linked role, and audit-log persistence.
 
 ## AI Cost Controls
 

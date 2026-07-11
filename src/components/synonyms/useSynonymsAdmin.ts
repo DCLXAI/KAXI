@@ -14,7 +14,7 @@ export function useSynonymsAdmin() {
   const activeLocale = useLocale();
   const locale = isLocale(activeLocale) ? activeLocale : defaultLocale;
   const { data: session, status } = useKaxiSession();
-  const isSessionAdmin = session?.user?.role === "PLATFORM_ADMIN" && session.currentAal === "aal2";
+  const isSessionAdmin = session?.user?.role === "PLATFORM_ADMIN";
   const [synonyms, setSynonyms] = useState<Synonym[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");

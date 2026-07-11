@@ -68,7 +68,7 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
       "ai.backend_policy",
       "rate_limit.shared",
       "admin.supabase_auth",
-      "admin.mfa_role",
+      "admin.role_link",
       "admin.audit_log",
     ]) {
       if (!byKey.has(key)) fail(`missing readiness check: ${key}`);
@@ -92,7 +92,7 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
       fail(`production attachment uploads should remain disabled without a scanner: ${JSON.stringify(attachmentScanner)}`);
     }
     if (byKey.get("admin.supabase_auth")?.ok) fail("missing Supabase Auth should not pass admin auth check");
-    if (byKey.get("admin.mfa_role")?.ok) fail("missing linked admin should not pass admin MFA check");
+    if (byKey.get("admin.role_link")?.ok) fail("missing linked admin should not pass admin role check");
     if (byKey.get("embeddings.cache")?.severity !== "warning") {
       fail(`embedding cache readiness should be warning severity: ${JSON.stringify(byKey.get("embeddings.cache"))}`);
     }
@@ -337,8 +337,8 @@ async function testSupabaseAdminReadinessContract() {
     const payload = await getReadinessPayload();
     const byKey = new Map(payload.checks.map((item) => [item.key, item]));
     if (!byKey.get("admin.supabase_auth")?.ok) fail("configured Supabase Auth should pass admin auth readiness");
-    if (byKey.get("admin.mfa_role")?.metadata?.linkedAdminCount !== 1) {
-      fail(`linked Supabase admin should be observable: ${JSON.stringify(byKey.get("admin.mfa_role"))}`);
+    if (byKey.get("admin.role_link")?.metadata?.linkedAdminCount !== 1) {
+      fail(`linked Supabase admin should be observable: ${JSON.stringify(byKey.get("admin.role_link"))}`);
     }
   } finally {
     await db.user.delete({ where: { id: admin.id } });

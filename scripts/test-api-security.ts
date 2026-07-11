@@ -50,37 +50,25 @@ console.log("PASS getClientIp: trusts x-real-ip, falls back to rightmost XFF tok
 // --- getAdminContext api-key role scoping -----------------------------
 
 delete process.env.ADMIN_API_KEY_ROLE;
-const defaultRoleContext = await getAdminContext(
-  req({ "x-admin-key": "test-admin-api-key-for-security-test" }),
-  { requireMfa: false }
-);
+const defaultRoleContext = await getAdminContext(req({ "x-admin-key": "test-admin-api-key-for-security-test" }));
 assert.ok(defaultRoleContext, "expected api-key auth to succeed");
 assert.equal(defaultRoleContext?.authType, "api-key");
 assert.equal(defaultRoleContext?.role, "admin", "default ADMIN_API_KEY role must be 'admin', not 'owner'");
 
 process.env.ADMIN_API_KEY_ROLE = "owner";
-const ownerRoleContext = await getAdminContext(
-  req({ "x-admin-key": "test-admin-api-key-for-security-test" }),
-  { requireMfa: false }
-);
+const ownerRoleContext = await getAdminContext(req({ "x-admin-key": "test-admin-api-key-for-security-test" }));
 assert.equal(ownerRoleContext?.role, "owner");
 
 process.env.ADMIN_API_KEY_ROLE = "viewer";
-const viewerRoleContext = await getAdminContext(
-  req({ "x-admin-key": "test-admin-api-key-for-security-test" }),
-  { requireMfa: false }
-);
+const viewerRoleContext = await getAdminContext(req({ "x-admin-key": "test-admin-api-key-for-security-test" }));
 assert.equal(viewerRoleContext?.role, "viewer");
 
 process.env.ADMIN_API_KEY_ROLE = "not-a-real-role";
-const invalidRoleContext = await getAdminContext(
-  req({ "x-admin-key": "test-admin-api-key-for-security-test" }),
-  { requireMfa: false }
-);
+const invalidRoleContext = await getAdminContext(req({ "x-admin-key": "test-admin-api-key-for-security-test" }));
 assert.equal(invalidRoleContext?.role, "admin", "invalid ADMIN_API_KEY_ROLE must fall back to 'admin'");
 
 delete process.env.ADMIN_API_KEY_ROLE;
-const wrongKeyContext = await getAdminContext(req({ "x-admin-key": "wrong-key" }), { requireMfa: false });
+const wrongKeyContext = await getAdminContext(req({ "x-admin-key": "wrong-key" }));
 assert.equal(wrongKeyContext, null);
 
 console.log("PASS getAdminContext: ADMIN_API_KEY defaults to 'admin' role, scoped via ADMIN_API_KEY_ROLE");

@@ -136,7 +136,7 @@ Auth/RLS follow-ups:
 
 ### Phase 3 Slice 2: Supabase Auth runtime
 
-Runtime Auth uses Supabase Auth for students, partner agents, and platform administrators. Runtime authorization comes from the linked `User.role`; administrator APIs additionally require an `aal2` Supabase session.
+Runtime Auth uses Supabase Auth for students, partner agents, and platform administrators. Runtime authorization comes from the linked `User.role`; administrator APIs require a linked `PLATFORM_ADMIN` role.
 
 Configured variables:
 

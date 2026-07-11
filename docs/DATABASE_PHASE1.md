@@ -63,7 +63,7 @@ Production is considered unfinished when:
 - the configured DB URL is not PostgreSQL;
 - Postgres connectivity fails;
 - approved pgvector knowledge embeddings are missing;
-- PII secrets, retention secret, admin MFA, or shared limiter DB are missing.
+- PII secrets, retention secret, linked admin role, or shared limiter DB are missing.
 
 ## RLS Notes
 

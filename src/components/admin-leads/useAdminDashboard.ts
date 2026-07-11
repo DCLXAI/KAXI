@@ -11,7 +11,7 @@ export function useAdminDashboard() {
   const activeLocale = useLocale();
   const locale = isLocale(activeLocale) ? activeLocale : defaultLocale;
   const { data: session, status } = useKaxiSession();
-  const isSessionAdmin = session?.user?.role === "PLATFORM_ADMIN" && session.currentAal === "aal2";
+  const isSessionAdmin = session?.user?.role === "PLATFORM_ADMIN";
   const { leads, fetchLeads, loading } = useLeadStore();
   const [authError, setAuthError] = useState<string | null>(null);
   const [query, setQuery] = useState("");

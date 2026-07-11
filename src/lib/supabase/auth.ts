@@ -236,8 +236,6 @@ export async function syncKaxiUserForAuth(input: {
 export interface CurrentKaxiSession {
   authUser: { id: string; email?: string | null };
   user: User | null;
-  currentAal: string | null;
-  nextAal: string | null;
 }
 
 export async function getCurrentKaxiSession(): Promise<CurrentKaxiSession | null> {
@@ -247,17 +245,11 @@ export async function getCurrentKaxiSession(): Promise<CurrentKaxiSession | null
   if (!authUser) return null;
 
   const authUserId = normalizeAuthUserId(authUser.id);
-  if (!client.auth.mfa) throw new AuthBridgeError("mfa_unavailable", "Supabase MFA is unavailable", 503);
-  const [user, assurance] = await Promise.all([
-    db.user.findUnique({ where: { authUserId } }),
-    client.auth.mfa.getAuthenticatorAssuranceLevel(),
-  ]);
+  const user = await db.user.findUnique({ where: { authUserId } });
 
   return {
     authUser,
     user,
-    currentAal: assurance.data?.currentLevel || null,
-    nextAal: assurance.data?.nextLevel || null,
   };
 }
 

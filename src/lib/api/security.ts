@@ -3,7 +3,6 @@ import { createHash, timingSafeEqual } from "crypto";
 import { canUseSharedRuntimeDatabase, db } from "@/lib/db";
 import { getCurrentKaxiSession } from "@/lib/supabase/auth";
 import { getSupabasePublicConfig } from "@/lib/supabase/config";
-import { isAdminAal2Session } from "@/lib/supabase/policy";
 import { isSupabaseAuthUnavailable } from "@/lib/supabase/server";
 
 type JsonBody = Record<string, unknown>;
@@ -20,7 +19,6 @@ export interface AdminContext {
   actor: string;
   role: AdminRole;
   authType: "supabase" | "api-key";
-  mfaVerified: boolean;
 }
 
 interface Bucket {
@@ -72,10 +70,7 @@ function roleAllowed(role: AdminRole, allowed: AdminRole[]): boolean {
   return allowed.includes(role);
 }
 
-export async function getAdminContext(
-  req: NextRequest,
-  options: { requireMfa?: boolean } = {}
-): Promise<AdminContext | null> {
+export async function getAdminContext(req: NextRequest): Promise<AdminContext | null> {
   try {
     const session = await getCurrentKaxiSession();
     if (session?.user?.role === "PLATFORM_ADMIN") {
@@ -83,9 +78,8 @@ export async function getAdminContext(
         actor: session.user.email || session.user.id,
         role: "owner",
         authType: "supabase",
-        mfaVerified: isAdminAal2Session(session.user.role, session.currentAal),
       };
-      if (context.mfaVerified || options.requireMfa === false) return context;
+      return context;
     }
   } catch (error) {
     if (!isSupabaseAuthUnavailable(error)) {
@@ -117,7 +111,6 @@ export async function getAdminContext(
     actor: "admin-api-key",
     role: apiKeyRole,
     authType: "api-key",
-    mfaVerified: true,
   };
 }
 
@@ -125,17 +118,13 @@ export async function requireAdmin(
   req: NextRequest,
   options: { roles?: AdminRole[] } = {}
 ): Promise<NextResponse | null> {
-  const context = await getAdminContext(req, { requireMfa: false });
+  const context = await getAdminContext(req);
   if (!context) {
     if (!process.env.ADMIN_API_KEY && !getSupabasePublicConfig()) {
       return jsonError("Admin credentials are not configured", 503);
     }
     return jsonError("Unauthorized", 401);
   }
-  if (context.authType === "supabase" && !context.mfaVerified) {
-    return jsonError("MFA verification required", 403);
-  }
-
   const allowed = options.roles || ["owner", "admin"];
   if (!roleAllowed(context.role, allowed)) return jsonError("Forbidden", 403);
 

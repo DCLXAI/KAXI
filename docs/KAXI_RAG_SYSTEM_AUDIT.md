@@ -111,7 +111,7 @@ Release status on 2026-07-10: managed database configuration, backup, migrations
 
 1. Configure a real Supabase pooler URL for runtime and `SUPABASE_DIRECT_URL` for migrations; verify both targets without logging credentials. Complete.
 2. Back up canonical tables, load the real direct Supabase URL, run `bun run db:migrate:deploy`, and require the canonical schema-parity readiness check to pass. Complete; the pre-migration backup is retained under `.tmp/supabase-backups/`.
-3. Add the remaining Vercel preview controls: Supabase runtime pooler URL, application-side image OCR key, durable Blob storage, admin session/MFA values, and a human alert destination. The separate Typebot, n8n, privacy, cron, and upload-signing secrets are already configured in preview.
+3. Add the remaining Vercel preview controls: Supabase runtime pooler URL, application-side image OCR key, durable Blob storage, linked admin session values, and a human alert destination. The separate Typebot, n8n, privacy, cron, and upload-signing secrets are already configured in preview.
 4. Re-run the existing preview verification after database migration parity: readiness, citation pages, unsigned/signed n8n verification, chat session, attachment storage/worker, and mobile widget. Health and responsive layout already pass.
 5. Obtain explicit approval and promote KAXI to production. Complete.
 6. Re-verify the already configured Typebot gateway secret on both server-side webhook headers immediately before publication. Complete.

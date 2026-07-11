@@ -9,7 +9,4 @@ export interface KaxiSessionPayload {
   available: boolean;
   authenticated: boolean;
   user: KaxiSessionUser | null;
-  currentAal: string | null;
-  nextAal: string | null;
-  mfaRequired: boolean;
 }

@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import { Activity, BookMarked, ClipboardList, FileClock, FileSearch, Headphones, Loader2, LogOut, Scale, ShieldCheck } from "lucide-react";
-import { SupabaseMfaPanel } from "@/components/auth/SupabaseMfaPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,7 +66,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { data: session, status, mutate } = useKaxiSession();
   const isSessionAdmin = session?.user?.role === "PLATFORM_ADMIN";
-  const hasAdminAccess = isSessionAdmin && session.currentAal === "aal2";
+  const hasAdminAccess = isSessionAdmin;
   const canManageOps = hasAdminAccess;
 
   const adminFetch = useCallback(
@@ -97,10 +96,6 @@ export function AdminShell({ children }: { children: ReactNode }) {
         <Loader2 className="h-6 w-6 animate-spin" />
       </div>
     );
-  }
-
-  if (isSessionAdmin && !hasAdminAccess) {
-    return <SupabaseMfaPanel onVerified={mutate} />;
   }
 
   if (!hasAdminAccess) {
@@ -141,7 +136,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <div className="ml-auto flex items-center gap-2">
               <Badge variant="outline" className="gap-1">
                 <ShieldCheck className="h-3 w-3" />
-                Supabase MFA
+                Supabase Auth
               </Badge>
               <Button variant="outline" size="sm" onClick={signOut} aria-label="로그아웃">
                 <LogOut className="h-3.5 w-3.5" />

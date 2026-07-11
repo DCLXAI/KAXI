@@ -21,7 +21,7 @@ export function AdminAuthGate({
           <CardDescription>
             {sessionStatus === "loading"
               ? locale === "ko" ? "세션 확인 중..." : "Checking session..."
-              : locale === "ko" ? "Supabase 관리자 계정과 MFA 인증이 필요합니다." : "A Supabase admin account with MFA is required."}
+              : locale === "ko" ? "Supabase 관리자 계정으로 로그인해주세요." : "Sign in with a Supabase admin account."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">

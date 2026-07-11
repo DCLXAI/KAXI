@@ -22,12 +22,24 @@ async function expectAuthError(operation: Promise<unknown>, code: string) {
 
 prepareTestDb("supabase auth bridge");
 
-const [otpRouteSource, bootstrapAdminSource, passwordResetSource, supabaseConfigSource, supabaseDynamicSource] = await Promise.all([
+const [
+  otpRouteSource,
+  bootstrapAdminSource,
+  passwordResetSource,
+  supabaseConfigSource,
+  supabaseDynamicSource,
+  adminShellSource,
+  apiSecuritySource,
+  sessionRouteSource,
+] = await Promise.all([
   Bun.file(new URL("../src/app/api/auth/supabase/otp/route.ts", import.meta.url)).text(),
   Bun.file(new URL("./bootstrap-supabase-admin.ts", import.meta.url)).text(),
   Bun.file(new URL("../src/components/auth/PasswordResetForm.tsx", import.meta.url)).text(),
   Bun.file(new URL("../src/lib/supabase/config.ts", import.meta.url)).text(),
   Bun.file(new URL("../src/lib/supabase/dynamic.ts", import.meta.url)).text(),
+  Bun.file(new URL("../src/components/admin/AdminShell.tsx", import.meta.url)).text(),
+  Bun.file(new URL("../src/lib/api/security.ts", import.meta.url)).text(),
+  Bun.file(new URL("../src/app/api/auth/session/route.ts", import.meta.url)).text(),
 ]);
 assert(otpRouteSource.includes('new URL("/auth/complete"'), "implicit email links should use the browser completion route");
 assert(
@@ -54,9 +66,21 @@ assert(
     supabaseDynamicSource.includes("createServerClient"),
   "Supabase dynamic loader must expose both browser and server client factories"
 );
+assert(
+  adminShellSource.includes("const hasAdminAccess = isSessionAdmin;") &&
+    !adminShellSource.includes("SupabaseMfaPanel") &&
+    !adminShellSource.includes("currentAal"),
+  "admin UI access should depend on the linked PLATFORM_ADMIN role without an MFA enrollment gate"
+);
+assert(
+  !apiSecuritySource.includes("MFA verification required") &&
+    !apiSecuritySource.includes("mfaVerified") &&
+    !sessionRouteSource.includes("mfaRequired"),
+  "admin API and session contracts should not require or expose MFA state"
+);
 
 const { db } = await import("../src/lib/db");
-const { areaForPath, canAccessArea, defaultLoginPath, isAdminAal2Session, postLoginPath } = await import("../src/lib/supabase/policy");
+const { areaForPath, canAccessArea, defaultLoginPath, postLoginPath } = await import("../src/lib/supabase/policy");
 const {
   createPartnerAgentInvite,
   hashPartnerInviteToken,
@@ -81,9 +105,8 @@ try {
   assert(postLoginPath("STUDENT", "/documents") === "/documents", "student may return to a public path");
   assert(postLoginPath("STUDENT", "/partner") === "/student", "student cannot redirect into partner area");
   assert(postLoginPath("STUDENT", "//evil.example") === "/student", "protocol-relative redirects must be rejected");
-  assert(isAdminAal2Session("PLATFORM_ADMIN", "aal2"), "linked admin AAL2 session should be authorized");
-  assert(!isAdminAal2Session("PLATFORM_ADMIN", "aal1"), "admin AAL1 session should require MFA");
-  assert(!isAdminAal2Session("STUDENT", "aal2"), "student AAL2 session must not gain admin access");
+  assert(canAccessArea("PLATFORM_ADMIN", "admin"), "linked admin role should access the admin area");
+  assert(!canAccessArea("STUDENT", "admin"), "student role must not gain admin access");
 
   const existingStudent = await db.user.create({
     data: {
