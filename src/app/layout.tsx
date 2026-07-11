@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { TypebotBubble } from "@/components/typebot/TypebotBubble";
+import { pretendard, notoSerifKr } from "./fonts";
 
 export const metadata: Metadata = {
   title: "KAXI · 브로커 없이 준비하는 한국 유학",
@@ -37,7 +38,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#000000",
+  themeColor: "#f0eee6",
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
@@ -49,7 +50,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko" suppressHydrationWarning>
+    <html
+      lang="ko"
+      suppressHydrationWarning
+      className={`${pretendard.variable} ${notoSerifKr.variable}`}
+    >
       <body className="antialiased bg-background text-foreground">
         {children}
         <TypebotBubble />
