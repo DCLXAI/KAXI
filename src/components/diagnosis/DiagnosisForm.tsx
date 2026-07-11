@@ -421,7 +421,7 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
         ) : (
           <Button type="button" size="lg" onClick={() => void onSubmit()} disabled={submitting || !currentStepValid}>
             {submitting ? (
-              <KaxiCat state="running" size={18} inverted label={t("diagnose_submitting")} />
+              <KaxiCat state="running" size={18} inverted />
             ) : (
               <ArrowRight className="h-4 w-4" />
             )}
