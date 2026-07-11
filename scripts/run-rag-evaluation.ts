@@ -23,7 +23,15 @@ type RagResponse = {
   answer?: string;
   riskLevel?: string;
   needsHuman?: boolean;
-  sources?: Array<{ docId?: string; sourceUrl?: string; checkedAt?: string; category?: string; language?: string }>;
+  sources?: Array<{
+    docId?: string;
+    title?: string;
+    sourceUrl?: string;
+    checkedAt?: string;
+    category?: string;
+    language?: string;
+    rerankScore?: number;
+  }>;
   searchMeta?: { topScore?: number; noContext?: boolean; retrievedCount?: number };
   executionId?: string;
   error?: string;
@@ -68,6 +76,22 @@ function detectedHeadingLocale(value: string) {
   if (/[А-Яа-яЁёӨөҮү]/u.test(value)) return "mn";
   if (/[a-z]/iu.test(value)) return "en";
   return null;
+}
+
+function titleMatchesLocale(value: string, locale: string) {
+  const title = value
+    .replace(/^#{1,6}\s+/, "")
+    .replace(/\b(?:[cdef]-?\d+(?:-\d+)?|topik|kaxi|hikorea|kiip|arc|k-eta|krw|usd|pdf)\b/giu, " ")
+    .trim();
+  const hasHangul = /[가-힣ㄱ-ㅎㅏ-ㅣ]/u.test(title);
+  const hasCyrillic = /[А-Яа-яЁёӨөҮү]/u.test(title);
+  const hasVietnamese = /[ăâđêôơưàáảãạằắẳẵặầấẩẫậèéẻẽẹềếểễệìíỉĩịòóỏõọồốổỗộờớởỡợùúủũụừứửữựỳýỷỹỵ]/iu.test(title);
+  const hasLatin = /[a-z]/iu.test(title);
+  if (locale === "ko") return hasHangul && !hasCyrillic && !hasVietnamese && !hasLatin;
+  if (locale === "en") return hasLatin && !hasHangul && !hasCyrillic && !hasVietnamese;
+  if (locale === "vi") return hasVietnamese && !hasHangul && !hasCyrillic;
+  if (locale === "mn") return hasCyrillic && !hasHangul && !hasVietnamese && !hasLatin;
+  return false;
 }
 
 function hasForeignMarkdownHeading(answer: string, locale: string) {
@@ -205,6 +229,16 @@ for (const testCase of cases) {
       hasForeignMarkdownHeading(payload.answer || "", testCase.locale)
     ) {
       failures.push("answer_locale_heading_mismatch");
+    }
+    if (
+      testCase.metadata?.expectedLocaleHeadings === true &&
+      !sources.every((source) =>
+        source.language === testCase.locale &&
+        titleMatchesLocale(source.title || "", testCase.locale) &&
+        Number.isFinite(source.rerankScore)
+      )
+    ) {
+      failures.push("source_locale_or_rerank_mismatch");
     }
     if (sources.length > 0) citedCaseCount += 1;
     if (citationsValid) validCitationCaseCount += 1;

@@ -153,7 +153,11 @@ The three POST webhooks require KAXI HMAC verification. The capability endpoint 
 }
 ```
 
-`Build Context` accepts only citation-valid HTTPS sources with `checkedAt` and `checkedBy`. No-context and citation-validation failures produce a bounded answer and a review handoff. A generic information question remains low risk; personal regulated actions, low-confidence personal cases, and high-consequence immigration/legal questions are classified separately.
+`Build Context` accepts only citation-valid HTTPS sources with `checkedAt` and `checkedBy`. It validates `metadata.language`, `locale_filter`, the localized Markdown heading, and body script against the requested locale. Mismatched documents are rejected; if every citation-valid result is rejected, the workflow emits `noContextReason=locale_validation_failed` instead of leaking another language. Document titles come only from a heading that passes the locale check, otherwise a locale-specific neutral title is used.
+
+The same node applies deterministic reranker `deterministic-locale-v2` before context construction. It combines the governed hybrid score with question/body token overlap, title overlap, strict category fit, keyword score, and citation validity, then deduplicates and keeps at most six documents. Returned sources include `language`, `rerankScore`, `originalRank`, and `titleSanitized`; `searchMeta` exposes `rawRetrievedCount`, `languageRejectedCount`, and `titleSanitizedCount`. This reranker adds no external LLM call or provider dependency.
+
+No-context and citation-validation failures produce a bounded answer and a review handoff. A generic information question remains low risk; personal regulated actions, low-confidence personal cases, and high-consequence immigration/legal questions are classified separately.
 
 `Search Governed Serving Chunks` must pass both `locale={{ $json.locale }}` and `category_mode=strict` to `match_rag_documents`. The RPC projects only the requested `ko`, `en`, `vi`, or `mn` Markdown sections from a canonical multilingual chunk. Its strict category scopes are `cost -> cost`, `visa -> visa/legal/process/warning`, `documents -> documents/legal/process/warning`, and `school -> school/documents/process`. If no eligible category or locale section remains, the RPC returns zero rows and the workflow must route to `Fallback No Context Answer`; it must not reuse context from another category or language.
 
