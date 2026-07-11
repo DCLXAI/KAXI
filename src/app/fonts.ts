@@ -18,3 +18,15 @@ export const notoSerifKr = Noto_Serif_KR({
   display: "swap",
   variable: "--font-serif-brand",
 });
+
+// 한글 헤드라인 세리프. next/font의 Noto Serif KR는 한글 글리프를 서빙하지 못하므로
+// Nanum Myeongjo(SIL OFL)를 self-host해 --font-serif 스택의 한글 폴백을 담당한다.
+export const nanumMyeongjo = localFont({
+  src: [
+    { path: "../fonts/NanumMyeongjo-Regular.woff2", weight: "400" },
+    { path: "../fonts/NanumMyeongjo-Bold.woff2", weight: "700" },
+    { path: "../fonts/NanumMyeongjo-ExtraBold.woff2", weight: "800" },
+  ],
+  display: "swap",
+  variable: "--font-serif-ko",
+});
