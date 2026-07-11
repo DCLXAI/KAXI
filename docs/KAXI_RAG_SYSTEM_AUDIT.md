@@ -16,7 +16,7 @@ KAXI remains the public security and persistence boundary, n8n owns retrieval/or
 | legacy RAG | quarantine and transactional cutover gate ready | 100 compatibility rows retained | cut over only with a separate explicit approval |
 | Prisma operational DB | pooled runtime and direct migration URLs verified | managed Supabase PostgreSQL is writable and schema parity passes | released |
 | school directory | 50 current rows with source metadata | readiness reports 50 active, 0 expired, 0 missing-source rows | operational; continue source review |
-| operations | health ledger, n8n error persistence, signed alert delivery, acknowledgement API/UI, and real Typebot-turn probing exist | health run `4efef805-5cc8-4350-adf5-0c3efb437b44` is healthy with zero open events | connect and test a human Slack/email destination |
+| operations | health ledger, n8n error persistence, signed alert delivery, acknowledgement API/UI, and real Typebot-turn probing exist | health run `745161e4-1fd4-43ae-b465-5d9b6110f737` is degraded; n8n and Typebot runtime checks failed, 20 recent events were open, and alert delivery was not configured | top up n8n Connect, rerun health, review/acknowledge events, and configure a human alert destination |
 | attachments | private storage, signature/MIME/hash checks, encrypted extraction, durable leased jobs, and scanner contract exist | storage and queue controls pass | add a production malware-scanner implementation and secondary OCR failover |
 | Codex n8n MCP | browser OAuth approval callback completed; a fresh Codex process can enumerate n8n tools | the current desktop process may retain a stale MCP auth cache until restart | management access only; it does not publish or authorize the runtime webhook |
 
@@ -50,7 +50,7 @@ KAXI remains the public security and persistence boundary, n8n owns retrieval/or
 - Active n8n version `1a65000a-f14e-4425-a926-992e573ad272` preserves verifier-first runtime, ingestion, and handoff paths; carries canonical `docId` through citations; expands multilingual retrieval queries; classifies multilingual forged-document requests as high risk; and emits executable provenance JSON on every response branch.
 - The serving projection is 201/201 ready with zero pending or quarantined chunks. Evaluation run `812f7634-d2c7-495b-8777-23634358d552` passed 56/56 cases with 100% citation validity, high-risk recall, and no-context accuracy across Korean, English, Vietnamese, and Mongolian; p95 latency was 5392ms.
 - Published Typebot normal and high-risk turns returned the real `block_answer`, persisted Typebot sessions, and routed high risk through privacy consent. The completed consent flow created and linked the lead, encrypted contact, handoff task/update, and versioned consent evidence.
-- System-health run `4efef805-5cc8-4350-adf5-0c3efb437b44` is healthy across Supabase, private storage, signed n8n answer, real Typebot answer, serving projection, operations events, and attachment queue.
+- System-health run `745161e4-1fd4-43ae-b465-5d9b6110f737` correctly recorded `degraded` with the semantic workflow, model, and prompt versions after the n8n and Typebot runtime checks failed; Supabase, private storage, serving projection, and attachment queue checks passed.
 
 ## 3. Remaining Release Gaps
 
@@ -66,12 +66,12 @@ KAXI remains the public security and persistence boundary, n8n owns retrieval/or
 | Boundary | Result | Evidence |
 | --- | --- | --- |
 | deployment | pass | Vercel reports production deployment `dpl_3qYHVcNKw6UtQWZUz2Eaj9mr4Pd7` at commit `7a27d71dcf0c77e809ff80d6c4c6c46b058ef6b5` as `Ready` |
-| health | pass | system-health run `4efef805-5cc8-4350-adf5-0c3efb437b44` completed healthy with all checks true and no open event |
+| health | degraded, correctly observed | system-health run `745161e4-1fd4-43ae-b465-5d9b6110f737` stored full provenance; n8n returned HTTP 500, Typebot timed out, 20 recent events were open, and alert delivery was not configured |
 | readiness safety | pass | database, gateway, Typebot, privacy, storage, serving projection, attachment queue, and operations-event checks pass |
 | signed verifier route | pass | unsigned POST returns HTTP 401 and a correctly signed ingestion-purpose probe returns HTTP 200 |
 | desktop UI | pass | page and widget fit 1280x720; widget rect is 430x608 at right edge 1256 of 1280 |
 | mobile UI | pass | no horizontal overflow at 390x844; the 320x568 layout keeps controls separated, uses accessible labels, and exposes answer updates through a live region |
-| chat and RAG E2E | pass | production evaluation created signed chat sessions and completed KAXI -> n8n -> Supabase retrieval for 56/56 cases |
+| chat and RAG E2E | historical pass; current retest blocked | the prior production evaluation completed 56/56 cases; the 2026-07-11 signed retest is blocked by depleted n8n Connect credits |
 | serving projection | pass | 201/201 ready, 0 pending, 0 quarantined, 201 citation-ready |
 | evaluation | pass | 56/56 cases; 100% citation validity, high-risk recall, and no-context accuracy across four locales; p95 5392ms |
 | Typebot channel | pass | published normal and high-risk turns returned a real answer; consent and handoff created linked session, lead, contact, task, update, and consent evidence |
