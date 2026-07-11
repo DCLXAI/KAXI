@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { AlertCircle, CheckCircle2, Clock, FileQuestion, FileText, FileWarning, RefreshCw, Upload } from "lucide-react";
 import { useLangStore } from "@/store/kbridge";
 import { tr } from "@/lib/i18n/translations";
@@ -120,6 +121,7 @@ async function sha256File(file: File): Promise<string> {
 
 export function Documents({ onNavigate }: { onNavigate: (v: string) => void }) {
   const { lang } = useLangStore();
+  const pathname = usePathname();
   const fileRef = useRef<HTMLInputElement>(null);
   const uploadTarget = useRef<StudentDocument | null>(null);
   const [documents, setDocuments] = useState<StudentDocument[]>(FALLBACK_DOCS);
@@ -129,6 +131,7 @@ export function Documents({ onNavigate }: { onNavigate: (v: string) => void }) {
   const [serverBacked, setServerBacked] = useState(false);
   const [workspaceIssue, setWorkspaceIssue] = useState<DocumentWorkspaceIssue | null>(null);
   const [authRequired, setAuthRequired] = useState(false);
+  const loginHref = `/login?next=${encodeURIComponent(pathname)}`;
 
   const loadDocuments = useCallback(async () => {
     setLoading(true);
@@ -137,12 +140,13 @@ export function Documents({ onNavigate }: { onNavigate: (v: string) => void }) {
     try {
       const res = await fetch("/api/documents");
       const data = await res.json();
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         setAuthRequired(true);
         setServerBacked(false);
         setDocuments(FALLBACK_DOCS);
         return;
       }
+      setAuthRequired(false);
       if (!res.ok) {
         setServerBacked(false);
         setWorkspaceIssue({
@@ -155,7 +159,6 @@ export function Documents({ onNavigate }: { onNavigate: (v: string) => void }) {
         setDocuments(FALLBACK_DOCS);
         return;
       }
-      setAuthRequired(false);
       setDocuments(data.documents || []);
       setServerBacked(true);
     } catch (err) {
@@ -174,7 +177,7 @@ export function Documents({ onNavigate }: { onNavigate: (v: string) => void }) {
 
   const triggerUpload = (document: StudentDocument) => {
     if (authRequired) {
-      window.location.href = "/login?next=/documents";
+      window.location.href = loginHref;
       return;
     }
     uploadTarget.current = document;
@@ -254,38 +257,42 @@ export function Documents({ onNavigate }: { onNavigate: (v: string) => void }) {
           <button
             type="button"
             className="mt-2 rounded-md bg-primary px-3 py-1.5 text-primary-foreground"
-            onClick={() => { window.location.href = "/login?next=/documents"; }}
+            onClick={() => { window.location.href = loginHref; }}
           >
             {lang === "ko" ? "로그인" : "Sign in"}
           </button>
         </div>
       )}
 
-      <Card className={serverBacked ? "border-blue-200 bg-blue-50" : "border-amber-200 bg-amber-50"}>
-        <CardContent className="flex items-start gap-3 py-4">
-          <AlertCircle className={`mt-0.5 h-4 w-4 shrink-0 ${serverBacked ? "text-blue-600" : "text-amber-600"}`} />
-          <div className={`space-y-2 text-xs ${serverBacked ? "text-blue-900" : "text-amber-900"}`}>
-            {serverBacked ? (
-              <p>파일은 SHA-256 해시, 용량, MIME 검증을 거쳐 업로드되고 행정사 검수 상태가 기록됩니다. OCR은 이후 비동기 처리로 확장됩니다.</p>
-            ) : (
-              <>
-                <p>
-                  현재 문서 업로드가 운영 저장소 준비 전이라 비활성화되어 있습니다.
-                  {error ? ` (${error})` : ""}
-                </p>
-                {workspaceIssue?.detail && <p>진단: {workspaceIssue.detail}</p>}
-                {workspaceIssue?.requirements?.length ? (
-                  <ul className="list-disc space-y-1 pl-4">
-                    {workspaceIssue.requirements.slice(0, 3).map((requirement) => (
-                      <li key={requirement}>{requirement}</li>
-                    ))}
-                  </ul>
-                ) : null}
-              </>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      {!authRequired && !loading && (
+        <Card className={serverBacked ? "border-blue-200 bg-blue-50" : "border-amber-200 bg-amber-50"}>
+          <CardContent className="flex items-start gap-3 py-4">
+            <AlertCircle className={`mt-0.5 h-4 w-4 shrink-0 ${serverBacked ? "text-blue-600" : "text-amber-600"}`} />
+            <div className={`space-y-2 text-xs ${serverBacked ? "text-blue-900" : "text-amber-900"}`}>
+              {serverBacked ? (
+                <p>파일은 SHA-256 해시, 용량, MIME 검증을 거쳐 업로드되고 행정사 검수 상태가 기록됩니다. OCR은 이후 비동기 처리로 확장됩니다.</p>
+              ) : (
+                <>
+                  <p>
+                    {workspaceIssue
+                      ? "현재 문서 업로드가 운영 저장소 준비 전이라 비활성화되어 있습니다."
+                      : "문서 워크스페이스에 연결하지 못했습니다."}
+                    {error ? ` (${error})` : ""}
+                  </p>
+                  {workspaceIssue?.detail && <p>진단: {workspaceIssue.detail}</p>}
+                  {workspaceIssue?.requirements?.length ? (
+                    <ul className="list-disc space-y-1 pl-4">
+                      {workspaceIssue.requirements.slice(0, 3).map((requirement) => (
+                        <li key={requirement}>{requirement}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

@@ -190,12 +190,14 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
     ),
     check(
       "chat.attachment_malware_scanner",
-      "Chat attachment malware scanning",
+      "Chat attachment security scanning",
       attachmentSecurity.ready,
       !attachmentSecurity.uploadsRequested
         ? "Chat attachment uploads are disabled until a managed malware scanner is configured and explicitly enabled."
         : attachmentSecurity.externalScannerConfigured
         ? "Managed malware scanning runs before private storage; images are also decoded and re-encoded, and active PDF content is rejected."
+        : attachmentSecurity.uploadsEnabled
+        ? "MVP structural scanning is enabled: images are decoded and re-encoded, and active PDF content is rejected before private storage."
         : "The configured managed malware scanner is unavailable, so attachment uploads fail closed.",
       attachmentSecurity,
       attachmentSecurity.uploadsRequested && attachmentSecurity.externalScannerRequired ? "required" : "warning",

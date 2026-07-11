@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { AuthBridgeError, requireKaxiUser } from "@/lib/supabase/auth";
+import { AuthBridgeError } from "@/lib/supabase/auth";
+import { requireDocumentWorkspaceUser } from "@/lib/documents/access";
 import { getStudentProfileForUser, listDocumentsForProfile } from "@/lib/documents/repository";
 import { getDocumentWorkspaceIssue } from "@/lib/documents/workspace-availability";
 
@@ -10,7 +11,7 @@ export async function GET() {
     const workspaceIssue = getDocumentWorkspaceIssue("list");
     if (workspaceIssue) return NextResponse.json(workspaceIssue, { status: 503 });
 
-    const user = await requireKaxiUser(["STUDENT"]);
+    const user = await requireDocumentWorkspaceUser();
     const profile = await getStudentProfileForUser(user.id);
     const documents = await listDocumentsForProfile(profile.id);
     return NextResponse.json({ documents });

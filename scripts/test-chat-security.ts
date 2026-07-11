@@ -90,13 +90,15 @@ assert.equal(productionDisabledDiagnostics.uploadsRequested, false);
 assert.equal(productionDisabledDiagnostics.uploadsEnabled, false);
 assert.equal(productionDisabledDiagnostics.ready, true);
 
-const productionUnsafeEnableDiagnostics = getChatAttachmentSecurityDiagnostics({
+const productionStructuralEnableDiagnostics = getChatAttachmentSecurityDiagnostics({
   NODE_ENV: "production",
   CHAT_ATTACHMENTS_ENABLED: "true",
+  ATTACHMENT_MALWARE_SCAN_MODE: "structural",
 } as NodeJS.ProcessEnv);
-assert.equal(productionUnsafeEnableDiagnostics.uploadsRequested, true);
-assert.equal(productionUnsafeEnableDiagnostics.uploadsEnabled, false);
-assert.equal(productionUnsafeEnableDiagnostics.ready, false);
+assert.equal(productionStructuralEnableDiagnostics.uploadsRequested, true);
+assert.equal(productionStructuralEnableDiagnostics.externalScannerRequired, false);
+assert.equal(productionStructuralEnableDiagnostics.uploadsEnabled, true);
+assert.equal(productionStructuralEnableDiagnostics.ready, true);
 
 const productionManagedDiagnostics = getChatAttachmentSecurityDiagnostics({
   NODE_ENV: "production",

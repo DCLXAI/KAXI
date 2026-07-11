@@ -58,7 +58,7 @@ export function getChatAttachmentSecurityDiagnostics(env: NodeJS.ProcessEnv = pr
   const configuredUploadState = env.CHAT_ATTACHMENTS_ENABLED?.trim().toLowerCase();
   const uploadsRequested = configuredUploadState === "true" || (configuredUploadState !== "false" && !production);
   const externalScannerRequired =
-    isEnvTrue(env.ATTACHMENT_MALWARE_SCAN_REQUIRED) || mode === "http" || (production && uploadsRequested);
+    isEnvTrue(env.ATTACHMENT_MALWARE_SCAN_REQUIRED) || mode === "http";
   const ready = !uploadsRequested || !externalScannerRequired || externalScannerConfigured;
   return {
     mode,

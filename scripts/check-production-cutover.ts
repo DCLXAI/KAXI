@@ -114,8 +114,17 @@ export function readinessGateErrors(payload: ReadinessPayload, expectedMigration
 
   const attachment = checks.get("chat.attachment_malware_scanner");
   if (attachment?.ok !== true) errors.push("attachment malware posture is not fail-closed");
-  if (attachment?.metadata?.uploadsEnabled === true && attachment.metadata.externalScannerConfigured !== true) {
-    errors.push("attachment uploads are enabled without a managed scanner");
+  const attachmentMetadata = attachment?.metadata || {};
+  const structurallyProtected =
+    attachmentMetadata.mode === "structural" &&
+    attachmentMetadata.structuralSanitization === true &&
+    attachmentMetadata.externalScannerRequired === false;
+  if (
+    attachmentMetadata.uploadsEnabled === true &&
+    attachmentMetadata.externalScannerConfigured !== true &&
+    !structurallyProtected
+  ) {
+    errors.push("attachment uploads are enabled without an approved scanner policy");
   }
   return errors;
 }

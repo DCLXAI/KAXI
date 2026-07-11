@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AuthBridgeError, requireKaxiUser } from "@/lib/supabase/auth";
+import { AuthBridgeError } from "@/lib/supabase/auth";
+import { requireDocumentWorkspaceUser } from "@/lib/documents/access";
 import { DOCUMENT_UPLOAD_TOKEN_TTL_SECONDS } from "@/lib/documents/config";
 import { getDocumentUploadSigningSecret, signDocumentUploadPayload } from "@/lib/documents/crypto";
 import {
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
     const workspaceIssue = getDocumentWorkspaceIssue("upload");
     if (workspaceIssue) return NextResponse.json(workspaceIssue, { status: 503 });
 
-    const user = await requireKaxiUser(["STUDENT"]);
+    const user = await requireDocumentWorkspaceUser();
     const profile = await getStudentProfileForUser(user.id);
     const secret = getDocumentUploadSigningSecret();
 

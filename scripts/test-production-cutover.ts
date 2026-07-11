@@ -46,7 +46,25 @@ assert.match(
       ? { ...check, metadata: { uploadsEnabled: true, externalScannerConfigured: false } }
       : check),
   }, expectedMigration).join(" "),
-  /enabled without a managed scanner/,
+  /enabled without an approved scanner policy/,
+);
+assert.deepEqual(
+  readinessGateErrors({
+    ...readyPayload,
+    checks: readyPayload.checks.map((check) => check.key === "chat.attachment_malware_scanner"
+      ? {
+          ...check,
+          metadata: {
+            uploadsEnabled: true,
+            externalScannerConfigured: false,
+            externalScannerRequired: false,
+            structuralSanitization: true,
+            mode: "structural",
+          },
+        }
+      : check),
+  }, expectedMigration),
+  [],
 );
 
 const start = {

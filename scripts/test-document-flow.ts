@@ -50,6 +50,7 @@ const {
 } = await import("../src/lib/documents/storage");
 const { processDocumentOcr } = await import("../src/lib/documents/ocr");
 const { VISA_DOCUMENT_REQUIREMENT_SEEDS } = await import("../src/lib/documents/visa-document-matrix");
+const { DOCUMENT_WORKSPACE_ROLES } = await import("../src/lib/documents/access");
 
 function cloneJson(value: unknown) {
   return JSON.parse(JSON.stringify(value));
@@ -113,6 +114,21 @@ try {
   // 멱등성: 두 번 호출해도 같은 프로필
   const profileAgain = await getStudentProfileForUser(seededUser.id);
   assert(profileAgain.id === profile.id, "getStudentProfileForUser must be idempotent");
+
+  assert(
+    (["STUDENT", "PARTNER_AGENT", "PLATFORM_ADMIN"] as const).every((role) => DOCUMENT_WORKSPACE_ROLES.includes(role)),
+    "document workspace should be available to every authenticated KAXI role"
+  );
+  const adminUser = await db.user.create({
+    data: {
+      role: "PLATFORM_ADMIN",
+      locale: "ko",
+      email: "doc-test-admin@kaxi.local",
+      authUserId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    },
+  });
+  const adminProfile = await getStudentProfileForUser(adminUser.id);
+  assert(adminProfile.userId === adminUser.id, "a platform admin should receive a personal document profile");
 
   // 유령 신원(zaloUid doc:*) 생성 금지
   const ghostUsers = await db.user.count({ where: { zaloUid: { startsWith: "doc:" } } });
