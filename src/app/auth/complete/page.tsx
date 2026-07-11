@@ -1,17 +1,17 @@
 import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
-import { PasswordResetForm } from "@/components/auth/PasswordResetForm";
+import { AuthComplete } from "@/components/auth/AuthComplete";
 
-export default function ResetPasswordPage() {
+export default function AuthCompletePage() {
   return (
     <Suspense
       fallback={
         <main className="flex min-h-screen items-center justify-center bg-muted/30">
-          <Loader2 className="h-6 w-6 animate-spin" aria-label="비밀번호 설정 화면 준비 중" />
+          <Loader2 className="h-6 w-6 animate-spin" aria-label="로그인 처리 중" />
         </main>
       }
     >
-      <PasswordResetForm />
+      <AuthComplete />
     </Suspense>
   );
 }

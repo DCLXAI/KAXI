@@ -38,7 +38,7 @@ async function resolveAuthUser(email: string): Promise<{ user: SupabaseUser; inv
   if (!shouldInvite()) fail("confirmed Supabase Auth user was not found; sign up and confirm the email first, or pass --invite");
   const publicOrigin = (process.env.KAXI_PUBLIC_URL || "https://kaxi.vercel.app").replace(/\/$/, "");
   const invite = await client.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${publicOrigin}/auth/callback?next=/admin/cases`,
+    redirectTo: `${publicOrigin}/account/reset-password?next=/admin/cases`,
   });
   if (invite.error || !invite.data.user) fail(invite.error?.message || "Supabase admin invite failed");
   return { user: invite.data.user, invited: true };

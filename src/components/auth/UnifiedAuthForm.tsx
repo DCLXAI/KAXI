@@ -133,7 +133,12 @@ export function UnifiedAuthForm() {
       const response = await fetch("/api/auth/supabase/otp", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, locale: "ko", next: requestedPath || undefined }),
+        body: JSON.stringify({
+          email,
+          inviteToken: inviteToken || undefined,
+          locale: "ko",
+          next: requestedPath || undefined,
+        }),
       });
       if (!response.ok) throw new Error("otp_failed");
       setMessage("이메일로 보낸 로그인 링크를 확인해주세요.");

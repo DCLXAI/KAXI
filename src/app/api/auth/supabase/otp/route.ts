@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = (await req.json().catch(() => ({}))) as {
       email?: string;
+      inviteToken?: string;
       locale?: string;
       next?: string;
     };
@@ -30,7 +31,8 @@ export async function POST(req: NextRequest) {
     const client = createClient(config.url, config.anonKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    const redirect = new URL("/auth/callback", siteOrigin(req));
+    const redirect = new URL("/auth/complete", siteOrigin(req));
+    if (body.inviteToken) redirect.searchParams.set("inviteToken", body.inviteToken.slice(0, 512));
     if (body.next?.startsWith("/") && !body.next.startsWith("//")) {
       redirect.searchParams.set("next", body.next);
     }

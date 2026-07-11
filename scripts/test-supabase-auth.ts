@@ -22,6 +22,16 @@ async function expectAuthError(operation: Promise<unknown>, code: string) {
 
 prepareTestDb("supabase auth bridge");
 
+const [otpRouteSource, bootstrapAdminSource] = await Promise.all([
+  Bun.file(new URL("../src/app/api/auth/supabase/otp/route.ts", import.meta.url)).text(),
+  Bun.file(new URL("./bootstrap-supabase-admin.ts", import.meta.url)).text(),
+]);
+assert(otpRouteSource.includes('new URL("/auth/complete"'), "implicit email links should use the browser completion route");
+assert(
+  bootstrapAdminSource.includes("/account/reset-password?next=/admin/cases"),
+  "admin invitations should open the client-side password setup route"
+);
+
 const { db } = await import("../src/lib/db");
 const { areaForPath, canAccessArea, defaultLoginPath, isAdminAal2Session, postLoginPath } = await import("../src/lib/supabase/policy");
 const {

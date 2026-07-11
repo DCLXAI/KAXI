@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { KeyRound, Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 export function PasswordResetForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [loading, setLoading] = useState(false);
@@ -35,7 +36,11 @@ export function PasswordResetForm() {
       const result = await client.auth.updateUser?.({ password });
       if (!result || result.error) throw new Error("password_update_failed");
       await client.auth.signOut?.();
-      router.replace("/login");
+      const requestedPath = searchParams.get("next") || "";
+      const loginPath = requestedPath.startsWith("/") && !requestedPath.startsWith("//")
+        ? `/login?next=${encodeURIComponent(requestedPath)}`
+        : "/login";
+      router.replace(loginPath);
       router.refresh();
     } catch {
       setError("재설정 링크가 만료되었거나 비밀번호를 변경할 수 없습니다.");

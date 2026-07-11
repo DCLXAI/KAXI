@@ -15,6 +15,7 @@ function needsSupabaseSession(pathname: string) {
     pathname.startsWith("/admin") ||
     pathname.startsWith("/student") ||
     pathname.startsWith("/partner") ||
+    pathname === "/auth/complete" ||
     pathname === "/auth/callback" ||
     pathname === "/api/auth/session" ||
     pathname.startsWith("/api/admin") ||
@@ -49,6 +50,7 @@ export const config = {
     "/admin/:path*",
     "/student/:path*",
     "/partner/:path*",
+    "/auth/complete",
     "/auth/callback",
     "/api/auth/session",
     "/api/admin/:path*",
