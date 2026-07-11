@@ -160,16 +160,31 @@ function DesktopNavLink({ currentView, item }: { currentView: string; item: Head
   );
 }
 
+interface MobileNavAccount {
+  authenticated: boolean;
+  label: string;
+  email?: string;
+  isAdmin: boolean;
+  adminHref: string;
+  adminLabel: string;
+  loginHref: string;
+  loginLabel: string;
+  logoutLabel: string;
+  onLogout: () => void;
+}
+
 function MobileNav({
   currentView,
   groups,
   items,
   label,
+  account,
 }: {
   currentView: string;
   groups: HeaderNavGroup[];
   items: HeaderNavItem[];
   label: string;
+  account: MobileNavAccount;
 }) {
   return (
     <Sheet>
@@ -222,6 +237,46 @@ function MobileNav({
                 </SheetClose>
               );
             })}
+          </div>
+          <div className="space-y-1 border-t pt-4">
+            {account.authenticated ? (
+              <>
+                {account.email && (
+                  <p className="truncate px-2 text-xs text-muted-foreground">{account.email}</p>
+                )}
+                {account.isAdmin && (
+                  <SheetClose asChild>
+                    <Link
+                      href={account.adminHref}
+                      className="flex h-10 items-center gap-3 rounded-md px-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+                    >
+                      <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
+                      {account.adminLabel}
+                    </Link>
+                  </SheetClose>
+                )}
+                <SheetClose asChild>
+                  <button
+                    type="button"
+                    onClick={account.onLogout}
+                    className="flex h-10 w-full items-center gap-3 rounded-md px-2 text-left text-sm font-medium text-destructive transition-colors hover:bg-accent"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    {account.logoutLabel}
+                  </button>
+                </SheetClose>
+              </>
+            ) : (
+              <SheetClose asChild>
+                <a
+                  href={account.loginHref}
+                  className="flex h-10 items-center gap-3 rounded-md px-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+                >
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  {account.loginLabel}
+                </a>
+              </SheetClose>
+            )}
           </div>
         </nav>
       </SheetContent>
@@ -303,6 +358,18 @@ export function Header({
             groups={navGroups}
             items={directNavItems}
             label={tr("nav_menu", activeLang)}
+            account={{
+              authenticated: Boolean(session?.authenticated && session.user),
+              label: accountLabel,
+              email: session?.user?.email ?? undefined,
+              isAdmin,
+              adminHref: "/admin/cases",
+              adminLabel: tr("nav_admin_console", activeLang),
+              loginHref: `/login?lang=${activeLang}`,
+              loginLabel: tr("nav_login", activeLang),
+              logoutLabel: tr("nav_logout", activeLang),
+              onLogout: logout,
+            }}
           />
           <LangSwitcher currentView={currentView} locale={locale} />
           {session?.authenticated && session.user ? (
