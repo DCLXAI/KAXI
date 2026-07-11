@@ -71,6 +71,26 @@ function roleAllowed(role: AdminRole, allowed: AdminRole[]): boolean {
 }
 
 export async function getAdminContext(req: NextRequest): Promise<AdminContext | null> {
+  const expected = process.env.ADMIN_API_KEY;
+  const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  const headerKey = req.headers.get("x-admin-key");
+  const provided = bearer || headerKey || "";
+
+  if (provided) {
+    if (!expected || !safeEqual(provided, expected)) return null;
+    const apiKeyRole: AdminRole =
+      process.env.ADMIN_API_KEY_ROLE === "owner"
+        ? "owner"
+        : process.env.ADMIN_API_KEY_ROLE === "viewer"
+          ? "viewer"
+          : "admin";
+    return {
+      actor: "admin-api-key",
+      role: apiKeyRole,
+      authType: "api-key",
+    };
+  }
+
   try {
     const session = await getCurrentKaxiSession();
     if (session?.user?.role === "PLATFORM_ADMIN") {
@@ -87,31 +107,7 @@ export async function getAdminContext(req: NextRequest): Promise<AdminContext | 
     }
   }
 
-  const expected = process.env.ADMIN_API_KEY;
-  if (!expected) {
-    return null;
-  }
-
-  const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  const headerKey = req.headers.get("x-admin-key");
-  const provided = bearer || headerKey || "";
-
-  if (!provided || !safeEqual(provided, expected)) {
-    return null;
-  }
-
-  const apiKeyRole: AdminRole =
-    process.env.ADMIN_API_KEY_ROLE === "owner"
-      ? "owner"
-      : process.env.ADMIN_API_KEY_ROLE === "viewer"
-        ? "viewer"
-        : "admin";
-
-  return {
-    actor: "admin-api-key",
-    role: apiKeyRole,
-    authType: "api-key",
-  };
+  return null;
 }
 
 export async function requireAdmin(
