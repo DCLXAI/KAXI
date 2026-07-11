@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
   ArrowRight,
@@ -56,7 +57,7 @@ function ChoiceButton({ icon: Icon, label, onSelect, selected }: ChoiceButtonPro
       aria-pressed={selected}
       onClick={onSelect}
       className={cn(
-        "relative flex min-h-14 w-full items-center gap-3 rounded-lg border border-border bg-background px-4 py-3.5 text-left text-sm font-medium text-foreground transition-all duration-150 sm:min-h-16 sm:px-5",
+        "relative flex min-h-14 w-full items-center gap-3 rounded-lg border border-border bg-background px-4 py-3.5 text-left text-sm font-medium text-foreground transition-[border-color,background-color,box-shadow,transform] duration-150 ease-snappy active:scale-[0.98] sm:min-h-16 sm:px-5",
         "hover:border-foreground/25 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         selected && "border-primary bg-primary/[0.06] shadow-sm ring-1 ring-primary",
       )}
@@ -67,7 +68,9 @@ function ChoiceButton({ icon: Icon, label, onSelect, selected }: ChoiceButtonPro
         </span>
       )}
       <span className="min-w-0 flex-1 leading-snug">{label}</span>
-      {selected && <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />}
+      {selected && (
+        <CheckCircle2 className="h-4 w-4 shrink-0 animate-in zoom-in-75 text-primary duration-150 ease-snappy motion-reduce:animate-none" />
+      )}
     </button>
   );
 }
@@ -75,6 +78,8 @@ function ChoiceButton({ icon: Icon, label, onSelect, selected }: ChoiceButtonPro
 export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpdate, submitting }: DiagnosisFormProps) {
   const t = useTranslations();
   const [step, setStep] = useState(initialStep);
+  const [direction, setDirection] = useState<1 | -1>(1);
+  const reducedMotion = useReducedMotion();
   const [goalConfirmed, setGoalConfirmed] = useState(initialStep > 0);
   const [koreanConfirmed, setKoreanConfirmed] = useState(initialStep > 2);
   const [brokerConfirmed, setBrokerConfirmed] = useState(initialStep > 4);
@@ -169,8 +174,26 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
     { label: t("diagnose_q_history"), value: input.hasHistory ? t("yes") : t("no") },
   ];
 
-  const next = () => setStep((current) => Math.min(TOTAL_STEPS - 1, current + 1));
-  const previous = () => setStep((current) => Math.max(0, current - 1));
+  const next = () => {
+    setDirection(1);
+    setStep((current) => Math.min(TOTAL_STEPS - 1, current + 1));
+  };
+  const previous = () => {
+    setDirection(-1);
+    setStep((current) => Math.max(0, current - 1));
+  };
+
+  const stepVariants = {
+    enter: (dir: 1 | -1) => ({
+      opacity: 0,
+      transform: reducedMotion ? "translateX(0px)" : `translateX(${dir * 24}px)`,
+    }),
+    center: { opacity: 1, transform: "translateX(0px)" },
+    exit: (dir: 1 | -1) => ({
+      opacity: 0,
+      transform: reducedMotion ? "translateX(0px)" : `translateX(${dir * -24}px)`,
+    }),
+  };
 
   return (
     <Card className="overflow-hidden bg-card py-0">
@@ -204,6 +227,16 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
       </CardHeader>
 
       <CardContent className="min-h-[20rem] px-5 py-6 sm:min-h-[21rem] sm:px-7 sm:py-8">
+      <AnimatePresence mode="wait" initial={false} custom={direction}>
+      <motion.div
+        key={step}
+        custom={direction}
+        variants={stepVariants}
+        initial="enter"
+        animate="center"
+        exit="exit"
+        transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+      >
         {step === 0 && (
           <div role="group" aria-label={t("diagnose_q_goal")} className="grid gap-2 sm:grid-cols-2 sm:gap-3">
             {goalOptions.map((option) => (
@@ -404,6 +437,8 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
             </div>
           </div>
         )}
+      </motion.div>
+      </AnimatePresence>
       </CardContent>
 
       <CardFooter className="sticky bottom-0 z-10 justify-between gap-3 border-t border-border bg-card/95 px-5 py-4 backdrop-blur sm:px-7">

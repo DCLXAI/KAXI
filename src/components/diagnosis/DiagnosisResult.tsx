@@ -41,7 +41,10 @@ export function DiagnosisResult({
 
   return (
     <div id="result-section" className="space-y-4">
-      <Card>
+      <Card
+        className="animate-in fade-in slide-in-from-bottom-2 duration-300 ease-snappy motion-reduce:animate-none"
+        style={{ animationDelay: "0ms", animationFillMode: "backwards" }}
+      >
         <CardHeader>
           <Badge className="w-fit">{t("result_recommended")}</Badge>
           <CardTitle className="font-serif text-2xl md:text-3xl mt-2">{pathLabel}</CardTitle>
@@ -64,9 +67,19 @@ export function DiagnosisResult({
         </CardContent>
       </Card>
 
-      {result.readiness && <ReadinessScoreCard readiness={result.readiness} lang={locale} />}
+      {result.readiness && (
+        <div
+          className="animate-in fade-in slide-in-from-bottom-2 duration-300 ease-snappy motion-reduce:animate-none"
+          style={{ animationDelay: "60ms", animationFillMode: "backwards" }}
+        >
+          <ReadinessScoreCard readiness={result.readiness} lang={locale} />
+        </div>
+      )}
 
-      <Card>
+      <Card
+        className="animate-in fade-in slide-in-from-bottom-2 duration-300 ease-snappy motion-reduce:animate-none"
+        style={{ animationDelay: "120ms", animationFillMode: "backwards" }}
+      >
         <CardHeader>
           <CardTitle className="font-serif flex items-center gap-2 text-lg">
             <FileText className="h-5 w-5" />
@@ -83,7 +96,11 @@ export function DiagnosisResult({
       </Card>
 
       {result.warnings.length > 0 && (
-        <Alert variant="destructive">
+        <Alert
+          variant="destructive"
+          className="animate-in fade-in slide-in-from-bottom-2 duration-300 ease-snappy motion-reduce:animate-none"
+          style={{ animationDelay: "180ms", animationFillMode: "backwards" }}
+        >
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>{t("result_warnings")}</AlertTitle>
           <AlertDescription>
@@ -96,7 +113,10 @@ export function DiagnosisResult({
         </Alert>
       )}
 
-      <Card>
+      <Card
+        className="animate-in fade-in slide-in-from-bottom-2 duration-300 ease-snappy motion-reduce:animate-none"
+        style={{ animationDelay: "240ms", animationFillMode: "backwards" }}
+      >
         <CardHeader>
           <CardTitle className="font-serif text-lg">{t("result_next_actions")}</CardTitle>
         </CardHeader>
@@ -112,7 +132,10 @@ export function DiagnosisResult({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card
+        className="animate-in fade-in slide-in-from-bottom-2 duration-300 ease-snappy motion-reduce:animate-none"
+        style={{ animationDelay: "300ms", animationFillMode: "backwards" }}
+      >
         <CardHeader>
           <CardTitle className="font-serif text-lg flex items-center gap-2">
             <Save className="h-4 w-4" />
