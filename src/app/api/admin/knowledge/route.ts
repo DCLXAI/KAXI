@@ -10,6 +10,7 @@ import {
   analyzeKnowledgeDocumentDiff,
   approveKnowledgeDocument,
   calculateKnowledgeImpact,
+  calculateKnowledgeImpacts,
   discardKnowledgeDocument,
   recheckKnowledgeDocument,
 } from "@/lib/knowledge/repository";
@@ -57,6 +58,40 @@ async function withImpact(item: AdminKnowledgeItem): Promise<AdminKnowledgeItem>
       topic: item.topic,
       supersedes: item.supersedes,
     }),
+  };
+}
+
+async function withImpacts(items: AdminKnowledgeItem[]): Promise<AdminKnowledgeItem[]> {
+  if (items.length === 0) return [];
+  const impacts = await calculateKnowledgeImpacts(items.map((item) => ({
+    docId: item.docId,
+    title: item.title,
+    sourceUrl: item.sourceUrl,
+    topic: item.topic,
+    supersedes: item.supersedes,
+  })));
+  return items.map((item) => ({ ...item, impact: impacts.get(item.docId) }));
+}
+
+const DEFAULT_PAGE_SIZE = 25;
+const MAX_PAGE_SIZE = 100;
+const MAX_PAGE = 10_000;
+
+function positiveQueryInt(value: string | null, fallback: number, max = Number.MAX_SAFE_INTEGER) {
+  const parsed = Number.parseInt(value || "", 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(parsed, max);
+}
+
+function paginationSummary(page: number, pageSize: number, total: number) {
+  const totalPages = Math.ceil(total / pageSize);
+  return {
+    page,
+    pageSize,
+    total,
+    totalPages,
+    hasPrevious: page > 1,
+    hasNext: page < totalPages,
   };
 }
 
@@ -386,18 +421,43 @@ export async function GET(req: NextRequest) {
     const unauthorized = await requireAdmin(req, { roles: ["owner", "admin", "viewer"] });
     if (unauthorized) return unauthorized;
 
-    const documents = await db.knowledgeDocument.findMany({
-      include: { chunks: true },
-      orderBy: [{ reviewStatus: "asc" }, { lastCheckedAt: "desc" }],
-    });
+    const page = positiveQueryInt(req.nextUrl.searchParams.get("page"), 1, MAX_PAGE);
+    const pageSize = positiveQueryInt(
+      req.nextUrl.searchParams.get("pageSize"),
+      DEFAULT_PAGE_SIZE,
+      MAX_PAGE_SIZE,
+    );
+    const [total, documents, readiness] = await Promise.all([
+      db.knowledgeDocument.count(),
+      db.knowledgeDocument.findMany({
+        include: { chunks: { select: { id: true } } },
+        orderBy: [{ reviewStatus: "asc" }, { lastCheckedAt: "desc" }, { docId: "asc" }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      knowledgeReadinessSummary(),
+    ]);
 
-    if (documents.length === 0) {
-      const staticDocuments = await Promise.all(staticKnowledgeItems().map(withImpact));
-      return NextResponse.json({ documents: staticDocuments, source: "static", readiness: await knowledgeReadinessSummary() });
+    if (total === 0) {
+      const allStaticDocuments = staticKnowledgeItems();
+      const staticDocuments = await withImpacts(
+        allStaticDocuments.slice((page - 1) * pageSize, page * pageSize),
+      );
+      return NextResponse.json({
+        documents: staticDocuments,
+        source: "static",
+        readiness,
+        pagination: paginationSummary(page, pageSize, allStaticDocuments.length),
+      });
     }
 
-    const serialized = await Promise.all(documents.map((document) => withImpact(toAdminKnowledgeItem(document))));
-    return NextResponse.json({ documents: serialized, source: "db", readiness: await knowledgeReadinessSummary() });
+    const serialized = await withImpacts(documents.map(toAdminKnowledgeItem));
+    return NextResponse.json({
+      documents: serialized,
+      source: "db",
+      readiness,
+      pagination: paginationSummary(page, pageSize, total),
+    });
   } catch (err) {
     console.error("[GET /api/admin/knowledge]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
@@ -422,6 +482,7 @@ export async function PATCH(req: NextRequest) {
       supersedes?: unknown;
       supersededBy?: string | null;
       docIds?: string[];
+      allPendingCandidates?: boolean;
       checkedBy?: string;
       checkedAt?: string;
       reviewedBy?: string;
@@ -438,7 +499,9 @@ export async function PATCH(req: NextRequest) {
 
     if (body.action === "bulkApproveCandidates" || body.action === "bulkDiscardCandidates") {
       const action = body.action === "bulkApproveCandidates" ? "approve" : "discard";
-      const requestedDocIds = stringList(body.docIds);
+      const requestedDocIds = body.allPendingCandidates === true
+        ? (await pendingCandidateRows()).map((document) => document.docId)
+        : stringList(body.docIds);
       const minApprovedCandidateChunks = optionalNumber(body.minApprovedCandidateChunks) ?? 500;
       const minProjectedApprovedChunks = optionalNumber(body.minProjectedApprovedChunks) ?? 500;
       const review = action === "approve" ? candidateApprovalReview(body) : null;
@@ -482,12 +545,10 @@ export async function PATCH(req: NextRequest) {
             ok: true,
             reviewStatus: result.document.reviewStatus,
           });
-          documents.push(
-            await withImpact({
-              ...toAdminKnowledgeItem(result.document),
-              diff: result.diff,
-            })
-          );
+          documents.push({
+            ...toAdminKnowledgeItem(result.document),
+            diff: result.diff,
+          });
         } catch (err) {
           results.push({
             docId,
@@ -499,6 +560,7 @@ export async function PATCH(req: NextRequest) {
 
       const processed = results.filter((result) => result.ok).length;
       const failed = results.length - processed;
+      const impactedDocuments = await withImpacts(documents);
       const postApprovalCorpus = action === "approve" && failed === 0 && targetDocIds.length > 0
         ? await getRagCorpusReadiness({
             minApprovedChunks: minProjectedApprovedChunks,
@@ -512,6 +574,7 @@ export async function PATCH(req: NextRequest) {
         targetType: "knowledgeDocument",
         metadata: {
           requested: targetDocIds.length,
+          allPendingCandidates: body.allPendingCandidates === true,
           processed,
           failed,
           docIdCount: targetDocIds.length,
@@ -559,7 +622,7 @@ export async function PATCH(req: NextRequest) {
         processed,
         failed,
         results,
-        documents,
+        documents: impactedDocuments,
         readiness: {
           projection: bulkValidation && bulkValidation.ok ? bulkValidation.projection : null,
           corpus: postApprovalCorpus,

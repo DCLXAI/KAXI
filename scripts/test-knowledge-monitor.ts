@@ -25,6 +25,7 @@ prepareTestDb("knowledge monitor");
 const { db } = await import("../src/lib/db");
 const {
   approveKnowledgeDocument,
+  calculateKnowledgeImpacts,
   discardKnowledgeDocument,
   listApprovedKnowledgeDocsForRag,
 } = await import("../src/lib/knowledge/repository");
@@ -297,6 +298,15 @@ try {
       retrievedDocs: JSON.stringify({ docIds: [source.docId] }),
     },
   });
+
+  const batchImpacts = await calculateKnowledgeImpacts([
+    source,
+    { docId: "monitor-no-impact-doc" },
+  ]);
+  assert(batchImpacts.get(source.docId)?.ruleCount === 1, "batch impact should match the source rule once");
+  assert(batchImpacts.get(source.docId)?.userCount === 1, "batch impact should match the source chat log once");
+  assert(batchImpacts.get("monitor-no-impact-doc")?.ruleCount === 0, "batch impact should preserve zero-rule documents");
+  assert(batchImpacts.get("monitor-no-impact-doc")?.userCount === 0, "batch impact should preserve zero-user documents");
 
   let fetchedHtml = "<html><body><h1>출입국 규정 최신본</h1><p>D-2 D-4 변경 감지 문장</p></body></html>";
   const fetchImpl = async () =>

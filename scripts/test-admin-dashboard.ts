@@ -118,6 +118,15 @@ try {
 
   const knowledge = await json(await knowledgeRoute.GET(adminRequest("/api/admin/knowledge")));
   assert(knowledge.documents.length >= 1, "admin knowledge should list source documents");
+  assert(knowledge.pagination?.page === 1, "admin knowledge should return the current page");
+  assert(knowledge.pagination?.pageSize === 25, "admin knowledge should use the bounded default page size");
+  assert(knowledge.pagination?.total >= knowledge.documents.length, "admin knowledge should return the total document count");
+  const pagedKnowledge = await json(
+    await knowledgeRoute.GET(adminRequest("/api/admin/knowledge?page=1&pageSize=1"))
+  );
+  assert(pagedKnowledge.documents.length === 1, "admin knowledge should enforce requested page size");
+  assert(pagedKnowledge.pagination.pageSize === 1, "admin knowledge pagination should echo page size");
+  assert(typeof pagedKnowledge.documents[0]?.impact?.ruleCount === "number", "paged knowledge should include batch impact data");
   assert(knowledge.readiness?.candidateApproval, "admin knowledge should expose candidate approval readiness");
   assert(knowledge.readiness?.corpus, "admin knowledge should expose production corpus readiness");
   assert(
@@ -410,7 +419,7 @@ try {
       await knowledgeRoute.PATCH(
         adminRequest("/api/admin/knowledge", {
           method: "PATCH",
-          body: JSON.stringify({ action: "bulkDiscardCandidates", docIds: [discardCandidateDocId] }),
+          body: JSON.stringify({ action: "bulkDiscardCandidates", allPendingCandidates: true }),
         })
       )
     );

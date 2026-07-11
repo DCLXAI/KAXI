@@ -46,7 +46,7 @@ type RuleWithRelations = Prisma.ComplianceRuleGetPayload<{
 }>;
 
 type KnowledgeWithChunks = Prisma.KnowledgeDocumentGetPayload<{
-  include: { chunks: true };
+  include: { chunks: { select: { id: true } } };
 }>;
 
 function iso(value: Date | string | null | undefined): string | null {
