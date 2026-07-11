@@ -5,6 +5,25 @@ import { notifyUser, type NotificationCopy } from "@/lib/notifications/repositor
 
 type NotificationDb = Prisma.TransactionClient | typeof db;
 
+function buildDocumentReviewCopy(documentType: string, status: string, reviewStatus: string): NotificationCopy {
+  return Object.fromEntries((["ko", "vi", "mn", "en"] as const).map((locale) => {
+    const statusLabel = workspaceStatusLabel(reviewStatus || status, locale);
+    const title = {
+      ko: "서류 심사 결과",
+      vi: "Kết quả kiểm tra giấy tờ",
+      mn: "Баримтын шалгалтын үр дүн",
+      en: "Document review result",
+    }[locale];
+    const message = {
+      ko: `${documentType} 상태가 '${statusLabel}'(으)로 변경되었습니다.`,
+      vi: `Trạng thái ${documentType} đã đổi thành '${statusLabel}'.`,
+      mn: `${documentType} баримтын төлөв '${statusLabel}' боллоо.`,
+      en: `${documentType} changed to '${statusLabel}'.`,
+    }[locale];
+    return [locale, { title, message }];
+  })) as NotificationCopy;
+}
+
 export async function notifyDocumentReview(input: {
   documentItemId: string;
   status: string;
@@ -19,22 +38,7 @@ export async function notifyDocumentReview(input: {
   });
   if (!document) return null;
   const user = document.studentProfile.user;
-  const copy = Object.fromEntries((["ko", "vi", "mn", "en"] as const).map((locale) => {
-    const status = workspaceStatusLabel(input.reviewStatus || input.status, locale);
-    const title = {
-      ko: "서류 심사 결과",
-      vi: "Kết quả kiểm tra giấy tờ",
-      mn: "Баримтын шалгалтын үр дүн",
-      en: "Document review result",
-    }[locale];
-    const message = {
-      ko: `${document.documentType} 상태가 '${status}'(으)로 변경되었습니다.`,
-      vi: `Trạng thái ${document.documentType} đã đổi thành '${status}'.`,
-      mn: `${document.documentType} баримтын төлөв '${status}' боллоо.`,
-      en: `${document.documentType} changed to '${status}'.`,
-    }[locale];
-    return [locale, { title, message }];
-  })) as NotificationCopy;
+  const copy = buildDocumentReviewCopy(document.documentType, input.status, input.reviewStatus);
   const locale = workspaceLocale(user.locale);
   return notifyUser({
     userId: user.id,
@@ -45,6 +49,30 @@ export async function notifyDocumentReview(input: {
     metadata: { documentItemId: document.id, status: input.status, reviewStatus: input.reviewStatus },
     tx: client,
   });
+}
+
+export async function buildDocumentReviewEmail(
+  documentItemId: string,
+  status: string,
+  reviewStatus: string,
+  tx?: NotificationDb,
+): Promise<{ to: string; subject: string; body: string; href: string } | null> {
+  const client = tx || db;
+  const document = await client.documentItem.findUnique({
+    where: { id: documentItemId },
+    include: { studentProfile: { include: { user: true } } },
+  });
+  if (!document) return null;
+  const user = document.studentProfile.user;
+  if (!user.email) return null;
+  const locale = workspaceLocale(user.locale);
+  const copy = buildDocumentReviewCopy(document.documentType, status, reviewStatus)[locale];
+  return {
+    to: user.email,
+    subject: copy.title,
+    body: copy.message,
+    href: `/${locale}/docs`,
+  };
 }
 
 export async function notifyCaseStudent(input: {
