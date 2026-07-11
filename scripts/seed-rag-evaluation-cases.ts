@@ -33,7 +33,31 @@ const rows = cases.map((item) => ({
     expectedCostFormat: item.expectedCostFormat,
     expectedNoContext: false,
     expectedRefusal: item.expectedRefusal,
+    expectedStrictCategory: (item.category || (item.id.includes("cost") ? "cost" : item.id.includes("d4") ? "visa" : "documents")) !== "general",
+    expectedLocaleHeadings: true,
     hasSyntheticAttachment: item.id.includes("attachment"),
+  },
+}));
+
+const strictCategoryLocaleRows = [
+  { id: "ko-cost-strict-locale", locale: "ko", question: "한국 유학 준비 비용 항목을 한국어로 짧게 알려주세요." },
+  { id: "en-cost-strict-locale", locale: "en", question: "Briefly list the cost items for studying in Korea in English." },
+  { id: "vi-cost-strict-locale", locale: "vi", question: "Hãy trả lời ngắn bằng tiếng Việt về các khoản chi phí du học Hàn Quốc." },
+  { id: "mn-cost-strict-locale", locale: "mn", question: "Солонгост сурах зардлын төрлүүдийг монгол хэлээр товч тайлбарлана уу." },
+].map((item) => ({
+  ...item,
+  category: "cost",
+  expected_doc_ids: ["cost-breakdown"],
+  expected_risk_level: "low",
+  expected_handoff: false,
+  active: true,
+  metadata: {
+    source: "strict-category-locale-regression",
+    expectedNoContext: false,
+    expectedRefusal: false,
+    expectedStrictCategory: true,
+    expectedLocaleHeadings: true,
+    hasSyntheticAttachment: false,
   },
 }));
 
@@ -52,6 +76,7 @@ const noContextRows = [
   metadata: { source: "governed-no-context-regression", expectedNoContext: true },
 }));
 
-const result = await supabase.from("rag_evaluation_cases").upsert([...rows, ...noContextRows], { onConflict: "id" });
+const evaluationRows = [...rows, ...strictCategoryLocaleRows, ...noContextRows];
+const result = await supabase.from("rag_evaluation_cases").upsert(evaluationRows, { onConflict: "id" });
 if (result.error) throw result.error;
-console.log(`PASS seeded ${rows.length + noContextRows.length} governed RAG evaluation cases`);
+console.log(`PASS seeded ${evaluationRows.length} governed RAG evaluation cases`);

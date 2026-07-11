@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 
-export const REQUIRED_PRODUCTION_MIGRATION = "20260711110000_partner_request_assignment_notifications";
+export const REQUIRED_PRODUCTION_MIGRATION = "20260711193000_rag_strict_category_locale";
 
 const REQUIRED_SCHEMA_OBJECTS = [
   "migration_ledger",
@@ -18,6 +18,7 @@ const REQUIRED_SCHEMA_OBJECTS = [
   "handoff_consent_evidence",
   "partner_request_assignment",
   "user_notifications",
+  "rag_strict_locale_search",
 ] as const;
 
 type RequiredSchemaObject = (typeof REQUIRED_SCHEMA_OBJECTS)[number];
@@ -79,7 +80,15 @@ export async function checkProductionSchemaParity(): Promise<SchemaParityResult>
           SELECT 1 FROM information_schema.columns
           WHERE table_schema = 'public' AND table_name = 'PartnerRequest' AND column_name = 'organizationId'
         ) AS partner_request_assignment,
-        to_regclass('public."UserNotification"') IS NOT NULL AS user_notifications
+        to_regclass('public."UserNotification"') IS NOT NULL AS user_notifications,
+        to_regprocedure('public.kaxi_rag_category_allowed(text,text)') IS NOT NULL
+          AND to_regprocedure('public.kaxi_extract_rag_locale_sections(text,text)') IS NOT NULL
+          AND to_regprocedure('public.match_rag_documents(vector,integer,jsonb)') IS NOT NULL
+          AND position(
+            'v_category_mode' IN pg_get_functiondef(
+              to_regprocedure('public.match_rag_documents(vector,integer,jsonb)')
+            )
+          ) > 0 AS rag_strict_locale_search
     `;
     const row = rows[0];
     const missing = REQUIRED_SCHEMA_OBJECTS.filter((key) => row?.[key] !== true);

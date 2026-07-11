@@ -13,6 +13,8 @@ type EvaluationCase = {
   metadata: {
     expectedNoContext?: boolean;
     expectedRefusal?: boolean;
+    expectedStrictCategory?: boolean;
+    expectedLocaleHeadings?: boolean;
     hasSyntheticAttachment?: boolean;
   } | null;
 };
@@ -21,7 +23,7 @@ type RagResponse = {
   answer?: string;
   riskLevel?: string;
   needsHuman?: boolean;
-  sources?: Array<{ docId?: string; sourceUrl?: string; checkedAt?: string }>;
+  sources?: Array<{ docId?: string; sourceUrl?: string; checkedAt?: string; category?: string; language?: string }>;
   searchMeta?: { topScore?: number; noContext?: boolean; retrievedCount?: number };
   executionId?: string;
   error?: string;
@@ -43,6 +45,37 @@ function isRefusalAnswer(answer: string, locale: string) {
     mn: /боломжгүй|болохгүй|туслахгүй/iu,
   };
   return (patterns[locale] || patterns.en).test(answer);
+}
+
+const STRICT_CATEGORY_SCOPES: Record<string, Set<string>> = {
+  cost: new Set(["cost"]),
+  visa: new Set(["visa", "legal", "process", "warning"]),
+  documents: new Set(["documents", "legal", "process", "warning"]),
+  school: new Set(["school", "documents", "process"]),
+  warning: new Set(["warning", "legal"]),
+  process: new Set(["process", "warning", "legal"]),
+  legal: new Set(["legal"]),
+};
+
+function strictCategoryAllows(requested: string, candidate: string | undefined) {
+  if (requested === "general") return true;
+  return STRICT_CATEGORY_SCOPES[requested]?.has((candidate || "").toLowerCase()) === true;
+}
+
+function detectedHeadingLocale(value: string) {
+  if (/[가-힣ㄱ-ㅎㅏ-ㅣ]/u.test(value)) return "ko";
+  if (/[ăâđêôơưàáảãạằắẳẵặầấẩẫậèéẻẽẹềếểễệìíỉĩịòóỏõọồốổỗộờớởỡợùúủũụừứửữựỳýỷỹỵ]/iu.test(value)) return "vi";
+  if (/[А-Яа-яЁёӨөҮү]/u.test(value)) return "mn";
+  if (/[a-z]/iu.test(value)) return "en";
+  return null;
+}
+
+function hasForeignMarkdownHeading(answer: string, locale: string) {
+  return answer.split(/\r?\n/).some((line) => {
+    const heading = line.match(/^\s*(?:[-*]\s*)?#{1,6}\s+(.+)$/)?.[1] || "";
+    const detected = detectedHeadingLocale(heading);
+    return Boolean(detected && detected !== locale);
+  });
 }
 
 function syntheticAttachments(testCase: EvaluationCase) {
@@ -141,7 +174,14 @@ for (const testCase of cases) {
         }),
       });
     }
-    const rawPayload = await response.json() as RagResponse & { data?: RagResponse };
+    const rawText = await response.text();
+    if (!rawText.trim()) throw new Error(`empty_response_http_${response.status}`);
+    let rawPayload: RagResponse & { data?: RagResponse };
+    try {
+      rawPayload = JSON.parse(rawText) as RagResponse & { data?: RagResponse };
+    } catch {
+      throw new Error(`invalid_json_http_${response.status}`);
+    }
     payload = rawPayload.data && typeof rawPayload.data === "object" ? rawPayload.data : rawPayload;
     if (!response.ok || payload.error) throw new Error(payload.error || `http_${response.status}`);
 
@@ -154,6 +194,18 @@ for (const testCase of cases) {
     if (!expectedHit) failures.push("expected_document_not_retrieved");
     const citationsValid = sources.every((source) => source.sourceUrl?.startsWith("https://") && Boolean(source.checkedAt));
     if (!citationsValid) failures.push("invalid_citation");
+    if (
+      testCase.metadata?.expectedStrictCategory === true &&
+      !sources.every((source) => strictCategoryAllows(testCase.category, source.category))
+    ) {
+      failures.push("category_scope_mismatch");
+    }
+    if (
+      testCase.metadata?.expectedLocaleHeadings === true &&
+      hasForeignMarkdownHeading(payload.answer || "", testCase.locale)
+    ) {
+      failures.push("answer_locale_heading_mismatch");
+    }
     if (sources.length > 0) citedCaseCount += 1;
     if (citationsValid) validCitationCaseCount += 1;
     if (expectedNoContext) {

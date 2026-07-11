@@ -155,6 +155,8 @@ The three POST webhooks require KAXI HMAC verification. The capability endpoint 
 
 `Build Context` accepts only citation-valid HTTPS sources with `checkedAt` and `checkedBy`. No-context and citation-validation failures produce a bounded answer and a review handoff. A generic information question remains low risk; personal regulated actions, low-confidence personal cases, and high-consequence immigration/legal questions are classified separately.
 
+`Search Governed Serving Chunks` must pass both `locale={{ $json.locale }}` and `category_mode=strict` to `match_rag_documents`. The RPC projects only the requested `ko`, `en`, `vi`, or `mn` Markdown sections from a canonical multilingual chunk. Its strict category scopes are `cost -> cost`, `visa -> visa/legal/process/warning`, `documents -> documents/legal/process/warning`, and `school -> school/documents/process`. If no eligible category or locale section remains, the RPC returns zero rows and the workflow must route to `Fallback No Context Answer`; it must not reuse context from another category or language.
+
 The active workflow preserves canonical `docId` in every returned citation, expands Korean/English/Vietnamese/Mongolian retrieval queries with bounded canonical hints, and treats forged-document expressions in all four languages as high risk. Operational evaluation run `812f7634-d2c7-495b-8777-23634358d552` passed 56/56 cases with 100% citation validity, 100% high-risk recall, and 100% no-context accuracy. Overall citation coverage is 92.857% because the four intentional no-context cases correctly return no citations; citation-bearing answers have complete valid citations. Measured latency was p50 2543ms and p95 5392ms.
 
 ## Release Order
@@ -185,4 +187,5 @@ The sync command refuses to write unless the active n8n capability contract matc
 - Database migration `20260710180000_n8n_audit_metadata_only` enforces that boundary even if a stale workflow attempts to write raw conversation content.
 - Attachment buckets are private and attachment ownership is verified with the signed KAXI session cookie.
 - Typebot was published only after the KAXI and n8n production contracts were live.
+- The runtime vector-search node sends an explicit locale and strict category mode; an empty strict result terminates in the no-context branch.
 - KAXI, n8n, and Typebot are live; the guarded legacy cutover remains a separate explicitly approved operation.

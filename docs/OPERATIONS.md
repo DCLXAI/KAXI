@@ -223,7 +223,7 @@ Production deployment is triggered by the successful `CI` workflow run for the e
 `test:document-verification-batch` verifies profile-level matrix coverage, missing required-document detection, optional placeholder creation, set summaries, and audit logging.
 `test:document-verification-metrics` verifies the reviewer feedback metrics API for coverage, accuracy, false-positive/false-negative rates, issue-code ranking, and audit logging.
 `test:n8n-signature` verifies HMAC validity, tamper detection, expiry, malformed envelopes, and replay protection.
-`test:rag-serving` verifies canonical eligibility, category fallback, no-context behavior, citation requirements, legacy quarantine, and the transactional cutover gate.
+`test:rag-serving` verifies canonical eligibility, strict category scopes, locale-only context projection, mismatch-to-no-context behavior, citation requirements, legacy quarantine, and the transactional cutover gate.
 `test:chat-security` verifies signed session ownership, expiry/tamper protection, and attachment magic-byte allowlists.
 `test:lead-privacy` verifies diagnosis/handoff separation and encrypted lead-contact persistence contracts.
 `test:readiness` verifies that production readiness fails closed when managed DB, canonical migration/object parity, PII secrets, a linked administrator, retention, or shared limiter settings are missing.
