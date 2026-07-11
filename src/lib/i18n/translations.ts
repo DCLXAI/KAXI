@@ -116,6 +116,26 @@ export const t = {
 
   diagnose_submit: { ko: "진단 결과 보기", vi: "Xem kết quả", mn: "Үр дүн харах", en: "See result" },
   diagnose_save_lead: { ko: "진단 결과 저장", vi: "Lưu kết quả đánh giá", mn: "Үнэлгээний үр дүн хадгалах", en: "Save diagnosis result" },
+  diagnose_save_description: {
+    ko: "진단 결과를 저장합니다. 전문가 상담은 저장 후 별도 동의를 거쳐 요청할 수 있습니다.",
+    vi: "Lưu kết quả đánh giá. Sau đó, bạn có thể đồng ý và gửi yêu cầu tư vấn riêng.",
+    mn: "Үнэлгээний үр дүнг хадгална. Дараа нь зөвшөөрөл өгч тусдаа зөвлөгөө хүсэж болно.",
+    en: "Save your diagnosis result. You can then consent and submit a separate consultation request.",
+  },
+  diagnose_nickname_placeholder: { ko: "닉네임", vi: "Biệt danh", mn: "Хоч нэр", en: "Nickname" },
+  diagnose_save_success: {
+    ko: "결과가 저장되었습니다. 전문가 연결이 필요하면 상담 요청으로 진행하세요.",
+    vi: "Đã lưu kết quả. Hãy gửi yêu cầu nếu bạn cần được kết nối với chuyên gia.",
+    mn: "Үр дүн хадгалагдлаа. Мэргэжилтэн хэрэгтэй бол зөвлөгөөний хүсэлт илгээнэ үү.",
+    en: "Your result is saved. Submit a consultation request if you need an expert connection.",
+  },
+  diagnose_cta_consult: { ko: "전문가 상담 요청", vi: "Yêu cầu tư vấn chuyên gia", mn: "Мэргэжлийн зөвлөгөө хүсэх", en: "Request expert consultation" },
+  diagnose_login_nudge: {
+    ko: "로그인하면 진단 이력이 내 계정에 자동으로 저장됩니다.",
+    vi: "Đăng nhập để tự động lưu lịch sử đánh giá vào tài khoản của bạn.",
+    mn: "Нэвтэрвэл үнэлгээний түүх таны акаунтад автоматаар хадгалагдана.",
+    en: "Sign in to automatically save your diagnosis history to your account.",
+  },
   diagnose_back: { ko: "이전", vi: "Quay lại", mn: "Өмнөх", en: "Back" },
   diagnose_next: { ko: "다음", vi: "Tiếp theo", mn: "Дараах", en: "Next" },
   diagnose_edit_answers: { ko: "답변 수정", vi: "Sửa câu trả lời", mn: "Хариулт засах", en: "Edit answers" },
