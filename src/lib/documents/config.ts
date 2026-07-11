@@ -1,3 +1,6 @@
+import { tr } from "@/lib/i18n/translations";
+import { DOCUMENT_WORKFLOW_ITEMS } from "@/lib/documents/workflow";
+
 export const DOCUMENT_STATUS_VALUES = [
   "NOT_UPLOADED",
   "UPLOADED",
@@ -19,16 +22,11 @@ export const ALLOWED_DOCUMENT_MIME_TYPES = [
   "image/webp",
 ] as const;
 
-export const DEFAULT_DOCUMENT_TYPES = [
-  { type: "passport", label: "여권", required: true },
-  { type: "id_photo", label: "증명사진", required: true },
-  { type: "standard_admission", label: "표준입학허가서", required: true },
-  { type: "graduation_certificate", label: "졸업증명서", required: true },
-  { type: "transcript", label: "성적증명서", required: true },
-  { type: "financial_proof", label: "재정능력 증빙", required: true },
-  { type: "tuberculosis_certificate", label: "결핵진단서", required: false },
-  { type: "study_plan", label: "유학계획서", required: false },
-] as const;
+export const DEFAULT_DOCUMENT_TYPES = DOCUMENT_WORKFLOW_ITEMS.map((item) => ({
+  type: item.type,
+  label: tr(item.labelKey, "ko"),
+  required: item.uses.some((use) => use.requirement === "required"),
+}));
 
 export const MAX_DOCUMENT_UPLOAD_BYTES = 10 * 1024 * 1024;
 export const DOCUMENT_UPLOAD_TOKEN_TTL_SECONDS = 10 * 60;
