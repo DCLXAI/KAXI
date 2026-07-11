@@ -69,6 +69,16 @@ assert.deepEqual(validatePublishedTypebotRuntime(start, {
   input: { id: "block_followup", type: "choice input" },
 }), []);
 assert.match(
+  validatePublishedTypebotRuntime(start, {
+    messages: [
+      { id: "block_loading", content: { richText: [{ children: [{ text: "문서 기준으로 확인하고 있어요." }] }] } },
+      { id: "block_answer", content: { richText: [{ children: [{ text: "" }] }] } },
+    ],
+    input: { id: "block_followup", type: "choice input" },
+  }).join(" "),
+  /runtime failure/,
+);
+assert.match(
   typebotGateErrors(start, {
     messages: [{ id: "block_answer", content: { richText: [{ children: [{ text: "인증되지 않은 요청입니다." }] }] } }],
     input: { id: "block_lead_name", type: "text input" },

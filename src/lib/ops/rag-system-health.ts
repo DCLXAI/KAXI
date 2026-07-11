@@ -5,7 +5,7 @@ import { sendOpsAlert } from "@/lib/ops/alerts";
 import { signN8nPayload } from "@/lib/n8n/signature";
 import {
   TypebotRuntimeTurn,
-  typebotRuntimeMessageText,
+  typebotRuntimeMessageTextById,
   validatePublishedTypebotRuntime,
 } from "@/lib/typebot/runtime-health";
 
@@ -106,7 +106,7 @@ export async function checkPublishedTypebotRuntime() {
   }
   const errors = validatePublishedTypebotRuntime(payload, continuation);
   if (errors.length > 0) throw new Error(errors.join("; "));
-  const answerLength = typebotRuntimeMessageText(continuation).length;
+  const answerLength = typebotRuntimeMessageTextById(continuation, "block_answer").length;
 
   return {
     ok: true,

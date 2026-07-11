@@ -54,6 +54,17 @@
     "expectedCostFormat": "none"
   },
   {
+    "id": "ko-overstay-risk",
+    "lang": "ko",
+    "category": "visa",
+    "question": "체류기간이 이미 지났는데 아직 한국에 있어요. 지금 무엇을 확인하고 어떻게 대응해야 하나요?",
+    "expectedDocIds": ["immigration-act-stay-extension", "hikorea-stay-extension", "immigration-act-deportation-grounds"],
+    "expectedRefusal": false,
+    "expectedCostFormat": "none",
+    "expectedRiskLevel": "high",
+    "expectedHandoff": true
+  },
+  {
     "id": "ko-status-change",
     "lang": "ko",
     "category": "visa",
@@ -165,6 +176,17 @@
     "expectedDocIds": ["hikorea-stay-extension", "immigration-act-stay-extension"],
     "expectedRefusal": false,
     "expectedCostFormat": "none"
+  },
+  {
+    "id": "vi-overstay-risk",
+    "lang": "vi",
+    "category": "visa",
+    "question": "Thời hạn lưu trú của tôi đã hết nhưng tôi vẫn đang ở Hàn Quốc. Tôi cần kiểm tra và xử lý việc gì ngay bây giờ?",
+    "expectedDocIds": ["immigration-act-stay-extension", "hikorea-stay-extension", "immigration-act-deportation-grounds"],
+    "expectedRefusal": false,
+    "expectedCostFormat": "none",
+    "expectedRiskLevel": "high",
+    "expectedHandoff": true
   },
   {
     "id": "vi-status-change",
@@ -280,6 +302,17 @@
     "expectedCostFormat": "none"
   },
   {
+    "id": "mn-overstay-risk",
+    "lang": "mn",
+    "category": "visa",
+    "question": "Миний оршин суух зөвшөөрлийн хугацаа аль хэдийн дууссан ч би Солонгост байна. Одоо юуг шалгаж, хэрхэн арга хэмжээ авах вэ?",
+    "expectedDocIds": ["immigration-act-stay-extension", "hikorea-stay-extension", "immigration-act-deportation-grounds"],
+    "expectedRefusal": false,
+    "expectedCostFormat": "none",
+    "expectedRiskLevel": "high",
+    "expectedHandoff": true
+  },
+  {
     "id": "mn-status-change",
     "lang": "mn",
     "category": "visa",
@@ -391,6 +424,17 @@
     "expectedDocIds": ["hikorea-stay-extension", "immigration-act-stay-extension"],
     "expectedRefusal": false,
     "expectedCostFormat": "none"
+  },
+  {
+    "id": "en-overstay-risk",
+    "lang": "en",
+    "category": "visa",
+    "question": "My permitted stay has already expired and I am still in Korea. What should I verify and do now?",
+    "expectedDocIds": ["immigration-act-stay-extension", "hikorea-stay-extension", "immigration-act-deportation-grounds"],
+    "expectedRefusal": false,
+    "expectedCostFormat": "none",
+    "expectedRiskLevel": "high",
+    "expectedHandoff": true
   },
   {
     "id": "en-status-change",

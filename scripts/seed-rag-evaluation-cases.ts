@@ -32,6 +32,8 @@ const rows = cases.map((item) => ({
     source: "quality/multilingual-eval-cases.json",
     expectedCostFormat: item.expectedCostFormat,
     expectedNoContext: false,
+    expectedRefusal: item.expectedRefusal,
+    hasSyntheticAttachment: item.id.includes("attachment"),
   },
 }));
 

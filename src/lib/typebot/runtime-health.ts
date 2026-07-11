@@ -19,6 +19,12 @@ export function typebotRuntimeMessageText(turn: TypebotRuntimeTurn) {
     .trim();
 }
 
+export function typebotRuntimeMessageTextById(turn: TypebotRuntimeTurn, messageId: string) {
+  return typebotRuntimeMessageText({
+    messages: (turn.messages || []).filter((message) => message.id === messageId),
+  });
+}
+
 export function validatePublishedTypebotRuntime(
   start: TypebotRuntimeTurn,
   continuation: TypebotRuntimeTurn,
@@ -29,8 +35,10 @@ export function validatePublishedTypebotRuntime(
   if (!start.typebot?.publishedAt) errors.push("Typebot does not expose a published version");
   if (start.input?.id !== "block_question") errors.push(`unexpected initial input: ${start.input?.id || "missing"}`);
 
-  const text = typebotRuntimeMessageText(continuation);
-  if (!text || FAILURE_TEXT.test(text)) errors.push("Typebot grounded-answer turn contains a gateway or runtime failure");
+  const answerText = typebotRuntimeMessageTextById(continuation, "block_answer");
+  if (!answerText || FAILURE_TEXT.test(answerText)) {
+    errors.push("Typebot grounded-answer turn contains a gateway or runtime failure");
+  }
   if (!(continuation.messages || []).some((message) => message.id === "block_answer")) {
     errors.push("published Typebot did not render the grounded answer block");
   }
