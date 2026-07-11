@@ -52,6 +52,7 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
       "rag.gateway_security",
       "typebot.public_endpoint",
       "typebot.gateway_auth",
+      "typebot.result_retention",
       "chat.attachments_storage",
       "chat.attachment_ocr_provider",
       "chat.attachment_malware_scanner",

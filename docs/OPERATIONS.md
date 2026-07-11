@@ -55,10 +55,12 @@
 - `N8N_WEBHOOK_SIGNING_SECRET`, `N8N_WEBHOOK_MAX_AGE_SECONDS`: Shared HMAC/replay-window contract between KAXI and the n8n verification nodes. The secret must match in every KAXI environment that calls n8n.
 - `TYPEBOT_PUBLIC_ID`, `TYPEBOT_PUBLIC_URL`: Published Typebot identity and public health target. Keep Typebot unpublished during backend cutover.
 - `TYPEBOT_GATEWAY_SECRET`: Separate 32-byte secret sent by both server-side Typebot webhook blocks as `x-kaxi-typebot-token`. It prevents callers from forging `source=typebot`; do not reuse the n8n signing secret.
+- `TYPEBOT_API_BASE_URL`, `TYPEBOT_BOT_ID`, `TYPEBOT_API_TOKEN`, `TYPEBOT_RESULT_RETENTION_DAYS`: Dedicated provider API contract for daily Typebot Result deletion. Production uses a separate `kaxi-retention` token and a seven-day window; never reuse or expose the gateway secret.
 - `KNOWLEDGE_MONITOR_CRON_SOURCE_IDS`, `KNOWLEDGE_MONITOR_FETCH_TIMEOUT_MS`, `KNOWLEDGE_MONITOR_CONCURRENCY`: Bound the Vercel daily critical-source monitor. The GitHub matrix remains responsible for the complete watchlist.
 
-Daily RAG health records `degraded` for required dependency failures and `warning` for operational issues such as stale attachment jobs or unacknowledged events. The check starts the published Typebot through its `startChat` runtime API and sends a signed grounded-answer probe through the active n8n RAG webhook; health-only n8n audit rows are removed after the probe. Both failure levels are sent through `OPS_ALERT_WEBHOOK_URL` when configured, while an already-open event does not create another summary event. A healthy run does not emit an alert.
+Daily RAG health records `degraded` for required dependency failures and `warning` for operational issues such as stale attachment jobs or unacknowledged events. The check starts the published Typebot through its `startChat` runtime API, verifies the provider-side Result retention API, and sends a signed grounded-answer probe through the active n8n RAG webhook; health-only n8n audit rows are removed after the probe. Both failure levels are sent through `OPS_ALERT_WEBHOOK_URL` when configured, while an already-open event does not create another summary event. A healthy run does not emit an alert.
 - `OPS_ALERT_WEBHOOK_URL`, `OPS_ALERT_FORMAT`, `OPS_ALERT_SIGNING_SECRET`: Optional HTTPS destination for degraded daily-health notifications. JSON and Slack incoming-webhook payloads are supported.
+- `.github/workflows/ops-health-alert.yml`: Independent daily and manual production probe. It opens or updates one `ops-health` GitHub issue on failure, fails the Actions run for native notification delivery, and comments/closes the issue after recovery. This path does not depend on n8n and uses the existing `KAXI_ADMIN_API_KEY` Actions secret.
 
 Attachment processing starts only after a sanitized object is stored. Transient OCR or provider failures move jobs to `retrying`; terminal validation failures reject the attachment and delete its storage object. Operators should investigate stale jobs through `/admin/ops`, and users can retry the existing attachment job from the chat widget without uploading the file again.
 
@@ -85,7 +87,7 @@ Phase 0 makes Supabase/PostgreSQL the only supported database target. The checke
 5. `Lead.contact`, `PartnerRequest.question`, and `ChatLog.question` are stored with ciphertext/hash columns when `DATA_ENCRYPTION_KEY` is set. Existing plaintext columns keep only a masked display value. In production, PII-bearing writes are not persisted unless encryption is configured; local development without a key stores `[redacted-unencrypted]` unless the local-only `PII_ALLOW_UNENCRYPTED_PLAINTEXT=true` escape hatch is set outside production.
 6. Partner routing requires active consent for `THIRD_PARTY_PROVISION`, `PROCESSING_CONSIGNMENT`, and `OVERSEAS_TRANSFER`; otherwise `POST /api/partner-requests` returns `428 CONSENT_REQUIRED` before creating a `PartnerRequest`.
 7. Deletion requests are accepted through `POST /api/privacy/delete-request` with `leadId`, `contact`, or an exact `question`. The request does not reveal whether a record exists and withdraws active lead consents when a matching lead is found.
-8. Retention is enforced by `POST /api/privacy/retention` for admins and daily Vercel Cron `GET /api/privacy/retention`; lead consent rows are expired when the linked lead reaches deletion or retention expiry. Canonical chat sessions use a rolling 90-day default and privacy deletion removes associated storage objects, messages, retrieval evidence, n8n audit rows, and handoff rows before deleting the session. Typebot result deletion remains a separate provider-side operation.
+8. Retention is enforced by `POST /api/privacy/retention` for admins and daily Vercel Cron `GET /api/privacy/retention`; lead consent rows are expired when the linked lead reaches deletion or retention expiry. Canonical chat sessions use a rolling 90-day default and privacy deletion removes associated storage objects, messages, retrieval evidence, n8n audit rows, and handoff rows before deleting the session. The same job lists Typebot Results through the dedicated provider token and deletes results older than seven days in bounded batches.
 9. Before analytics export, use the redacted ChatLog analysis route or scripts; free-form questions are masked for emails, phone numbers, and private messenger handles.
 
 Hosted Vercel deployments must use a reachable managed PostgreSQL database for admin CRUD, lead capture, partner requests, chat logs, Agent ledger persistence, audit logs, retention, compliance evaluations, knowledge governance, escalation cases, and shared rate-limit buckets.
@@ -156,10 +158,10 @@ Only after `readyChunks == eligibleChunks`, `citationReadyChunks == eligibleChun
 ```bash
 bun run rag:evaluation:run
 bun run rag:serving:cutover
-bun run rag:serving:cutover --execute --confirm CUTOVER_LEGACY_RAG --expected-ready 199
+bun run rag:serving:cutover --execute --confirm CUTOVER_LEGACY_RAG --expected-ready 201
 ```
 
-The database function rechecks the counts inside the cutover transaction, copies legacy rows to `legacy_rag_chunks_quarantine`, and then removes `knowledge_chunks`. Never call the cutover RPC directly during a partial sync.
+The database function rechecks the counts inside the cutover transaction, copies legacy rows to `legacy_rag_chunks_quarantine`, and removes only IDs confirmed in quarantine. The 2026-07-11 production cutover copied and removed 100 rows; `knowledge_chunks` is now empty while the governed projection remains 201/201. Never call the cutover RPC directly during a partial sync.
 
 ## Data Source Policy
 

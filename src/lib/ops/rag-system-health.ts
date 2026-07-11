@@ -9,6 +9,7 @@ import {
   typebotRuntimeMessageTextById,
   validatePublishedTypebotRuntime,
 } from "@/lib/typebot/runtime-health";
+import { enforceTypebotResultRetention } from "@/lib/typebot/result-retention";
 
 export type SystemHealthCheck = {
   key: string;
@@ -209,6 +210,23 @@ export async function runRagSystemHealth(triggerSource = "manual") {
     timed("typebot.runtime", true, async () => {
       if (!typebotUrl) throw new Error("TYPEBOT_PUBLIC_URL is not configured");
       return checkPublishedTypebotRuntime();
+    }),
+    timed("typebot.result_retention", true, async () => {
+      const result = await enforceTypebotResultRetention({ dryRun: true });
+      const ok = result.configured && result.apiFailures === 0;
+      return {
+        ok,
+        detail: ok
+          ? `Typebot result retention is reachable with ${result.eligible} result(s) eligible for deletion.`
+          : result.error || "Typebot result retention credentials are not configured.",
+        metadata: {
+          configured: result.configured,
+          retentionDays: result.retentionDays,
+          examined: result.examined,
+          eligible: result.eligible,
+          apiFailures: result.apiFailures,
+        },
+      };
     }),
     timed("rag.serving_projection", true, async () => {
       const status = await getRagServingProjectionStatus();

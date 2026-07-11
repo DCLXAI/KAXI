@@ -51,6 +51,11 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(`[rag-serving:cutover] ${error instanceof Error ? error.message : String(error)}`);
+  const message = error instanceof Error
+    ? error.message
+    : error && typeof error === "object"
+      ? JSON.stringify(error)
+      : String(error);
+  console.error(`[rag-serving:cutover] ${message}`);
   process.exitCode = 1;
 });

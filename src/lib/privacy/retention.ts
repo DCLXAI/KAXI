@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { parsePositiveInt } from "@/lib/api/security";
 import { expireLeadConsentsForRetention } from "@/lib/privacy/consent";
+import { enforceTypebotResultRetention, type TypebotResultRetentionResult } from "@/lib/typebot/result-retention";
 import { createClient } from "@supabase/supabase-js";
 
 export interface RetentionResult {
@@ -16,6 +17,7 @@ export interface RetentionResult {
   canonicalChatSessionDeleteFailures: number;
   canonicalAuditRowsDeleted: number;
   canonicalHandoffRowsDeleted: number;
+  typebotResults: TypebotResultRetentionResult;
 }
 
 function daysAgo(days: number): Date {
@@ -165,7 +167,7 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
   };
 
   if (dryRun) {
-    const [chatLogs, partnerRequests, leadsRedacted, leadsDeleted, redactLeads, deleteLeads, chatAttachmentsDeleted, canonicalChatSessionsDeleted] = await Promise.all([
+    const [chatLogs, partnerRequests, leadsRedacted, leadsDeleted, redactLeads, deleteLeads, chatAttachmentsDeleted, canonicalChatSessionsDeleted, typebotResults] = await Promise.all([
       db.chatLog.count({ where: chatWhere }),
       db.partnerRequest.count({ where: partnerWhere }),
       db.diagnosisLead.count({ where: leadRedactWhere }),
@@ -179,6 +181,7 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
           OR: [{ deleteRequestedAt: { not: null } }, { retentionUntil: { lte: now } }],
         },
       }),
+      enforceTypebotResultRetention({ dryRun: true, now }),
     ]);
     const leadIds = [...new Set([...redactLeads, ...deleteLeads].map((lead) => lead.id))];
     const consentUsers = leadIds.length
@@ -208,6 +211,7 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
       canonicalChatSessionDeleteFailures: 0,
       canonicalAuditRowsDeleted: 0,
       canonicalHandoffRowsDeleted: 0,
+      typebotResults,
     };
   }
 
@@ -261,6 +265,7 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
   });
   const attachmentRetention = await deleteExpiredChatAttachments(now);
   const canonicalChatRetention = await deleteExpiredCanonicalChatSessions(now);
+  const typebotResults = await enforceTypebotResultRetention({ now });
 
   return {
     dryRun,
@@ -275,5 +280,6 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
     canonicalChatSessionDeleteFailures: canonicalChatRetention.failures,
     canonicalAuditRowsDeleted: canonicalChatRetention.auditRowsDeleted,
     canonicalHandoffRowsDeleted: canonicalChatRetention.handoffRowsDeleted,
+    typebotResults,
   };
 }

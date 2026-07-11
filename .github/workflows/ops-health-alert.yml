@@ -1,0 +1,104 @@
+name: KAXI Ops Health Alert
+
+on:
+  schedule:
+    - cron: "45 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: kaxi-ops-health-alert
+  cancel-in-progress: true
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      KAXI_HEALTH_URL: https://kaxi.vercel.app/api/ops/health
+      KAXI_ADMIN_API_KEY: ${{ secrets.KAXI_ADMIN_API_KEY }}
+    steps:
+      - name: Require production monitor key
+        if: ${{ env.KAXI_ADMIN_API_KEY == '' }}
+        run: |
+          echo "KAXI_ADMIN_API_KEY is required for the production health monitor."
+          exit 1
+
+      - name: Probe production health
+        id: probe
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          set +e
+          http_code="$(curl --silent --show-error --max-time 70 \
+            --output "$response_file" \
+            --write-out '%{http_code}' \
+            --request POST "$KAXI_HEALTH_URL" \
+            --header "authorization: Bearer $KAXI_ADMIN_API_KEY" \
+            --header 'content-type: application/json')"
+          curl_exit=$?
+          set -e
+          if [ "$curl_exit" -ne 0 ]; then
+            http_code="000"
+          fi
+          if ! jq -e . "$response_file" >/dev/null 2>&1; then
+            printf '%s\n' '{"status":"unreachable","checks":[]}' > "$response_file"
+          fi
+          status="$(jq -r '.status // "unknown"' "$response_file")"
+          failed_keys="$(jq -r '[.checks[]? | select(.ok == false) | .key] | join(", ")' "$response_file")"
+          {
+            echo "http_code=$http_code"
+            echo "status=$status"
+            echo "failed_keys=$failed_keys"
+          } >> "$GITHUB_OUTPUT"
+          if [ "$http_code" = "200" ] && [ "$status" = "healthy" ]; then
+            exit 0
+          fi
+          exit 1
+
+      - name: Notify or resolve operations incident
+        if: ${{ always() && env.KAXI_ADMIN_API_KEY != '' }}
+        shell: bash
+        env:
+          PROBE_OUTCOME: ${{ steps.probe.outcome }}
+          HEALTH_STATUS: ${{ steps.probe.outputs.status }}
+          HTTP_CODE: ${{ steps.probe.outputs.http_code }}
+          FAILED_KEYS: ${{ steps.probe.outputs.failed_keys }}
+        run: |
+          set -euo pipefail
+          gh label create ops-health \
+            --description "Automated KAXI production health incidents" \
+            --color D73A4A \
+            --force
+          issue_number="$(gh issue list --state open --label ops-health --limit 1 --json number --jq '.[0].number // empty')"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if [ "$PROBE_OUTCOME" = "success" ]; then
+            if [ -n "$issue_number" ]; then
+              gh issue comment "$issue_number" --body "Recovered at $(date -u +'%Y-%m-%dT%H:%M:%SZ'). [Health run]($run_url)"
+              gh issue close "$issue_number" --reason completed
+            fi
+            exit 0
+          fi
+
+          body="$(printf '%s\n' \
+            "Status: \`$HEALTH_STATUS\`" \
+            "HTTP: \`$HTTP_CODE\`" \
+            "Failed checks: \`${FAILED_KEYS:-unavailable}\`" \
+            "Detected: \`$(date -u +'%Y-%m-%dT%H:%M:%SZ')\`" \
+            "" \
+            "[Open health workflow run]($run_url)")"
+          if [ -n "$issue_number" ]; then
+            gh issue comment "$issue_number" --body "$body"
+          else
+            gh issue create \
+              --title "[Ops] KAXI production health degraded" \
+              --label ops-health \
+              --body "$body"
+          fi
+          exit 1

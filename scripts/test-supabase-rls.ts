@@ -48,6 +48,10 @@ const legacyRagCutoverMigration = readFileSync(
   join(root, "prisma", "postgres", "migrations", "20260710161000_legacy_rag_cutover_gate", "migration.sql"),
   "utf8",
 );
+const legacyRagSafeDeleteMigration = readFileSync(
+  join(root, "prisma", "postgres", "migrations", "20260711223000_legacy_rag_cutover_safe_delete", "migration.sql"),
+  "utf8",
+);
 const chatAttachmentJobsMigration = readFileSync(
   join(root, "prisma", "postgres", "migrations", "20260710170000_chat_attachment_jobs", "migration.sql"),
   "utf8",
@@ -118,6 +122,12 @@ assert(
     legacyRagCutoverMigration.includes("DELETE FROM public.knowledge_chunks") &&
     legacyRagCutoverMigration.includes("FROM PUBLIC;"),
   "legacy deletion must be readiness-gated and unavailable to public roles",
+);
+assert(
+  legacyRagSafeDeleteMigration.includes("USING public.legacy_rag_chunks_quarantine") &&
+    legacyRagSafeDeleteMigration.includes("WHERE quarantine.original_id = legacy.id") &&
+    legacyRagSafeDeleteMigration.includes("RAG cutover blocked"),
+  "legacy deletion must remove only rows copied into quarantine and remain readiness-gated",
 );
 assert(/ADD COLUMN IF NOT EXISTS "authUserId" UUID/.test(migration), "migration must add User.authUserId UUID");
 

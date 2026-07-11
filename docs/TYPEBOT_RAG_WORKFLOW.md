@@ -197,7 +197,7 @@ Do not change this order:
 8. Publish the Typebot draft.
 9. Test Typebot -> KAXI -> n8n -> Supabase, including no-context and handoff branches.
 
-Current status: steps 1-6 and step 8 are complete. Step 7 (legacy cutover) remains intentionally unexecuted. The normal-answer, high-risk, privacy-consent, and handoff portions of step 9 pass against the published bot; no-context and retry channel probes remain part of the next observation run.
+Current status: steps 1-8 are complete. Step 7 quarantined and removed all 100 legacy `knowledge_chunks` rows at 201/201 readiness. The normal-answer, high-risk, privacy-consent, and handoff portions of step 9 passed against the published bot; no-context and retry channel probes remain part of the next observation run after n8n credits recover.
 
 The sync command refuses to write unless the active n8n capability contract matches. The cutover command refuses to remove legacy rows until every eligible chunk has a ready 1536-dimensional embedding and citation metadata.
 
@@ -214,4 +214,5 @@ The sync command refuses to write unless the active n8n capability contract matc
 - Attachment buckets are private and attachment ownership is verified with the signed KAXI session cookie.
 - Typebot was published only after the KAXI and n8n production contracts were live.
 - The runtime vector-search node sends an explicit locale and strict category mode; an empty strict result terminates in the no-context branch.
-- KAXI, n8n, and Typebot are live; the guarded legacy cutover remains a separate explicitly approved operation.
+- KAXI, n8n, and Typebot are live; the explicitly approved legacy cutover completed with 100 rows retained in server-only quarantine and zero rows left in `knowledge_chunks`.
+- Daily privacy retention deletes Typebot Results older than seven days through a dedicated provider API token; the token is never exposed to the browser or Typebot flow.

@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 
-export const REQUIRED_PRODUCTION_MIGRATION = "20260711210000_rag_response_provenance";
+export const REQUIRED_PRODUCTION_MIGRATION = "20260711223000_legacy_rag_cutover_safe_delete";
 
 const REQUIRED_SCHEMA_OBJECTS = [
   "migration_ledger",
@@ -20,6 +20,7 @@ const REQUIRED_SCHEMA_OBJECTS = [
   "user_notifications",
   "rag_strict_locale_search",
   "rag_provenance_columns",
+  "legacy_cutover_function",
 ] as const;
 
 type RequiredSchemaObject = (typeof REQUIRED_SCHEMA_OBJECTS)[number];
@@ -101,7 +102,13 @@ export async function checkProductionSchemaParity(): Promise<SchemaParityResult>
             AND column_name IN (
               'workflow_id', 'workflow_version_id', 'model_version', 'prompt_version'
             )
-        ) AS rag_provenance_columns
+        ) AS rag_provenance_columns,
+        to_regprocedure('public.kaxi_finalize_legacy_rag_cutover(integer)') IS NOT NULL
+          AND position(
+            'USING public.legacy_rag_chunks_quarantine' IN pg_get_functiondef(
+              to_regprocedure('public.kaxi_finalize_legacy_rag_cutover(integer)')
+            )
+          ) > 0 AS legacy_cutover_function
     `;
     const row = rows[0];
     const missing = REQUIRED_SCHEMA_OBJECTS.filter((key) => row?.[key] !== true);

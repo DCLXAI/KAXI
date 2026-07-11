@@ -172,6 +172,20 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
       { gatewaySecretConfigured: isTypebotGatewayAuthConfigured(env) },
     ),
     check(
+      "typebot.result_retention",
+      "Typebot provider-side result retention",
+      httpsUrl(env.TYPEBOT_API_BASE_URL || "https://app.typebot.com") &&
+        configured(env.TYPEBOT_BOT_ID) &&
+        strongSecret(env.TYPEBOT_API_TOKEN),
+      "Configure TYPEBOT_API_BASE_URL, TYPEBOT_BOT_ID, and a dedicated TYPEBOT_API_TOKEN for daily provider-side result deletion.",
+      {
+        apiUrlConfigured: httpsUrl(env.TYPEBOT_API_BASE_URL || "https://app.typebot.com"),
+        botIdConfigured: configured(env.TYPEBOT_BOT_ID),
+        apiTokenStrong: strongSecret(env.TYPEBOT_API_TOKEN),
+      },
+      production ? "required" : "warning",
+    ),
+    check(
       "chat.attachments_storage",
       "Chat attachment private storage",
       configured(env.NEXT_PUBLIC_SUPABASE_URL) && configured(env.SUPABASE_SERVICE_ROLE_KEY) && configured(env.SUPABASE_CHAT_ATTACHMENTS_BUCKET || env.SUPABASE_STORAGE_BUCKET),
