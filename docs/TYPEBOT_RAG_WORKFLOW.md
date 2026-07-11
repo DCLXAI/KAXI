@@ -3,12 +3,12 @@
 Typebot never receives Supabase, OpenAI, or n8n signing secrets. The production request path is:
 
 ```txt
-Typebot -> KAXI API -> signed n8n webhook -> Supabase pgvector
+Typebot -> KAXI API -> signed n8n webhook -> governed Supabase RAG serving
 ```
 
 KAXI owns request validation, UUID/idempotency normalization, HMAC signing, canonical chat/retrieval persistence, encrypted handoff-task creation, attachment ownership, and the handoff token. n8n owns retrieval, grounded answer construction, risk classification, and metadata-only execution telemetry.
 
-Active n8n production version: `1a65000a-f14e-4425-a926-992e573ad272` (`Response provenance v1 verified`, 41 nodes). Its immutable response contract uses semantic workflow release ID `kaxi-rag-runtime@2026-07-11.provenance-v1`; n8n does not expose the active history UUID as a runtime expression, so the history UUID remains deployment evidence while the semantic ID is stored with each response and log. The KAXI verifier and 201/201 serving projection pass. A signed answer-path retest on 2026-07-11 reached `Search Governed Serving Chunks` but n8n execution `591` failed because n8n Connect credits were depleted; top up the workspace before treating successful grounded answers as operational again.
+Active n8n production version: `681ce8dd-5e00-4c9d-8f1a-896940e394d9` (42 nodes). Its immutable response contract uses semantic workflow release ID `kaxi-rag-runtime@2026-07-12.lexical-fallback-v2`. Runtime retrieval uses the governed `match_rag_documents_lexical` RPC, so serving no longer depends on n8n Connect credits; existing embeddings remain part of the approved corpus and ingestion contract. The active release passed 60/60 multilingual regression cases, a published Typebot-to-Supabase turn, and system health run `a0a3e18b-d552-4d8b-b2fe-8fceb16c1db8` with all checks healthy.
 
 ## Typebot Runtime Request
 
@@ -91,9 +91,9 @@ The Typebot flow uses these exact mapping expressions. A typical response is:
   "requestId": "uuid",
   "executionId": "n8n-execution-id",
   "workflowId": "EqX3C5c2WNWoKkSR",
-  "workflowVersionId": "kaxi-rag-runtime@2026-07-11.provenance-v1",
-  "modelVersion": "openai/text-embedding-3-small@1536",
-  "promptVersion": "kaxi-grounded-context-answer@2026-07-11.reranker-v2",
+  "workflowVersionId": "kaxi-rag-runtime@2026-07-12.lexical-fallback-v2",
+  "modelVersion": "retrieval/lexical-provider-fallback@v1",
+  "promptVersion": "kaxi-grounded-context-answer@2026-07-12.lexical-fallback-v2",
   "handoffToken": "short-lived-signed-token",
   "persisted": true,
   "messageId": "123",
@@ -205,9 +205,9 @@ Production regression `ko-cost-strict-locale` replays the exact cost question th
 
 No-context and citation-validation failures produce a bounded answer and a review handoff. A generic information question remains low risk; personal regulated actions, low-confidence personal cases, and high-consequence immigration/legal questions are classified separately.
 
-`Search Governed Serving Chunks` must pass both `locale={{ $json.locale }}` and `category_mode=strict` to `match_rag_documents`. The RPC projects only the requested `ko`, `en`, `vi`, or `mn` Markdown sections from a canonical multilingual chunk. Its strict category scopes are `cost -> cost`, `visa -> visa/legal/process/warning`, `documents -> documents/legal/process/warning`, and `school -> school/documents/process`. If no eligible category or locale section remains, the RPC returns zero rows and the workflow must route to `Fallback No Context Answer`; it must not reuse context from another category or language.
+`Search Governed Serving Chunks Lexical` must pass `locale`, `category_mode=strict`, and the bounded multilingual `query_text` to `match_rag_documents_lexical`. The RPC projects only the requested `ko`, `en`, `vi`, or `mn` Markdown sections from a canonical multilingual chunk. Its strict category scopes are `cost -> cost`, `visa -> visa/legal/process/warning`, `documents -> documents/legal/process/warning`, and `school -> school/documents/process`. If no eligible category or locale section remains, the RPC returns zero rows and the workflow routes to `Fallback No Context Answer`; it never reuses context from another category or language.
 
-The active workflow preserves canonical `docId` in every returned citation, expands Korean/English/Vietnamese/Mongolian retrieval queries with bounded canonical hints, and treats forged-document expressions in all four languages as high risk. Historical operational evaluation run `812f7634-d2c7-495b-8777-23634358d552` passed its then-current 56/56 cases with 100% citation validity, 100% high-risk recall, and 100% no-context accuracy. Overall citation coverage was 92.857% because the four intentional no-context cases correctly returned no citations; citation-bearing answers had complete valid citations. Measured latency was p50 2543ms and p95 5392ms.
+The active workflow preserves canonical `docId` in every returned citation, expands Korean/English/Vietnamese/Mongolian retrieval queries with bounded canonical hints, and treats forged-document expressions in all four languages as high risk. Operational evaluation run `be9d9350-e4dd-4bed-8e41-0310093cacca` passed 60/60 cases with 100% citation validity, 100% high-risk recall, and 100% no-context accuracy. Intentional no-context cases correctly returned no citations; citation-bearing answers had complete valid citations. Measured latency was p50 1342ms and p95 1840ms.
 
 ## Release Order
 
