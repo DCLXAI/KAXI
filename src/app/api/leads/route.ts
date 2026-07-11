@@ -1,8 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { canWriteRuntimeDatabase, db } from "@/lib/db";
-import { getAdminContext, jsonError, parsePositiveInt, rateLimit, requireAdmin } from "@/lib/api/security";
+import { getAdminContext, parsePositiveInt, rateLimit, requireAdmin } from "@/lib/api/security";
+import { parseJsonBody } from "@/lib/api/validation";
 import { canPersistPiiValue, preparePiiField, retentionUntil } from "@/lib/privacy/pii";
 import { serializeLeadForResponse } from "@/lib/privacy/serializers";
+
+// Prisma's DiagnosisLead.age/budget/brokerCost/estimatedCost are all Int
+// columns, so every numeric field here is coerced and validated as an
+// integer — a decimal like 25.5 must be rejected (400) rather than fail
+// later as a 500 at db.create.
+const leadSchema = z.object({
+  nickname: z.string().min(1).max(80),
+  nationality: z.string().min(1),
+  pathKey: z.string().min(1),
+  age: z.coerce.number().int().min(0).max(150).optional().default(0),
+  education: z.string().optional().default(""),
+  koreanLevel: z.string().optional().default(""),
+  goal: z.string().optional().default(""),
+  budget: z.coerce.number().int().min(0).optional().default(0),
+  region: z.string().optional().default(""),
+  // NOTE: z.coerce.boolean() is JS-truthiness (Boolean(x)) — the STRING "false"
+  // coerces to true. That matches this route's prior Boolean(x) behavior, but do
+  // not copy it for fields that receive "true"/"false" strings; parse those
+  // explicitly instead.
+  usingBroker: z.coerce.boolean().optional().default(false),
+  brokerCost: z.coerce.number().int().min(0).optional().default(0),
+  hasHistory: z.coerce.boolean().optional().default(false),
+  estimatedCost: z.coerce.number().int().min(0).optional().default(0),
+  prepTime: z.string().optional().default(""),
+  requiredDocs: z.array(z.string()).optional().default([]),
+  warnings: z.array(z.string()).optional().default([]),
+  nextActions: z.array(z.string()).optional().default([]),
+  contact: z.string().max(160).optional(),
+  contactType: z.string().optional(),
+});
 
 // GET /api/leads - 리드 목록 조회
 export async function GET(req: NextRequest) {
@@ -46,73 +78,51 @@ export async function POST(req: NextRequest) {
     const limited = await rateLimit(req, { key: "lead:create", limit: 20, windowMs: 60 * 60 * 1000 });
     if (limited) return limited;
 
-    const body = await req.json();
-    const {
-      nickname,
-      nationality,
-      age,
-      education,
-      koreanLevel,
-      goal,
-      budget,
-      region,
-      usingBroker,
-      brokerCost,
-      hasHistory,
-      pathKey,
-      estimatedCost,
-      prepTime,
-      requiredDocs,
-      warnings,
-      nextActions,
-      contact,
-      contactType,
-    } = body || {};
+    const parsed = await parseJsonBody(req, leadSchema);
+    if (!parsed.ok) return parsed.response;
+    const data = parsed.data;
 
-    if (!nickname || !nationality || !pathKey) return jsonError("Missing required fields: nickname, nationality, pathKey", 400);
-    if (String(nickname).length > 80) return jsonError("Nickname is too long", 413);
-    if (contact && String(contact).length > 160) return jsonError("Contact is too long", 413);
     if (!canWriteRuntimeDatabase()) {
       return NextResponse.json(
         { error: "Writable production database is not configured", persisted: false },
         { status: 503 }
       );
     }
-    if (!canPersistPiiValue(contact ? String(contact) : null)) {
+    if (!canPersistPiiValue(data.contact ?? null)) {
       return NextResponse.json(
         { error: "PII encryption is required before storing contact in production", persisted: false },
         { status: 503 }
       );
     }
 
-    const protectedContact = preparePiiField(contact ? String(contact) : null, {
+    const protectedContact = preparePiiField(data.contact ?? null, {
       kind: "contact",
       maxPlainLength: 160,
     });
     const lead = await db.diagnosisLead.create({
       data: {
-        nickname: String(nickname),
-        nationality: String(nationality),
-        age: Number(age) || 0,
-        education: String(education),
-        koreanLevel: String(koreanLevel),
-        goal: String(goal),
-        budget: Number(budget) || 0,
-        region: String(region),
-        usingBroker: Boolean(usingBroker),
-        brokerCost: Number(brokerCost) || 0,
-        hasHistory: Boolean(hasHistory),
-        pathKey: String(pathKey),
-        estimatedCost: Number(estimatedCost) || 0,
-        prepTime: String(prepTime || ""),
-        requiredDocs: JSON.stringify(requiredDocs || []),
-        warningsJson: JSON.stringify(warnings || []),
-        nextActionsJson: JSON.stringify(nextActions || []),
+        nickname: data.nickname,
+        nationality: data.nationality,
+        age: data.age,
+        education: data.education,
+        koreanLevel: data.koreanLevel,
+        goal: data.goal,
+        budget: data.budget,
+        region: data.region,
+        usingBroker: data.usingBroker,
+        brokerCost: data.brokerCost,
+        hasHistory: data.hasHistory,
+        pathKey: data.pathKey,
+        estimatedCost: data.estimatedCost,
+        prepTime: data.prepTime,
+        requiredDocs: JSON.stringify(data.requiredDocs),
+        warningsJson: JSON.stringify(data.warnings),
+        nextActionsJson: JSON.stringify(data.nextActions),
         contact: protectedContact.plaintext,
         contactCiphertext: protectedContact.ciphertext,
         contactHash: protectedContact.hash,
         contactRedacted: protectedContact.redacted,
-        contactType: contactType || null,
+        contactType: data.contactType || null,
         retentionUntil: retentionUntil(parsePositiveInt(process.env.PRIVACY_LEAD_RETENTION_DAYS, 365)),
       },
     });
