@@ -63,11 +63,14 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       method: "PUT",
-      uploadUrl: `${req.nextUrl.origin}/api/documents/upload-direct?token=${encodeURIComponent(token)}`,
+      // The token rides in a header (x-kaxi-upload-token), not the URL, to keep
+      // the signed upload capability out of access logs / Referer / history.
+      uploadUrl: `${req.nextUrl.origin}/api/documents/upload-direct`,
       expiresAt: new Date(exp * 1000).toISOString(),
       headers: {
         "content-type": mimeType,
         "x-kaxi-file-sha256": sha256,
+        "x-kaxi-upload-token": token,
       },
       maxBytes: sizeBytes,
       storageKey,

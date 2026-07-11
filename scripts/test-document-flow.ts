@@ -325,11 +325,12 @@ try {
   );
   assert(routeVerified && routeVerified.studentProfileId === profile.id, "route token must verify");
   const putRes = await directRoute.PUT(
-    new NextRequest(`http://localhost/api/documents/upload-direct?token=${encodeURIComponent(routeToken)}`, {
+    new NextRequest("http://localhost/api/documents/upload-direct", {
       method: "PUT",
       headers: {
         "content-type": routeVerified.mimeType,
         "x-kaxi-file-sha256": routeVerified.sha256,
+        "x-kaxi-upload-token": routeToken,
       },
       body: routeBytes,
     })
@@ -338,8 +339,24 @@ try {
   assert(putRes.ok, `upload-direct route must accept a valid signed token, got ${putRes.status}: ${JSON.stringify(putBody)}`);
   assert(putBody.document?.documentType === "transcript", "route response must carry the committed document");
 
+  // The signed token must live in the header, never the URL query string.
+  const legacyQueryPutRes = await directRoute.PUT(
+    new NextRequest(`http://localhost/api/documents/upload-direct?token=${encodeURIComponent(routeToken)}`, {
+      method: "PUT",
+      headers: { "content-type": routeVerified.mimeType, "x-kaxi-file-sha256": routeVerified.sha256 },
+      body: routeBytes,
+    })
+  );
+  assert(
+    legacyQueryPutRes.status === 401,
+    `upload-direct must ignore a URL query token, got ${legacyQueryPutRes.status}`
+  );
+
   const tamperedPutRes = await directRoute.PUT(
-    new NextRequest("http://localhost/api/documents/upload-direct?token=tampered", { method: "PUT" })
+    new NextRequest("http://localhost/api/documents/upload-direct", {
+      method: "PUT",
+      headers: { "x-kaxi-upload-token": "tampered" },
+    })
   );
   assert(tamperedPutRes.status === 401, `upload-direct route must reject a tampered token, got ${tamperedPutRes.status}`);
 

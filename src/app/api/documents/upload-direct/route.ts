@@ -23,7 +23,9 @@ export async function PUT(req: NextRequest) {
     const workspaceIssue = getDocumentWorkspaceIssue("upload");
     if (workspaceIssue) return NextResponse.json(workspaceIssue, { status: 503 });
 
-    const token = req.nextUrl.searchParams.get("token") || "";
+    // The signed upload token travels in a header, not the URL query string, so
+    // it cannot leak through access logs, the Referer header, or browser history.
+    const token = req.headers.get("x-kaxi-upload-token")?.trim() || "";
     const secret = getDocumentUploadSigningSecret();
     const payload = verifyDocumentUploadToken(token, secret);
     if (!payload) return NextResponse.json({ error: "Invalid or expired upload token" }, { status: 401 });
