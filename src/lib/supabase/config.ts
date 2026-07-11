@@ -13,9 +13,13 @@ function configured(value: string | undefined): string {
   return text;
 }
 
-export function getSupabasePublicConfig(env: NodeJS.ProcessEnv = process.env): SupabasePublicConfig | null {
-  const url = configured(env.NEXT_PUBLIC_SUPABASE_URL);
-  const anonKey = configured(env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+export function getSupabasePublicConfig(env?: NodeJS.ProcessEnv): SupabasePublicConfig | null {
+  // Keep the no-argument path as direct static references. Next.js only embeds
+  // NEXT_PUBLIC_* values in client bundles when it can see the literal keys.
+  const url = configured(env ? env.NEXT_PUBLIC_SUPABASE_URL : process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const anonKey = configured(
+    env ? env.NEXT_PUBLIC_SUPABASE_ANON_KEY : process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
   if (!url || !anonKey) return null;
   return { url, anonKey };
 }
