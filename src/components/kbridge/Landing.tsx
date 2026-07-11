@@ -7,6 +7,7 @@ import type { School } from "@/lib/data/schools";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { KaxiCat } from "@/components/brand/KaxiCat";
 import { ArrowRight, Calculator, FileCheck, School as SchoolIcon, ShieldCheck, Users, Globe2, AlertTriangle, Scale, Sparkles } from "lucide-react";
 
 export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
@@ -103,41 +104,44 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
             <ShieldCheck className="h-3.5 w-3.5" />
             {tr("hero_badge", lang)}
           </Badge>
-          <h1 className="text-4xl md:text-6xl font-black tracking-tight leading-tight">
+          <h1 className="font-serif text-4xl md:text-6xl font-extrabold tracking-tight leading-tight">
             {tr("hero_title", lang)}
           </h1>
           <p className="mt-6 text-base md:text-lg text-muted-foreground max-w-3xl mx-auto leading-relaxed">
             {tr("hero_subtitle", lang)}
           </p>
-          <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
-            <Button size="lg" className="gap-2" onClick={() => onNavigate("agent")}>
-              <Sparkles className="h-4 w-4" />
-              {lang === "ko" ? "AI 에이전트 시작" : lang === "vi" ? "Bắt đầu Agent" : lang === "mn" ? "Агент эхлэх" : "Start AI Agent"}
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-            <Button size="lg" variant="outline" onClick={() => onNavigate("diagnose")}>
-              {tr("cta_start", lang)}
-              <ArrowRight className="h-4 w-4" />
-            </Button>
+          <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <KaxiCat state="running" size={48} className="shrink-0" />
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button size="lg" className="gap-2" onClick={() => onNavigate("agent")}>
+                <Sparkles className="h-4 w-4" />
+                {tr("hero_cta_agent", lang)}
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              <Button size="lg" variant="outline" onClick={() => onNavigate("diagnose")}>
+                {tr("cta_start", lang)}
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
           {/* Stats */}
           <div className="mt-12 grid grid-cols-3 gap-4 max-w-2xl mx-auto">
-            <div className="rounded-lg border bg-card p-4">
-              <div className="text-2xl md:text-3xl font-bold">25.3만</div>
+            <div className="rounded-xl border border-border/70 bg-card p-4 md:p-5 shadow-sm">
+              <div className="font-serif text-2xl md:text-3xl font-semibold">{tr("hero_stat_students_value", lang)}</div>
               <div className="text-xs text-muted-foreground mt-1">{tr("hero_stat_students", lang)}</div>
             </div>
-            <div className="rounded-lg border bg-card p-4">
-              <div className="text-2xl md:text-3xl font-bold">{schoolStats.total ?? "—"}</div>
+            <div className="rounded-xl border border-border/70 bg-card p-4 md:p-5 shadow-sm">
+              <div className="font-serif text-2xl md:text-3xl font-semibold">{schoolStats.total ?? "—"}</div>
               <div className="text-xs text-muted-foreground mt-1">{tr("hero_stat_schools", lang)}</div>
               {schoolStats.accredited !== null && (
                 <div className="mt-1 text-[10px] text-muted-foreground">
-                  {lang === "ko" ? `인증 ${schoolStats.accredited}` : `${schoolStats.accredited} accredited`}
+                  {tr("hero_stat_accredited", lang).replace("{n}", String(schoolStats.accredited))}
                 </div>
               )}
             </div>
-            <div className="rounded-lg border bg-card p-4">
-              <div className="text-2xl md:text-3xl font-bold">4</div>
+            <div className="rounded-xl border border-border/70 bg-card p-4 md:p-5 shadow-sm">
+              <div className="font-serif text-2xl md:text-3xl font-semibold">4</div>
               <div className="text-xs text-muted-foreground mt-1">{tr("hero_stat_langs", lang)}</div>
             </div>
           </div>
@@ -147,7 +151,7 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
       {/* AI 에이전트 배너 (메인 CTA) */}
       <section className="mx-auto max-w-5xl px-4">
         <Card
-          className="cursor-pointer overflow-hidden border-2 border-primary/30 hover:border-primary/60 transition-all bg-gradient-to-br from-primary/5 to-transparent"
+          className="cursor-pointer overflow-hidden border border-primary/25 hover:border-primary/50 hover:shadow-md transition-all"
           onClick={() => onNavigate("agent")}
         >
           <CardContent className="p-0">
@@ -159,34 +163,22 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge className="gap-1.5">
                     <Sparkles className="h-3 w-3" />
-                    {lang === "ko" ? "네이티브 AI 에이전트" : "Native AI Agent"}
+                    {tr("ai_banner_badge", lang)}
                   </Badge>
                   <Badge variant="outline" className="gap-1">
                     <Scale className="h-3 w-3" />
                     ReAct · 6 Tools
                   </Badge>
                 </div>
-                <h3 className="text-2xl md:text-3xl font-bold tracking-tight">
-                  {lang === "ko"
-                    ? "한 번에 끝내는 유학 준비"
-                    : lang === "vi"
-                    ? "Hoàn tất trong một bước"
-                    : lang === "mn"
-                    ? "Нэг удаад дуусгах"
-                    : "Everything in one go"}
+                <h3 className="font-serif text-2xl md:text-3xl font-bold tracking-tight">
+                  {tr("ai_banner_title", lang)}
                 </h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  {lang === "ko"
-                    ? "학교 검색 → 비용 계산 → 서류 생성 → 비자 정보 → 전문가 연결. 자연어로 요청하면 에이전트가 도구를 호출해 직접 실행합니다."
-                    : lang === "vi"
-                    ? "Tìm trường → Chi phí → Hồ sơ → Visa → Chuyên gia. Nói tự nhiên, agent tự gọi công cụ."
-                    : lang === "mn"
-                    ? "Сургууль → Зардал → Баримт → Виз → Мэргэжилтэн. Хэлж байгаа л агент гүйцэтгэнэ."
-                    : "Search → Cost → Documents → Visa → Experts. Just ask, agent calls tools for you."}
+                  {tr("ai_banner_desc", lang)}
                 </p>
               </div>
               <Button size="lg" className="gap-2 shrink-0">
-                {lang === "ko" ? "에이전트 실행" : "Launch"}
+                {tr("ai_banner_cta", lang)}
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </div>
@@ -197,7 +189,7 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
       {/* 전문 상담 배너 */}
       <section className="mx-auto max-w-5xl px-4">
         <Card
-          className="cursor-pointer overflow-hidden border-2 hover:border-primary/50 transition-all"
+          className="cursor-pointer overflow-hidden border border-border hover:border-primary/40 hover:shadow-md transition-all"
           onClick={() => onNavigate("consult")}
         >
           <CardContent className="p-0">
@@ -206,34 +198,22 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge className="gap-1.5">
                     <Scale className="h-3 w-3" />
-                    {lang === "ko" ? "행정사 AI 에이전트" : lang === "vi" ? "AI luật sư" : lang === "mn" ? "Зөвлөгөөний AI" : "Admin Lawyer AI"}
+                    {tr("consult_banner_badge", lang)}
                   </Badge>
                   <Badge variant="outline" className="gap-1">
                     <Sparkles className="h-3 w-3" />
                     RAG · Deep Think
                   </Badge>
                 </div>
-                <h3 className="text-xl md:text-2xl font-bold tracking-tight">
-                  {lang === "ko"
-                    ? "유학 비자·체류, 전문가에게 직접 물어보세요"
-                    : lang === "vi"
-                    ? "Hỏi trực tiếp chuyên gia về visa du học"
-                    : lang === "mn"
-                    ? "Мэргэжилтнээс шууд асуугаарай"
-                    : "Ask an expert about study visa & stay"}
+                <h3 className="font-serif text-xl md:text-2xl font-bold tracking-tight">
+                  {tr("consult_banner_title", lang)}
                 </h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  {lang === "ko"
-                    ? "공식 문서 기반 RAG · 5가지 전문 모드 (종합/비자/서류/거절대응/유학원운영) · 위험 신호 자동 감지 · 법적 경계 명확화"
-                    : lang === "vi"
-                    ? "RAG chính thức · 5 chế độ chuyên gia · phát hiện rủi ro · ranh giới pháp lý rõ ràng"
-                    : lang === "mn"
-                    ? "Албан баримт RAG · 5 төрөл · эрсдэл илрүүлэлт · хуулийн хязгаар"
-                    : "Official RAG · 5 expert modes · risk detection · clear legal boundaries"}
+                  {tr("consult_banner_desc", lang)}
                 </p>
               </div>
               <Button size="lg" className="gap-2 shrink-0">
-                {lang === "ko" ? "상담 시작" : lang === "vi" ? "Bắt đầu" : lang === "mn" ? "Эхлэх" : "Start"}
+                {tr("consult_banner_cta", lang)}
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </div>
@@ -244,7 +224,7 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
       {/* Features */}
       <section className="mx-auto max-w-7xl px-4">
         <div className="text-center mb-10">
-          <h2 className="text-3xl font-bold tracking-tight">{tr("features_title", lang)}</h2>
+          <h2 className="font-serif text-3xl font-bold tracking-tight">{tr("features_title", lang)}</h2>
           <p className="mt-3 text-muted-foreground">{tr("features_subtitle", lang)}</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -253,14 +233,14 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
             return (
               <Card
                 key={f.action}
-                className="cursor-pointer transition-all hover:shadow-md hover:-translate-y-1"
+                className="cursor-pointer border-border/70 transition-all hover:border-primary/40 hover:shadow-md hover:-translate-y-0.5"
                 onClick={() => onNavigate(f.action)}
               >
                 <CardHeader>
                   <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
                     <Icon className="h-5 w-5 text-primary" />
                   </div>
-                  <CardTitle className="mt-2 text-lg">{f.title}</CardTitle>
+                  <CardTitle className="font-serif mt-2 text-lg">{f.title}</CardTitle>
                   <CardDescription className="text-sm leading-relaxed">{f.desc}</CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -277,9 +257,9 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
 
       {/* Broker comparison */}
       <section className="mx-auto max-w-5xl px-4">
-        <Card>
+        <Card className="border-border/70">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="font-serif flex items-center gap-2 text-xl">
               <AlertTriangle className="h-5 w-5 text-amber-500" />
               {tr("broker_compare_title", lang)}
             </CardTitle>
@@ -314,7 +294,10 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
       {/* CTA */}
       <section className="mx-auto max-w-4xl px-4 pb-16">
         <div className="rounded-2xl bg-primary p-8 md:p-12 text-primary-foreground text-center">
-          <h2 className="text-2xl md:text-3xl font-bold mb-3">{tr("hero_title", lang)}</h2>
+          <div className="mb-4 flex justify-center">
+            <KaxiCat state="happy" size={44} inverted />
+          </div>
+          <h2 className="font-serif text-2xl md:text-3xl font-bold mb-3">{tr("hero_title", lang)}</h2>
           <p className="text-primary-foreground/80 mb-6 max-w-2xl mx-auto">{tr("hero_subtitle", lang)}</p>
           <Button size="lg" variant="secondary" className="gap-2" onClick={() => onNavigate("diagnose")}>
             {tr("cta_start", lang)}
