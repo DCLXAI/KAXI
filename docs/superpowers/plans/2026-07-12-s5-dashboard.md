@@ -48,13 +48,19 @@
   diagnosisLeads DiagnosisLead[]
 ```
 
-- [ ] **Step 2: 로컬 PG 기동 확인 후 마이그레이션 생성**
+- [ ] **Step 2: 마이그레이션 SQL 생성(적용 안 함) → 전진 적용**
 
-로컬 PG(:5433)가 떠 있어야 함(수동 기동 환경). Run:
+로컬 PG(:5433) 기동됨, `.env.local`의 `DATABASE_URL`=`@localhost:5433`(오케스트레이터가 확인·복사 완료). **리셋 금지** — 절대 `migrate reset`/`db push --force`/`--accept-data-loss` 쓰지 말 것.
+
+먼저 SQL만 생성(DB 미적용, 리셋 프롬프트 없음):
 ```bash
-bunx prisma migrate dev --name diagnosis_lead_user --schema prisma/postgres/schema.prisma
+bunx prisma migrate dev --create-only --name diagnosis_lead_user --schema prisma/postgres/schema.prisma
 ```
-Expected: 새 마이그레이션 폴더 생성, `ALTER TABLE "diagnosis_leads" ADD COLUMN "userId" TEXT;` + FK(`ON DELETE SET NULL`) + 인덱스. **원격 DB 금지 — 로컬 전용.** 실패 시(로컬 PG 미기동) 멈추고 보고.
+그다음 전진 전용 적용(리셋 로직 없음, 드리프트 시 깨끗이 실패):
+```bash
+bunx prisma migrate deploy --schema prisma/postgres/schema.prisma
+```
+Expected: 새 마이그레이션 폴더 생성 + 로컬 DB에 `ALTER TABLE "diagnosis_leads" ADD COLUMN "userId" TEXT;` + FK(`ON DELETE SET NULL`) + 인덱스 적용. **원격 DB 금지 — 로컬 전용.** `migrate dev`가 리셋을 요구하거나 `migrate deploy`가 드리프트로 실패하면 **멈추고 오케스트레이터에 보고**(임의 reset 금지).
 
 - [ ] **Step 3: 생성된 SQL 검토**
 
