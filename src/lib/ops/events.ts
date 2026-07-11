@@ -5,7 +5,10 @@ export type OpsEvent = {
   source: string;
   severity: "warning" | "error" | "critical";
   eventType: string;
-  workflowId: string | null;
+  workflowId: string;
+  workflowVersionId: string;
+  modelVersion: string;
+  promptVersion: string;
   executionId: string | null;
   message: string;
   payload: Record<string, unknown>;
@@ -35,7 +38,10 @@ function mapEvent(row: Record<string, unknown>): OpsEvent {
     source: String(row.source || "unknown"),
     severity: (row.severity === "critical" || row.severity === "warning" ? row.severity : "error"),
     eventType: String(row.event_type || "unknown"),
-    workflowId: row.workflow_id ? String(row.workflow_id) : null,
+    workflowId: row.workflow_id ? String(row.workflow_id) : "legacy-unversioned",
+    workflowVersionId: row.workflow_version_id ? String(row.workflow_version_id) : "legacy-unversioned",
+    modelVersion: row.model_version ? String(row.model_version) : "legacy-unversioned",
+    promptVersion: row.prompt_version ? String(row.prompt_version) : "legacy-unversioned",
     executionId: row.execution_id ? String(row.execution_id) : null,
     message: String(row.message || ""),
     payload: row.payload && typeof row.payload === "object" ? row.payload as Record<string, unknown> : {},
@@ -49,7 +55,7 @@ export async function listOpenOpsEvents(limit = 50) {
   if (isolatedTestRuntime()) return [];
   const result = await serviceClient()
     .from("ops_events")
-    .select("id,source,severity,event_type,workflow_id,execution_id,message,payload,acknowledged_at,acknowledged_by,created_at")
+    .select("id,source,severity,event_type,workflow_id,workflow_version_id,model_version,prompt_version,execution_id,message,payload,acknowledged_at,acknowledged_by,created_at")
     .is("acknowledged_at", null)
     .order("created_at", { ascending: false })
     .limit(Math.min(100, Math.max(1, Math.trunc(limit))));
@@ -65,7 +71,7 @@ export async function acknowledgeOpsEvent(id: string, actor: string) {
     .update({ acknowledged_at: acknowledgedAt, acknowledged_by: actor.slice(0, 160) })
     .eq("id", id)
     .is("acknowledged_at", null)
-    .select("id,source,severity,event_type,workflow_id,execution_id,message,payload,acknowledged_at,acknowledged_by,created_at")
+    .select("id,source,severity,event_type,workflow_id,workflow_version_id,model_version,prompt_version,execution_id,message,payload,acknowledged_at,acknowledged_by,created_at")
     .maybeSingle();
   if (result.error) throw result.error;
   return result.data ? mapEvent(result.data) : null;

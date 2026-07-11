@@ -51,6 +51,7 @@
 - GitHub secret `KAXI_ADMIN_API_KEY`: Also required by `.github/workflows/chat-attachment-worker.yml`, which retries queued attachment extraction jobs every five minutes through the internal worker API.
 - `N8N_TYPEBOT_RAG_WEBHOOK_URL`, `N8N_RAG_INGESTION_WEBHOOK_URL`, `N8N_TYPEBOT_HANDOFF_WEBHOOK_URL`: Production n8n webhook URLs called only by KAXI server routes.
 - `N8N_RAG_CAPABILITY_URL`: Read-only active-contract probe used before bulk serving-projection sync.
+- `N8N_RAG_WORKFLOW_ID`, `N8N_RAG_WORKFLOW_VERSION_ID`, `N8N_RAG_MODEL_VERSION`, `N8N_RAG_PROMPT_VERSION`: Expected RAG provenance contract used for fail-closed gateway responses, persistence, health, and evaluation checks. `N8N_RAG_WORKFLOW_VERSION_ID` is the immutable semantic release ID returned at runtime; record the separate n8n history UUID in the release evidence because n8n runtime expressions do not expose it.
 - `N8N_WEBHOOK_SIGNING_SECRET`, `N8N_WEBHOOK_MAX_AGE_SECONDS`: Shared HMAC/replay-window contract between KAXI and the n8n verification nodes. The secret must match in every KAXI environment that calls n8n.
 - `TYPEBOT_PUBLIC_ID`, `TYPEBOT_PUBLIC_URL`: Published Typebot identity and public health target. Keep Typebot unpublished during backend cutover.
 - `TYPEBOT_GATEWAY_SECRET`: Separate 32-byte secret sent by both server-side Typebot webhook blocks as `x-kaxi-typebot-token`. It prevents callers from forging `source=typebot`; do not reuse the n8n signing secret.

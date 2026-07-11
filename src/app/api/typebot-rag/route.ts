@@ -7,6 +7,11 @@ import { getReadyChatAttachmentsForRuntime } from "@/lib/chat/attachment-process
 import { inferChatCategory } from "@/lib/chat/category";
 import { createChatRequestIdentity } from "@/lib/chat/request-identity";
 import { applyChatResponseGuardrail } from "@/lib/chat/response-guardrail";
+import {
+  ragProvenanceHeaders,
+  resolveRagProvenance,
+  type RagProvenance,
+} from "@/lib/n8n/provenance";
 import { createTypebotHandoffToken, signN8nPayload } from "@/lib/n8n/signature";
 import { verifyTypebotGatewayHeaders } from "@/lib/typebot/gateway-auth";
 
@@ -69,7 +74,38 @@ function normalizeN8nPayload(payload: unknown) {
     sources: nested.sources,
     searchMeta: nested.searchMeta,
     executionId: typeof nested.executionId === "string" ? nested.executionId : undefined,
+    workflowId: typeof nested.workflowId === "string" ? nested.workflowId : undefined,
+    workflowVersionId: typeof nested.workflowVersionId === "string" ? nested.workflowVersionId : undefined,
+    modelVersion: typeof nested.modelVersion === "string" ? nested.modelVersion : undefined,
+    promptVersion: typeof nested.promptVersion === "string" ? nested.promptVersion : undefined,
   };
+}
+
+function addProvenanceHeaders(response: NextResponse, provenance = resolveRagProvenance()) {
+  for (const [name, value] of Object.entries(ragProvenanceHeaders(provenance))) {
+    response.headers.set(name, value);
+  }
+  return response;
+}
+
+function ragJson(
+  body: Record<string, unknown>,
+  init?: ResponseInit,
+  provenanceInput?: unknown,
+) {
+  const provenance = resolveRagProvenance(provenanceInput);
+  return addProvenanceHeaders(NextResponse.json({ ...body, ...provenance }, init), provenance);
+}
+
+async function ragRateLimitJson(response: NextResponse) {
+  const payload = await response.json().catch(() => ({ error: "Rate limit unavailable" }));
+  const body = payload && typeof payload === "object" && !Array.isArray(payload)
+    ? payload as Record<string, unknown>
+    : { error: "Rate limit unavailable" };
+  const headers = new Headers();
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter) headers.set("retry-after", retryAfter);
+  return ragJson(body, { status: response.status, headers });
 }
 
 function normalizeBoolean(value: unknown) {
@@ -84,7 +120,7 @@ export async function POST(req: NextRequest) {
     limit: parseLimit(process.env.TYPEBOT_RAG_RATE_LIMIT, 20),
     windowMs: 60 * 1000,
   });
-  if (limited) return limited;
+  if (limited) return ragRateLimitJson(limited);
 
   try {
     const body = await readJsonBody<Record<string, unknown>>(req, 64 * 1024);
@@ -97,19 +133,19 @@ export async function POST(req: NextRequest) {
     const attachments = normalizeAttachments(body?.attachments);
 
     if (!question || !sessionId) {
-      return NextResponse.json({ error: "question and sessionId are required" }, { status: 400 });
+      return ragJson({ error: "question and sessionId are required" }, { status: 400 });
     }
     if (source === "typebot" && (!typebotResultId || sessionId !== `typebot-${typebotResultId}`)) {
-      return NextResponse.json({ error: "Invalid Typebot session" }, { status: 400 });
+      return ragJson({ error: "Invalid Typebot session" }, { status: 400 });
     }
     if (source === "typebot" && !verifyTypebotGatewayHeaders(req.headers)) {
-      return NextResponse.json({ error: "Unauthorized Typebot gateway" }, { status: 401 });
+      return ragJson({ error: "Unauthorized Typebot gateway" }, { status: 401 });
     }
     if (source === "typebot" && attachments.length > 0) {
-      return NextResponse.json({ error: "Typebot attachments are not supported by this gateway" }, { status: 400 });
+      return ragJson({ error: "Typebot attachments are not supported by this gateway" }, { status: 400 });
     }
     if (source === "kaxi-site" && !verifyChatSessionToken(req.cookies.get(CHAT_SESSION_COOKIE)?.value, sessionId)) {
-      return NextResponse.json({ error: "Invalid or expired chat session" }, { status: 401 });
+      return ragJson({ error: "Invalid or expired chat session" }, { status: 401 });
     }
     let verifiedAttachments = attachments;
     if (source === "kaxi-site" && attachments.length > 0) {
@@ -117,7 +153,7 @@ export async function POST(req: NextRequest) {
         verifiedAttachments = await getReadyChatAttachmentsForRuntime(sessionId, attachments);
       } catch (error) {
         console.warn("[POST /api/typebot-rag] attachment validation failed", error);
-        return NextResponse.json({ error: "Attachment is not ready or does not belong to this session" }, { status: 409 });
+        return ragJson({ error: "Attachment is not ready or does not belong to this session" }, { status: 409 });
       }
     }
 
@@ -138,7 +174,11 @@ export async function POST(req: NextRequest) {
       attachments: verifiedAttachments,
     };
 
-    const persistFailure = async (errorCode: string, executionId?: string) => {
+    const persistFailure = async (
+      errorCode: string,
+      provenance: RagProvenance,
+      executionId?: string,
+    ) => {
       try {
         await persistChatExchange({
           requestId: identity.requestId,
@@ -152,6 +192,7 @@ export async function POST(req: NextRequest) {
           answer: "",
           attachments: verifiedAttachments,
           executionId,
+          provenance,
           latencyMs: Date.now() - startedAt,
           status: "failed",
           errorCode,
@@ -172,8 +213,9 @@ export async function POST(req: NextRequest) {
       });
     } catch (error) {
       console.error("[POST /api/typebot-rag] n8n unavailable", error);
-      await persistFailure("n8n_unavailable");
-      return NextResponse.json({ error: "n8n request failed" }, { status: 502 });
+      const provenance = resolveRagProvenance();
+      await persistFailure("n8n_unavailable", provenance);
+      return ragJson({ error: "n8n request failed" }, { status: 502 }, provenance);
     }
 
     const rawText = await response.text();
@@ -186,16 +228,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const normalizedPayload = applyChatResponseGuardrail(normalizeN8nPayload(payload), question, locale);
+    const guardedPayload = applyChatResponseGuardrail(normalizeN8nPayload(payload), question, locale);
+    const provenance = resolveRagProvenance(guardedPayload);
+    const normalizedPayload = { ...guardedPayload, ...provenance };
     if (!response.ok) {
       console.error("[POST /api/typebot-rag] n8n error", response.status, rawText);
-      await persistFailure(`n8n_http_${response.status}`, normalizedPayload.executionId);
-      return NextResponse.json({ error: "n8n request failed" }, { status: 502 });
+      await persistFailure(`n8n_http_${response.status}`, provenance, normalizedPayload.executionId);
+      return ragJson({ error: "n8n request failed" }, { status: 502 }, provenance);
     }
     if (!normalizedPayload.answer?.trim()) {
       console.error("[POST /api/typebot-rag] n8n response missing answer", rawText);
-      await persistFailure("n8n_invalid_response", normalizedPayload.executionId);
-      return NextResponse.json({ error: "n8n returned an invalid response" }, { status: 502 });
+      await persistFailure("n8n_invalid_response", provenance, normalizedPayload.executionId);
+      return ragJson({ error: "n8n returned an invalid response" }, { status: 502 }, provenance);
     }
 
     let storedMessageId: string | undefined;
@@ -220,6 +264,7 @@ export async function POST(req: NextRequest) {
         nextStep: normalizedPayload.nextStep,
         attachments: verifiedAttachments,
         executionId: normalizedPayload.executionId,
+        provenance,
         sources: normalizedPayload.sources,
         searchMeta: normalizedPayload.searchMeta,
         latencyMs: Date.now() - startedAt,
@@ -244,6 +289,7 @@ export async function POST(req: NextRequest) {
             leadStage: typeof normalizedPayload.leadStage === "string" ? normalizedPayload.leadStage : undefined,
             nextStep: normalizedPayload.nextStep,
             executionId: normalizedPayload.executionId,
+            provenance,
             sources: normalizedPayload.sources,
             searchMeta: normalizedPayload.searchMeta,
             latencyMs: Date.now() - startedAt,
@@ -257,7 +303,7 @@ export async function POST(req: NextRequest) {
     }
 
     const handoffToken = source === "typebot" ? createTypebotHandoffToken(sessionId) : undefined;
-    return NextResponse.json({
+    return ragJson({
       ...normalizedPayload,
       requestId: identity.requestId,
       handoffToken,
@@ -265,15 +311,15 @@ export async function POST(req: NextRequest) {
       messageId: storedMessageId,
       persistenceMode,
       handoffTaskPersisted,
-    });
+    }, undefined, provenance);
   } catch (error) {
     if (error instanceof JsonBodyError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return ragJson({ error: error.message }, { status: error.status });
     }
     if (error instanceof Error && error.message === "N8N_WEBHOOK_NOT_CONFIGURED") {
-      return NextResponse.json({ error: "n8n runtime is not configured" }, { status: 503 });
+      return ragJson({ error: "n8n runtime is not configured" }, { status: 503 });
     }
     console.error("[POST /api/typebot-rag]", error);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return ragJson({ error: "Internal error" }, { status: 500 });
   }
 }

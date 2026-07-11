@@ -8,7 +8,7 @@ Typebot -> KAXI API -> signed n8n webhook -> Supabase pgvector
 
 KAXI owns request validation, UUID/idempotency normalization, HMAC signing, canonical chat/retrieval persistence, encrypted handoff-task creation, attachment ownership, and the handoff token. n8n owns retrieval, grounded answer construction, risk classification, and metadata-only execution telemetry.
 
-Active n8n production version: `6d8f57f4-8c04-4c9c-917e-da3f632e823f` (41 nodes). The KAXI verifier, Supabase migrations, and 201/201 serving projection pass. The production evaluation table has 60 active governed cases; release decisions must use the latest recorded run rather than a historical pass count. Typebot is published and its normal-answer, high-risk, consent, and handoff paths have been verified against the production chain.
+Active n8n production version: `1a65000a-f14e-4425-a926-992e573ad272` (`Response provenance v1 verified`, 41 nodes). Its immutable response contract uses semantic workflow release ID `kaxi-rag-runtime@2026-07-11.provenance-v1`; n8n does not expose the active history UUID as a runtime expression, so the history UUID remains deployment evidence while the semantic ID is stored with each response and log. The KAXI verifier and 201/201 serving projection pass. A signed answer-path retest on 2026-07-11 reached `Search Governed Serving Chunks` but n8n execution `591` failed because n8n Connect credits were depleted; top up the workspace before treating successful grounded answers as operational again.
 
 ## Typebot Runtime Request
 
@@ -73,11 +73,17 @@ The current Typebot MCP draft uses these exact body paths. A typical response is
   },
   "requestId": "uuid",
   "executionId": "n8n-execution-id",
+  "workflowId": "EqX3C5c2WNWoKkSR",
+  "workflowVersionId": "kaxi-rag-runtime@2026-07-11.provenance-v1",
+  "modelVersion": "openai/text-embedding-3-small@1536",
+  "promptVersion": "kaxi-grounded-context-answer@2026-07-11.reranker-v2",
   "handoffToken": "short-lived-signed-token",
   "persisted": true,
   "messageId": "123"
 }
 ```
+
+The same four provenance fields are returned on validation, authorization, upstream, and persistence-error responses and are mirrored in `x-kaxi-workflow-id`, `x-kaxi-workflow-version-id`, `x-kaxi-model-version`, and `x-kaxi-prompt-version` headers. Canonical chat, retrieval, n8n audit, health, operations-event, and evaluation records store dedicated queryable columns for the same contract.
 
 ## Conversation Flow
 

@@ -127,6 +127,10 @@ assert(postgresSql.includes("kaxi_hybrid_knowledge_search"), "missing RRF hybrid
 assert(postgresSql.includes("kaxi_claim_chat_attachment_jobs"), "missing durable chat attachment claim function");
 assert(postgresSql.includes("CREATE TABLE IF NOT EXISTS public.chat_attachment_jobs"), "missing durable chat attachment jobs table");
 assert(postgresSql.includes("kaxi_sanitize_n8n_audit_content"), "missing metadata-only n8n audit sanitizer");
+assert(postgresSql.includes("chat_messages_provenance_idx"), "missing RAG response provenance migration");
+for (const provenanceColumn of ["workflow_version_id", "model_version", "prompt_version"]) {
+  assert(postgresSql.includes(provenanceColumn), `missing RAG provenance column ${provenanceColumn}`);
+}
 assert(postgresSql.includes("kaxi_visa_document_requirement_public_read"), "missing visa document matrix RLS policy");
 
 console.log(`PASS DB schema policy: ${requiredModels.length} domain models, single PostgreSQL schema, pgvector indexes, and RRF function verified`);

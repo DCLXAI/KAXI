@@ -652,6 +652,10 @@ model ChatMessage {
   channel            String   @default("kaxi-site")
   locale             String   @default("ko")
   executionId        String?  @map("execution_id")
+  workflowId         String   @default("legacy-unversioned") @map("workflow_id")
+  workflowVersionId  String   @default("legacy-unversioned") @map("workflow_version_id")
+  modelVersion       String   @default("legacy-unversioned") @map("model_version")
+  promptVersion      String   @default("legacy-unversioned") @map("prompt_version")
   status             String   @default("completed")
   errorCode          String?  @map("error_code")
   n8nRequest         Json?    @map("n8n_request")
@@ -674,6 +678,7 @@ model ChatMessage {
   @@index([locale])
   @@index([riskLevel])
   @@index([needsHuman])
+  @@index([workflowId, workflowVersionId])
   @@index([createdAt])
   @@map("chat_messages")
 }
@@ -684,6 +689,10 @@ model RetrievalRun {
   messageId             BigInt   @unique @map("message_id")
   sessionKey            String   @map("session_id")
   executionId           String?  @map("execution_id")
+  workflowId            String   @default("legacy-unversioned") @map("workflow_id")
+  workflowVersionId     String   @default("legacy-unversioned") @map("workflow_version_id")
+  modelVersion          String   @default("legacy-unversioned") @map("model_version")
+  promptVersion         String   @default("legacy-unversioned") @map("prompt_version")
   query                 String
   queryCiphertext       String?  @map("query_ciphertext")
   queryHash             String?  @map("query_hash")
@@ -705,6 +714,7 @@ model RetrievalRun {
 
   @@index([sessionKey, createdAt])
   @@index([executionId])
+  @@index([workflowId, workflowVersionId])
   @@index([noContext, createdAt])
   @@map("retrieval_runs")
 }
@@ -712,7 +722,10 @@ model RetrievalRun {
 model N8nAuditMessage {
   id                  BigInt   @id @default(autoincrement())
   executionId         String?  @unique @map("execution_id")
-  workflowId          String?  @map("workflow_id")
+  workflowId          String   @default("legacy-unversioned") @map("workflow_id")
+  workflowVersionId   String   @default("legacy-unversioned") @map("workflow_version_id")
+  modelVersion        String   @default("legacy-unversioned") @map("model_version")
+  promptVersion       String   @default("legacy-unversioned") @map("prompt_version")
   sourceChatMessageId BigInt?  @unique @map("source_chat_message_id")
   requestId           String?  @unique @map("request_id") @db.Uuid
   idempotencyKey      String?  @map("idempotency_key")
@@ -742,6 +755,7 @@ model N8nAuditMessage {
   @@index([tenantId, createdAt])
   @@index([channel])
   @@index([riskLevel, needsHuman])
+  @@index([workflowId, workflowVersionId])
   @@map("n8n_audit_messages")
 }
 

@@ -1,15 +1,15 @@
 # KAXI RAG System Audit and Delivery Plan
 
-Checked: 2026-07-10 (Asia/Seoul)
+Checked: 2026-07-11 (Asia/Seoul)
 
 ## 1. Executive Status
 
-The production chain is live end to end: KAXI is the public security and persistence boundary, n8n owns retrieval/orchestration, Supabase owns canonical state and pgvector serving data, and the published Typebot is an alternate conversation channel. The governed corpus, multilingual evaluation, real Typebot turn, consent, and handoff gates pass. The latest system-health run is healthy with no open operations event.
+KAXI remains the public security and persistence boundary, n8n owns retrieval/orchestration, Supabase owns canonical state and pgvector serving data, and the published Typebot is an alternate conversation channel. The response-provenance contract and database migration are current, but the successful answer path is operationally degraded: signed n8n execution `591` reached `Search Governed Serving Chunks` and failed because n8n Connect credits were depleted. Historical governed corpus, multilingual evaluation, real Typebot turn, consent, and handoff evidence remains valid; top up n8n Connect and rerun health/evaluation before claiming current end-to-end availability.
 
 | Area | Local/draft state | Live state | Release status |
 | --- | --- | --- | --- |
 | KAXI app | Full CI and production build pass | production deployment `dpl_3qYHVcNKw6UtQWZUz2Eaj9mr4Pd7` is `Ready` at commit `7a27d71dcf0c77e809ff80d6c4c6c46b058ef6b5` | released; the additional local guardrail/evaluation edits remain uncommitted and are not claimed as deployed |
-| n8n main workflow | 41-node workflow with shared Error Workflow, verifier-first webhooks, and success execution data disabled | active version `f1a32f92-2211-44d7-bfc5-4d618c4ee02c`; capability contract `2026-07-10.v1` passes | published and evaluated |
+| n8n main workflow | 41-node workflow with shared Error Workflow, verifier-first webhooks, and success execution data disabled | active version `1a65000a-f14e-4425-a926-992e573ad272`; capability contract `2026-07-10.v1` and semantic release `kaxi-rag-runtime@2026-07-11.provenance-v1` pass | published; provenance branches verified; answer path blocked by depleted n8n Connect credits |
 | Typebot | `data.*` response mappings, stable Result ID session, and matching server-side gateway headers | published as `kaxi-rag-typebot`; normal, high-risk, consent, and handoff E2E pass | released; continue synthetic observation |
 | Supabase canonical corpus | 94 eligible documents, 201 eligible chunks, 201 citation-ready | migration ledger is current through `20260710180000_n8n_audit_metadata_only` | released |
 | pgvector serving projection | governed sync/cutover tooling ready | 201/201 ready, 0 pending, 0 quarantined; operational evaluation 56/56 | released |
@@ -39,6 +39,7 @@ The production chain is live end to end: KAXI is the public security and persist
 - Privacy deletion now resolves canonical sessions by lead, contact hash, or question hash; scheduled retention removes storage objects, canonical chat/retrieval rows, n8n audit rows, and handoff records together.
 - KAXI now creates encrypted, message-linked handoff tasks after canonical persistence; database-level dedupe keeps one open task and one keyed contact per session/question/contact.
 - KAXI now writes metadata-only n8n audit rows linked to canonical messages. A database trigger replaces any duplicated question, answer, or source payload with fixed placeholders, including writes from an older n8n version.
+- Every n8n runtime, ingestion, handoff, and capability response now emits evaluated `workflowId` and `executionId` plus immutable workflow, model, and prompt versions. KAXI preserves the same fields in response bodies and headers, and canonical chat, retrieval, n8n-audit, health, ops-event, and evaluation ledgers expose dedicated provenance columns.
 - Production readiness now verifies the latest migration ledger entry plus the attachment queue, retention, encryption, handoff ownership, and audit-sanitizer objects in the connected PostgreSQL database.
 - A local drift rehearsal reproduced the live ledger/object split, then applied all 23 pending or unrecorded migrations with `prisma migrate deploy` without conflict; the resulting database passed the canonical schema-parity gate.
 - The website widget now restores up to 20 canonical exchanges from the signed HttpOnly session, decrypts recoverable text only on the server, restores verified HTTPS citations, preserves failed request identities for idempotent retry, and resumes or exposes pending/failed attachments after refresh.
@@ -46,18 +47,19 @@ The production chain is live end to end: KAXI is the public security and persist
 - Vercel production deployment `dpl_3qYHVcNKw6UtQWZUz2Eaj9mr4Pd7` at commit `7a27d71dcf0c77e809ff80d6c4c6c46b058ef6b5` is `Ready`, includes the verifier/readiness/session-history routes, and retains the verified responsive widget layout.
 - Production session endpoints use the managed PostgreSQL-backed shared rate limiter and keep session responses `private, no-store` with `Vary: Cookie`.
 - Production readiness confirms the managed database, latest migration, gateway signing, Typebot gateway authentication, private attachment storage, privacy controls, school metadata, and shared rate limiting. Managed provider availability and OCR failover remain independently monitored operational dependencies.
-- Active n8n version `f1a32f92-2211-44d7-bfc5-4d618c4ee02c` preserves verifier-first runtime, ingestion, and handoff paths; carries canonical `docId` through citations; expands multilingual retrieval queries; and classifies multilingual forged-document requests as high risk.
+- Active n8n version `1a65000a-f14e-4425-a926-992e573ad272` preserves verifier-first runtime, ingestion, and handoff paths; carries canonical `docId` through citations; expands multilingual retrieval queries; classifies multilingual forged-document requests as high risk; and emits executable provenance JSON on every response branch.
 - The serving projection is 201/201 ready with zero pending or quarantined chunks. Evaluation run `812f7634-d2c7-495b-8777-23634358d552` passed 56/56 cases with 100% citation validity, high-risk recall, and no-context accuracy across Korean, English, Vietnamese, and Mongolian; p95 latency was 5392ms.
 - Published Typebot normal and high-risk turns returned the real `block_answer`, persisted Typebot sessions, and routed high risk through privacy consent. The completed consent flow created and linked the lead, encrypted contact, handoff task/update, and versioned consent evidence.
 - System-health run `4efef805-5cc8-4350-adf5-0c3efb437b44` is healthy across Supabase, private storage, signed n8n answer, real Typebot answer, serving projection, operations events, and attachment queue.
 
 ## 3. Remaining Release Gaps
 
-1. The current local response-guardrail and expanded evaluation source edits are not committed or deployed; production claims remain pinned to commit `7a27d71dcf0c77e809ff80d6c4c6c46b058ef6b5` plus the separately published n8n and Typebot revisions.
-2. Run published-Typebot no-context and retry synthetic probes during the observation window; normal, high-risk, consent, and handoff flows already pass.
-3. The n8n Error Workflow persists `ops_events`, but a human Slack/email destination is not yet confirmed and tested.
-4. The 100 legacy compatibility rows remain intentionally retained. The guarded cutover was not run because this release request did not authorize it.
-5. A production malware-scanner implementation and a secondary OCR provider remain outstanding attachment hardening work.
+1. Top up n8n Connect credits, then rerun signed KAXI -> n8n retrieval, published Typebot, daily health, and the governed regression suite.
+2. The current local response-provenance and migration edits are not committed or deployed yet; production claims remain pinned to the last KAXI deployment plus the separately published n8n revision until promotion completes.
+3. Run published-Typebot no-context and retry synthetic probes during the observation window; historical normal, high-risk, consent, and handoff flows passed before the current credit depletion.
+4. The n8n Error Workflow persists `ops_events`, but a human Slack/email destination is not yet confirmed and tested.
+5. The 100 legacy compatibility rows remain intentionally retained. The guarded cutover was not run because this release request did not authorize it.
+6. A production malware-scanner implementation and a secondary OCR provider remain outstanding attachment hardening work.
 
 ## 3.1 Production Evidence
 
@@ -84,7 +86,7 @@ The production chain is live end to end: KAXI is the public security and persist
 | visa document matrix | pass | 50/50 rows seeded idempotently with all 50 validation-rule rows and D-2, D-4, D-10, E-7, F-2, and F-5 coverage |
 | corpus policy regression | pass | strict default official-source floor still rejects internal-only capacity; explicitly reviewed mixed floors pass without weakening URL, freshness, or vector-presence checks |
 | n8n OAuth callback | pass, management only | the browser approval callback authorized the Codex n8n MCP connection; it is separate from KAXI HMAC runtime authorization and does not activate draft workflows |
-| n8n workflow invariant | pass, published | active/current version `f1a32f92-2211-44d7-bfc5-4d618c4ee02c` has 41 nodes, verifier-first webhook edges, no executable placeholder secret, canonical citations, and multilingual risk/query handling |
+| n8n workflow invariant | pass, published | active/current version `1a65000a-f14e-4425-a926-992e573ad272` has 41 nodes, verifier-first webhook edges, executable response provenance, no placeholder secret, canonical citations, and multilingual risk/query handling |
 | Typebot session/handoff contract | pass, published | the Result ID variable produces `typebot-{{sessionId}}`, handoff reuses that session plus `handoffToken`, both server-side HTTP Request blocks authenticate, and live consent/handoff persistence passes |
 
 ## 4. Target Runtime Contract

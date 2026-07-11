@@ -12,6 +12,12 @@ import { inferChatCategory } from "../src/lib/chat/category";
 import { createChatRequestIdentity } from "../src/lib/chat/request-identity";
 import { applyChatResponseGuardrail } from "../src/lib/chat/response-guardrail";
 import {
+  DEFAULT_RAG_PROVENANCE,
+  extractRagProvenance,
+  ragProvenanceHeaders,
+  resolveRagProvenance,
+} from "../src/lib/n8n/provenance";
+import {
   isTypebotGatewayAuthConfigured,
   TYPEBOT_GATEWAY_HEADER,
   verifyTypebotGatewayHeaders,
@@ -29,6 +35,17 @@ import {
 } from "../src/lib/api/security";
 
 process.env.CHAT_SESSION_SIGNING_SECRET = "chat-security-test-secret-that-is-longer-than-thirty-two-characters";
+
+assert.deepEqual(resolveRagProvenance({}, {} as NodeJS.ProcessEnv), DEFAULT_RAG_PROVENANCE);
+const explicitProvenance = resolveRagProvenance({
+  workflowId: "workflow-test",
+  workflowVersionId: "workflow-version-test",
+  modelVersion: "model-version-test",
+  promptVersion: "prompt-version-test",
+}, {} as NodeJS.ProcessEnv);
+assert.deepEqual(extractRagProvenance(explicitProvenance), explicitProvenance);
+assert.equal(extractRagProvenance({ workflowId: "workflow-test" }), null);
+assert.equal(ragProvenanceHeaders(explicitProvenance)["x-kaxi-workflow-version-id"], "workflow-version-test");
 
 const now = Date.UTC(2026, 6, 10, 0, 0, 0);
 const sessionId = createKaxiSessionId();
@@ -264,4 +281,4 @@ assert.equal(parseLimit(undefined, AI_CHAT_DEFAULT_DAILY_QUOTA), 100);
 // 명시적 무제한은 여전히 유효
 assert.equal(parseLimit("unlimited", AI_CHAT_DEFAULT_RATE_LIMIT), 0);
 
-console.log("PASS chat security: signed ownership, Typebot gateway auth, bounded JSON, category inference, expiry, tamper protection, and magic-byte allowlist");
+console.log("PASS chat security: provenance, signed ownership, Typebot gateway auth, bounded JSON, category inference, expiry, tamper protection, and magic-byte allowlist");

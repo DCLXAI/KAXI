@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "crypto";
 import { createClient } from "@supabase/supabase-js";
+import { extractRagProvenance, resolveRagProvenance } from "../src/lib/n8n/provenance";
 import { signN8nPayload } from "../src/lib/n8n/signature";
 
 type EvaluationCase = {
@@ -41,6 +42,10 @@ type RagResponse = {
   }>;
   searchMeta?: { topScore?: number; noContext?: boolean; retrievedCount?: number; reranker?: string };
   executionId?: string;
+  workflowId?: string;
+  workflowVersionId?: string;
+  modelVersion?: string;
+  promptVersion?: string;
   error?: string;
 };
 
@@ -52,6 +57,7 @@ const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession:
 const limit = Math.min(Math.max(Number(process.env.RAG_EVAL_LIMIT || 100), 1), 200);
 const caseIdFilter = process.env.RAG_EVAL_CASE_ID?.trim() || "";
 const transport = process.env.RAG_EVAL_TRANSPORT?.trim() === "gateway" ? "gateway" : "direct-n8n";
+const expectedProvenance = resolveRagProvenance();
 
 function isRefusalAnswer(answer: string, locale: string) {
   const patterns: Record<string, RegExp> = {
@@ -141,7 +147,10 @@ const corpusVersion = createHash("sha256")
   .digest("hex");
 const runResult = await supabase.from("rag_evaluation_runs").insert({
   status: "running",
-  workflow_id: "EqX3C5c2WNWoKkSR",
+  workflow_id: expectedProvenance.workflowId,
+  workflow_version_id: expectedProvenance.workflowVersionId,
+  model_version: expectedProvenance.modelVersion,
+  prompt_version: expectedProvenance.promptVersion,
   corpus_version: corpusVersion,
   case_count: cases.length,
 }).select("id").single();
@@ -219,6 +228,18 @@ for (const testCase of cases) {
     }
     payload = rawPayload.data && typeof rawPayload.data === "object" ? rawPayload.data : rawPayload;
     if (!response.ok || payload.error) throw new Error(payload.error || `http_${response.status}`);
+
+    const responseProvenance = extractRagProvenance(payload);
+    if (!responseProvenance) {
+      failures.push("response_provenance_missing");
+    } else if (
+      responseProvenance.workflowId !== expectedProvenance.workflowId
+      || responseProvenance.workflowVersionId !== expectedProvenance.workflowVersionId
+      || responseProvenance.modelVersion !== expectedProvenance.modelVersion
+      || responseProvenance.promptVersion !== expectedProvenance.promptVersion
+    ) {
+      failures.push("response_provenance_mismatch");
+    }
 
     const sources = payload.sources || [];
     const retrievedDocIds = sources.map((source) => source.docId).filter((id): id is string => Boolean(id));
@@ -321,6 +342,10 @@ for (const testCase of cases) {
         refusalExpected: testCase.metadata?.expectedRefusal === true,
         syntheticAttachment: testCase.metadata?.hasSyntheticAttachment === true,
         executionId: payload.executionId || null,
+        workflowId: responseProvenance?.workflowId || null,
+        workflowVersionId: responseProvenance?.workflowVersionId || null,
+        modelVersion: responseProvenance?.modelVersion || null,
+        promptVersion: responseProvenance?.promptVersion || null,
       },
     });
   } catch (error) {
@@ -378,6 +403,7 @@ const completed = await supabase.from("rag_evaluation_runs").update({
     baseUrl,
     transport,
     caseIdFilter: caseIdFilter || null,
+    provenance: expectedProvenance,
   },
   completed_at: new Date().toISOString(),
 }).eq("id", runId);

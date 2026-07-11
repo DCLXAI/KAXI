@@ -12,7 +12,7 @@ import {
 import { validatePublishedTypebotRuntime } from "../src/lib/typebot/runtime-health";
 
 const expectedMigration = latestMigrationName();
-assert.equal(expectedMigration, "20260711193000_rag_strict_category_locale");
+assert.equal(expectedMigration, "20260711210000_rag_response_provenance");
 assert.equal(declaredRequiredMigration(), expectedMigration);
 
 const readyPayload = {

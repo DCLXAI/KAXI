@@ -1,4 +1,5 @@
 import { createSupabaseChatClient } from "@/lib/chat/persistence";
+import type { RagProvenance } from "@/lib/n8n/provenance";
 import { readPiiField } from "@/lib/privacy/pii";
 
 export type ChatHistorySource = {
@@ -8,7 +9,7 @@ export type ChatHistorySource = {
   checkedAt?: string;
 };
 
-export type ChatHistoryExchange = {
+export type ChatHistoryExchange = RagProvenance & {
   id: string;
   requestId: string;
   question: string;
@@ -47,6 +48,15 @@ function text(value: unknown, maxLength: number) {
   if (typeof value === "string") return value.trim().slice(0, maxLength);
   if (typeof value === "number" && Number.isFinite(value)) return String(value).slice(0, maxLength);
   return "";
+}
+
+function storedProvenance(value: Record<string, unknown>): RagProvenance {
+  return {
+    workflowId: text(value.workflow_id, 200) || "legacy-unversioned",
+    workflowVersionId: text(value.workflow_version_id, 200) || "legacy-unversioned",
+    modelVersion: text(value.model_version, 200) || "legacy-unversioned",
+    promptVersion: text(value.prompt_version, 200) || "legacy-unversioned",
+  };
 }
 
 function parseLegacySources(value: unknown) {
@@ -101,7 +111,7 @@ export async function loadChatSessionSnapshot(
 
   const messagesResult = await supabase
     .from("chat_messages")
-    .select("id,request_id,question,question_ciphertext,answer,answer_ciphertext,status,error_code,next_step,sources,sources_json,created_at")
+    .select("id,request_id,question,question_ciphertext,answer,answer_ciphertext,status,error_code,next_step,sources,sources_json,workflow_id,workflow_version_id,model_version,prompt_version,created_at")
     .eq("session_id", sessionKey)
     .eq("source", "kaxi-site")
     .eq("channel", "kaxi-site")
@@ -173,6 +183,7 @@ export async function loadChatSessionSnapshot(
       errorCode: text(message.error_code, 120) || undefined,
       nextStep: text(message.next_step, 2_000) || undefined,
       sources: normalizeChatHistorySources(rawSources),
+      ...storedProvenance(message),
       createdAt: text(message.created_at, 80),
     }];
   });

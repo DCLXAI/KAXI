@@ -29,6 +29,10 @@ assert(migration.includes("contact_ciphertext") && migration.includes("contact_h
 assert(handoffRoute.includes("preparePiiField(leadContact") && handoffRoute.includes("leadContactCiphertext"), "KAXI gateway must encrypt contact before n8n");
 assert(!handoffRoute.includes("\n      leadContact,\n"), "KAXI gateway must not forward raw contact as a payload field");
 assert(
+  handoffRoute.includes("resolveHandoffProvenance") && handoffRoute.includes("handoffJson"),
+  "Typebot handoff responses must expose workflow, model, and prompt provenance",
+);
+assert(
   handoffRoute.includes("hasAcceptedHandoffConsent") &&
     handoffRoute.includes("recordHandoffConsentEvidence") &&
     handoffRoute.includes('code: "CONSENT_REQUIRED"'),

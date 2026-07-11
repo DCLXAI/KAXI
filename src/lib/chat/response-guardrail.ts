@@ -9,6 +9,10 @@ export type GuardedChatResponse = {
   sources?: unknown;
   searchMeta?: unknown;
   executionId?: string;
+  workflowId?: string;
+  workflowVersionId?: string;
+  modelVersion?: string;
+  promptVersion?: string;
 };
 
 const WEATHER_PATTERN = /날씨|강수|기온|weather|rain probability|thời\s*tiết|khả\s*năng\s*mưa|nhiệt\s*độ|цаг\s*агаар|бороо|температур/iu;

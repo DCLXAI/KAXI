@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "crypto";
 import { createClient } from "@supabase/supabase-js";
+import type { RagProvenance } from "@/lib/n8n/provenance";
 import { preparePiiField } from "@/lib/privacy/pii";
 
 type SupabaseErrorLike = {
@@ -32,6 +33,7 @@ export interface PersistChatExchangeInput {
   nextStep?: string;
   attachments?: PersistedAttachmentInput[];
   executionId?: string;
+  provenance: RagProvenance;
   sources?: unknown;
   searchMeta?: unknown;
   latencyMs?: number;
@@ -321,6 +323,10 @@ async function persistRetrievalRun(input: PersistChatExchangeInput, messageId: n
     message_id: messageId,
     session_id: input.sessionKey,
     execution_id: input.executionId || null,
+    workflow_id: input.provenance.workflowId,
+    workflow_version_id: input.provenance.workflowVersionId,
+    model_version: input.provenance.modelVersion,
+    prompt_version: input.provenance.promptVersion,
     query: protectedQuery.plaintext || "",
     query_ciphertext: protectedQuery.ciphertext,
     query_hash: protectedQuery.hash,
@@ -349,7 +355,10 @@ async function persistN8nAuditMetadata(input: PersistChatExchangeInput, messageI
   const protectedAnswer = protectConversationText(input.answer, 8_000);
   const payload = compactUndefined({
     execution_id: input.executionId || undefined,
-    workflow_id: configured(process.env.N8N_RAG_WORKFLOW_ID) || undefined,
+    workflow_id: input.provenance.workflowId,
+    workflow_version_id: input.provenance.workflowVersionId,
+    model_version: input.provenance.modelVersion,
+    prompt_version: input.provenance.promptVersion,
     source_chat_message_id: messageId,
     request_id: input.requestId,
     idempotency_key: input.idempotencyKey,
@@ -464,6 +473,10 @@ async function updateExistingChatExchange(
       risk_level: input.riskLevel || "low",
       needs_human: Boolean(input.needsHuman),
       execution_id: input.executionId,
+      workflow_id: input.provenance.workflowId,
+      workflow_version_id: input.provenance.workflowVersionId,
+      model_version: input.provenance.modelVersion,
+      prompt_version: input.provenance.promptVersion,
       status,
       error_code: status === "completed" ? null : input.errorCode || "request_failed",
       lead_stage: input.leadStage,
@@ -531,6 +544,10 @@ export async function persistChatExchange(input: PersistChatExchangeInput) {
     source: input.source,
     channel: input.source === "typebot" ? "typebot" : "kaxi-site",
     execution_id: input.executionId,
+    workflow_id: input.provenance.workflowId,
+    workflow_version_id: input.provenance.workflowVersionId,
+    model_version: input.provenance.modelVersion,
+    prompt_version: input.provenance.promptVersion,
     status: input.status || "completed",
     error_code: input.status === "failed" ? input.errorCode || "request_failed" : null,
     n8n_request: null,

@@ -50,6 +50,10 @@ const server = Bun.serve({
           answer_ciphertext: null,
           status: "failed",
           error_code: "n8n_unavailable",
+          workflow_id: "workflow-history",
+          workflow_version_id: "workflow-history-v1",
+          model_version: "model-history-v1",
+          prompt_version: "prompt-history-v1",
           next_step: null,
           sources: null,
           sources_json: "[]",
@@ -64,6 +68,10 @@ const server = Bun.serve({
           answer_ciphertext: firstAnswer.ciphertext,
           status: "completed",
           error_code: null,
+          workflow_id: "workflow-history",
+          workflow_version_id: "workflow-history-v1",
+          model_version: "model-history-v1",
+          prompt_version: "prompt-history-v1",
           next_step: "학교 발급 서류의 최신 양식을 확인하세요.",
           sources: null,
           sources_json: "[]",
@@ -163,6 +171,10 @@ try {
   assert.equal(snapshot.messages.length, 2);
   assert.equal(snapshot.messages[0].question, "D-4 비자 준비 서류를 알려주세요.");
   assert.equal(snapshot.messages[0].answer, "여권과 입학허가서 등 공식 서류를 확인하세요.");
+  assert.equal(snapshot.messages[0].workflowId, "workflow-history");
+  assert.equal(snapshot.messages[0].workflowVersionId, "workflow-history-v1");
+  assert.equal(snapshot.messages[0].modelVersion, "model-history-v1");
+  assert.equal(snapshot.messages[0].promptVersion, "prompt-history-v1");
   assert.equal(snapshot.messages[0].sources.length, 1, "unsafe citation URLs must be removed");
   assert.equal(snapshot.messages[0].sources[0].sourceUrl, "https://www.hikorea.go.kr/");
   assert.equal(snapshot.messages[1].status, "failed");

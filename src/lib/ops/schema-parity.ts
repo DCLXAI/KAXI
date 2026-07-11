@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 
-export const REQUIRED_PRODUCTION_MIGRATION = "20260711193000_rag_strict_category_locale";
+export const REQUIRED_PRODUCTION_MIGRATION = "20260711210000_rag_response_provenance";
 
 const REQUIRED_SCHEMA_OBJECTS = [
   "migration_ledger",
@@ -19,6 +19,7 @@ const REQUIRED_SCHEMA_OBJECTS = [
   "partner_request_assignment",
   "user_notifications",
   "rag_strict_locale_search",
+  "rag_provenance_columns",
 ] as const;
 
 type RequiredSchemaObject = (typeof REQUIRED_SCHEMA_OBJECTS)[number];
@@ -88,7 +89,19 @@ export async function checkProductionSchemaParity(): Promise<SchemaParityResult>
             'v_category_mode' IN pg_get_functiondef(
               to_regprocedure('public.match_rag_documents(vector,integer,jsonb)')
             )
-          ) > 0 AS rag_strict_locale_search
+          ) > 0 AS rag_strict_locale_search,
+        (
+          SELECT count(*) = 24
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name IN (
+              'chat_messages', 'retrieval_runs', 'n8n_audit_messages',
+              'ops_events', 'system_health_runs', 'rag_evaluation_runs'
+            )
+            AND column_name IN (
+              'workflow_id', 'workflow_version_id', 'model_version', 'prompt_version'
+            )
+        ) AS rag_provenance_columns
     `;
     const row = rows[0];
     const missing = REQUIRED_SCHEMA_OBJECTS.filter((key) => row?.[key] !== true);

@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
 import { getRagServingProjectionStatus } from "@/lib/knowledge/serving-projection";
 import { sendOpsAlert } from "@/lib/ops/alerts";
+import { extractRagProvenance, resolveRagProvenance } from "@/lib/n8n/provenance";
 import { signN8nPayload } from "@/lib/n8n/signature";
 import {
   TypebotRuntimeTurn,
@@ -157,9 +158,11 @@ export async function checkN8nRagWorkflow(supabase = serviceClient()) {
       : payload;
     const answer = typeof normalized.answer === "string" ? normalized.answer.trim() : "";
     const sources = Array.isArray(normalized.sources) ? normalized.sources : [];
+    const provenance = extractRagProvenance(normalized);
     if (!response.ok) throw new Error(`n8n RAG workflow returned HTTP ${response.status}`);
     if (answer.length < 20) throw new Error("n8n RAG workflow returned an empty or incomplete answer");
     if (sources.length === 0) throw new Error("n8n RAG workflow returned no grounded sources");
+    if (!provenance) throw new Error("n8n RAG workflow returned incomplete provenance");
 
     return {
       ok: true,
@@ -169,6 +172,7 @@ export async function checkN8nRagWorkflow(supabase = serviceClient()) {
         answerLength: answer.length,
         sourceCount: sources.length,
         executionTracked: typeof normalized.executionId === "string",
+        ...provenance,
       },
     };
   } finally {
@@ -179,6 +183,7 @@ export async function checkN8nRagWorkflow(supabase = serviceClient()) {
 export async function runRagSystemHealth(triggerSource = "manual") {
   const started = Date.now();
   const supabase = serviceClient();
+  const provenance = resolveRagProvenance();
   const bucket = configured(process.env.SUPABASE_CHAT_ATTACHMENTS_BUCKET) || configured(process.env.SUPABASE_STORAGE_BUCKET) || "kaxi-documents";
   const n8nWebhook = configured(process.env.N8N_TYPEBOT_RAG_WEBHOOK_URL);
   const typebotUrl = configured(process.env.TYPEBOT_PUBLIC_URL);
@@ -264,6 +269,10 @@ export async function runRagSystemHealth(triggerSource = "manual") {
     checks,
     failed_checks: failed.length,
     duration_ms: durationMs,
+    workflow_id: provenance.workflowId,
+    workflow_version_id: provenance.workflowVersionId,
+    model_version: provenance.modelVersion,
+    prompt_version: provenance.promptVersion,
   }).select("id").single();
   if (inserted.error) throw inserted.error;
 
@@ -281,6 +290,10 @@ export async function runRagSystemHealth(triggerSource = "manual") {
       source: "kaxi-health",
       severity: summary.severity,
       event_type: eventType,
+      workflow_id: provenance.workflowId,
+      workflow_version_id: provenance.workflowVersionId,
+      model_version: provenance.modelVersion,
+      prompt_version: provenance.promptVersion,
       execution_id: inserted.data.id,
       message,
       payload: {
@@ -305,7 +318,7 @@ export async function runRagSystemHealth(triggerSource = "manual") {
       adminUrl: `${configured(process.env.NEXT_PUBLIC_APP_URL) || "https://kaxi.vercel.app"}/admin`,
     });
   }
-  return { id: inserted.data.id, status, checkedAt: new Date().toISOString(), durationMs, checks, alert };
+  return { id: inserted.data.id, status, checkedAt: new Date().toISOString(), durationMs, checks, alert, ...provenance };
 }
 
 export async function getLatestRagSystemHealth() {

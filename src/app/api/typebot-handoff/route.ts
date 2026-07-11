@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getClientIp, parseLimit, rateLimit } from "@/lib/api/security";
 import { JsonBodyError, readJsonBody } from "@/lib/api/json-body";
+import {
+  ragProvenanceHeaders,
+  resolveRagProvenance,
+  type RagProvenance,
+} from "@/lib/n8n/provenance";
 import { signN8nPayload, verifyTypebotHandoffToken } from "@/lib/n8n/signature";
 import { canPersistPiiValue, preparePiiField } from "@/lib/privacy/pii";
 import {
@@ -14,6 +19,8 @@ import { verifyTypebotGatewayHeaders } from "@/lib/typebot/gateway-auth";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
+const HANDOFF_PROMPT_VERSION = "kaxi-handoff-update@2026-07-11.provenance-v1";
+
 function text(value: unknown, maxLength: number) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
@@ -21,6 +28,53 @@ function text(value: unknown, maxLength: number) {
 function configured(value: string | undefined) {
   const result = value?.trim() || "";
   return !result || /^(replace-with-|change_me)/i.test(result) ? "" : result;
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function resolveHandoffProvenance(value?: unknown): RagProvenance {
+  const candidate = record(value);
+  return resolveRagProvenance({
+    ...candidate,
+    promptVersion:
+      typeof candidate.promptVersion === "string" && candidate.promptVersion.trim()
+        ? candidate.promptVersion
+        : HANDOFF_PROMPT_VERSION,
+  });
+}
+
+function addHandoffProvenanceHeaders(response: NextResponse, provenance: RagProvenance) {
+  for (const [name, value] of Object.entries(ragProvenanceHeaders(provenance))) {
+    response.headers.set(name, value);
+  }
+  return response;
+}
+
+function handoffJson(
+  body: Record<string, unknown>,
+  init?: ResponseInit,
+  provenanceInput?: unknown,
+) {
+  const provenance = resolveHandoffProvenance(provenanceInput);
+  return addHandoffProvenanceHeaders(
+    NextResponse.json({ ...body, ...provenance }, init),
+    provenance,
+  );
+}
+
+async function handoffRateLimitJson(response: NextResponse) {
+  const payload = await response.json().catch(() => ({ error: "Rate limit unavailable" }));
+  const headers = new Headers();
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter) headers.set("retry-after", retryAfter);
+  return handoffJson(
+    record(payload).error ? record(payload) : { error: "Rate limit unavailable" },
+    { status: response.status, headers },
+  );
 }
 
 function redactName(value: string) {
@@ -53,11 +107,11 @@ export async function POST(req: NextRequest) {
     limit: parseLimit(process.env.TYPEBOT_HANDOFF_RATE_LIMIT, 10),
     windowMs: 60 * 1000,
   });
-  if (limited) return limited;
+  if (limited) return handoffRateLimitJson(limited);
 
   try {
     if (!verifyTypebotGatewayHeaders(req.headers)) {
-      return NextResponse.json({ error: "Unauthorized Typebot gateway" }, { status: 401 });
+      return handoffJson({ error: "Unauthorized Typebot gateway" }, { status: 401 });
     }
     const body = await readJsonBody<Record<string, unknown>>(req, 32 * 1024);
     const typebotResultId = text(body?.typebotResultId, 120);
@@ -70,17 +124,17 @@ export async function POST(req: NextRequest) {
       !leadContact ||
       !verifyTypebotHandoffToken(sessionId, handoffToken)
     ) {
-      return NextResponse.json({ error: "Invalid handoff request" }, { status: 401 });
+      return handoffJson({ error: "Invalid handoff request" }, { status: 401 });
     }
     if (!(await typebotSessionExists(sessionId))) {
-      return NextResponse.json({ error: "Typebot session not found" }, { status: 404 });
+      return handoffJson({ error: "Typebot session not found" }, { status: 404 });
     }
     const locale = text(body?.locale, 8) || "ko";
     if (!hasAcceptedHandoffConsent({
       consent: body?.privacyConsent,
       noticeVersion: body?.privacyNoticeVersion,
     })) {
-      return NextResponse.json({
+      return handoffJson({
         error: "Explicit consent is required before collecting contact information",
         code: "CONSENT_REQUIRED",
         noticeVersion: HANDOFF_NOTICE_VERSION,
@@ -98,7 +152,7 @@ export async function POST(req: NextRequest) {
     const question = text(body?.question, 1_200);
     const answer = text(body?.answer, 8_000);
     if (![leadContact, leadName, leadNote, question, answer].every(canPersistPiiValue)) {
-      return NextResponse.json({ error: "PII encryption is not configured" }, { status: 503 });
+      return handoffJson({ error: "PII encryption is not configured" }, { status: 503 });
     }
     const protectedContact = preparePiiField(leadContact, { kind: "contact", maxPlainLength: 160 });
     const protectedName = preparePiiField(leadName, { kind: "text", maxPlainLength: 80 });
@@ -144,21 +198,24 @@ export async function POST(req: NextRequest) {
       body: signed.body,
       signal: AbortSignal.timeout(25_000),
     });
-    const responseBody = await response.json().catch(() => ({}));
-    if (!response.ok) return NextResponse.json({ error: "handoff update failed" }, { status: 502 });
-    return NextResponse.json(responseBody);
+    const responseBody = record(await response.json().catch(() => ({})));
+    const provenance = resolveHandoffProvenance(responseBody);
+    if (!response.ok) {
+      return handoffJson({ error: "handoff update failed" }, { status: 502 }, provenance);
+    }
+    return handoffJson(responseBody, undefined, provenance);
   } catch (error) {
     if (error instanceof JsonBodyError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return handoffJson({ error: error.message }, { status: error.status });
     }
     if (
       error instanceof Error &&
       (error.message === "N8N_WEBHOOK_NOT_CONFIGURED" ||
         error.message === "SUPABASE_CHAT_PERSISTENCE_NOT_CONFIGURED")
     ) {
-      return NextResponse.json({ error: "handoff service is not configured" }, { status: 503 });
+      return handoffJson({ error: "handoff service is not configured" }, { status: 503 });
     }
     console.error("[POST /api/typebot-handoff]", error);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return handoffJson({ error: "Internal error" }, { status: 500 });
   }
 }
