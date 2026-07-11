@@ -22,11 +22,12 @@ async function expectAuthError(operation: Promise<unknown>, code: string) {
 
 prepareTestDb("supabase auth bridge");
 
-const [otpRouteSource, bootstrapAdminSource, passwordResetSource, supabaseConfigSource] = await Promise.all([
+const [otpRouteSource, bootstrapAdminSource, passwordResetSource, supabaseConfigSource, supabaseDynamicSource] = await Promise.all([
   Bun.file(new URL("../src/app/api/auth/supabase/otp/route.ts", import.meta.url)).text(),
   Bun.file(new URL("./bootstrap-supabase-admin.ts", import.meta.url)).text(),
   Bun.file(new URL("../src/components/auth/PasswordResetForm.tsx", import.meta.url)).text(),
   Bun.file(new URL("../src/lib/supabase/config.ts", import.meta.url)).text(),
+  Bun.file(new URL("../src/lib/supabase/dynamic.ts", import.meta.url)).text(),
 ]);
 assert(otpRouteSource.includes('new URL("/auth/complete"'), "implicit email links should use the browser completion route");
 assert(
@@ -41,6 +42,11 @@ assert(
   supabaseConfigSource.includes("process.env.NEXT_PUBLIC_SUPABASE_URL") &&
     supabaseConfigSource.includes("process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY"),
   "client Supabase config must use statically analyzable NEXT_PUBLIC environment references"
+);
+assert(
+  supabaseDynamicSource.includes("createBrowserClient") &&
+    supabaseDynamicSource.includes("createServerClient"),
+  "Supabase dynamic loader must expose both browser and server client factories"
 );
 
 const { db } = await import("../src/lib/db");

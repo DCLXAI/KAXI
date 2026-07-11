@@ -86,6 +86,7 @@ export interface SupabaseClientLike {
 }
 
 type SupabaseSsrModule = {
+  createBrowserClient: (...args: unknown[]) => SupabaseClientLike;
   createServerClient: (...args: unknown[]) => SupabaseClientLike;
 };
 
@@ -94,11 +95,14 @@ type SupabaseJsModule = {
 };
 
 export async function loadSupabaseSsr(): Promise<SupabaseSsrModule> {
-  return { createServerClient: createServerClient as unknown as SupabaseSsrModule["createServerClient"] };
+  return {
+    createBrowserClient: createBrowserClient as unknown as SupabaseSsrModule["createBrowserClient"],
+    createServerClient: createServerClient as unknown as SupabaseSsrModule["createServerClient"],
+  };
 }
 
 export async function loadSupabaseJs(): Promise<SupabaseJsModule> {
   return { createClient: createClient as unknown as SupabaseJsModule["createClient"] };
 }
-import { createServerClient } from "@supabase/ssr";
+import { createBrowserClient, createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
