@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 
-export const REQUIRED_PRODUCTION_MIGRATION = "20260711223000_legacy_rag_cutover_safe_delete";
+export const REQUIRED_PRODUCTION_MIGRATION = "20260712120000_diagnosis_lead_user";
 
 const REQUIRED_SCHEMA_OBJECTS = [
   "migration_ledger",

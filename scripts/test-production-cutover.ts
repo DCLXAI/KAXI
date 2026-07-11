@@ -12,7 +12,7 @@ import {
 import { validatePublishedTypebotRuntime } from "../src/lib/typebot/runtime-health";
 
 const expectedMigration = latestMigrationName();
-assert.equal(expectedMigration, "20260711223000_legacy_rag_cutover_safe_delete");
+assert.equal(expectedMigration, "20260712120000_diagnosis_lead_user");
 assert.equal(declaredRequiredMigration(), expectedMigration);
 
 const readyPayload = {
