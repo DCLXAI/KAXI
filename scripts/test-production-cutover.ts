@@ -97,6 +97,26 @@ assert.match(
   /runtime failure/,
 );
 assert.match(
+  validatePublishedTypebotRuntime(start, {
+    messages: [
+      { id: "block_chat_persistence_warning", content: { richText: [{ children: [{ text: "대화 기록 저장을 확인하지 못했어요." }] }] } },
+      { id: "block_answer", content: { richText: [{ children: [{ text: "문서 기준 답변입니다." }] }] } },
+    ],
+    input: { id: "block_followup", type: "choice input" },
+  }).join(" "),
+  /chat persistence was not confirmed/,
+);
+assert.match(
+  validatePublishedTypebotRuntime(start, {
+    messages: [
+      { id: "block_answer", content: { richText: [{ children: [{ text: "담당자 연결이 필요합니다." }] }] } },
+      { id: "block_handoff_save_failed", content: { richText: [{ children: [{ text: "상담 요청을 저장하지 못했어요." }] }] } },
+    ],
+    input: { id: "block_handoff_save_failed_choice", type: "choice input" },
+  }).join(" "),
+  /handoff persistence was not confirmed/,
+);
+assert.match(
   typebotGateErrors(start, {
     messages: [{ id: "block_answer", content: { richText: [{ children: [{ text: "인증되지 않은 요청입니다." }] }] } }],
     input: { id: "block_lead_name", type: "text input" },

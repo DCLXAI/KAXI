@@ -47,6 +47,8 @@ leadStage     <- data.leadStage
 nextStep      <- data.nextStep
 sources       <- data.sources
 handoffToken  <- data.handoffToken
+persisted     <- data.persisted
+persistenceMode <- data.persistenceMode
 ```
 
 The current Typebot MCP draft uses these exact body paths. A typical response is:
@@ -79,9 +81,12 @@ The current Typebot MCP draft uses these exact body paths. A typical response is
   "promptVersion": "kaxi-grounded-context-answer@2026-07-11.reranker-v2",
   "handoffToken": "short-lived-signed-token",
   "persisted": true,
-  "messageId": "123"
+  "messageId": "123",
+  "persistenceMode": "inserted"
 }
 ```
+
+The published Typebot checks `persisted` before showing the normal response path. `true` continues directly to the answer; `false` or an empty mapping shows a storage warning first, then preserves the answer so the user is not left without guidance. The published-runtime health check treats that warning as degraded even when an answer block is present.
 
 The same four provenance fields are returned on validation, authorization, upstream, and persistence-error responses and are mirrored in `x-kaxi-workflow-id`, `x-kaxi-workflow-version-id`, `x-kaxi-model-version`, and `x-kaxi-prompt-version` headers. Canonical chat, retrieval, n8n audit, health, operations-event, and evaluation records store dedicated queryable columns for the same contract.
 
@@ -92,12 +97,19 @@ flowchart LR
   A["Start / Welcome"] --> B["Question input"]
   B --> C["Set sessionId = typebot-Result ID"]
   C --> D["POST KAXI /api/typebot-rag"]
-  D --> E["Show answer and nextStep"]
+  D --> P{"persisted = true?"}
+  P -- "yes" --> E["Show answer and nextStep"]
+  P -- "no / empty" --> W["Warn that chat history was not saved"]
+  W --> E
   E --> F{"needsHuman or medium/high risk?"}
   F -- "no" --> G["Ask another / Finish"]
   F -- "yes" --> H["Collect name, contact, note"]
   H --> I["POST KAXI /api/typebot-handoff"]
-  I --> G
+  I --> J{"ok = true?"}
+  J -- "yes" --> G
+  J -- "no / empty" --> K["Show save failure"]
+  K -- "retry" --> I
+  K -- "continue" --> G
   G -- "ask another" --> B
 ```
 
@@ -133,7 +145,7 @@ Timeout: 45s
 }
 ```
 
-Map the response from top-level `status` and `leadId`. KAXI verifies the short-lived token, confirms that the Typebot session exists, encrypts contact and free-form handoff PII, then sends a second signed webhook to n8n. Supabase updates the existing KAXI-owned `handoff_tasks` row and writes `leads` plus `lead_contacts` without exposing service credentials to Typebot.
+Map `handoffSaved <- data.ok`, plus `status <- data.status` and `leadId <- data.leadId`. `handoffSaved=true` shows the completed message. A false or empty value shows an explicit not-saved message with `retry` and `continue without handoff` choices; it never claims that an unconfirmed request was accepted. KAXI verifies the short-lived token, confirms that the Typebot session exists, encrypts contact and free-form handoff PII, then sends a second signed webhook to n8n. Supabase updates the existing KAXI-owned `handoff_tasks` row and writes `leads` plus `lead_contacts` without exposing service credentials to Typebot.
 
 ## n8n Contracts
 
@@ -192,6 +204,8 @@ The sync command refuses to write unless the active n8n capability contract matc
 ## Production Checks
 
 - Typebot response mappings use `data.answer` and the corresponding `data.*` expressions in the HTTP Request block context.
+- Typebot maps `data.persisted` and `data.persistenceMode`; an unconfirmed chat write shows `block_chat_persistence_warning` before the answer.
+- Typebot maps handoff `data.ok`; an unconfirmed handoff shows `block_handoff_save_failed` and offers retry or return to general consultation.
 - `sessionId` remains stable for the Typebot Result ID.
 - Repeated high-risk requests create one open handoff task but still return and audit every execution.
 - Failed KAXI/n8n turns are stored with `status=failed` and an `error_code`; a successful retry with the same idempotency key upgrades the canonical row.

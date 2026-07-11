@@ -25,6 +25,10 @@ export function typebotRuntimeMessageTextById(turn: TypebotRuntimeTurn, messageI
   });
 }
 
+function hasRuntimeMessage(turn: TypebotRuntimeTurn, messageId: string) {
+  return (turn.messages || []).some((message) => message.id === messageId);
+}
+
 export function validatePublishedTypebotRuntime(
   start: TypebotRuntimeTurn,
   continuation: TypebotRuntimeTurn,
@@ -34,6 +38,13 @@ export function validatePublishedTypebotRuntime(
   if (!start.sessionId) errors.push("Typebot startChat did not return a sessionId");
   if (!start.typebot?.publishedAt) errors.push("Typebot does not expose a published version");
   if (start.input?.id !== "block_question") errors.push(`unexpected initial input: ${start.input?.id || "missing"}`);
+
+  if (hasRuntimeMessage(continuation, "block_chat_persistence_warning")) {
+    errors.push("Typebot chat persistence was not confirmed");
+  }
+  if (hasRuntimeMessage(continuation, "block_handoff_save_failed")) {
+    errors.push("Typebot handoff persistence was not confirmed");
+  }
 
   const answerText = typebotRuntimeMessageTextById(continuation, "block_answer");
   if (!answerText || FAILURE_TEXT.test(answerText)) {
