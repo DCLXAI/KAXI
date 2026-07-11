@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { AlertTriangle, ArrowRight, CheckCircle2, Clock, FileText, Loader2, LogIn, Save } from "lucide-react";
 import { pickLang, recommendPath } from "@/lib/data/diagnosis";
-import { localePath, type Locale } from "@/i18n/routing";
+import type { Locale } from "@/i18n/routing";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -125,7 +125,7 @@ export function DiagnosisResult({
             <LogIn className="h-3.5 w-3.5 shrink-0 text-primary" />
             <span>{t("diagnose_login_nudge")}</span>
             <Link
-              href={localePath(locale, "/student/login")}
+              href={`/login?lang=${locale}`}
               className="font-medium text-primary underline-offset-2 hover:underline"
             >
               {t("nav_login")} →
