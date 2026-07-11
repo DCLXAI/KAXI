@@ -3,10 +3,39 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
-import { Activity, BookMarked, ClipboardList, FileClock, FileSearch, Headphones, Loader2, LogOut, Scale, ShieldCheck } from "lucide-react";
+import {
+  Activity,
+  BookMarked,
+  ChevronDown,
+  ClipboardList,
+  FileClock,
+  FileSearch,
+  Headphones,
+  Loader2,
+  LogOut,
+  Menu,
+  Scale,
+  ShieldCheck,
+  type LucideIcon,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { useKaxiSession } from "@/hooks/useKaxiSession";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
@@ -24,15 +53,119 @@ export function useAdminApi() {
   return context;
 }
 
-const navItems = [
-  { href: "/admin/cases", label: "케이스", icon: ClipboardList },
-  { href: "/admin/documents", label: "서류검증", icon: FileSearch },
-  { href: "/admin/rules", label: "룰", icon: Scale },
-  { href: "/admin/knowledge", label: "지식", icon: BookMarked },
-  { href: "/admin/handoffs", label: "상담전환", icon: Headphones },
-  { href: "/admin/ops", label: "운영", icon: Activity },
-  { href: "/admin/audit", label: "감사", icon: FileClock },
+interface AdminNavItem {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+}
+
+interface AdminNavGroup {
+  key: string;
+  label: string;
+  items: AdminNavItem[];
+}
+
+const navGroups: AdminNavGroup[] = [
+  {
+    key: "work",
+    label: "업무",
+    items: [
+      { href: "/admin/cases", label: "케이스", icon: ClipboardList },
+      { href: "/admin/documents", label: "서류검증", icon: FileSearch },
+      { href: "/admin/handoffs", label: "상담전환", icon: Headphones },
+    ],
+  },
+  {
+    key: "content",
+    label: "정책·지식",
+    items: [
+      { href: "/admin/rules", label: "룰", icon: Scale },
+      { href: "/admin/knowledge", label: "지식", icon: BookMarked },
+    ],
+  },
+  {
+    key: "system",
+    label: "시스템",
+    items: [
+      { href: "/admin/ops", label: "운영", icon: Activity },
+      { href: "/admin/audit", label: "감사", icon: FileClock },
+    ],
+  },
 ];
+
+function isAdminNavItemActive(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function AdminNavDropdown({ group, pathname }: { group: AdminNavGroup; pathname: string }) {
+  const active = group.items.some((item) => isAdminNavItemActive(pathname, item.href));
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant={active ? "secondary" : "ghost"} size="sm" className="gap-1">
+          {group.label}
+          <ChevronDown className="h-3.5 w-3.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-44">
+        {group.items.map((item) => {
+          const Icon = item.icon;
+          return (
+            <DropdownMenuItem key={item.href} asChild>
+              <Link href={item.href} className="gap-2">
+                <Icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function AdminMobileNav({ pathname }: { pathname: string }) {
+  return (
+    <Sheet>
+      <SheetTrigger asChild>
+        <Button variant="ghost" size="icon" className="md:hidden" aria-label="관리 메뉴 열기">
+          <Menu className="h-5 w-5" />
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="right" className="w-[min(88vw,22rem)]">
+        <SheetHeader className="border-b">
+          <SheetTitle>KAXI Admin</SheetTitle>
+          <SheetDescription className="sr-only">관리 메뉴</SheetDescription>
+        </SheetHeader>
+        <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-4 pb-6" aria-label="관리 메뉴">
+          {navGroups.map((group) => (
+            <div key={group.key} className="space-y-1">
+              <p className="px-2 text-xs font-medium text-muted-foreground">{group.label}</p>
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const active = isAdminNavItemActive(pathname, item.href);
+                return (
+                  <SheetClose key={item.href} asChild>
+                    <Link
+                      href={item.href}
+                      className={`flex h-10 items-center gap-3 rounded-md px-2 text-sm font-medium transition-colors hover:bg-accent ${
+                        active ? "bg-accent text-accent-foreground" : "text-foreground"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 text-muted-foreground" />
+                      {item.label}
+                    </Link>
+                  </SheetClose>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
+      </SheetContent>
+    </Sheet>
+  );
+}
 
 function AdminAuthGate({ authenticated, available, onSignOut }: { authenticated: boolean; available: boolean; onSignOut: () => void }) {
   return (
@@ -120,39 +253,19 @@ export function AdminShell({ children }: { children: ReactNode }) {
               <span>KAXI Admin</span>
             </Link>
             <nav className="hidden items-center gap-1 md:flex">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-                return (
-                  <Button key={item.href} variant={active ? "secondary" : "ghost"} size="sm" asChild>
-                    <Link href={item.href} className="gap-1.5">
-                      <Icon className="h-3.5 w-3.5" />
-                      {item.label}
-                    </Link>
-                  </Button>
-                );
-              })}
+              {navGroups.map((group) => (
+                <AdminNavDropdown key={group.key} group={group} pathname={pathname} />
+              ))}
             </nav>
             <div className="ml-auto flex items-center gap-2">
-              <Badge variant="outline" className="gap-1">
+              <AdminMobileNav pathname={pathname} />
+              <Badge variant="outline" className="hidden gap-1 sm:inline-flex">
                 <ShieldCheck className="h-3 w-3" />
                 Supabase Auth
               </Badge>
               <Button variant="outline" size="sm" onClick={signOut} aria-label="로그아웃">
                 <LogOut className="h-3.5 w-3.5" />
               </Button>
-            </div>
-          </div>
-          <div className="border-t bg-muted/30 md:hidden">
-            <div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 py-2">
-              {navItems.map((item) => {
-                const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-                return (
-                  <Button key={item.href} variant={active ? "secondary" : "ghost"} size="sm" asChild>
-                    <Link href={item.href}>{item.label}</Link>
-                  </Button>
-                );
-              })}
             </div>
           </div>
         </header>

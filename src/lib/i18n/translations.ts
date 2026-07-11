@@ -12,12 +12,22 @@ export const LANGS: { code: Lang; label: string; flag: string }[] = [
 export const t = {
   // 네비게이션
   brand: { ko: "KAXI", vi: "KAXI", mn: "KAXI", en: "KAXI" },
+  nav_ai_support: { ko: "AI 상담", vi: "Tư vấn AI", mn: "AI зөвлөгөө", en: "AI Support" },
+  nav_study_prep: { ko: "유학 준비", vi: "Chuẩn bị du học", mn: "Суралцах бэлтгэл", en: "Study Prep" },
+  nav_agent: { ko: "AI 에이전트", vi: "AI Agent", mn: "AI Agent", en: "AI Agent" },
+  nav_consult: { ko: "전문 상담", vi: "Tư vấn chuyên môn", mn: "Мэргэжлийн зөвлөгөө", en: "Expert Consultation" },
   nav_diagnose: { ko: "유학 경로 진단", vi: "Đánh giá lộ trình", mn: "Маршрутын үнэлгээ", en: "Path Diagnosis" },
   nav_schools: { ko: "학교 비교", vi: "So sánh trường", mn: "Сургуулийн харьцуулалт", en: "Compare Schools" },
   nav_cost: { ko: "비용 계산기", vi: "Tính chi phí", mn: "Зардал тооцоолуур", en: "Cost Calculator" },
   nav_docs: { ko: "서류 워크스페이스", vi: "Hồ sơ", mn: "Баримт бичиг", en: "Document Workspace" },
+  nav_my_docs: { ko: "내 서류", vi: "Hồ sơ của tôi", mn: "Миний баримт", en: "My Documents" },
   nav_partners: { ko: "파트너 연결", vi: "Đối tác", mn: "Түншийн холбоо", en: "Partners" },
+  nav_expert_support: { ko: "전문가 연결", vi: "Kết nối chuyên gia", mn: "Мэргэжилтэнтэй холбогдох", en: "Expert Support" },
   nav_admin: { ko: "관리자", vi: "Quản trị", mn: "Админ", en: "Admin" },
+  nav_admin_console: { ko: "관리 콘솔", vi: "Bảng quản trị", mn: "Удирдлагын самбар", en: "Admin Console" },
+  nav_menu: { ko: "전체 메뉴", vi: "Menu chính", mn: "Үндсэн цэс", en: "Full Menu" },
+  nav_login: { ko: "로그인", vi: "Đăng nhập", mn: "Нэвтрэх", en: "Sign in" },
+  nav_logout: { ko: "로그아웃", vi: "Đăng xuất", mn: "Гарах", en: "Sign out" },
 
   // 랜딩
   hero_badge: { ko: "공식 정보 기반 · 브로커 없이 준비", vi: "Dựa trên thông tin chính thức · Không cần môi giới", mn: "Албан ёсны мэдээлэлд үндэслэсэн · Зуучлагчгүй", en: "Official info based · No broker needed" },
