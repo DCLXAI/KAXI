@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { defaultLocale, isLocale } from "@/i18n/routing";
 import { useLeadStore } from "@/store/kbridge";
 import { recommendPath, type DiagnosisInput } from "@/lib/data/diagnosis";
@@ -20,6 +20,7 @@ const DEFAULT_INPUT: DiagnosisInput = {
 };
 
 export function useDiagnosisFlow() {
+  const t = useTranslations();
   const activeLocale = useLocale();
   const locale = isLocale(activeLocale) ? activeLocale : defaultLocale;
   const { saveDiagnosis, savingDiagnosis, currentDiagnosis, updateCurrentDiagnosisRecommendation } = useLeadStore();
@@ -73,7 +74,7 @@ export function useDiagnosisFlow() {
     if (leadId) {
       setShowSave(true);
     } else {
-      setSaveError(locale === "ko" ? "저장 중 오류가 발생했습니다. 다시 시도해주세요." : "Save error. Please retry.");
+      setSaveError(t("diagnose_save_error"));
     }
   };
 
