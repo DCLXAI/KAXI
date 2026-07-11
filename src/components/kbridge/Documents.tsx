@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useLangStore, useLeadStore } from "@/store/kbridge";
 import { tr, type Lang } from "@/lib/i18n/translations";
+import { KaxiCat } from "@/components/brand/KaxiCat";
 import {
   DOCUMENT_WORKFLOW_ITEMS,
   DOCUMENT_WORKFLOW_STAGES,
@@ -390,11 +391,11 @@ export function Documents({ onNavigate }: { onNavigate: (view: string) => void }
     <div className="mx-auto max-w-6xl space-y-7 px-4 py-8 sm:px-6 sm:py-10">
       <header className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div className="max-w-3xl">
-          <h1 className="text-2xl font-bold sm:text-3xl">{tr("docs_title", lang)}</h1>
+          <h1 className="font-serif text-2xl font-bold sm:text-3xl">{tr("docs_title", lang)}</h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground sm:text-base">{tr("docs_subtitle", lang)}</p>
         </div>
         <Button variant="outline" size="sm" onClick={() => loadDocuments()} disabled={loading} className="self-start">
-          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+          {loading ? <KaxiCat state="running" size={16} /> : <RefreshCw className="h-3.5 w-3.5" />}
           {copy.refresh}
         </Button>
       </header>
@@ -432,12 +433,12 @@ export function Documents({ onNavigate }: { onNavigate: (view: string) => void }
       </section>
 
       {authRequired && (
-        <div className="flex flex-col gap-3 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-2.5">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+        <div className="flex flex-col items-center gap-3 rounded-md border border-amber-300 bg-amber-50 p-4 text-center text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between sm:text-left">
+          <div className="flex flex-col items-center gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <KaxiCat state="nap" size={40} label={copy.loginRequired} />
             <p className="font-medium">{copy.loginRequired}</p>
           </div>
-          <Button size="sm" onClick={() => { window.location.href = loginHref; }} className="self-start sm:self-auto">
+          <Button size="sm" onClick={() => { window.location.href = loginHref; }} className="self-center sm:self-auto">
             {copy.login}
           </Button>
         </div>
@@ -494,7 +495,7 @@ export function Documents({ onNavigate }: { onNavigate: (view: string) => void }
                 <span className="text-xs font-semibold text-primary">STEP {DOCUMENT_WORKFLOW_STAGES.indexOf(activeStage) + 1}</span>
                 <span className="text-xs text-muted-foreground">{activeStageDone}/{activeStageRequired.length} {copy.requiredReady}</span>
               </div>
-              <h2 id={`stage-${activeStage.id}`} className="mt-1 text-xl font-bold sm:text-2xl">{tr(activeStage.titleKey, lang)}</h2>
+              <h2 id={`stage-${activeStage.id}`} className="mt-1 font-serif text-xl font-bold sm:text-2xl">{tr(activeStage.titleKey, lang)}</h2>
               <p className="mt-1.5 text-sm leading-6 text-muted-foreground">{tr(activeStage.descriptionKey, lang)}</p>
             </div>
             <a
@@ -564,7 +565,7 @@ export function Documents({ onNavigate }: { onNavigate: (view: string) => void }
                         disabled={(!serverBacked && !authRequired) || uploading}
                         className="shrink-0 self-start sm:self-auto"
                       >
-                        {uploading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                        {uploading ? <KaxiCat state="running" size={16} /> : <Upload className="h-3.5 w-3.5" />}
                         {doc.file ? copy.replace : copy.upload}
                       </Button>
                     </div>
