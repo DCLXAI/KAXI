@@ -5,6 +5,7 @@ import { getAdminContext, parsePositiveInt, rateLimit, requireAdmin } from "@/li
 import { parseJsonBody } from "@/lib/api/validation";
 import { canPersistPiiValue, preparePiiField, retentionUntil } from "@/lib/privacy/pii";
 import { serializeLeadForResponse } from "@/lib/privacy/serializers";
+import { getCurrentKaxiUser } from "@/lib/supabase/auth";
 
 // Prisma's DiagnosisLead.age/budget/brokerCost/estimatedCost are all Int
 // columns, so every numeric field here is coerced and validated as an
@@ -99,8 +100,11 @@ export async function POST(req: NextRequest) {
       kind: "contact",
       maxPlainLength: 160,
     });
+    // 로그인 상태로 저장하면 계정에 연결(익명 저장은 그대로 null). 동일 오리진 fetch라 세션 쿠키 자동 전송.
+    const kaxiUser = await getCurrentKaxiUser();
     const lead = await db.diagnosisLead.create({
       data: {
+        userId: kaxiUser?.id ?? null,
         nickname: data.nickname,
         nationality: data.nationality,
         age: data.age,
