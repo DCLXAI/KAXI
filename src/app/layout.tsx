@@ -34,7 +34,9 @@ export const metadata: Metadata = {
     description:
       "학교 선택, 비용 계산, 서류 준비, 입학 지원, 비자 준비까지 한곳에서. AI 에이전트가 도구를 호출해 직접 실행합니다.",
     type: "website",
+    images: [{ url: "/og.png", width: 1200, height: 630 }],
   },
+  twitter: { card: "summary_large_image", images: ["/og.png"] },
 };
 
 export const viewport: Viewport = {
