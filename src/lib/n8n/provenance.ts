@@ -7,9 +7,9 @@ export type RagProvenance = {
 
 export const DEFAULT_RAG_PROVENANCE: RagProvenance = {
   workflowId: "EqX3C5c2WNWoKkSR",
-  workflowVersionId: "kaxi-rag-runtime@2026-07-11.provenance-v1",
-  modelVersion: "openai/text-embedding-3-small@1536",
-  promptVersion: "kaxi-grounded-context-answer@2026-07-11.reranker-v2",
+  workflowVersionId: "kaxi-rag-runtime@2026-07-12.lexical-fallback-v1",
+  modelVersion: "retrieval/lexical-provider-fallback@v1",
+  promptVersion: "kaxi-grounded-context-answer@2026-07-12.lexical-fallback-v1",
 };
 
 export const RAG_PROVENANCE_HEADERS = {

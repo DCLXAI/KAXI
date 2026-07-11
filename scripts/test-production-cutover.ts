@@ -18,7 +18,7 @@ import {
 } from "../src/lib/typebot/runtime-health";
 
 const expectedMigration = latestMigrationName();
-assert.equal(expectedMigration, "20260712130000_single_open_knowledge_candidate");
+assert.equal(expectedMigration, "20260712193000_rag_lexical_provider_fallback");
 assert.equal(declaredRequiredMigration(), expectedMigration);
 
 const readyPayload = {

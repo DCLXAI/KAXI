@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 
-export const REQUIRED_PRODUCTION_MIGRATION = "20260712130000_single_open_knowledge_candidate";
+export const REQUIRED_PRODUCTION_MIGRATION = "20260712193000_rag_lexical_provider_fallback";
 
 const REQUIRED_SCHEMA_OBJECTS = [
   "migration_ledger",
@@ -19,6 +19,7 @@ const REQUIRED_SCHEMA_OBJECTS = [
   "partner_request_assignment",
   "user_notifications",
   "rag_strict_locale_search",
+  "rag_lexical_fallback_function",
   "rag_provenance_columns",
   "legacy_cutover_function",
 ] as const;
@@ -91,6 +92,12 @@ export async function checkProductionSchemaParity(): Promise<SchemaParityResult>
               to_regprocedure('public.match_rag_documents(vector,integer,jsonb)')
             )
           ) > 0 AS rag_strict_locale_search,
+        to_regprocedure('public.match_rag_documents_lexical(integer,jsonb)') IS NOT NULL
+          AND position(
+            'exact_doc_id_score' IN pg_get_functiondef(
+              to_regprocedure('public.match_rag_documents_lexical(integer,jsonb)')
+            )
+          ) > 0 AS rag_lexical_fallback_function,
         (
           SELECT count(*) = 24
           FROM information_schema.columns
