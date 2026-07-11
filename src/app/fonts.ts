@@ -28,5 +28,8 @@ export const nanumMyeongjo = localFont({
     { path: "../fonts/NanumMyeongjo-ExtraBold.woff2", weight: "800" },
   ],
   display: "swap",
+  // ~1.77MB의 한글 세리프를 랜딩 LCP 경로에 preload하지 않는다. display:swap이
+  // 세리프 한글이 실제로 그려질 때 lazy-fetch하므로 마케팅 페이지 성능을 지킨다.
+  preload: false,
   variable: "--font-serif-ko",
 });
