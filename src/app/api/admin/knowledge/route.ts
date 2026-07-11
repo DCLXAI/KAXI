@@ -70,7 +70,19 @@ async function withImpacts(items: AdminKnowledgeItem[]): Promise<AdminKnowledgeI
     topic: item.topic,
     supersedes: item.supersedes,
   })));
-  return items.map((item) => ({ ...item, impact: impacts.get(item.docId) }));
+  return items.map((item) => {
+    const impact = impacts.get(item.docId);
+    return {
+      ...item,
+      impact: impact
+        ? {
+            ...impact,
+            rules: impact.rules.slice(0, 3),
+            users: [],
+          }
+        : undefined,
+    };
+  });
 }
 
 const DEFAULT_PAGE_SIZE = 25;
@@ -93,6 +105,18 @@ function paginationSummary(page: number, pageSize: number, total: number) {
     hasPrevious: page > 1,
     hasNext: page < totalPages,
   };
+}
+
+function knowledgeJson(body: unknown, timings: { auth: number; data: number; enrichment: number }) {
+  return NextResponse.json(body, {
+    headers: {
+      "server-timing": [
+        `auth;dur=${timings.auth}`,
+        `data;dur=${timings.data}`,
+        `enrichment;dur=${timings.enrichment}`,
+      ].join(", "),
+    },
+  });
 }
 
 async function knowledgeReadinessSummary() {
@@ -417,9 +441,11 @@ async function validateSingleCandidateApproval(input: {
 }
 
 export async function GET(req: NextRequest) {
+  const startedAt = Date.now();
   try {
     const unauthorized = await requireAdmin(req, { roles: ["owner", "admin", "viewer"] });
     if (unauthorized) return unauthorized;
+    const authCompletedAt = Date.now();
 
     const page = positiveQueryInt(req.nextUrl.searchParams.get("page"), 1, MAX_PAGE);
     const pageSize = positiveQueryInt(
@@ -427,7 +453,7 @@ export async function GET(req: NextRequest) {
       DEFAULT_PAGE_SIZE,
       MAX_PAGE_SIZE,
     );
-    const [total, documents, readiness] = await Promise.all([
+    const [total, documents] = await Promise.all([
       db.knowledgeDocument.count(),
       db.knowledgeDocument.findMany({
         include: { chunks: { select: { id: true } } },
@@ -435,28 +461,40 @@ export async function GET(req: NextRequest) {
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
-      knowledgeReadinessSummary(),
     ]);
+    const dataCompletedAt = Date.now();
 
     if (total === 0) {
       const allStaticDocuments = staticKnowledgeItems();
-      const staticDocuments = await withImpacts(
-        allStaticDocuments.slice((page - 1) * pageSize, page * pageSize),
-      );
-      return NextResponse.json({
+      const [staticDocuments, readiness] = await Promise.all([
+        withImpacts(allStaticDocuments.slice((page - 1) * pageSize, page * pageSize)),
+        knowledgeReadinessSummary(),
+      ]);
+      return knowledgeJson({
         documents: staticDocuments,
         source: "static",
         readiness,
         pagination: paginationSummary(page, pageSize, allStaticDocuments.length),
+      }, {
+        auth: authCompletedAt - startedAt,
+        data: dataCompletedAt - authCompletedAt,
+        enrichment: Date.now() - dataCompletedAt,
       });
     }
 
-    const serialized = await withImpacts(documents.map(toAdminKnowledgeItem));
-    return NextResponse.json({
+    const [serialized, readiness] = await Promise.all([
+      withImpacts(documents.map(toAdminKnowledgeItem)),
+      knowledgeReadinessSummary(),
+    ]);
+    return knowledgeJson({
       documents: serialized,
       source: "db",
       readiness,
       pagination: paginationSummary(page, pageSize, total),
+    }, {
+      auth: authCompletedAt - startedAt,
+      data: dataCompletedAt - authCompletedAt,
+      enrichment: Date.now() - dataCompletedAt,
     });
   } catch (err) {
     console.error("[GET /api/admin/knowledge]", err);

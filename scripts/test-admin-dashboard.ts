@@ -116,7 +116,9 @@ try {
   );
   assert(approvedVersion.version.reviewStatus === "APPROVED", "rule review status should update to APPROVED");
 
-  const knowledge = await json(await knowledgeRoute.GET(adminRequest("/api/admin/knowledge")));
+  const knowledgeResponse = await knowledgeRoute.GET(adminRequest("/api/admin/knowledge"));
+  assert(knowledgeResponse.headers.get("server-timing")?.includes("enrichment;dur="), "admin knowledge should expose server timing");
+  const knowledge = await json(knowledgeResponse);
   assert(knowledge.documents.length >= 1, "admin knowledge should list source documents");
   assert(knowledge.pagination?.page === 1, "admin knowledge should return the current page");
   assert(knowledge.pagination?.pageSize === 25, "admin knowledge should use the bounded default page size");
@@ -127,6 +129,7 @@ try {
   assert(pagedKnowledge.documents.length === 1, "admin knowledge should enforce requested page size");
   assert(pagedKnowledge.pagination.pageSize === 1, "admin knowledge pagination should echo page size");
   assert(typeof pagedKnowledge.documents[0]?.impact?.ruleCount === "number", "paged knowledge should include batch impact data");
+  assert(pagedKnowledge.documents[0]?.impact?.users.length === 0, "paged knowledge should return compact impact summaries");
   assert(knowledge.readiness?.candidateApproval, "admin knowledge should expose candidate approval readiness");
   assert(knowledge.readiness?.corpus, "admin knowledge should expose production corpus readiness");
   assert(
