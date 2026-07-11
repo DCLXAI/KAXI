@@ -1,4 +1,6 @@
 .git
+.superpowers
+.worktrees
 .env*
 .tmp
 .next

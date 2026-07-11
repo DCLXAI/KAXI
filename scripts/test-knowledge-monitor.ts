@@ -31,6 +31,7 @@ const {
 const {
   OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST,
   DEFAULT_CRON_KNOWLEDGE_SOURCE_IDS,
+  fetchOfficialKnowledgeSource,
   getCronOfficialKnowledgeSources,
   runOfficialKnowledgeSourceMonitor,
 } = await import("../src/lib/knowledge/source-monitor");
@@ -144,6 +145,11 @@ try {
   }
 
   const workflowText = readFileSync(".github/workflows/official-source-monitor.yml", "utf8");
+  assert(
+    /persist_candidates:[\s\S]*?default:\s*"false"/.test(workflowText),
+    "scheduled source monitoring should default to audit-only candidate handling",
+  );
+  assert(workflowText.includes("max-parallel: 1"), "official source monitor should use reduced job parallelism");
   const workflowSourceIds = new Set<string>();
   for (const match of workflowText.matchAll(/source_ids:\s*([^\n]+)/g)) {
     for (const id of match[1].split(",").map((item) => item.trim()).filter(Boolean)) {
@@ -212,6 +218,22 @@ try {
     sourceType: "official_law",
     topic: "legal",
   };
+  const stableHashA = await fetchOfficialKnowledgeSource(source, {
+    fetchImpl: async () =>
+      new Response('<html><body data-request-id="a"><p>동일한 공식 본문</p></body></html>', {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      }),
+  });
+  const stableHashB = await fetchOfficialKnowledgeSource(source, {
+    fetchImpl: async () =>
+      new Response('<html><body data-request-id="b"><p>동일한 공식 본문</p></body></html>', {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      }),
+  });
+  assert(stableHashA.bodyHash === stableHashB.bodyHash, "body hash should ignore volatile HTML attributes");
+  assert(stableHashA.contentHash === stableHashA.bodyHash, "monitor content hash should use the stable body hash");
+  assert(stableHashA.content !== stableHashB.content, "raw byte metadata should remain available for audit evidence");
+
   const oldContent = "old immigration rule content";
   await db.knowledgeDocument.create({
     data: {
@@ -276,8 +298,9 @@ try {
     },
   });
 
+  let fetchedHtml = "<html><body><h1>출입국 규정 최신본</h1><p>D-2 D-4 변경 감지 문장</p></body></html>";
   const fetchImpl = async () =>
-    new Response("<html><body><h1>출입국 규정 최신본</h1><p>D-2 D-4 변경 감지 문장</p></body></html>", {
+    new Response(fetchedHtml, {
       status: 200,
       headers: { "content-type": "text/html; charset=utf-8" },
     });
@@ -309,6 +332,34 @@ try {
   );
   assert(persisted.results[0]?.diff?.impact.ruleCount === 1, "monitor diff should include impacted rule count");
   assert(persisted.results[0]?.diff?.impact.userCount === 1, "monitor diff should include impacted chat log count");
+
+  fetchedHtml = '<html><body data-request-id="volatile"><h1>출입국 규정 최신본</h1><p>D-2 D-4 변경 감지 문장</p></body></html>';
+  const stableRepeat = await runOfficialKnowledgeSourceMonitor({
+    actor: "test-monitor",
+    persistCandidates: true,
+    sources: [source],
+    fetchImpl,
+    now: new Date("2026-07-02T00:02:00.000Z"),
+  });
+  assert(stableRepeat.candidatesCreated === 0, "stable body hash should avoid rewriting an unchanged open candidate");
+  assert(stableRepeat.results[0]?.candidateDocId === candidateDocId, "unchanged source should retain its open candidate");
+
+  fetchedHtml = '<html><body data-request-id="changed"><h1>출입국 규정 최신본</h1><p>D-2 D-4 변경 감지 문장</p><p>추가된 공식 본문</p></body></html>';
+  const changedRepeat = await runOfficialKnowledgeSourceMonitor({
+    actor: "test-monitor",
+    persistCandidates: true,
+    sources: [source],
+    fetchImpl,
+    now: new Date("2026-07-02T00:03:00.000Z"),
+  });
+  assert(changedRepeat.candidatesCreated === 1, "changed body should update the existing open candidate");
+  assert(changedRepeat.results[0]?.candidateDocId === candidateDocId, "changed body should not open a second candidate");
+  assert(
+    await db.knowledgeDocument.count({
+      where: { reviewStatus: "PENDING", docId: { startsWith: `${source.docId}__candidate__` } },
+    }) === 1,
+    "each source must have exactly one open candidate",
+  );
 
   const alertPayload = buildKnowledgeMonitorAlertPayload(persisted, {
     actor: "test-monitor",

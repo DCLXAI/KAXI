@@ -29,6 +29,7 @@ export interface OfficialKnowledgeMonitorResult {
   sourceUrl: string;
   status: "changed" | "unchanged" | "failed";
   contentHash?: string;
+  bodyHash?: string;
   byteLength?: number;
   extractionMethod?: OfficialSourceExtractionMethod;
   extractedCharCount?: number;
@@ -982,6 +983,10 @@ function sha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+const BODY_HASH_LINE_RE = /^body_sha256:\s*([a-f0-9]{64})\s*$/im;
+const DEFAULT_MONITOR_CONCURRENCY = 2;
+const MAX_MONITOR_CONCURRENCY = 4;
+
 function decodeHtmlEntities(value: string): string {
   return value
     .replace(/&nbsp;/gi, " ")
@@ -1085,6 +1090,7 @@ export async function fetchOfficialKnowledgeSource(
 ): Promise<{
   content: string;
   contentHash: string;
+  bodyHash: string;
   byteLength: number;
   extractionMethod: OfficialSourceExtractionMethod;
   extractedCharCount: number;
@@ -1107,6 +1113,7 @@ export async function fetchOfficialKnowledgeSource(
   let extractionMethod: OfficialSourceExtractionMethod = "plain_text";
   let extractionError: string | undefined;
   let normalized = "";
+  let stableBody = "";
 
   if (isPdf) {
     try {
@@ -1115,6 +1122,7 @@ export async function fetchOfficialKnowledgeSource(
         throw new Error("empty_pdf_text");
       }
       extractionMethod = "pdf_text";
+      stableBody = normalizeText(pdfText);
       normalized = [
         "PDF official source extracted.",
         `content_type: ${contentType || "application/pdf"}`,
@@ -1128,6 +1136,7 @@ export async function fetchOfficialKnowledgeSource(
     } catch (err) {
       extractionMethod = "binary_metadata";
       extractionError = err instanceof Error ? err.message : String(err);
+      stableBody = byteHash;
       normalized = buildBinarySourceMetadata({
         contentType,
         byteHash,
@@ -1137,16 +1146,20 @@ export async function fetchOfficialKnowledgeSource(
     }
   } else if (looksBinary) {
     extractionMethod = "binary_metadata";
+    stableBody = byteHash;
     normalized = buildBinarySourceMetadata({ contentType, byteHash, byteLength: buffer.length });
   } else if (contentType.includes("html") || /<html|<!doctype/i.test(rawText)) {
     extractionMethod = "html";
     normalized = normalizeHtml(rawText);
+    stableBody = normalized;
   } else {
     extractionMethod = "plain_text";
     normalized = normalizeText(rawText);
+    stableBody = normalized;
   }
 
   const clipped = normalized.slice(0, maxChars);
+  const bodyHash = sha256(stableBody.slice(0, maxChars));
   const content = [
     `# ${source.title}`,
     `source_url: ${source.sourceUrl}`,
@@ -1156,6 +1169,7 @@ export async function fetchOfficialKnowledgeSource(
     `monitor_cadence: ${source.monitorCadence || "daily"}`,
     `change_signals: ${(source.changeSignals || []).join(", ") || "content_hash"}`,
     `extraction_method: ${extractionMethod}`,
+    `body_sha256: ${bodyHash}`,
     `content_type: ${contentType || "unknown"}`,
     `byte_sha256: ${byteHash}`,
     `byte_length: ${buffer.length}`,
@@ -1167,7 +1181,8 @@ export async function fetchOfficialKnowledgeSource(
 
   return {
     content,
-    contentHash: sha256(content),
+    contentHash: bodyHash,
+    bodyHash,
     byteLength: buffer.length,
     extractionMethod,
     extractedCharCount: normalized.length,
@@ -1177,6 +1192,43 @@ export async function fetchOfficialKnowledgeSource(
 
 function candidateDocIdFor(docId: string, contentHash: string): string {
   return `${docId}__candidate__${contentHash.slice(0, 12)}`;
+}
+
+function candidateBodyHash(chunks: Array<{ chunkIndex: number; content: string }>): string | undefined {
+  const content = chunks
+    .slice()
+    .sort((a, b) => a.chunkIndex - b.chunkIndex)
+    .map((chunk) => chunk.content)
+    .join("\n\n");
+  return content.match(BODY_HASH_LINE_RE)?.[1]?.toLowerCase();
+}
+
+async function findSingleOpenCandidate(sourceDocId: string, actor: string) {
+  const candidates = await db.knowledgeDocument.findMany({
+    where: {
+      reviewStatus: "PENDING",
+      docId: { startsWith: `${sourceDocId}__candidate__` },
+    },
+    include: {
+      chunks: {
+        select: { chunkIndex: true, content: true },
+        orderBy: { chunkIndex: "asc" },
+      },
+    },
+    orderBy: [{ lastCheckedAt: "desc" }, { updatedAt: "desc" }, { docId: "asc" }],
+  });
+  const keeper = candidates[0];
+  if (!keeper || candidates.length === 1) return keeper;
+
+  await db.knowledgeDocument.updateMany({
+    where: { id: { in: candidates.slice(1).map((candidate) => candidate.id) } },
+    data: {
+      reviewStatus: "REJECTED",
+      supersededBy: keeper.docId,
+      checkedBy: actor,
+    },
+  });
+  return keeper;
 }
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
@@ -1223,11 +1275,17 @@ export async function runOfficialKnowledgeSourceMonitor(
   } = {}
 ): Promise<OfficialKnowledgeMonitorSummary> {
   const now = options.now || new Date();
-  const persistCandidates = options.persistCandidates ?? true;
+  const persistCandidates = options.persistCandidates ?? false;
   const actor = options.actor || "knowledge-monitor";
   const sources = options.sources || getOfficialKnowledgeSourceWatchlist();
-  const configuredConcurrency = parsePositiveInt(process.env.KNOWLEDGE_MONITOR_CONCURRENCY, 4);
-  const concurrency = Math.min(Math.max(options.concurrency || configuredConcurrency, 1), 12);
+  const configuredConcurrency = parsePositiveInt(
+    process.env.KNOWLEDGE_MONITOR_CONCURRENCY,
+    DEFAULT_MONITOR_CONCURRENCY,
+  );
+  const concurrency = Math.min(
+    Math.max(options.concurrency || configuredConcurrency, 1),
+    MAX_MONITOR_CONCURRENCY,
+  );
 
   const inspectSource = async (source: OfficialKnowledgeSource): Promise<OfficialKnowledgeMonitorResult> => {
     try {
@@ -1249,29 +1307,47 @@ export async function runOfficialKnowledgeSourceMonitor(
         chunkMaxChars: options.chunkMaxChars,
         now,
       });
-      const candidateDocId = candidateDocIdFor(source.docId, fetched.contentHash);
+      const proposedCandidateDocId = candidateDocIdFor(source.docId, fetched.bodyHash);
+      let candidateDocId = proposedCandidateDocId;
       let candidatePersisted = false;
       if (diff.changed && persistCandidates) {
-        const existingCandidate = await db.knowledgeDocument.findUnique({
-          where: { docId: candidateDocId },
-          select: { reviewStatus: true },
-        });
-        if (!existingCandidate || existingCandidate.reviewStatus === "PENDING") {
-          await upsertPendingKnowledgeCandidate({
-            docId: candidateDocId,
-            actor,
-            title: `[검토 후보] ${source.title}`,
-            content: fetched.content,
-            sourceUrl: source.sourceUrl,
-            sourceType: source.sourceType,
-            language: source.language || "ko",
-            jurisdiction: source.jurisdiction || "KR",
-            topic: source.topic,
-            supersedes: [source.docId],
-            chunkMaxChars: options.chunkMaxChars,
-            now,
-          });
-          candidatePersisted = true;
+        const openCandidate = await findSingleOpenCandidate(source.docId, actor);
+        candidateDocId = openCandidate?.docId || proposedCandidateDocId;
+        const openBodyHash = openCandidate ? candidateBodyHash(openCandidate.chunks) : undefined;
+        const closedMatchingCandidate = openCandidate
+          ? null
+          : await db.knowledgeDocument.findUnique({
+              where: { docId: proposedCandidateDocId },
+              select: { reviewStatus: true },
+            });
+        if (!closedMatchingCandidate && (!openCandidate || openBodyHash !== fetched.bodyHash)) {
+          const persistCandidate = (docId: string) =>
+            upsertPendingKnowledgeCandidate({
+              docId,
+              actor,
+              title: `[검토 후보] ${source.title}`,
+              content: fetched.content,
+              sourceUrl: source.sourceUrl,
+              sourceType: source.sourceType,
+              language: source.language || "ko",
+              jurisdiction: source.jurisdiction || "KR",
+              topic: source.topic,
+              supersedes: [source.docId],
+              chunkMaxChars: options.chunkMaxChars,
+              now,
+            });
+          try {
+            await persistCandidate(candidateDocId);
+            candidatePersisted = true;
+          } catch (error) {
+            const winningCandidate = await findSingleOpenCandidate(source.docId, actor).catch(() => undefined);
+            if (!winningCandidate || winningCandidate.docId === candidateDocId) throw error;
+            candidateDocId = winningCandidate.docId;
+            if (candidateBodyHash(winningCandidate.chunks) !== fetched.bodyHash) {
+              await persistCandidate(candidateDocId);
+              candidatePersisted = true;
+            }
+          }
         }
       }
 
@@ -1281,6 +1357,7 @@ export async function runOfficialKnowledgeSourceMonitor(
         sourceUrl: source.sourceUrl,
         status: diff.changed ? "changed" : "unchanged",
         contentHash: fetched.contentHash,
+        bodyHash: fetched.bodyHash,
         byteLength: fetched.byteLength,
         extractionMethod: fetched.extractionMethod,
         extractedCharCount: fetched.extractedCharCount,

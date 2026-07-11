@@ -8,7 +8,7 @@ on:
       persist_candidates:
         description: "Create PENDING knowledge candidates when official sources change"
         required: true
-        default: "true"
+        default: "false"
         type: choice
         options:
           - "true"
@@ -31,7 +31,7 @@ jobs:
     timeout-minutes: 10
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 1
       matrix:
         include:
           - batch: law-core
@@ -65,7 +65,7 @@ jobs:
     env:
       KAXI_MONITOR_URL: https://kaxi.vercel.app/api/knowledge/monitor
       KAXI_ADMIN_API_KEY: ${{ secrets.KAXI_ADMIN_API_KEY }}
-      PERSIST_CANDIDATES: ${{ inputs.persist_candidates || 'true' }}
+      PERSIST_CANDIDATES: ${{ inputs.persist_candidates || 'false' }}
       MAX_SOURCES: ${{ inputs.max_sources || '' }}
       SOURCE_IDS: ${{ matrix.source_ids }}
     steps:

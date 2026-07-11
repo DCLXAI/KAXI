@@ -21,6 +21,7 @@ async function responseJson(res: Response) {
 }
 
 process.env.ADMIN_API_KEY = "test-admin-key";
+process.env.KNOWLEDGE_MONITOR_PERSIST_CANDIDATES = "false";
 prepareTestDb("admin dashboard");
 
 const { NextRequest } = await import("next/server");
@@ -180,6 +181,18 @@ try {
       "admin monitor sourceIds should select the requested source"
     );
 
+    const pausedPersist = await json(
+      await knowledgeMonitorRoute.POST(
+        adminRequest("/api/knowledge/monitor", {
+          method: "POST",
+          body: JSON.stringify({ persistCandidates: true, maxSources: 1 }),
+        })
+      )
+    );
+    assert(pausedPersist.candidateWritePaused === true, "candidate kill switch should keep admin runs audit-only");
+    assert(pausedPersist.candidatesCreated === 0, "paused candidate writes must not create a pending candidate");
+
+    process.env.KNOWLEDGE_MONITOR_PERSIST_CANDIDATES = "true";
     const monitorPersist = await json(
       await knowledgeMonitorRoute.POST(
         adminRequest("/api/knowledge/monitor", {
@@ -473,5 +486,6 @@ try {
 
   console.log("PASS admin dashboard API: cases, actions, rules, knowledge, audit, ops, handoffs");
 } finally {
+  delete process.env.KNOWLEDGE_MONITOR_PERSIST_CANDIDATES;
   await db.$disconnect();
 }

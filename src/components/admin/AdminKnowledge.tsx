@@ -16,6 +16,8 @@ interface MonitorResult {
   unchanged: number;
   failed: number;
   candidatesCreated: number;
+  candidateWritesEnabled?: boolean;
+  candidateWritePaused?: boolean;
   alert?: {
     attempted: boolean;
     sent: boolean;
@@ -197,7 +199,13 @@ export function AdminKnowledge() {
             <Satellite className={`h-3.5 w-3.5 ${monitoringMode === "preview" ? "animate-pulse" : ""}`} />
             실시간 감시
           </Button>
-          <Button variant="outline" size="sm" onClick={() => runMonitor(true)} disabled={Boolean(monitoringMode)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => runMonitor(true)}
+            disabled={Boolean(monitoringMode) || monitorResult?.candidateWritesEnabled === false}
+            title={monitorResult?.candidateWritesEnabled === false ? "공식 출처 후보 저장이 일시 중단되었습니다." : undefined}
+          >
             <AlertTriangle className={`h-3.5 w-3.5 ${monitoringMode === "persist" ? "animate-pulse" : ""}`} />
             후보 생성
           </Button>
@@ -296,6 +304,11 @@ export function AdminKnowledge() {
             </div>
             <div className="text-xs text-muted-foreground">{formatDate(monitorResult.checkedAt)}</div>
           </div>
+          {monitorResult.candidateWritePaused && (
+            <div className="mt-2 text-xs text-amber-700">
+              공식 출처 후보 저장은 일시 중단되어 변경 감지만 기록했습니다.
+            </div>
+          )}
           {monitorResult.alert && (
             <div className="mt-2 text-xs text-muted-foreground">
               운영 알림: {monitorResult.alert.sent
