@@ -4,17 +4,27 @@
   "description": "브로커 없이 준비하는 한국 유학 원스톱 플랫폼 — AI 에이전트, 학교 검색, 비용 계산, 서류 관리",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#000000",
+  "background_color": "#f0eee6",
+  "theme_color": "#c96442",
   "orientation": "portrait-primary",
   "lang": "ko",
-  "categories": ["education", "productivity", "utilities"],
+  "categories": [
+    "education",
+    "productivity",
+    "utilities"
+  ],
   "icons": [
     {
-      "src": "/logo.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "shortcuts": [

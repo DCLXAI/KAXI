@@ -32,7 +32,7 @@
 S1 배포 후 실화면에서 액센트 미세조정 기회 1회 (토큰만 바꾸면 전파).
 
 ### 2.2 타이포그래피
-- 디스플레이/헤드라인: **Noto Serif KR** (`next/font/google`) — ko·vi 라틴 커버, mn 키릴은 본문 폰트 폴백.
+- 디스플레이/헤드라인: **Noto Serif KR** (`next/font/google`) — 단, next/font는 이 폰트의 **한글 글리프를 서빙하지 못함**(선택 가능 서브셋: cyrillic/latin/latin-ext/vietnamese). 라틴·숫자·베트남어 헤드라인만 세리프. **한글 헤드라인 세리프는 S1에서 self-host woff2로 적용**(Noto Serif KR 한글 subset 또는 더 가벼운 Nanum Myeongjo — S1에서 용량 대비 결정). 그전까지 한글은 `--font-serif` 스택의 Pretendard 폴백.
 - 본문/UI: **Pretendard Variable** (로컬 번들) — ko·라틴·키릴 커버.
 - 현재 폰트 미로드 버그는 이 작업으로 해소.
 
