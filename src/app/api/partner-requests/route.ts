@@ -12,15 +12,21 @@ export async function POST(req: NextRequest) {
     if (limited) return limited;
 
     const body = await req.json();
-    const { leadId, partnerType, question, consent } = body || {};
+    const { leadId, partnerType, question, name, contact, contactType, consent } = body || {};
 
     if (!leadId || !partnerType) return jsonError("Missing required fields: leadId, partnerType", 400);
+    if (!name || !contact) return jsonError("Name and contact are required", 400);
     if (question && String(question).length > 1000) return jsonError("Question is too long", 413);
+    if (name && String(name).length > 80) return jsonError("Name is too long", 413);
+    if (contact && String(contact).length > 160) return jsonError("Contact is too long", 413);
 
     const request = await createPartnerRequest({
       leadId,
       partnerType: String(partnerType),
       question: question || null,
+      name: name || null,
+      contact: contact || null,
+      contactType: contactType || null,
       consent: consent || null,
       auditContext: {
         actor: "public-user",

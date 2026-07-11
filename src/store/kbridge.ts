@@ -217,6 +217,7 @@ interface PartnerState {
     leadId: string | null,
     partnerType: string,
     question?: string,
+    contactInfo?: { name?: string; contact?: string; contactType?: string },
     consent?: {
       thirdPartyProvision: boolean;
       processingConsignment: boolean;
@@ -230,7 +231,7 @@ interface PartnerState {
 
 export const usePartnerStore = create<PartnerState>()((set) => ({
   submitting: false,
-  submitPartnerRequest: async (leadId, partnerType, question, consent) => {
+  submitPartnerRequest: async (leadId, partnerType, question, contactInfo, consent) => {
     set({ submitting: true });
     try {
       const res = await fetch("/api/partner-requests", {
@@ -240,6 +241,9 @@ export const usePartnerStore = create<PartnerState>()((set) => ({
           leadId: leadId || "anonymous",
           partnerType,
           question: question || null,
+          name: contactInfo?.name || null,
+          contact: contactInfo?.contact || null,
+          contactType: contactInfo?.contactType || null,
           consent: consent || null,
         }),
       });

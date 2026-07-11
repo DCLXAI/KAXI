@@ -2,13 +2,12 @@
 
 import { useTranslations } from "next-intl";
 import { RefreshCw } from "lucide-react";
-import { AdminSchools } from "@/components/kbridge/AdminSchools";
 import { Button } from "@/components/ui/button";
 import { AdminAuthGate } from "./AdminAuthGate";
 import { AdminLeadDetailModal } from "./AdminLeadDetailModal";
 import { AdminLeadTable } from "./AdminLeadTable";
 import { AdminNationalityCard } from "./AdminNationalityCard";
-import { AdminOpsStatusCard } from "./AdminOpsStatusCard";
+import { AdminPartnerRequestQueue } from "./AdminPartnerRequestQueue";
 import { AdminStatsCards } from "./AdminStatsCards";
 import { useAdminDashboard } from "./useAdminDashboard";
 
@@ -44,11 +43,10 @@ export function AdminDashboard() {
         </div>
       )}
 
-      {dashboard.opsStatus && <AdminOpsStatusCard locale={dashboard.locale} opsStatus={dashboard.opsStatus} />}
       {dashboard.stats && <AdminStatsCards locale={dashboard.locale} stats={dashboard.stats} />}
       {dashboard.stats && <AdminNationalityCard locale={dashboard.locale} stats={dashboard.stats} />}
 
-      <AdminSchools />
+      <AdminPartnerRequestQueue />
 
       <AdminLeadTable
         leads={dashboard.filteredLeads}

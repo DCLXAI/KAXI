@@ -21,6 +21,7 @@ import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-
 import { isPiiEncryptionConfigured } from "@/lib/privacy/pii";
 import { isEnvFalse, isEnvTrue } from "@/lib/env";
 import { maybeCreateHighRiskEscalationCase } from "@/lib/cases/high-risk-hook";
+import { currentAuthenticatedStudentProfileId } from "@/lib/cases/current-student";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -234,7 +235,7 @@ export async function POST(req: NextRequest) {
     });
     if (parsed.error) return parsed.error;
 
-    const { question, history, leadId, studentProfileId } = parsed.value;
+    const { question, history, leadId } = parsed.value;
     const lang = parsed.value.lang as Lang;
     const ctx: ToolContext = { lang, leadId };
     ledgerContext = { question, leadId, preflight: emptyPreflight(question) };
@@ -317,6 +318,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (hasHighRiskAgentSignal(toolResults)) {
+      const studentProfileId = await currentAuthenticatedStudentProfileId();
       maybeCreateHighRiskEscalationCase({
         studentProfileId,
         category: "agent:high-risk",

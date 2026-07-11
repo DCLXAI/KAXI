@@ -30,6 +30,11 @@ process.env.DATA_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abc
 process.env.PII_HASH_SECRET = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 process.env.AI_PROVIDER = "kimi";
 process.env.OPENAI_API_KEY = "";
+// Route handlers are invoked directly in this test, outside Next's request
+// async context. Disable browser Auth config so the expected anonymous 401
+// path does not attempt to read request cookies from the local developer env.
+process.env.NEXT_PUBLIC_SUPABASE_URL = "";
+process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "";
 prepareTestDb("document flow");
 
 const { NextRequest } = await import("next/server");
@@ -558,11 +563,15 @@ try {
     where: { targetId: uploadedDoc.id, action: "document.reviewed" },
   });
   assert(reviewAudit, "admin review should create AuditEvent");
+  const reviewNotification = await db.userNotification.findFirst({
+    where: { userId: seededUser.id, eventKey: { contains: `document:${uploadedDoc.id}:review:APPROVED:APPROVED` } },
+  });
+  assert(reviewNotification, "admin document review should notify the student");
 
   const adminLogs = await db.adminAuditLog.findMany({ where: { targetId: uploadedDoc.id } });
   assert(adminLogs.length >= 3, "upload, OCR transition, and review should be mirrored to AdminAuditLog");
 
-  console.log("PASS document flow: signed upload, validation, admin review, audit logs");
+  console.log("PASS document flow: signed upload, validation, admin review, student notification, audit logs");
 } finally {
   await db.$disconnect();
   rmSync(tmpDir, { recursive: true, force: true });

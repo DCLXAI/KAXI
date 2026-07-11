@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "framer-motion";
-import { AlertCircle, Database, Loader2, Scale, ShieldAlert } from "lucide-react";
+import { AlertCircle, ArrowRight, Database, Loader2, Scale, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { MessageResponse } from "@/components/ai-elements/message";
 import {
   linkCitationMarkers,
@@ -10,6 +12,7 @@ import {
 } from "@/components/kbridge/SourceAnnotations";
 import type { ConsultLocale, ConsultMessage } from "./types";
 import { sourceAnnotationsFromDocs } from "./types";
+import { localePath } from "@/i18n/routing";
 
 interface ConsultMessageListProps {
   endRef: React.RefObject<HTMLDivElement | null>;
@@ -75,6 +78,20 @@ export function ConsultMessageList({
                     max={4}
                     idPrefix={`consult-message-${index}`}
                   />
+
+                  {message.needsHumanExpert && (
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+                      <p className="text-xs text-muted-foreground">
+                        {locale === "ko" ? "개인정보 동의 후 검증된 파트너에게 상담을 요청할 수 있습니다." : locale === "vi" ? "Bạn có thể đồng ý và gửi yêu cầu tới đối tác đã xác minh." : locale === "mn" ? "Зөвшөөрөл өгсний дараа баталгаажсан түншээс зөвлөгөө хүсэж болно." : "After consent, you can send this to a verified partner."}
+                      </p>
+                      <Button size="sm" asChild>
+                        <Link href={`${localePath(locale, "/partners")}?type=admin&question=${encodeURIComponent(message.consultationQuestion || "")}`}>
+                          {locale === "ko" ? "전문가 상담 요청" : locale === "vi" ? "Yêu cầu chuyên gia" : locale === "mn" ? "Мэргэжилтэн хүсэх" : "Request an expert"}
+                          <ArrowRight className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 {message.disclaimer && (

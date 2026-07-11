@@ -117,10 +117,10 @@ export function DiagnosisResult({
             {t("diagnose_save_lead")}
           </CardTitle>
           <CardDescription>
-            {locale === "ko" && "결과를 저장하고 상담을 예약하세요 (데모: 관리자 화면에서 확인 가능)"}
-            {locale === "vi" && "Lưu kết quả và đặt lịch (demo)"}
-            {locale === "mn" && "Хадгалж зөвлөгөө захиалах (demo)"}
-            {locale === "en" && "Save & book consultation (demo)"}
+            {locale === "ko" && "진단 결과를 저장합니다. 전문가 상담은 저장 후 별도 동의를 거쳐 요청할 수 있습니다."}
+            {locale === "vi" && "Lưu kết quả đánh giá. Sau đó, bạn có thể đồng ý và gửi yêu cầu tư vấn riêng."}
+            {locale === "mn" && "Үнэлгээний үр дүнг хадгална. Дараа нь зөвшөөрөл өгч тусдаа зөвлөгөө хүсэж болно."}
+            {locale === "en" && "Save your diagnosis result. You can then consent and submit a separate consultation request."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -141,10 +141,10 @@ export function DiagnosisResult({
             <Alert>
               <CheckCircle2 className="h-4 w-4" />
               <AlertDescription>
-                {locale === "ko" && "저장되었습니다! 관리자 화면에서도 확인 가능합니다. 이제 학교 비교로 진행하세요."}
-                {locale === "vi" && "Đã lưu! Có thể xem ở trang quản trị."}
-                {locale === "mn" && "Хадгаллаа! Админ хуудаснаас харна."}
-                {locale === "en" && "Saved! Visible in admin page."}
+                {locale === "ko" && "결과가 저장되었습니다. 전문가 연결이 필요하면 상담 요청으로 진행하세요."}
+                {locale === "vi" && "Đã lưu kết quả. Hãy gửi yêu cầu nếu bạn cần được kết nối với chuyên gia."}
+                {locale === "mn" && "Үр дүн хадгалагдлаа. Мэргэжилтэн хэрэгтэй бол зөвлөгөөний хүсэлт илгээнэ үү."}
+                {locale === "en" && "Your result is saved. Submit a consultation request if you need an expert connection."}
               </AlertDescription>
             </Alert>
           )}
@@ -155,6 +155,9 @@ export function DiagnosisResult({
             </Alert>
           )}
           <div className="flex flex-wrap gap-2 pt-2">
+            {showSave && (
+              <Button onClick={() => onNavigate("partners")}>{t("partner_request")} →</Button>
+            )}
             <Button variant="outline" onClick={() => onNavigate("schools")}>{t("nav_schools")} →</Button>
             <Button variant="outline" onClick={() => onNavigate("cost")}>{t("nav_cost")} →</Button>
             <Button variant="outline" onClick={() => onNavigate("docs")}>{t("nav_docs")} →</Button>

@@ -4,6 +4,14 @@ import { useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { workspaceLocale } from "@/lib/i18n/workspace";
+
+const LOADING_COPY = {
+  ko: "로그인 정보를 확인하고 있습니다.",
+  vi: "Đang xác minh thông tin đăng nhập.",
+  mn: "Нэвтрэх мэдээллийг шалгаж байна.",
+  en: "Verifying your sign-in.",
+} as const;
 
 interface SyncResponse {
   error?: string;
@@ -14,6 +22,7 @@ export function AuthComplete() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const started = useRef(false);
+  const locale = workspaceLocale(searchParams.get("locale"));
 
   useEffect(() => {
     if (started.current) return;
@@ -48,15 +57,16 @@ export function AuthComplete() {
     }
 
     void complete().catch(() => {
-      router.replace("/login?error=callback_failed");
+      const locale = searchParams.get("locale") || "ko";
+      router.replace(`/login?error=callback_failed&lang=${encodeURIComponent(locale)}`);
       router.refresh();
     });
   }, [router, searchParams]);
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-3 bg-muted/30 px-4 text-center">
+    <main lang={locale} className="flex min-h-screen flex-col items-center justify-center gap-3 bg-muted/30 px-4 text-center">
       <Loader2 className="h-6 w-6 animate-spin" aria-hidden="true" />
-      <p className="text-sm text-muted-foreground">로그인 정보를 확인하고 있습니다.</p>
+      <p className="text-sm text-muted-foreground" aria-live="polite">{LOADING_COPY[locale]}</p>
     </main>
   );
 }

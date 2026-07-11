@@ -7,6 +7,8 @@ import {
   type EscalationCase,
 } from "@prisma/client";
 import { db } from "@/lib/db";
+import { CASE_NOTIFICATION_COPY, notifyCaseStudent } from "@/lib/notifications/domain";
+import { notifyUsers } from "@/lib/notifications/repository";
 
 type Tx = Prisma.TransactionClient;
 
@@ -207,6 +209,7 @@ export async function createHighRiskEscalationCase(input: CreateHighRiskEscalati
       riskLevel: caseItem.riskLevel,
       category: caseItem.category,
     });
+    await notifyCaseStudent({ caseId: caseItem.id, eventKey: "created", copy: CASE_NOTIFICATION_COPY.created, tx });
 
     return { case: caseItem };
   });
@@ -223,7 +226,15 @@ export async function assignCaseToPartnerOffice(input: {
   return db.$transaction(async (tx) => {
     const [caseItem, organization] = await Promise.all([
       findCaseOrThrow(tx, input.caseId),
-      tx.organization.findUnique({ where: { id: input.organizationId } }),
+      tx.organization.findUnique({
+        where: { id: input.organizationId },
+        include: {
+          users: {
+            where: { role: "PARTNER_AGENT" },
+            select: { id: true, locale: true },
+          },
+        },
+      }),
     ]);
     if (!organization || organization.type !== OrgType.PARTNER_AGENT_OFFICE) {
       throw new CasePipelineError("invalid_partner_office", "Organization must be a partner agent office", 400);
@@ -263,6 +274,23 @@ export async function assignCaseToPartnerOffice(input: {
       assignedUserId: input.assignedUserId || null,
       previousStatus: caseItem.status,
       nextStatus: updated.status,
+    });
+    await notifyCaseStudent({ caseId: input.caseId, eventKey: "assigned", copy: CASE_NOTIFICATION_COPY.assigned, tx });
+    const partnerRecipients = input.assignedUserId
+      ? organization.users.filter((user) => user.id === input.assignedUserId)
+      : organization.users;
+    await notifyUsers({
+      users: partnerRecipients,
+      eventKey: `case:${input.caseId}:assigned:${organization.id}`,
+      copy: {
+        ko: { title: "새 케이스 배정", message: "파트너 워크스페이스에 새 케이스가 배정되었습니다." },
+        vi: { title: "Hồ sơ mới được giao", message: "Một hồ sơ mới đã được giao vào không gian đối tác." },
+        mn: { title: "Шинэ кейс хуваарилагдлаа", message: "Түншийн талбарт шинэ кейс хуваарилагдлаа." },
+        en: { title: "New case assigned", message: "A new case was assigned to your partner workspace." },
+      },
+      href: `/partner/cases/${input.caseId}`,
+      metadata: { caseId: input.caseId, organizationId: organization.id },
+      tx,
     });
 
     return { case: updated };
@@ -312,6 +340,7 @@ export async function acceptAssignedCase(input: {
       nextStatus: updated.status,
       reviewerUserId: input.reviewerUserId || null,
     });
+    await notifyCaseStudent({ caseId: input.caseId, eventKey: "accepted", copy: CASE_NOTIFICATION_COPY.accepted, tx });
 
     return { case: updated };
   });
@@ -335,6 +364,12 @@ export async function addCaseComment(input: {
     });
     await recordAudit(tx, "case.comment_added", input.caseId, actor, {
       organizationId: input.organizationId || null,
+    });
+    await notifyCaseStudent({
+      caseId: input.caseId,
+      eventKey: `comment:${Date.now()}`,
+      copy: CASE_NOTIFICATION_COPY.comment,
+      tx,
     });
     return { case: caseItem };
   });
@@ -399,6 +434,13 @@ export async function requestCaseSupplement(input: {
       previousStatus: caseItem.status,
       nextStatus: updated.status,
     });
+    await notifyCaseStudent({
+      caseId: input.caseId,
+      eventKey: `supplement:${updated.updatedAt.toISOString()}`,
+      copy: CASE_NOTIFICATION_COPY.supplement,
+      metadata: { documentItemIds },
+      tx,
+    });
 
     return { case: updated };
   });
@@ -433,6 +475,7 @@ export async function closeCase(input: {
       nextStatus: updated.status,
       reason,
     });
+    await notifyCaseStudent({ caseId: input.caseId, eventKey: "closed", copy: CASE_NOTIFICATION_COPY.closed, tx });
 
     return { case: updated };
   });

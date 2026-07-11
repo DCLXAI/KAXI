@@ -95,6 +95,7 @@ model Organization {
 
   users               User[]
   escalationCases     EscalationCase[]
+  partnerRequests     PartnerRequest[]
   partnerAgentInvites PartnerAgentInvite[]
   auditEvents         AuditEvent[]
 
@@ -119,10 +120,12 @@ model User {
   consents                      Consent[]
   uploadedFiles                 UploadedFile[]                 @relation("UploadedFileOwner")
   assignedCases                 EscalationCase[]               @relation("AssignedCases")
+  assignedPartnerRequests       PartnerRequest[]               @relation("AssignedPartnerRequests")
   agentReviews                  AgentReview[]                  @relation("AgentReviewReviewer")
   documentVerificationFeedbacks DocumentVerificationFeedback[] @relation("DocumentVerificationFeedbackReviewer")
   caseTimelineEvents            CaseTimelineEvent[]            @relation("CaseTimelineActor")
   acceptedPartnerInvites        PartnerAgentInvite[]           @relation("AcceptedPartnerInvites")
+  notifications                 UserNotification[]
   auditEvents                   AuditEvent[]                   @relation("AuditActor")
 
   @@index([organizationId])
@@ -392,9 +395,15 @@ model DiagnosisLead {
 model PartnerRequest {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   leadId String
   lead   DiagnosisLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  assignedUserId String?
+  assignedUser   User?         @relation("AssignedPartnerRequests", fields: [assignedUserId], references: [id], onDelete: SetNull)
 
   partnerType        String // admin, translation, academy, admission, settlement
   question           String?
@@ -404,14 +413,39 @@ model PartnerRequest {
   deleteRequestedAt  DateTime?
   deletedAt          DateTime?
   retentionUntil     DateTime?
-  status             String    @default("pending") // pending, contacted, closed
+  status             String    @default("pending") // pending, matched, accepted, closed
+  matchedAt          DateTime?
+  acceptedAt         DateTime?
+  closedAt           DateTime?
 
   @@index([leadId])
+  @@index([organizationId])
+  @@index([assignedUserId])
   @@index([partnerType])
   @@index([status])
+  @@index([matchedAt])
   @@index([questionHash])
   @@index([deleteRequestedAt])
   @@index([retentionUntil])
+}
+
+model UserNotification {
+  id        String    @id @default(cuid())
+  userId    String
+  eventKey  String
+  title     String
+  message   String
+  href      String?
+  metadata  Json?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventKey])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, readAt])
+  @@index([eventKey])
 }
 
 model HandoffLead {
@@ -557,10 +591,10 @@ model ChatSession {
   deleteRequestedAt DateTime? @map("delete_requested_at")
   deletedAt         DateTime? @map("deleted_at")
 
-  attachments   ChatAttachment[]
+  attachments     ChatAttachment[]
   handoffConsents HandoffConsentEvidence[]
-  messages      ChatMessage[]
-  retrievalRuns RetrievalRun[]
+  messages        ChatMessage[]
+  retrievalRuns   RetrievalRun[]
 
   @@index([tenantId])
   @@index([locale])
@@ -572,21 +606,21 @@ model ChatSession {
 }
 
 model HandoffConsentEvidence {
-  id               String    @id @default(uuid()) @db.Uuid
-  sessionKey       String    @map("session_id")
-  typebotResultId  String?   @map("typebot_result_id")
-  scope            String    @default("HANDOFF_CONTACT_COLLECTION")
-  noticeVersion    String    @map("notice_version")
-  accepted         Boolean
-  acceptedAt       DateTime? @map("accepted_at")
-  source           String    @default("typebot")
-  locale           String    @default("ko")
-  requestIpHash    String?   @map("request_ip_hash")
-  requestUaHash    String?   @map("request_ua_hash")
-  evidence         Json      @default("{}")
-  retentionUntil   DateTime  @default(dbgenerated("now() + interval '90 days'")) @map("retention_until")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  id              String    @id @default(uuid()) @db.Uuid
+  sessionKey      String    @map("session_id")
+  typebotResultId String?   @map("typebot_result_id")
+  scope           String    @default("HANDOFF_CONTACT_COLLECTION")
+  noticeVersion   String    @map("notice_version")
+  accepted        Boolean
+  acceptedAt      DateTime? @map("accepted_at")
+  source          String    @default("typebot")
+  locale          String    @default("ko")
+  requestIpHash   String?   @map("request_ip_hash")
+  requestUaHash   String?   @map("request_ua_hash")
+  evidence        Json      @default("{}")
+  retentionUntil  DateTime  @default(dbgenerated("now() + interval '90 days'")) @map("retention_until")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   session ChatSession @relation(fields: [sessionKey], references: [sessionKey], onDelete: Cascade)
 

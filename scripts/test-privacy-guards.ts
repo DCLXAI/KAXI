@@ -90,6 +90,9 @@ async function postPartnerRequest(
         body: JSON.stringify({
           leadId,
           partnerType: "admin",
+          name: "Privacy Test User",
+          contact: "user@example.com",
+          contactType: "email",
           question: "D-4 to D-2 transfer consult. email user@example.com",
           ...(consent ? { consent } : {}),
         }),

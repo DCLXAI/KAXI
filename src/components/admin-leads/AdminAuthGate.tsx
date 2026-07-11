@@ -26,7 +26,7 @@ export function AdminAuthGate({
         </CardHeader>
         <CardContent className="space-y-3">
           <Button variant="outline" className="w-full" asChild>
-            <a href="/login?next=/admin/cases">{locale === "ko" ? "로그인" : "Sign in"}</a>
+            <a href="/login?next=/admin/leads">{locale === "ko" ? "로그인" : "Sign in"}</a>
           </Button>
         </CardContent>
       </Card>

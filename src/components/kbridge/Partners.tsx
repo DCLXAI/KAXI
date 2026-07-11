@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useLangStore, useLeadStore, usePartnerStore } from "@/store/kbridge";
 import { tr, translationKey, type Lang, type TranslationKey } from "@/lib/i18n/translations";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -120,13 +121,16 @@ const PARTNERS: PartnerType[] = [
 ];
 
 export function Partners() {
+  const searchParams = useSearchParams();
   const { lang } = useLangStore();
   const { currentLeadId } = useLeadStore();
   const { submitting, submitPartnerRequest } = usePartnerStore();
-  const [open, setOpen] = useState<string | null>(null);
+  const requestedType = searchParams.get("type");
+  const initialType = requestedType && PARTNERS.some((partner) => partner.key === requestedType) ? requestedType : null;
+  const [open, setOpen] = useState<string | null>(initialType);
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
-  const [question, setQuestion] = useState("");
+  const [question, setQuestion] = useState(() => searchParams.get("question")?.slice(0, 1000) || "");
   const [thirdPartyProvision, setThirdPartyProvision] = useState(false);
   const [processingConsignment, setProcessingConsignment] = useState(false);
   const [overseasTransfer, setOverseasTransfer] = useState(false);
@@ -137,6 +141,15 @@ export function Partners() {
   const submit = async () => {
     setError(null);
     setSubmitted(false);
+    if (!name.trim() || !contact.trim()) {
+      setError(
+        lang === "ko" ? "이름과 연락처를 입력해주세요." :
+        lang === "vi" ? "Vui lòng nhập tên và thông tin liên hệ." :
+        lang === "mn" ? "Нэр болон холбоо барих мэдээллээ оруулна уу." :
+        "Enter your name and contact details."
+      );
+      return;
+    }
     if (!consentReady) {
       setError(
         lang === "ko"
@@ -152,7 +165,12 @@ export function Partners() {
     const ok = await submitPartnerRequest(
       currentLeadId,
       open!,
-      `${name} (${contact}): ${question}`,
+      question,
+      {
+        name,
+        contact,
+        contactType: contact.includes("@") ? "email" : "messenger",
+      },
       {
         thirdPartyProvision,
         processingConsignment,
@@ -248,10 +266,10 @@ export function Partners() {
                 {tr("partner_request", lang)} - {tr(translationKey(`partner_${open}`, "partner_admin"), lang)}
               </CardTitle>
               <CardDescription>
-                {lang === "ko" && "담당자가 24시간 내 연락드립니다 (데모: 실제 전송 안 됨)"}
-                {lang === "vi" && "Liên hệ trong 24h (demo)"}
-                {lang === "mn" && "24 цагийн дотор (demo)"}
-                {lang === "en" && "Contact within 24h (demo)"}
+                {lang === "ko" && "동의 후 요청이 운영자 인입 큐에 접수되고, 배정된 파트너가 상태를 갱신합니다."}
+                {lang === "vi" && "Sau khi đồng ý, yêu cầu được đưa vào hàng chờ và đối tác được giao sẽ cập nhật trạng thái."}
+                {lang === "mn" && "Зөвшөөрсний дараа хүсэлт дараалалд орж, хуваарилагдсан түнш төлөвийг шинэчилнэ."}
+                {lang === "en" && "After consent, the request enters the operations queue and the assigned partner updates its status."}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">

@@ -337,7 +337,7 @@ export function Header({
             </DropdownMenu>
           ) : (
             <Button variant="ghost" size="sm" asChild className="gap-1.5">
-              <a href="/login">
+              <a href={`/login?lang=${activeLang}`}>
                 <User className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">{tr("nav_login", activeLang)}</span>
               </a>

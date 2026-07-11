@@ -40,7 +40,6 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         userAgent: req.headers.get("user-agent"),
       }
     );
-
     return NextResponse.json({ ok: true, document });
   } catch (err) {
     console.error("[PATCH /api/admin/documents/:id/review]", err);

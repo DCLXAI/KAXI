@@ -1,5 +1,6 @@
 import { DocumentStatus, Prisma, ReviewStatus } from "@prisma/client";
 import { db } from "@/lib/db";
+import { notifyDocumentReview } from "@/lib/notifications/domain";
 import { recordAuditLog } from "@/lib/audit";
 import {
   DEFAULT_DOCUMENT_TYPES,
@@ -252,14 +253,24 @@ export async function reviewDocumentItem(
   const existing = await db.documentItem.findUnique({ where: { id: documentItemId } });
   if (!existing) throw new Error("DocumentItem not found.");
 
-  const updated = await db.documentItem.update({
-    where: { id: documentItemId },
-    data: {
-      status: input.status as DocumentStatus,
-      reviewStatus: input.reviewStatus as ReviewStatus,
-      reviewNote: input.reviewNote?.slice(0, 1000) || null,
-    },
-    include: { file: true },
+  const updated = await db.$transaction(async (tx) => {
+    const document = await tx.documentItem.update({
+      where: { id: documentItemId },
+      data: {
+        status: input.status as DocumentStatus,
+        reviewStatus: input.reviewStatus as ReviewStatus,
+        reviewNote: input.reviewNote?.slice(0, 1000) || null,
+      },
+      include: { file: true },
+    });
+    await notifyDocumentReview({
+      documentItemId: document.id,
+      status: document.status,
+      reviewStatus: document.reviewStatus,
+      reviewNote: document.reviewNote,
+      tx,
+    });
+    return document;
   });
 
   await auditDocumentStatusChange({

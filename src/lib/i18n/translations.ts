@@ -89,7 +89,7 @@ export const t = {
   no: { ko: "아니오", vi: "Không", mn: "Үгүй", en: "No" },
 
   diagnose_submit: { ko: "진단 결과 보기", vi: "Xem kết quả", mn: "Үр дүн харах", en: "See result" },
-  diagnose_save_lead: { ko: "내 결과 저장하고 상담 예약", vi: "Lưu kết quả và đặt lịch", mn: "Хадгалах & зөвлөгөөн захиалах", en: "Save & book consultation" },
+  diagnose_save_lead: { ko: "진단 결과 저장", vi: "Lưu kết quả đánh giá", mn: "Үнэлгээний үр дүн хадгалах", en: "Save diagnosis result" },
   diagnose_back: { ko: "이전", vi: "Quay lại", mn: "Өмнөх", en: "Back" },
   diagnose_next: { ko: "다음", vi: "Tiếp theo", mn: "Дараах", en: "Next" },
   diagnose_edit_answers: { ko: "답변 수정", vi: "Sửa câu trả lời", mn: "Хариулт засах", en: "Edit answers" },

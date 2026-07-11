@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getAdminContext, requireAdmin } from "@/lib/api/security";
 import { recordRequestAudit } from "@/lib/audit";
 import type { AdminCaseAction } from "@/lib/admin/types";
+import { CASE_NOTIFICATION_COPY, notifyCaseStudent } from "@/lib/notifications/domain";
 import {
   CasePipelineError,
   acceptAssignedCase,
@@ -266,6 +267,17 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       targetId: id,
       success: true,
       metadata: { label: actionLabel(action), nextStatus: updated.status },
+    });
+    const notificationCopy = legacyAction === "request_more_documents"
+      ? CASE_NOTIFICATION_COPY.supplement
+      : legacyAction === "mark_high_risk"
+        ? CASE_NOTIFICATION_COPY.created
+        : CASE_NOTIFICATION_COPY.closed;
+    await notifyCaseStudent({
+      caseId: id,
+      eventKey: `admin:${legacyAction}:${updated.updatedAt.toISOString()}`,
+      copy: notificationCopy,
+      metadata: { action: legacyAction, status: updated.status },
     });
 
     return NextResponse.json({ ok: true, case: updated });

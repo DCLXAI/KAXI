@@ -56,6 +56,10 @@ const chatContentPrivacyMigration = readFileSync(
   join(root, "prisma", "postgres", "migrations", "20260710173000_chat_content_privacy", "migration.sql"),
   "utf8",
 );
+const funnelNotificationMigration = readFileSync(
+  join(root, "prisma", "postgres", "migrations", "20260711110000_partner_request_assignment_notifications", "migration.sql"),
+  "utf8",
+);
 
 assert(
   /authUserId\s+String\?\s+@unique\s+@db\.Uuid/.test(schema),
@@ -238,7 +242,14 @@ assert(
   migration.includes("public.kaxi_can_access_case(\"escalationCaseId\")"),
   "case child policies must scope reads through case access helper"
 );
+assert(
+  funnelNotificationMigration.includes('ALTER TABLE "UserNotification" ENABLE ROW LEVEL SECURITY;') &&
+    funnelNotificationMigration.includes("kaxi_user_notification_select_own") &&
+    funnelNotificationMigration.includes("kaxi_user_notification_update_own") &&
+    funnelNotificationMigration.includes('"authUserId" = public.kaxi_auth_uid()'),
+  "UserNotification must allow only the authenticated owner to read and update notifications",
+);
 
 console.log(
-  `PASS Supabase RLS: ${rlsTables.length + serverOnlyN8nTables.length + 3} tables protected and scoped policies verified`,
+  `PASS Supabase RLS: ${rlsTables.length + serverOnlyN8nTables.length + 4} tables protected and scoped policies verified`,
 );

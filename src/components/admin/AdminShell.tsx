@@ -16,6 +16,7 @@ import {
   Menu,
   Scale,
   ShieldCheck,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -70,6 +71,7 @@ const navGroups: AdminNavGroup[] = [
     key: "work",
     label: "업무",
     items: [
+      { href: "/admin/leads", label: "진단 리드", icon: Users },
       { href: "/admin/cases", label: "케이스", icon: ClipboardList },
       { href: "/admin/documents", label: "서류검증", icon: FileSearch },
       { href: "/admin/handoffs", label: "상담전환", icon: Headphones },
@@ -167,7 +169,7 @@ function AdminMobileNav({ pathname }: { pathname: string }) {
   );
 }
 
-function AdminAuthGate({ authenticated, available, onSignOut }: { authenticated: boolean; available: boolean; onSignOut: () => void }) {
+function AdminAuthGate({ authenticated, available, nextPath, onSignOut }: { authenticated: boolean; available: boolean; nextPath: string; onSignOut: () => void }) {
   return (
     <div className="min-h-screen bg-muted/30 px-4 py-12">
       <Card className="mx-auto max-w-md">
@@ -186,7 +188,7 @@ function AdminAuthGate({ authenticated, available, onSignOut }: { authenticated:
             <Button className="w-full" onClick={onSignOut}>다른 계정으로 로그인</Button>
           ) : (
             <Button className="w-full" asChild>
-              <Link href="/login?next=/admin/cases">로그인</Link>
+              <Link href={`/login?next=${encodeURIComponent(nextPath)}`}>로그인</Link>
             </Button>
           )}
         </CardContent>
@@ -220,8 +222,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
     const client = await createSupabaseBrowserClient();
     await client.auth.signOut?.();
     await mutate();
-    window.location.assign("/login?next=/admin/cases");
-  }, [mutate]);
+    window.location.assign(`/login?next=${encodeURIComponent(pathname)}`);
+  }, [mutate, pathname]);
 
   if (status === "loading") {
     return (
@@ -236,6 +238,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
       <AdminAuthGate
         authenticated={Boolean(session?.authenticated)}
         available={session?.available !== false}
+        nextPath={pathname}
         onSignOut={signOut}
       />
     );

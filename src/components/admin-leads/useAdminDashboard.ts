@@ -5,7 +5,7 @@ import { useLocale } from "next-intl";
 import { useKaxiSession } from "@/hooks/useKaxiSession";
 import { defaultLocale, isLocale } from "@/i18n/routing";
 import { useLeadStore } from "@/store/kbridge";
-import type { AdminLead, AdminOpsStatus, Stats } from "./types";
+import type { AdminLead, Stats } from "./types";
 
 export function useAdminDashboard() {
   const activeLocale = useLocale();
@@ -17,7 +17,6 @@ export function useAdminDashboard() {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
-  const [opsStatus, setOpsStatus] = useState<AdminOpsStatus | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const hasAdminAccess = isSessionAdmin;
 
@@ -42,14 +41,6 @@ export function useAdminDashboard() {
           setStatsLoading(false);
         }
       })(),
-      (async () => {
-        try {
-          const res = await fetch("/api/admin/ops");
-          if (res.ok) setOpsStatus(await res.json());
-        } catch (error) {
-          console.error("[admin ops]", error);
-        }
-      })(),
     ]);
   }, [fetchLeads, hasAdminAccess, locale]);
 
@@ -71,7 +62,6 @@ export function useAdminDashboard() {
     leads,
     loading,
     locale,
-    opsStatus,
     query,
     selectedLead,
     sessionStatus: status,

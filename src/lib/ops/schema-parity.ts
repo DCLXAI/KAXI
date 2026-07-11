@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 
-export const REQUIRED_PRODUCTION_MIGRATION = "20260710190000_handoff_consent_evidence";
+export const REQUIRED_PRODUCTION_MIGRATION = "20260711110000_partner_request_assignment_notifications";
 
 const REQUIRED_SCHEMA_OBJECTS = [
   "migration_ledger",
@@ -16,6 +16,8 @@ const REQUIRED_SCHEMA_OBJECTS = [
   "handoff_content_function",
   "audit_sanitizer_function",
   "handoff_consent_evidence",
+  "partner_request_assignment",
+  "user_notifications",
 ] as const;
 
 type RequiredSchemaObject = (typeof REQUIRED_SCHEMA_OBJECTS)[number];
@@ -72,7 +74,12 @@ export async function checkProductionSchemaParity(): Promise<SchemaParityResult>
         to_regprocedure('public.kaxi_extend_chat_session_retention()') IS NOT NULL AS session_retention_function,
         to_regprocedure('public.kaxi_propagate_handoff_content_privacy()') IS NOT NULL AS handoff_content_function,
         to_regprocedure('public.kaxi_sanitize_n8n_audit_content()') IS NOT NULL AS audit_sanitizer_function,
-        to_regclass('public.handoff_consent_evidence') IS NOT NULL AS handoff_consent_evidence
+        to_regclass('public.handoff_consent_evidence') IS NOT NULL AS handoff_consent_evidence,
+        EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'PartnerRequest' AND column_name = 'organizationId'
+        ) AS partner_request_assignment,
+        to_regclass('public."UserNotification"') IS NOT NULL AS user_notifications
     `;
     const row = rows[0];
     const missing = REQUIRED_SCHEMA_OBJECTS.filter((key) => row?.[key] !== true);

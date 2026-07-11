@@ -37,6 +37,11 @@ const {
   requestCaseSupplement,
 } = await import("../src/lib/cases/repository");
 const { maybeCreateHighRiskEscalationCase } = await import("../src/lib/cases/high-risk-hook");
+const {
+  assignPartnerRequest,
+  listPartnerRequestInbox,
+  updatePartnerRequestStatus,
+} = await import("../src/lib/partners/assignment");
 
 function adminRequest(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers || {});
@@ -121,6 +126,82 @@ try {
   const partnerB = await seedPartnerOffice("org_phase3_partner_b", "Phase 3 Partner B");
   const consented = await seedStudent("consented", true);
   const unconsented = await seedStudent("unconsented", false);
+
+  const diagnosisLead = await db.diagnosisLead.create({
+    data: {
+      nickname: "퍼널 테스트",
+      nationality: "vn",
+      age: 22,
+      education: "university",
+      koreanLevel: "topik2",
+      goal: "degree",
+      budget: 15_000_000,
+      region: "seoul",
+      pathKey: "goal_degree",
+      estimatedCost: 12_000_000,
+      prepTime: "6 months",
+      requiredDocs: "[]",
+      warningsJson: "[]",
+      nextActionsJson: "[]",
+    },
+  });
+  const partnerRequest = await db.partnerRequest.create({
+    data: {
+      leadId: diagnosisLead.id,
+      partnerType: "admin",
+      question: "D-2 상담 요청",
+      status: "pending",
+    },
+  });
+  const leadConsentUser = await db.user.create({
+    data: {
+      role: "STUDENT",
+      email: "funnel-consent@consent.kaxi.local",
+      zaloUid: `lead:${diagnosisLead.id}`,
+      locale: "vi",
+    },
+  });
+  await db.consent.createMany({
+    data: ["THIRD_PARTY_PROVISION", "PROCESSING_CONSIGNMENT", "OVERSEAS_TRANSFER"].map((scope) => ({
+      userId: leadConsentUser.id,
+      scope: scope as "THIRD_PARTY_PROVISION" | "PROCESSING_CONSIGNMENT" | "OVERSEAS_TRANSFER",
+      status: "GRANTED" as const,
+      version: "funnel-test",
+      locale: "vi",
+    })),
+  });
+  const matchedRequest = await assignPartnerRequest({
+    requestId: partnerRequest.id,
+    organizationId: partnerA.organization.id,
+    assignedUserId: partnerA.user.id,
+    actor: "test-admin",
+  });
+  assert(matchedRequest.status === "matched", "partner request assignment should set matched status");
+  const partnerInbox = await listPartnerRequestInbox(partnerA.organization.id);
+  assert(partnerInbox.some((item) => item.id === partnerRequest.id), "assigned request should appear in partner inbox");
+  const acceptedRequest = await updatePartnerRequestStatus({
+    requestId: partnerRequest.id,
+    organizationId: partnerA.organization.id,
+    userId: partnerA.user.id,
+    action: "accept",
+  });
+  assert(acceptedRequest.status === "accepted" && acceptedRequest.acceptedAt, "partner should accept assigned request");
+  await expectCaseError(
+    updatePartnerRequestStatus({
+      requestId: partnerRequest.id,
+      organizationId: partnerA.organization.id,
+      userId: partnerA.user.id,
+      action: "accept",
+    }),
+    "request_transition_conflict",
+  );
+  const closedRequest = await updatePartnerRequestStatus({
+    requestId: partnerRequest.id,
+    organizationId: partnerA.organization.id,
+    userId: partnerA.user.id,
+    action: "close",
+  });
+  assert(closedRequest.status === "closed" && closedRequest.closedAt, "partner should close accepted request");
 
   const hookCase = await maybeCreateHighRiskEscalationCase({
     studentProfileId: consented.profile.id,
@@ -264,6 +345,13 @@ try {
   ]) {
     assert(auditActionSet.has(action), `missing AuditEvent ${action}`);
   }
+  const studentNotifications = await db.userNotification.findMany({ where: { userId: consented.user.id } });
+  for (const eventPart of ["created", "assigned", "accepted", "supplement", "comment", "closed"]) {
+    assert(studentNotifications.some((notification) => notification.eventKey.includes(eventPart)), `missing student ${eventPart} notification`);
+  }
+  const partnerNotifications = await db.userNotification.findMany({ where: { userId: partnerA.user.id } });
+  assert(partnerNotifications.some((notification) => notification.eventKey.includes(`partner-request:${partnerRequest.id}:matched`)), "partner request assignment should notify the partner");
+  assert(partnerNotifications.some((notification) => notification.eventKey.includes(`case:${hookCase.id}:assigned`)), "case assignment should notify the partner");
 
   const unconsentedCase = await createHighRiskEscalationCase({
     studentProfileId: unconsented.profile.id,
@@ -332,7 +420,7 @@ try {
   const scopedTimeline = await db.caseTimelineEvent.findMany({ where: { escalationCaseId: scopedCase.case.id } });
   assert(scopedTimeline.length >= 4, "repository transitions should write timeline events");
 
-  console.log("PASS case pipeline: lifecycle, consent gating, organization scope, document links, and audits verified");
+  console.log("PASS case pipeline: lifecycle, lead routing, notifications, consent gating, organization scope, document links, and audits verified");
 } finally {
   await db.$disconnect();
 }

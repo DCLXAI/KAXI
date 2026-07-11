@@ -24,6 +24,7 @@ import {
   withTimeout,
 } from "@/lib/api/security";
 import { maybeCreateHighRiskEscalationCase } from "@/lib/cases/high-risk-hook";
+import { currentAuthenticatedStudentProfileId } from "@/lib/cases/current-student";
 
 // POST /api/ai/consult - 행정사 전문 AI 에이전트 상담 채팅
 // 일반 AI 도우미보다 더 깊이 있는 법적/행정적 답변 제공
@@ -154,7 +155,7 @@ export async function POST(req: NextRequest) {
     });
     if (parsed.error) return parsed.error;
 
-    const { question, history, studentProfileId } = parsed.value;
+    const { question, history } = parsed.value;
     const lang = parsed.value.lang as Lang;
     const mode = parsed.value.mode || "general"; // general | visa | documents | appeal | business
 
@@ -217,6 +218,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (result.needsHumanExpert) {
+      const studentProfileId = await currentAuthenticatedStudentProfileId();
       maybeCreateHighRiskEscalationCase({
         studentProfileId,
         category: `consult:${mode}`,
