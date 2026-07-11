@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
 import { createHash, timingSafeEqual } from "crypto";
 import { canUseSharedRuntimeDatabase, db } from "@/lib/db";
+import { getCurrentKaxiSession } from "@/lib/supabase/auth";
+import { getSupabasePublicConfig } from "@/lib/supabase/config";
+import { isAdminAal2Session } from "@/lib/supabase/policy";
+import { isSupabaseAuthUnavailable } from "@/lib/supabase/server";
 
 type JsonBody = Record<string, unknown>;
 
@@ -16,7 +19,8 @@ type AdminRole = "owner" | "admin" | "viewer";
 export interface AdminContext {
   actor: string;
   role: AdminRole;
-  authType: "session" | "api-key";
+  authType: "supabase" | "api-key";
+  mfaVerified: boolean;
 }
 
 interface Bucket {
@@ -57,15 +61,24 @@ function roleAllowed(role: AdminRole, allowed: AdminRole[]): boolean {
   return allowed.includes(role);
 }
 
-export async function getAdminContext(req: NextRequest): Promise<AdminContext | null> {
-  if (process.env.NEXTAUTH_SECRET) {
-    const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
-    if (token?.role === "owner" || token?.role === "admin" || token?.role === "viewer") {
-      return {
-        actor: token.email || token.sub || "session-admin",
-        role: token.role,
-        authType: "session",
+export async function getAdminContext(
+  req: NextRequest,
+  options: { requireMfa?: boolean } = {}
+): Promise<AdminContext | null> {
+  try {
+    const session = await getCurrentKaxiSession();
+    if (session?.user?.role === "PLATFORM_ADMIN") {
+      const context: AdminContext = {
+        actor: session.user.email || session.user.id,
+        role: "owner",
+        authType: "supabase",
+        mfaVerified: isAdminAal2Session(session.user.role, session.currentAal),
       };
+      if (context.mfaVerified || options.requireMfa === false) return context;
+    }
+  } catch (error) {
+    if (!isSupabaseAuthUnavailable(error)) {
+      console.warn("[admin auth] Supabase session lookup failed", error instanceof Error ? error.message : error);
     }
   }
 
@@ -86,6 +99,7 @@ export async function getAdminContext(req: NextRequest): Promise<AdminContext | 
     actor: "admin-api-key",
     role: "owner",
     authType: "api-key",
+    mfaVerified: true,
   };
 }
 
@@ -93,12 +107,15 @@ export async function requireAdmin(
   req: NextRequest,
   options: { roles?: AdminRole[] } = {}
 ): Promise<NextResponse | null> {
-  const context = await getAdminContext(req);
+  const context = await getAdminContext(req, { requireMfa: false });
   if (!context) {
-    if (!process.env.ADMIN_API_KEY && !process.env.NEXTAUTH_SECRET) {
+    if (!process.env.ADMIN_API_KEY && !getSupabasePublicConfig()) {
       return jsonError("Admin credentials are not configured", 503);
     }
     return jsonError("Unauthorized", 401);
+  }
+  if (context.authType === "supabase" && !context.mfaVerified) {
+    return jsonError("MFA verification required", 403);
   }
 
   const allowed = options.roles || ["owner", "admin"];

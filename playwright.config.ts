@@ -29,7 +29,6 @@ export default defineConfig({
       DATABASE_URL: e2eDatabaseUrl,
       TEST_DATABASE_URL: e2eDatabaseUrl,
       ADMIN_API_KEY: "e2e-admin-key",
-      NEXTAUTH_SECRET: "e2e-nextauth-secret",
       CHAT_SESSION_SIGNING_SECRET: "e2e-chat-session-signing-secret-with-more-than-thirty-two-characters",
       AGENT_BACKEND: "tool-fallback",
       ZAI_ENABLED: "false",

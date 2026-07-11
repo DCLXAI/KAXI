@@ -128,16 +128,15 @@ bun run test:supabase-rls
 bun run test:schema
 ```
 
-Next Auth/RLS follow-ups:
+Auth/RLS follow-ups:
 
-- add Supabase Auth sign-up/sign-in UI for student and partner-agent accounts;
-- create an admin-only account-linking flow that writes `User.authUserId`;
+- add recovery-code and administrator account-replacement runbooks;
 - move direct document downloads to Supabase Storage signed URLs;
 - add write policies only for audited, narrow mutations such as case timeline comments or student profile self-service edits.
 
 ### Phase 3 Slice 2: Supabase Auth runtime
 
-Runtime Auth integration uses Supabase Auth for students and partner agents while the existing NextAuth admin login remains unchanged.
+Runtime Auth uses Supabase Auth for students, partner agents, and platform administrators. Runtime authorization comes from the linked `User.role`; administrator APIs additionally require an `aal2` Supabase session.
 
 Configured variables:
 
@@ -153,6 +152,7 @@ Security boundary:
 
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` is browser-safe and may be bundled in client code.
 - `SUPABASE_SERVICE_ROLE_KEY` is server-only. Do not print it, return it from API routes, expose it to client components, or commit it.
+- Administrator email matching alone never grants access. Use `admin:bootstrap-supabase` to link a confirmed Auth UUID to `PLATFORM_ADMIN`.
 - On machines where the direct Supabase hostname is IPv6-only or DNS-unresolvable, use `SUPABASE_POOLER_URL` for runtime Prisma work. Use direct URLs only from networks that can resolve and reach them.
 
 Auth mapping:

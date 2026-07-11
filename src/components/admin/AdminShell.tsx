@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { signOut, useSession } from "next-auth/react";
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { Activity, AlertTriangle, BookMarked, ClipboardList, FileClock, FileSearch, Headphones, KeyRound, LogOut, Scale, ShieldCheck } from "lucide-react";
+import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
+import { Activity, BookMarked, ClipboardList, FileClock, FileSearch, Headphones, Loader2, LogOut, Scale, ShieldCheck } from "lucide-react";
+import { SupabaseMfaPanel } from "@/components/auth/SupabaseMfaPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { useKaxiSession } from "@/hooks/useKaxiSession";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 interface AdminContextValue {
   hasAdminAccess: boolean;
@@ -34,47 +35,28 @@ const navItems = [
   { href: "/admin/audit", label: "감사", icon: FileClock },
 ];
 
-function AdminAuthGate({
-  onUnlock,
-  status,
-}: {
-  onUnlock: (key: string) => void;
-  status: "loading" | "authenticated" | "unauthenticated";
-}) {
-  const [keyInput, setKeyInput] = useState("");
-
+function AdminAuthGate({ authenticated, available, onSignOut }: { authenticated: boolean; available: boolean; onSignOut: () => void }) {
   return (
     <div className="min-h-screen bg-muted/30 px-4 py-12">
       <Card className="mx-auto max-w-md">
         <CardHeader>
-          <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <KeyRound className="h-5 w-5" />
-          </div>
-          <CardTitle>행정사 Admin Dashboard</CardTitle>
+          <CardTitle>관리자 인증</CardTitle>
           <CardDescription>
-            세션 로그인 또는 임시 관리자 API 키로 접근합니다. 운영 데이터 API는 서버에서 다시 권한을 검증합니다.
+            {!available
+              ? "Supabase Auth 설정이 필요합니다."
+              : authenticated
+                ? "현재 계정에는 관리자 권한이 없습니다."
+                : "Supabase 관리자 계정으로 로그인해주세요."}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <Button className="w-full" asChild>
-            <Link href="/login?next=/admin/cases">로그인</Link>
-          </Button>
-          <div className="grid gap-2">
-            <Input
-              type="password"
-              value={keyInput}
-              onChange={(event) => setKeyInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && keyInput.trim()) onUnlock(keyInput.trim());
-              }}
-              placeholder="임시 관리자 API 키"
-              autoComplete="off"
-            />
-            <Button variant="outline" onClick={() => keyInput.trim() && onUnlock(keyInput.trim())}>
-              API 키로 접속
+        <CardContent>
+          {!available ? null : authenticated ? (
+            <Button className="w-full" onClick={onSignOut}>다른 계정으로 로그인</Button>
+          ) : (
+            <Button className="w-full" asChild>
+              <Link href="/login?next=/admin/cases">로그인</Link>
             </Button>
-          </div>
-          {status === "loading" && <p className="text-xs text-muted-foreground">세션 확인 중...</p>}
+          )}
         </CardContent>
       </Card>
     </div>
@@ -83,21 +65,18 @@ function AdminAuthGate({
 
 export function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { data: session, status } = useSession();
-  const [adminKey, setAdminKey] = useState("");
-  const role = session?.user?.role || "";
-  const isSessionAdmin = ["owner", "admin", "viewer"].includes(role);
-  const hasAdminAccess = isSessionAdmin || Boolean(adminKey);
-  const canManageOps = Boolean(adminKey) || ["owner", "admin"].includes(role);
+  const { data: session, status, mutate } = useKaxiSession();
+  const isSessionAdmin = session?.user?.role === "PLATFORM_ADMIN";
+  const hasAdminAccess = isSessionAdmin && session.currentAal === "aal2";
+  const canManageOps = hasAdminAccess;
 
   const adminFetch = useCallback(
     (input: RequestInfo | URL, init: RequestInit = {}) => {
       const headers = new Headers(init.headers || {});
-      if (adminKey) headers.set("x-admin-key", adminKey);
       if (!headers.has("content-type") && init.body) headers.set("content-type", "application/json");
       return fetch(input, { ...init, headers });
     },
-    [adminKey]
+    []
   );
 
   const context = useMemo<AdminContextValue>(
@@ -105,8 +84,33 @@ export function AdminShell({ children }: { children: ReactNode }) {
     [adminFetch, canManageOps, hasAdminAccess]
   );
 
+  const signOut = useCallback(async () => {
+    const client = await createSupabaseBrowserClient();
+    await client.auth.signOut?.();
+    await mutate();
+    window.location.assign("/login?next=/admin/cases");
+  }, [mutate]);
+
+  if (status === "loading") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/30">
+        <Loader2 className="h-6 w-6 animate-spin" />
+      </div>
+    );
+  }
+
+  if (isSessionAdmin && !hasAdminAccess) {
+    return <SupabaseMfaPanel onVerified={mutate} />;
+  }
+
   if (!hasAdminAccess) {
-    return <AdminAuthGate onUnlock={setAdminKey} status={status} />;
+    return (
+      <AdminAuthGate
+        authenticated={Boolean(session?.authenticated)}
+        available={session?.available !== false}
+        onSignOut={signOut}
+      />
+    );
   }
 
   return (
@@ -135,22 +139,13 @@ export function AdminShell({ children }: { children: ReactNode }) {
               })}
             </nav>
             <div className="ml-auto flex items-center gap-2">
-              {isSessionAdmin ? (
-                <Badge variant="outline" className="gap-1">
-                  <ShieldCheck className="h-3 w-3" />
-                  {role}
-                </Badge>
-              ) : (
-                <Badge variant="secondary" className="gap-1">
-                  <AlertTriangle className="h-3 w-3" />
-                  API key
-                </Badge>
-              )}
-              {isSessionAdmin && (
-                <Button variant="outline" size="sm" onClick={() => signOut({ callbackUrl: "/" })}>
-                  <LogOut className="h-3.5 w-3.5" />
-                </Button>
-              )}
+              <Badge variant="outline" className="gap-1">
+                <ShieldCheck className="h-3 w-3" />
+                Supabase MFA
+              </Badge>
+              <Button variant="outline" size="sm" onClick={signOut} aria-label="로그아웃">
+                <LogOut className="h-3.5 w-3.5" />
+              </Button>
             </div>
           </div>
           <div className="border-t bg-muted/30 md:hidden">

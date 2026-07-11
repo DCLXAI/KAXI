@@ -3,10 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { signOut, useSession } from "next-auth/react";
 import { useLangStore } from "@/store/kbridge";
+import { useKaxiSession } from "@/hooks/useKaxiSession";
 import { LANGS, tr, type Lang } from "@/lib/i18n/translations";
 import { viewToPath } from "@/lib/kbridge/views";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -104,8 +105,19 @@ export function Header({
 }) {
   const { lang } = useLangStore();
   const activeLang = locale ?? lang;
-  const { data: session } = useSession();
-  const isAdmin = ["owner", "admin", "viewer"].includes(session?.user?.role || "");
+  const router = useRouter();
+  const { data: session, mutate } = useKaxiSession();
+  const role = session?.user?.role;
+  const isAdmin = role === "PLATFORM_ADMIN";
+  const accountLabel = role === "PLATFORM_ADMIN" ? "Admin" : role === "PARTNER_AGENT" ? "Partner" : "Student";
+
+  const logout = async () => {
+    const client = await createSupabaseBrowserClient();
+    await client.auth.signOut?.();
+    await mutate();
+    router.push("/");
+    router.refresh();
+  };
 
   const navItems = [
     { key: "home", label: tr("brand", activeLang) },
@@ -154,21 +166,21 @@ export function Header({
         </nav>
         <div className="ml-auto flex items-center gap-2">
           <LangSwitcher currentView={currentView} locale={locale} />
-          {isAdmin ? (
+          {session?.authenticated && session.user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="gap-1.5">
                   <User className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Admin</span>
+                  <span className="hidden sm:inline">{accountLabel}</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem className="text-xs text-muted-foreground">
-                  {session?.user?.email}
+                  {session.user.email}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={() => signOut({ callbackUrl: "/" })}
+                  onClick={logout}
                   className="text-destructive gap-1.5"
                 >
                   <LogOut className="h-3.5 w-3.5" />

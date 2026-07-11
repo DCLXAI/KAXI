@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { getSession, signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { KeyRound, Loader2, Mail, ShieldCheck, UserPlus } from "lucide-react";
+import { KeyRound, Loader2, Mail, RotateCcw, UserPlus } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,15 +23,11 @@ const CALLBACK_ERRORS: Record<string, string> = {
   callback_failed: "로그인 링크가 만료되었거나 이미 사용되었습니다.",
   invite_not_valid: "파트너 초대가 만료되었거나 올바르지 않습니다.",
   invite_email_mismatch: "초대받은 이메일과 로그인 이메일이 다릅니다.",
-  admin_credentials_required: "관리자 MFA 인증으로 로그인해주세요.",
+  admin_link_required: "관리자 계정 연결이 필요합니다. 운영자에게 문의해주세요.",
   auth_identity_conflict: "이미 다른 로그인 계정에 연결된 이메일입니다.",
   supabase_unavailable: "회원 인증 서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.",
   internal: "로그인 처리 중 오류가 발생했습니다.",
 };
-
-function safeAdminDestination(value: string | null): string {
-  return value?.startsWith("/admin") && !value.startsWith("//") ? value : "/admin/cases";
-}
 
 export function UnifiedAuthForm() {
   const router = useRouter();
@@ -42,9 +37,7 @@ export function UnifiedAuthForm() {
   const [mode, setMode] = useState<AuthMode>(inviteToken ? "sign_up" : "sign_in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [adminOtp, setAdminOtp] = useState("");
-  const [showAdminMfa, setShowAdminMfa] = useState(false);
-  const [loading, setLoading] = useState<"password" | "otp" | null>(null);
+  const [loading, setLoading] = useState<"password" | "otp" | "reset" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const callbackError = searchParams.get("error");
   const [error, setError] = useState<string | null>(
@@ -70,22 +63,7 @@ export function UnifiedAuthForm() {
     router.refresh();
   }
 
-  async function tryAdminSignIn(): Promise<boolean> {
-    const result = await signIn("credentials", {
-      email,
-      password,
-      otp: adminOtp,
-      redirect: false,
-    });
-    if (!result?.ok || result.error) return false;
-
-    await getSession();
-    router.replace(safeAdminDestination(requestedPath));
-    router.refresh();
-    return true;
-  }
-
-  async function tryMemberSignIn(): Promise<boolean> {
+  async function trySignIn(): Promise<boolean> {
     try {
       const client = await createSupabaseBrowserClient();
       const result = await client.auth.signInWithPassword?.({ email, password });
@@ -103,10 +81,8 @@ export function UnifiedAuthForm() {
     setError(null);
     setMessage(null);
     try {
-      const signedIn = showAdminMfa ? await tryAdminSignIn() : await tryMemberSignIn();
-      if (!signedIn) {
-        setError(showAdminMfa ? "관리자 계정 정보와 MFA 코드를 확인해주세요." : "이메일과 비밀번호를 확인해주세요.");
-      }
+      const signedIn = await trySignIn();
+      if (!signedIn) setError("이메일과 비밀번호를 확인해주세요.");
     } catch {
       setError("로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
     } finally {
@@ -168,6 +144,24 @@ export function UnifiedAuthForm() {
     }
   }
 
+  async function sendPasswordReset() {
+    setLoading("reset");
+    setError(null);
+    setMessage(null);
+    try {
+      const client = await createSupabaseBrowserClient();
+      const result = await client.auth.resetPasswordForEmail?.(email, {
+        redirectTo: new URL("/auth/callback?next=/account/reset-password", window.location.origin).toString(),
+      });
+      if (!result || result.error) throw new Error("reset_failed");
+      setMessage("비밀번호 재설정 링크를 이메일로 보냈습니다.");
+    } catch {
+      setError("비밀번호 재설정 링크를 보낼 수 없습니다.");
+    } finally {
+      setLoading(null);
+    }
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-10">
       <Card className="w-full max-w-md rounded-lg">
@@ -211,41 +205,18 @@ export function UnifiedAuthForm() {
                   onEmailChange={setEmail}
                   onPasswordChange={setPassword}
                 />
-                {showAdminMfa && (
-                  <div className="space-y-1.5">
-                    <Label htmlFor="admin-otp">관리자 MFA 코드</Label>
-                    <Input
-                      id="admin-otp"
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      value={adminOtp}
-                      onChange={(event) => setAdminOtp(event.target.value)}
-                      disabled={Boolean(loading)}
-                    />
-                  </div>
-                )}
                 <Button type="submit" className="w-full" disabled={Boolean(loading) || !email || !password}>
                   {loading === "password" && <Loader2 className="h-4 w-4 animate-spin" />}
                   로그인
                 </Button>
                 <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={sendEmailLink}
-                    disabled={Boolean(loading) || !email}
-                  >
+                  <Button type="button" variant="outline" onClick={sendEmailLink} disabled={Boolean(loading) || !email}>
                     {loading === "otp" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
                     이메일 링크
                   </Button>
-                  <Button
-                    type="button"
-                    variant={showAdminMfa ? "secondary" : "outline"}
-                    onClick={() => setShowAdminMfa((current) => !current)}
-                    disabled={Boolean(loading)}
-                  >
-                    <ShieldCheck className="h-4 w-4" />
-                    관리자 MFA
+                  <Button type="button" variant="outline" onClick={sendPasswordReset} disabled={Boolean(loading) || !email}>
+                    {loading === "reset" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                    비밀번호 재설정
                   </Button>
                 </div>
               </form>

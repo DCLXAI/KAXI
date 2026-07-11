@@ -22,10 +22,9 @@
 - `AI_AGENT_PREFLIGHT_TIMEOUT_MS`, `AI_AGENT_CONTEXT_MAX_CHARS`, `AI_AGENT_GROUNDED_QUESTION_MAX_CHARS`: Bound preflight latency and context sent to the managed LLM.
 - `AI_AGENT_LOGGING_ENABLED`: Enables Agent `ChatLog` persistence when Postgres is configured.
 - `AI_AGENT_LEDGER_ENABLED`: Enables per-request Agent cost/quality ledger persistence when Postgres is configured.
-- `NEXTAUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`: Required for session-based admin login. Generate the hash with `bun run admin:hash-password -- <password>`.
-- `ADMIN_PASSWORD`: Local/demo fallback only. Do not use plaintext admin passwords in production.
-- `ADMIN_ROLE`: `owner`, `admin`, or `viewer`. `viewer` can read admin dashboards but cannot mutate data.
-- `ADMIN_MFA_TOTP_SECRET`: Base32 TOTP secret for admin MFA. Required in hosted/production admin login.
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Required for student, partner, and administrator browser authentication.
+- `SUPABASE_SERVICE_ROLE_KEY`: Server-only key used for operator bootstrap and storage administration. Never expose it to browser code.
+- `SUPABASE_ADMIN_EMAIL`: Operator-only input for `bun run admin:bootstrap-supabase -- --email=...`; it is not consulted by runtime authorization.
 - `DATA_ENCRYPTION_KEY`, `PII_HASH_SECRET`: Required before production writes. Encrypts contact/free-form question payloads and hashes them for deletion lookup.
 - `PII_ALLOW_UNENCRYPTED_PLAINTEXT`: Local development escape hatch only. Keep `false` in production.
 - `PRIVACY_CHATLOG_RETENTION_DAYS`, `PRIVACY_PARTNER_REQUEST_RETENTION_DAYS`, `PRIVACY_LEAD_RETENTION_DAYS`: Retention windows enforced by `/api/privacy/retention`.
@@ -187,10 +186,9 @@ Visa, immigration, school-accreditation, and cost guidance are time-sensitive.
 
 ## Admin Access
 
-Admin APIs require a session login or break-glass `x-admin-key: $ADMIN_API_KEY` / `Authorization: Bearer $ADMIN_API_KEY`.
+Admin APIs require a linked `PLATFORM_ADMIN` Supabase session at `aal2`, or the server-to-server break-glass `x-admin-key: $ADMIN_API_KEY` / `Authorization: Bearer $ADMIN_API_KEY`.
 Do not expose admin navigation in public product surfaces. Admin UI routes such as `/admin` and `/synonyms` are real Next.js routes, but server-side API guards remain mandatory.
-Prefer session login through `/login`; the browser API-key fallback is intentionally memory-only and should be used only for temporary operations.
-Production/hosted admin login fails closed unless `NEXTAUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`, a valid `ADMIN_ROLE`, and `ADMIN_MFA_TOTP_SECRET` are configured, and plaintext `ADMIN_PASSWORD` is empty. Admin actions and privacy operations are written to `AdminAuditLog`; inspect with `GET /api/audit-logs`.
+The browser never accepts an admin API key. Create and confirm the Supabase account, then run `bun run admin:bootstrap-supabase -- --email=admin@example.com` to bind its UUID to `User.role=PLATFORM_ADMIN`. For a new operator, add `--invite` to send a Supabase setup email and atomically link the invited UUID. The first admin visit enrolls a TOTP factor; API access remains closed until the session reaches `aal2`. Admin actions and privacy operations are written to `AdminAuditLog`; inspect with `GET /api/audit-logs`.
 
 ## CI Quality Gates
 

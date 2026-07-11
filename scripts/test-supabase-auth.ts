@@ -23,7 +23,7 @@ async function expectAuthError(operation: Promise<unknown>, code: string) {
 prepareTestDb("supabase auth bridge");
 
 const { db } = await import("../src/lib/db");
-const { areaForPath, canAccessArea, defaultLoginPath, postLoginPath } = await import("../src/lib/supabase/policy");
+const { areaForPath, canAccessArea, defaultLoginPath, isAdminAal2Session, postLoginPath } = await import("../src/lib/supabase/policy");
 const {
   createPartnerAgentInvite,
   hashPartnerInviteToken,
@@ -48,6 +48,9 @@ try {
   assert(postLoginPath("STUDENT", "/documents") === "/documents", "student may return to a public path");
   assert(postLoginPath("STUDENT", "/partner") === "/student", "student cannot redirect into partner area");
   assert(postLoginPath("STUDENT", "//evil.example") === "/student", "protocol-relative redirects must be rejected");
+  assert(isAdminAal2Session("PLATFORM_ADMIN", "aal2"), "linked admin AAL2 session should be authorized");
+  assert(!isAdminAal2Session("PLATFORM_ADMIN", "aal1"), "admin AAL1 session should require MFA");
+  assert(!isAdminAal2Session("STUDENT", "aal2"), "student AAL2 session must not gain admin access");
 
   const existingStudent = await db.user.create({
     data: {
@@ -144,6 +147,35 @@ try {
       email: "conflict@example.com",
     }),
     "auth_identity_conflict"
+  );
+
+  const linkedAdmin = await db.user.create({
+    data: {
+      id: "user_auth_linked_admin",
+      authUserId: "77777777-7777-4777-8777-777777777777",
+      role: "PLATFORM_ADMIN",
+      email: "linked-admin@example.com",
+    },
+  });
+  const returningAdmin = await syncKaxiUserForAuth({
+    authUserId: "77777777-7777-4777-8777-777777777777",
+    email: "linked-admin@example.com",
+  });
+  assert(returningAdmin.id === linkedAdmin.id && returningAdmin.role === "PLATFORM_ADMIN", "linked admin role should be preserved");
+
+  await db.user.create({
+    data: {
+      id: "user_auth_unlinked_admin",
+      role: "PLATFORM_ADMIN",
+      email: "unlinked-admin@example.com",
+    },
+  });
+  await expectAuthError(
+    syncKaxiUserForAuth({
+      authUserId: "88888888-8888-4888-8888-888888888888",
+      email: "unlinked-admin@example.com",
+    }),
+    "admin_link_required"
   );
 
   console.log("PASS unified Auth bridge: role preservation, partner invites, identity conflicts, and redirects verified");

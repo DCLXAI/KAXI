@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocale } from "next-intl";
-import { useSession } from "next-auth/react";
+import { useKaxiSession } from "@/hooks/useKaxiSession";
 import { defaultLocale, isLocale } from "@/i18n/routing";
 import type { ChatlogAnalysis, Suggestion, Synonym } from "./types";
 
@@ -13,10 +13,8 @@ function errorMessage(error: unknown): string {
 export function useSynonymsAdmin() {
   const activeLocale = useLocale();
   const locale = isLocale(activeLocale) ? activeLocale : defaultLocale;
-  const { data: session, status } = useSession();
-  const isSessionAdmin = ["owner", "admin", "viewer"].includes(session?.user?.role || "");
-  const [adminKey, setAdminKey] = useState("");
-  const [keyInput, setKeyInput] = useState("");
+  const { data: session, status } = useKaxiSession();
+  const isSessionAdmin = session?.user?.role === "PLATFORM_ADMIN" && session.currentAal === "aal2";
   const [synonyms, setSynonyms] = useState<Synonym[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
@@ -31,8 +29,7 @@ export function useSynonymsAdmin() {
   const [newCategory, setNewCategory] = useState("general");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const authHeaders = useMemo(() => (adminKey ? { "x-admin-key": adminKey } : undefined), [adminKey]);
-  const hasAdminAccess = isSessionAdmin || Boolean(adminKey);
+  const hasAdminAccess = isSessionAdmin;
 
   const fetchSynonyms = useCallback(async () => {
     if (!hasAdminAccess) return;
@@ -42,7 +39,7 @@ export function useSynonymsAdmin() {
       if (category !== "all") params.set("category", category);
       if (origin !== "all") params.set("origin", origin);
       if (query) params.set("q", query);
-      const res = await fetch(`/api/synonyms?${params}`, { headers: authHeaders });
+      const res = await fetch(`/api/synonyms?${params}`);
       if (res.status === 401 || res.status === 503) throw new Error("관리자 키를 확인하세요");
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
@@ -53,29 +50,23 @@ export function useSynonymsAdmin() {
     } finally {
       setLoading(false);
     }
-  }, [authHeaders, category, hasAdminAccess, origin, query]);
+  }, [category, hasAdminAccess, origin, query]);
 
   const fetchAnalysis = useCallback(async () => {
     if (!hasAdminAccess) return;
     try {
-      const res = await fetch("/api/chatlog/analyze?days=30", { headers: authHeaders });
+      const res = await fetch("/api/chatlog/analyze?days=30");
       if (!res.ok) return;
       setAnalysis(await res.json());
     } catch (error) {
       console.error(error);
     }
-  }, [authHeaders, hasAdminAccess]);
+  }, [hasAdminAccess]);
 
   useEffect(() => {
     fetchSynonyms();
     fetchAnalysis();
   }, [fetchSynonyms, fetchAnalysis]);
-
-  const unlock = () => {
-    const trimmed = keyInput.trim();
-    if (!trimmed) return;
-    setAdminKey(trimmed);
-  };
 
   const refresh = () => {
     fetchSynonyms();
@@ -86,7 +77,7 @@ export function useSynonymsAdmin() {
     try {
       await fetch(`/api/synonyms/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", ...authHeaders },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: !current }),
       });
       fetchSynonyms();
@@ -98,7 +89,7 @@ export function useSynonymsAdmin() {
   const remove = async (id: string) => {
     if (!confirm("삭제하시겠습니까?")) return;
     try {
-      await fetch(`/api/synonyms/${id}`, { method: "DELETE", headers: authHeaders });
+      await fetch(`/api/synonyms/${id}`, { method: "DELETE" });
       fetchSynonyms();
     } catch (error) {
       console.error(error);
@@ -115,7 +106,7 @@ export function useSynonymsAdmin() {
       const targets = newTargets.split(",").map((item) => item.trim()).filter(Boolean);
       const res = await fetch("/api/synonyms", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ source: newSource.trim(), targets, category: newCategory, origin: "manual" }),
       });
       if (!res.ok) {
@@ -139,7 +130,7 @@ export function useSynonymsAdmin() {
     try {
       const res = await fetch("/api/synonyms/suggest", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ days: 30, topN: 15 }),
       });
       if (!res.ok) throw new Error("Failed");
@@ -157,7 +148,7 @@ export function useSynonymsAdmin() {
     try {
       const res = await fetch("/api/synonyms", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           source: suggestion.source,
           targets: suggestion.targets,
@@ -183,7 +174,6 @@ export function useSynonymsAdmin() {
     category,
     error,
     hasAdminAccess,
-    keyInput,
     loading,
     locale,
     newCategory,
@@ -195,7 +185,6 @@ export function useSynonymsAdmin() {
     remove,
     sessionStatus: status,
     setCategory,
-    setKeyInput,
     setNewCategory,
     setNewSource,
     setNewTargets,
@@ -209,6 +198,5 @@ export function useSynonymsAdmin() {
     suggestions,
     synonyms,
     toggleEnabled,
-    unlock,
   };
 }

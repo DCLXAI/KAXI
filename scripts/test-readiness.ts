@@ -1,24 +1,16 @@
-import { createHmac } from "crypto";
 import { NextRequest } from "next/server";
 import { prepareTestDb } from "./prepare-test-db";
 
 prepareTestDb("readiness guards");
 
 const { getReadinessPayload } = await import("../src/lib/ops/readiness");
-const { getRuntimeDatabaseInfo } = await import("../src/lib/db");
+const { db, getRuntimeDatabaseInfo } = await import("../src/lib/db");
 const { shouldUsePgvector } = await import("../src/lib/embeddings/pgvector-rag");
 const { rateLimit } = await import("../src/lib/api/security");
 const { KNOWLEDGE_DOCS } = await import("../src/lib/data/knowledge");
 const { canUseSchoolSeedFallback } = await import("../src/lib/schools/repository");
 const { sendOpsAlert } = await import("../src/lib/ops/alerts");
 const { summarizeRagSystemHealth } = await import("../src/lib/ops/rag-system-health");
-const {
-  getConfiguredAdminRole,
-  isAdminLoginConfigurationReady,
-  isSecureAdminAuthRequired,
-  verifyAdminMfa,
-  verifyAdminPassword,
-} = await import("../src/lib/auth/password");
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -47,12 +39,8 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
     delete process.env.DATA_ENCRYPTION_KEY;
     delete process.env.PII_HASH_SECRET;
     delete process.env.CRON_SECRET;
-    delete process.env.ADMIN_MFA_TOTP_SECRET;
-    process.env.ADMIN_EMAIL = "admin@example.com";
-    process.env.ADMIN_PASSWORD_HASH = "scrypt:salt:hash";
-    process.env.ADMIN_PASSWORD = "";
-    process.env.ADMIN_ROLE = "owner";
-    process.env.NEXTAUTH_SECRET = "test-secret";
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "";
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "";
 
     const payload = await getReadinessPayload();
     if (payload.status !== "degraded" || !payload.production) {
@@ -79,7 +67,7 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
       "embeddings.cache",
       "ai.backend_policy",
       "rate_limit.shared",
-      "admin.session_hash",
+      "admin.supabase_auth",
       "admin.mfa_role",
       "admin.audit_log",
     ]) {
@@ -103,7 +91,8 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
     if (attachmentScanner.metadata?.uploadsEnabled !== false) {
       fail(`production attachment uploads should remain disabled without a scanner: ${JSON.stringify(attachmentScanner)}`);
     }
-    if (byKey.get("admin.mfa_role")?.ok) fail("missing MFA should not pass admin MFA check");
+    if (byKey.get("admin.supabase_auth")?.ok) fail("missing Supabase Auth should not pass admin auth check");
+    if (byKey.get("admin.mfa_role")?.ok) fail("missing linked admin should not pass admin MFA check");
     if (byKey.get("embeddings.cache")?.severity !== "warning") {
       fail(`embedding cache readiness should be warning severity: ${JSON.stringify(byKey.get("embeddings.cache"))}`);
     }
@@ -332,105 +321,27 @@ function testSchoolSeedFallbackIsLocalOnly() {
   }
 }
 
-function sha256AdminHash(password: string): string {
-  return `sha256:${createHmac("sha256", process.env.ADMIN_PASSWORD_PEPPER || "kaxi-admin")
-    .update(password)
-    .digest("hex")}`;
-}
-
-function testProductionAdminAuthFailsClosed() {
+async function testSupabaseAdminReadinessContract() {
   const snapshot = { ...process.env };
+  const admin = await db.user.create({
+    data: {
+      authUserId: "77777777-7777-4777-8777-777777777777",
+      email: "readiness-admin@example.com",
+      role: "PLATFORM_ADMIN",
+      locale: "ko",
+    },
+  });
   try {
-    Object.assign(process.env, {
-      NODE_ENV: "production",
-      VERCEL_ENV: "production",
-      VERCEL: "1",
-      NEXTAUTH_SECRET: "test-nextauth-secret",
-      ADMIN_EMAIL: "admin@example.com",
-      ADMIN_ROLE: "owner",
-      ADMIN_PASSWORD: "plain-password",
-      ADMIN_PASSWORD_HASH: "",
-      ADMIN_MFA_TOTP_SECRET: "JBSWY3DPEHPK3PXP",
-    });
-
-    if (!isSecureAdminAuthRequired()) fail("production admin auth should require secure mode");
-    if (isAdminLoginConfigurationReady()) fail("production plaintext ADMIN_PASSWORD should not be login-ready");
-    if (verifyAdminPassword("plain-password")) fail("production plaintext ADMIN_PASSWORD should not verify");
-
-    process.env.ADMIN_PASSWORD = "";
-    process.env.ADMIN_PASSWORD_HASH = sha256AdminHash("plain-password");
-    delete process.env.ADMIN_MFA_TOTP_SECRET;
-    if (isAdminLoginConfigurationReady()) fail("production admin login should require MFA secret");
-    if (verifyAdminMfa(undefined)) fail("production admin MFA should fail without a secret");
-
-    process.env.ADMIN_PASSWORD_HASH = "scrypt:replace-with-generated-salt:replace-with-generated-hash";
-    process.env.ADMIN_MFA_TOTP_SECRET = "JBSWY3DPEHPK3PXP";
-    if (isAdminLoginConfigurationReady()) fail("production placeholder admin hash should not be login-ready");
-
-    process.env.ADMIN_PASSWORD_HASH = sha256AdminHash("plain-password");
-    process.env.ADMIN_MFA_TOTP_SECRET = "JBSWY3DPEHPK3PXP";
-    if (!isAdminLoginConfigurationReady()) fail("production hashed password + MFA should be login-ready");
-    if (!verifyAdminPassword("plain-password")) fail("production ADMIN_PASSWORD_HASH should verify");
-
-    process.env.ADMIN_ROLE = "superuser";
-    if (getConfiguredAdminRole()) fail("production invalid admin role should not resolve");
-    if (isAdminLoginConfigurationReady()) fail("production invalid admin role should not be login-ready");
-  } finally {
-    restoreEnv(snapshot);
-  }
-}
-
-function testLocalAdminPasswordFallbackStillWorks() {
-  const snapshot = { ...process.env };
-  try {
-    Object.assign(process.env, {
-      NODE_ENV: "development",
-      ADMIN_EMAIL: "admin@example.com",
-      ADMIN_PASSWORD: "local-password",
-      ADMIN_PASSWORD_HASH: "scrypt:replace-with-generated-salt:replace-with-generated-hash",
-      ADMIN_ROLE: "",
-    });
-    delete process.env.VERCEL;
-    delete process.env.VERCEL_ENV;
-    delete process.env.NEXTAUTH_SECRET;
-    delete process.env.ADMIN_MFA_TOTP_SECRET;
-
-    if (isSecureAdminAuthRequired()) fail("local admin auth should not require secure mode");
-    if (getConfiguredAdminRole() !== "owner") fail("local missing ADMIN_ROLE should default to owner");
-    if (!isAdminLoginConfigurationReady()) fail("local plaintext ADMIN_PASSWORD should remain login-ready");
-    if (!verifyAdminPassword("local-password")) fail("local plaintext ADMIN_PASSWORD should verify");
-    if (!verifyAdminMfa(undefined)) fail("local admin MFA should be optional");
-  } finally {
-    restoreEnv(snapshot);
-  }
-}
-
-async function testAuthSessionFailsClosedWhenAdminConfigMissing() {
-  const snapshot = { ...process.env };
-  try {
-    Object.assign(process.env, {
-      NODE_ENV: "production",
-      VERCEL_ENV: "production",
-      VERCEL: "1",
-      ADMIN_EMAIL: "",
-      ADMIN_PASSWORD: "",
-      ADMIN_PASSWORD_HASH: "",
-      ADMIN_ROLE: "",
-      ADMIN_MFA_TOTP_SECRET: "",
-    });
-    delete process.env.NEXTAUTH_SECRET;
-
-    const route = await import("../src/app/api/auth/[...nextauth]/route");
-    const res = await route.GET(
-      new NextRequest("https://kaxi.local/api/auth/session"),
-      {} as never
-    );
-    const body = await res.json();
-
-    if (res.status !== 200 || Object.keys(body).length !== 0) {
-      fail(`auth session should fail closed with empty session when admin config is missing: ${res.status} ${JSON.stringify(body)}`);
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "test-anon-key";
+    const payload = await getReadinessPayload();
+    const byKey = new Map(payload.checks.map((item) => [item.key, item]));
+    if (!byKey.get("admin.supabase_auth")?.ok) fail("configured Supabase Auth should pass admin auth readiness");
+    if (byKey.get("admin.mfa_role")?.metadata?.linkedAdminCount !== 1) {
+      fail(`linked Supabase admin should be observable: ${JSON.stringify(byKey.get("admin.mfa_role"))}`);
     }
   } finally {
+    await db.user.delete({ where: { id: admin.id } });
     restoreEnv(snapshot);
   }
 }
@@ -504,9 +415,7 @@ testDatabaseRuntimeInfo();
 await testProductionRateLimitFailsClosedWithoutSharedBackend();
 await testReadinessFailsMissingRagMetadata();
 testSchoolSeedFallbackIsLocalOnly();
-testProductionAdminAuthFailsClosed();
-testLocalAdminPasswordFallbackStillWorks();
-await testAuthSessionFailsClosedWhenAdminConfigMissing();
+await testSupabaseAdminReadinessContract();
 await testOpsAlertDeliveryContract();
 testRagSystemHealthSummary();
 console.log("PASS readiness guards");

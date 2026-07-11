@@ -55,7 +55,7 @@ interface LeadState {
   savingDiagnosis: boolean;
   selectedSchoolsForReadiness: School[];
   saveDiagnosis: (nickname: string, input: DiagnosisInput, recommendation: PathRecommendation) => Promise<string | null>;
-  fetchLeads: (adminKey?: string) => Promise<void>;
+  fetchLeads: () => Promise<void>;
   clearCurrent: () => void;
   toggleSchoolForReadiness: (school: School) => void;
   clearSelectedSchoolsForReadiness: () => void;
@@ -153,12 +153,10 @@ export const useLeadStore = create<LeadState>()((set, get) => ({
     }
   },
 
-  fetchLeads: async (adminKey) => {
+  fetchLeads: async () => {
     set({ loading: true });
     try {
-      const res = await fetch("/api/leads", {
-        headers: adminKey ? { "x-admin-key": adminKey } : undefined,
-      });
+      const res = await fetch("/api/leads");
       if (!res.ok) throw new Error("Failed to fetch leads");
       const { leads } = await res.json();
       set({ leads });

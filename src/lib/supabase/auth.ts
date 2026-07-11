@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "crypto";
 import { redirect } from "next/navigation";
 import type { User, UserRole } from "@prisma/client";
 import { db } from "@/lib/db";
-import { getSupabaseAuthUser } from "@/lib/supabase/server";
+import { createSupabaseServerClient, getSupabaseAuthUser } from "@/lib/supabase/server";
 import { canAccessArea, defaultLoginPath, type KaxiAuthArea } from "@/lib/supabase/policy";
 
 export class AuthBridgeError extends Error {
@@ -209,7 +209,13 @@ export async function syncKaxiUserForAuth(input: {
     return upsertKaxiUserForAuth({ authUserId, email, role: "STUDENT", locale });
   }
   if (existing.role === "PLATFORM_ADMIN") {
-    throw new AuthBridgeError("admin_credentials_required", "Administrators must use MFA credentials", 403);
+    if (!existing.authUserId || existing.authUserId !== authUserId) {
+      throw new AuthBridgeError("admin_link_required", "Administrator account must be linked by an operator", 403);
+    }
+    return db.user.update({
+      where: { id: existing.id },
+      data: { email: email || existing.email, locale },
+    });
   }
   return db.$transaction(async (tx) => {
     const user = await tx.user.update({
@@ -225,6 +231,34 @@ export async function syncKaxiUserForAuth(input: {
     }
     return user;
   });
+}
+
+export interface CurrentKaxiSession {
+  authUser: { id: string; email?: string | null };
+  user: User | null;
+  currentAal: string | null;
+  nextAal: string | null;
+}
+
+export async function getCurrentKaxiSession(): Promise<CurrentKaxiSession | null> {
+  const client = await createSupabaseServerClient();
+  const auth = await client.auth.getUser();
+  const authUser = auth.data?.user || null;
+  if (!authUser) return null;
+
+  const authUserId = normalizeAuthUserId(authUser.id);
+  if (!client.auth.mfa) throw new AuthBridgeError("mfa_unavailable", "Supabase MFA is unavailable", 503);
+  const [user, assurance] = await Promise.all([
+    db.user.findUnique({ where: { authUserId } }),
+    client.auth.mfa.getAuthenticatorAssuranceLevel(),
+  ]);
+
+  return {
+    authUser,
+    user,
+    currentAal: assurance.data?.currentLevel || null,
+    nextAal: assurance.data?.nextLevel || null,
+  };
 }
 
 export async function getCurrentKaxiUser(): Promise<User | null> {

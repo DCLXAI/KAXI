@@ -16,10 +16,7 @@ export function SynonymsDashboard() {
   if (!state.hasAdminAccess) {
     return (
       <AdminAuthGate
-        keyInput={state.keyInput}
         locale={state.locale}
-        onKeyInputChange={state.setKeyInput}
-        onUnlock={state.unlock}
         sessionStatus={state.sessionStatus}
       />
     );

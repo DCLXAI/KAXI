@@ -17,6 +17,10 @@ export function canAccessArea(role: UserRole | null | undefined, area: KaxiAuthA
   return false;
 }
 
+export function isAdminAal2Session(role: UserRole | null | undefined, currentAal: string | null | undefined): boolean {
+  return role === "PLATFORM_ADMIN" && currentAal === "aal2";
+}
+
 export function defaultLoginPath(area: KaxiAuthArea): string {
   if (area === "public") return "/";
   return "/login";

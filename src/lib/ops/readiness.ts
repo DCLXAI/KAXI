@@ -1,4 +1,4 @@
-import { checkRuntimeDatabaseConnectivity, getRuntimeDatabaseInfo } from "@/lib/db";
+import { checkRuntimeDatabaseConnectivity, db, getRuntimeDatabaseInfo } from "@/lib/db";
 import { getAiBackendDiagnostics } from "@/lib/ai/backend-selector";
 import { getKnowledgeSourceAudit } from "@/lib/data/knowledge";
 import { getDocumentUploadSigningSecret } from "@/lib/documents/crypto";
@@ -37,10 +37,6 @@ function isProductionEnv(env: NodeJS.ProcessEnv): boolean {
 function configured(value: string | undefined): boolean {
   const trimmed = value?.trim() || "";
   return Boolean(trimmed) && !/^replace-with-/i.test(trimmed);
-}
-
-function adminRoleValid(value: string | undefined): boolean {
-  return value === "owner" || value === "admin" || value === "viewer";
 }
 
 function strongSecret(value: string | undefined) {
@@ -128,6 +124,11 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
   const attachmentSecurity = getChatAttachmentSecurityDiagnostics(env);
 
   const managedDatabase = databaseInfo.sharedWritable && databaseConnectivity.ok;
+  const linkedAdminCount = databaseConnectivity.ok
+    ? await db.user.count({
+        where: { role: "PLATFORM_ADMIN", authUserId: { not: null } },
+      }).catch(() => 0)
+    : 0;
   const postgresqlOperationalUrl = databaseInfo.kind === "postgresql" && databaseInfo.postgresqlConfigured;
   const sharedRateLimit =
     managedDatabase && (rateLimitBackend === "auto" || rateLimitBackend === "database");
@@ -376,28 +377,23 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
       { rateLimitBackend, managedDatabase }
     ),
     check(
-      "admin.session_hash",
-      "Admin hashed session login",
-      configured(env.NEXTAUTH_SECRET) &&
-        configured(env.ADMIN_EMAIL) &&
-        configured(env.ADMIN_PASSWORD_HASH) &&
-        !configured(env.ADMIN_PASSWORD),
-      "Use NEXTAUTH_SECRET, ADMIN_EMAIL, and ADMIN_PASSWORD_HASH; do not use plaintext ADMIN_PASSWORD in production.",
+      "admin.supabase_auth",
+      "Supabase admin authentication",
+      configured(env.NEXT_PUBLIC_SUPABASE_URL) && configured(env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+      "Admin sessions use Supabase Auth and server-side User.role authorization.",
       {
-        nextAuthSecretConfigured: configured(env.NEXTAUTH_SECRET),
-        adminEmailConfigured: configured(env.ADMIN_EMAIL),
-        adminPasswordHashConfigured: configured(env.ADMIN_PASSWORD_HASH),
-        plaintextAdminPasswordConfigured: configured(env.ADMIN_PASSWORD),
+        supabaseUrlConfigured: configured(env.NEXT_PUBLIC_SUPABASE_URL),
+        supabaseAnonKeyConfigured: configured(env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
       }
     ),
     check(
       "admin.mfa_role",
-      "Admin MFA and role",
-      configured(env.ADMIN_MFA_TOTP_SECRET) && adminRoleValid(env.ADMIN_ROLE),
-      "Production admin login should require TOTP MFA and a valid owner/admin/viewer role.",
+      "Admin MFA and linked role",
+      production ? linkedAdminCount > 0 : true,
+      "Admin API access requires a linked PLATFORM_ADMIN user and a Supabase aal2 session.",
       {
-        mfaConfigured: configured(env.ADMIN_MFA_TOTP_SECRET),
-        role: env.ADMIN_ROLE || null,
+        linkedAdminCount,
+        aalRequired: "aal2",
       }
     ),
     check(

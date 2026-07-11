@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
-import { Providers } from "@/components/providers";
 import { TypebotBubble } from "@/components/typebot/TypebotBubble";
 
 export const metadata: Metadata = {
@@ -52,11 +51,9 @@ export default function RootLayout({
   return (
     <html lang="ko" suppressHydrationWarning>
       <body className="antialiased bg-background text-foreground">
-        <Providers>
-          {children}
-          <TypebotBubble />
-          <Toaster />
-        </Providers>
+        {children}
+        <TypebotBubble />
+        <Toaster />
       </body>
     </html>
   );

@@ -34,8 +34,6 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
       PRISMA_DATABASE_URL: ${{ secrets.PRISMA_DATABASE_URL }}
-      NEXTAUTH_URL: https://kaxi.vercel.app
-      NEXTAUTH_URL_INTERNAL: https://kaxi.vercel.app
       KAXI_PRISMA_PROVIDER: postgresql
       EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
     steps:

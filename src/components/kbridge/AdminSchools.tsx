@@ -13,10 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Edit3, RefreshCw, Save, Trash2 } from "lucide-react";
 
-interface AdminSchoolsProps {
-  adminKey: string;
-}
-
 interface SchoolForm {
   id: string;
   nameKo: string;
@@ -108,7 +104,7 @@ function formToPayload(form: SchoolForm) {
   };
 }
 
-export function AdminSchools({ adminKey }: AdminSchoolsProps) {
+export function AdminSchools() {
   const { lang } = useLangStore();
   const [schools, setSchools] = useState<School[]>([]);
   const [form, setForm] = useState<SchoolForm>(EMPTY_FORM);
@@ -116,8 +112,6 @@ export function AdminSchools({ adminKey }: AdminSchoolsProps) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-
-  const adminHeaders = adminKey ? { "x-admin-key": adminKey } : undefined;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -151,7 +145,7 @@ export function AdminSchools({ adminKey }: AdminSchoolsProps) {
       const payload = formToPayload(form);
       const res = await fetch(editingId ? `/api/schools/${editingId}` : "/api/schools", {
         method: editingId ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json", ...(adminHeaders || {}) },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
@@ -174,7 +168,6 @@ export function AdminSchools({ adminKey }: AdminSchoolsProps) {
     try {
       const res = await fetch(`/api/schools/${id}`, {
         method: "DELETE",
-        headers: adminHeaders,
       });
       if (!res.ok) throw new Error("Delete failed");
       await load();

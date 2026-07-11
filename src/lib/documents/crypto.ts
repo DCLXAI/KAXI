@@ -34,7 +34,6 @@ export function sha256Hex(value: Buffer | Uint8Array | string): string {
 export function getDocumentUploadSigningSecret(env: NodeJS.ProcessEnv = process.env): string {
   const configured =
     env.DOCUMENT_UPLOAD_SIGNING_SECRET ||
-    env.NEXTAUTH_SECRET ||
     env.ADMIN_API_KEY ||
     "";
 

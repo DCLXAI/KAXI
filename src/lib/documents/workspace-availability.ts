@@ -63,7 +63,7 @@ export function getDocumentWorkspaceIssue(
   if (!databaseOk) requirements.push(...databaseRequirements(database.reason));
   if (action === "upload" && !storageOk) requirements.push(...storageRequirements(storage.reason));
   if (action === "upload" && !signingConfigured) {
-    requirements.push("업로드 URL 발급 전 DOCUMENT_UPLOAD_SIGNING_SECRET 또는 NEXTAUTH_SECRET을 설정해야 합니다.");
+    requirements.push("업로드 URL 발급 전 DOCUMENT_UPLOAD_SIGNING_SECRET을 설정해야 합니다.");
   }
 
   return {

@@ -42,8 +42,6 @@ jobs:
       AI_CONSULT_CODEX_CONTEXT_CHARS: "5500"
       DOCUMENT_UPLOAD_STORAGE_BACKEND: database
       DEPLOY_AFTER_UPDATE: ${{ inputs.deploy }}
-      NEXTAUTH_URL: https://kaxi.vercel.app
-      NEXTAUTH_URL_INTERNAL: https://kaxi.vercel.app
       KAXI_PRISMA_PROVIDER: postgresql
     steps:
       - name: Require deployment and bridge secrets

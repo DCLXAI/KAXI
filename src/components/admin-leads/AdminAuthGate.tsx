@@ -2,22 +2,15 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import type { Locale } from "@/i18n/routing";
 
 interface AdminAuthGateProps {
-  keyInput: string;
   locale: Locale;
-  onKeyInputChange: (value: string) => void;
-  onUnlock: () => void;
   sessionStatus: "authenticated" | "loading" | "unauthenticated";
 }
 
 export function AdminAuthGate({
-  keyInput,
   locale,
-  onKeyInputChange,
-  onUnlock,
   sessionStatus,
 }: AdminAuthGateProps) {
   return (
@@ -28,23 +21,12 @@ export function AdminAuthGate({
           <CardDescription>
             {sessionStatus === "loading"
               ? locale === "ko" ? "세션 확인 중..." : "Checking session..."
-              : locale === "ko" ? "세션 로그인을 권장합니다. API 키는 현재 화면에서만 임시 사용됩니다." : "Session login is preferred. API key fallback is kept only for this tab."}
+              : locale === "ko" ? "Supabase 관리자 계정과 MFA 인증이 필요합니다." : "A Supabase admin account with MFA is required."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <Button variant="outline" className="w-full" asChild>
             <a href="/login?next=/admin/cases">{locale === "ko" ? "로그인" : "Sign in"}</a>
-          </Button>
-          <Input
-            type="password"
-            value={keyInput}
-            onChange={(event) => onKeyInputChange(event.target.value)}
-            onKeyDown={(event) => event.key === "Enter" && onUnlock()}
-            placeholder={locale === "ko" ? "임시 관리자 API 키" : "Temporary admin API key"}
-            autoComplete="off"
-          />
-          <Button className="w-full" onClick={onUnlock}>
-            {locale === "ko" ? "접속" : "Unlock"}
           </Button>
         </CardContent>
       </Card>

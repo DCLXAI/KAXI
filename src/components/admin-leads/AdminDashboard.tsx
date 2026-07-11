@@ -19,10 +19,7 @@ export function AdminDashboard() {
   if (!dashboard.hasAdminAccess) {
     return (
       <AdminAuthGate
-        keyInput={dashboard.keyInput}
         locale={dashboard.locale}
-        onKeyInputChange={dashboard.setKeyInput}
-        onUnlock={dashboard.unlock}
         sessionStatus={dashboard.sessionStatus}
       />
     );
@@ -51,7 +48,7 @@ export function AdminDashboard() {
       {dashboard.stats && <AdminStatsCards locale={dashboard.locale} stats={dashboard.stats} />}
       {dashboard.stats && <AdminNationalityCard locale={dashboard.locale} stats={dashboard.stats} />}
 
-      <AdminSchools adminKey={dashboard.adminKey} />
+      <AdminSchools />
 
       <AdminLeadTable
         leads={dashboard.filteredLeads}

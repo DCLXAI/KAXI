@@ -8,6 +8,7 @@ export class SupabaseSdkUnavailableError extends Error {
 export interface SupabaseAuthUser {
   id: string;
   email?: string | null;
+  email_confirmed_at?: string | null;
   user_metadata?: Record<string, unknown>;
 }
 
@@ -22,12 +23,50 @@ export interface SupabaseAuthResult<T = unknown> {
   error: { message?: string } | null;
 }
 
+export interface SupabaseMfaFactor {
+  id: string;
+  friendly_name?: string;
+  factor_type: "totp" | "phone" | "webauthn";
+  status: "verified" | "unverified";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SupabaseMfaApiLike {
+  enroll(input: {
+    factorType: "totp";
+    friendlyName?: string;
+    issuer?: string;
+  }): Promise<SupabaseAuthResult<{
+    id: string;
+    type: "totp";
+    friendly_name?: string;
+    totp: { qr_code: string; secret: string; uri: string };
+  }>>;
+  challengeAndVerify(input: { factorId: string; code: string }): Promise<SupabaseAuthResult<unknown>>;
+  unenroll(input: { factorId: string }): Promise<SupabaseAuthResult<{ id: string }>>;
+  listFactors(): Promise<SupabaseAuthResult<{
+    all: SupabaseMfaFactor[];
+    totp: SupabaseMfaFactor[];
+    phone: SupabaseMfaFactor[];
+    webauthn: SupabaseMfaFactor[];
+  }>>;
+  getAuthenticatorAssuranceLevel(): Promise<SupabaseAuthResult<{
+    currentLevel: string | null;
+    nextLevel: string | null;
+    currentAuthenticationMethods: unknown[];
+  }>>;
+}
+
 export interface SupabaseAuthClientLike {
+  mfa?: SupabaseMfaApiLike;
   getUser(): Promise<SupabaseAuthResult<{ user: SupabaseAuthUser | null }>>;
   exchangeCodeForSession?(code: string): Promise<SupabaseAuthResult<{ session: SupabaseSession | null }>>;
   signUp?(input: unknown): Promise<SupabaseAuthResult<{ user: SupabaseAuthUser | null; session: SupabaseSession | null }>>;
   signInWithPassword?(input: unknown): Promise<SupabaseAuthResult<{ user: SupabaseAuthUser | null; session: SupabaseSession | null }>>;
   signInWithOtp?(input: unknown): Promise<SupabaseAuthResult<unknown>>;
+  resetPasswordForEmail?(email: string, options?: { redirectTo?: string }): Promise<SupabaseAuthResult<unknown>>;
+  updateUser?(attributes: { password?: string }): Promise<SupabaseAuthResult<{ user: SupabaseAuthUser | null }>>;
   signOut?(): Promise<SupabaseAuthResult<unknown>>;
 }
 

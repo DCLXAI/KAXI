@@ -37,7 +37,7 @@ type TransformersEnv = {
   };
 };
 
-export function resolveModelCacheDir(env: ModelCacheEnv = process.env): string {
+export function resolveModelCacheDir(env: ModelCacheEnv = process.env as ModelCacheEnv): string {
   const configured = env.MODEL_CACHE_DIR?.trim();
   if (configured) return configured;
 
@@ -48,7 +48,7 @@ export function resolveModelCacheDir(env: ModelCacheEnv = process.env): string {
   return path.join(/*turbopackIgnore: true*/ process.cwd(), "data", "model-cache");
 }
 
-function modelCacheLocation(env: ModelCacheEnv = process.env): "custom" | "serverless-tmp" | "project-data" {
+function modelCacheLocation(env: ModelCacheEnv = process.env as ModelCacheEnv): "custom" | "serverless-tmp" | "project-data" {
   if (env.MODEL_CACHE_DIR?.trim()) return "custom";
   if (env.VERCEL === "1" || env.VERCEL_ENV) return "serverless-tmp";
   return "project-data";
@@ -71,7 +71,7 @@ function sanitizeDiagnosticText(value: unknown): string {
     .replaceAll(home || "__no_home__", "<home>");
 }
 
-export function getTransformerRuntimeInfo(env: ModelCacheEnv = process.env) {
+export function getTransformerRuntimeInfo(env: ModelCacheEnv = process.env as ModelCacheEnv) {
   const cacheDir = resolveModelCacheDir(env);
   const allowRemoteModels = env.TRANSFORMERS_ALLOW_REMOTE !== "false";
   const allowLocalModels = env.TRANSFORMERS_ALLOW_LOCAL === "true";
