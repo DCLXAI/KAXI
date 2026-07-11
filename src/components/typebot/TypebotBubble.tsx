@@ -440,6 +440,8 @@ export function TypebotBubble() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isHidden = shouldHideChatbot(pathname);
+  const publicPath = pathname.replace(LOCALE_PREFIX_RE, "") || "/";
+  const hideOnMobile = publicPath === "/diagnose";
   const conversationMessages = messages.filter((message) => message.id !== INITIAL_MESSAGE_ID);
   const uploadedAttachments = attachedFiles.filter((file) => file.status === "ready" && file.storageKey && file.bucket);
   const hasPendingAttachments = attachedFiles.some((file) => ["uploading", "processing", "deleting"].includes(file.status));
@@ -795,7 +797,7 @@ export function TypebotBubble() {
   };
 
   return (
-    <div className="fixed bottom-4 right-4 z-[424243] sm:bottom-6 sm:right-6">
+    <div className={`fixed bottom-4 right-4 z-[424243] sm:bottom-6 sm:right-6 ${hideOnMobile ? "max-sm:hidden" : ""}`}>
       {isOpen && (
         <section
           lang={locale}

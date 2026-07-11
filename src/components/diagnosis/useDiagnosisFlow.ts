@@ -11,7 +11,7 @@ const DEFAULT_INPUT: DiagnosisInput = {
   age: "20",
   education: "highschool",
   korean: "none",
-  goal: "language",
+  goal: "unsure",
   budget: 10000000,
   region: "any",
   usingBroker: false,
@@ -28,6 +28,7 @@ export function useDiagnosisFlow() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [nickname, setNickname] = useState("");
   const [input, setInput] = useState<DiagnosisInput>(DEFAULT_INPUT);
+  const [submitting, setSubmitting] = useState(false);
 
   const update = (patch: Partial<DiagnosisInput>) => setInput((current) => ({ ...current, ...patch }));
 
@@ -39,6 +40,8 @@ export function useDiagnosisFlow() {
   }, [currentDiagnosis]);
 
   const submit = async () => {
+    if (submitting) return;
+    setSubmitting(true);
     try {
       const res = await fetch("/api/diagnosis", {
         method: "POST",
@@ -53,6 +56,8 @@ export function useDiagnosisFlow() {
       const rec = recommendPath(input);
       setResult(rec);
       updateCurrentDiagnosisRecommendation(input, rec);
+    } finally {
+      setSubmitting(false);
     }
     setShowSave(false);
     setSaveError(null);
@@ -83,6 +88,7 @@ export function useDiagnosisFlow() {
     setNickname,
     showSave,
     submit,
+    submitting,
     update,
   };
 }
