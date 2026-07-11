@@ -47,6 +47,9 @@ export const t = {
   features_title: { ko: "브로커가 하던 일을 플랫폼이 대체합니다", vi: "Nền tảng thay thế những gì môi giới làm", mn: "Зуучлагчийн ажлыг платформ орлоно", en: "The platform replaces what brokers do" },
   features_subtitle: { ko: "불법 기능은 차단하고, 정상 기능은 더 투명하게 제공합니다.", vi: "Chặn chức năng bất hợp pháp, minh bạch hóa chức năng hợp pháp.", mn: "Хууль бус үйлдлийг хааж, хууль ёсны үйлдлийг ил тод болгоно.", en: "Block illegal functions, make legal ones more transparent." },
 
+  broker_compare_title: { ko: "브로커 vs KAXI, 이렇게 다릅니다", vi: "Môi giới và KAXI khác nhau thế nào", mn: "Зуучлагч ба KAXI ийм ялгаатай", en: "Broker vs. KAXI, here's the difference" },
+  broker_compare_subtitle: { ko: "비용 투명성부터 비자 안전까지, 항목별로 비교해보세요.", vi: "Từ minh bạch chi phí đến an toàn visa, hãy so sánh từng mục.", mn: "Зардлын ил тод байдлаас эхлээд визийн аюулгүй байдал хүртэл харьцуулна уу.", en: "Compare item by item, from cost transparency to visa safety." },
+
   // 경로 진단
   diagnose_title: { ko: "유학 경로 진단", vi: "Đánh giá lộ trình du học", mn: "Суралцах маршрутын үнэлгээ", en: "Study Path Diagnosis" },
   diagnose_subtitle: { ko: "6단계로 나에게 맞는 유학 경로와 준비 서류를 확인하세요.", vi: "Hoàn thành 6 bước để xem lộ trình và hồ sơ phù hợp.", mn: "6 алхмаар тохирох суралцах зам, бүрдүүлэх материалаа шалгана уу.", en: "Complete 6 steps to see your study path and required documents." },
@@ -319,6 +322,7 @@ export const t = {
     en: "Platform provides official-info-based guidance. Visa/stay decisions and administrative submissions belong to experts. Fake documents and illegal jobs are refused.",
   },
   footer_data_source: { ko: "데이터 출처: 한국유학종합시스템·교육부·법무부·법제처", vi: "Nguồn: Study in Korea · MOE · MOJ · Korea Legislation", mn: "Эх сурвалж: Study in Korea · MOE · MOJ", en: "Sources: Study in Korea · MOE · MOJ · Legislation" },
+  footer_company_info: { ko: "사업자 정보 준비 중", vi: "Thông tin doanh nghiệp đang cập nhật", mn: "Байгууллагын мэдээлэл бэлдэж байна", en: "Company registration info coming soon" },
   ai_assistant_title: { ko: "유학 준비 도우미", vi: "Trợ lý du học", mn: "Туслах", en: "Study prep assistant" },
   ai_placeholder: { ko: "질문을 입력하세요 (예: D-2와 D-4 차이?)", vi: "Nhập câu hỏi", mn: "Асуулт оруул", en: "Ask a question" },
   ai_send: { ko: "전송", vi: "Gửi", mn: "Илгээх", en: "Send" },

@@ -281,9 +281,9 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-500" />
-              {tr("features_title", lang)}
+              {tr("broker_compare_title", lang)}
             </CardTitle>
-            <CardDescription>{tr("features_subtitle", lang)}</CardDescription>
+            <CardDescription>{tr("broker_compare_subtitle", lang)}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-3 gap-2 text-sm">

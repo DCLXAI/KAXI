@@ -58,7 +58,17 @@ export function KaxiPage({ view, locale }: { view: ViewKey; locale?: Lang }) {
         {view === "synonyms" && <Synonyms />}
       </main>
 
-      {view !== "consult" && view !== "agent" && (
+      {view === "consult" || view === "agent" ? (
+        <footer className="mt-auto border-t bg-muted/30">
+          <div className="mx-auto max-w-7xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span className="truncate">⚠️ {tr("footer_disclaimer", activeLang)}</span>
+            <span className="flex flex-wrap items-center gap-x-4 gap-y-1 shrink-0">
+              <Link href={`/${activeLang}/privacy`} className="hover:text-foreground hover:underline">{legalCopy.privacyLink}</Link>
+              <Link href={`/${activeLang}/terms`} className="hover:text-foreground hover:underline">{legalCopy.termsLink}</Link>
+            </span>
+          </div>
+        </footer>
+      ) : (
         <footer className="mt-auto border-t bg-muted/30">
           <div className="mx-auto max-w-7xl px-4 py-6 space-y-3">
             <div className="text-xs text-muted-foreground leading-relaxed">
@@ -66,6 +76,9 @@ export function KaxiPage({ view, locale }: { view: ViewKey; locale?: Lang }) {
             </div>
             <div className="text-xs text-muted-foreground">
               📚 {tr("footer_data_source", activeLang)}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              🏢 {tr("footer_company_info", activeLang)}
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t">
               <div className="text-xs text-muted-foreground">
