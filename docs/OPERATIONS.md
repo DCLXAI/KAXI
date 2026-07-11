@@ -62,6 +62,14 @@ Daily RAG health records `degraded` for required dependency failures and `warnin
 - `OPS_ALERT_WEBHOOK_URL`, `OPS_ALERT_FORMAT`, `OPS_ALERT_SIGNING_SECRET`: Optional HTTPS destination for degraded daily-health notifications. JSON and Slack incoming-webhook payloads are supported.
 - `.github/workflows/ops-health-alert.yml`: Independent daily and manual production probe. It opens or updates one `ops-health` GitHub issue on failure, fails the Actions run for native notification delivery, and comments/closes the issue after recovery. This path does not depend on n8n and uses the existing `KAXI_ADMIN_API_KEY` Actions secret.
 
+## Handoff Assignment SLA
+
+- Assign handoffs only to a linked `PARTNER_AGENT` in a `PARTNER_AGENT_OFFICE`; free-text assignees are not accepted by the admin assignment API.
+- `high` risk or `urgent` lead-stage handoffs use the `urgent-2h` first-response SLA. Other active handoffs use `standard-24h`.
+- SLA time starts when the assignment is saved, not when an older unassigned handoff was originally created. `start` or `contacted` records the first response as `met` or `breached` against that due time.
+- Assignment identity, policy version, SLA tier, minutes, start time, due time, and response status are stored in `handoff_tasks.handoff_metadata`. Admin list responses derive `overdue` at read time so an expired pending SLA is visible without a batch job.
+- Partner assignment is internal routing metadata. Do not expose question or contact details in a partner workspace unless the applicable third-party and handoff-consent requirements are satisfied.
+
 Attachment processing starts only after a sanitized object is stored. Transient OCR or provider failures move jobs to `retrying`; terminal validation failures reject the attachment and delete its storage object. Operators should investigate stale jobs through `/admin/ops`, and users can retry the existing attachment job from the chat widget without uploading the file again.
 
 ## Runtime Artifacts

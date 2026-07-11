@@ -40,6 +40,7 @@ KAXI remains the public security and persistence boundary, n8n owns retrieval/or
 - New canonical chat writes keep recoverable question, answer, retrieval query, and handoff text in AES-GCM ciphertext while legacy text columns receive redacted display copies; remote migration parity is still required.
 - Privacy deletion now resolves canonical sessions by lead, contact hash, or question hash; scheduled retention removes storage objects, canonical chat/retrieval rows, n8n audit rows, and handoff records together.
 - KAXI now creates encrypted, message-linked handoff tasks after canonical persistence; database-level dedupe keeps one open task and one keyed contact per session/question/contact.
+- Handoff assignment now resolves to a linked partner account, stores a versioned 2-hour urgent or 24-hour standard first-response SLA, derives overdue state in the admin queue, and records assignment audits without granting partner-side access to unconsented content.
 - KAXI now writes metadata-only n8n audit rows linked to canonical messages. A database trigger replaces any duplicated question, answer, or source payload with fixed placeholders, including writes from an older n8n version.
 - Every n8n runtime, ingestion, handoff, and capability response now emits evaluated `workflowId` and `executionId` plus immutable workflow, model, and prompt versions. KAXI preserves the same fields in response bodies and headers, and canonical chat, retrieval, n8n-audit, health, ops-event, and evaluation ledgers expose dedicated provenance columns.
 - Production readiness now verifies the latest migration ledger entry plus the attachment queue, retention, encryption, handoff ownership, and audit-sanitizer objects in the connected PostgreSQL database.
@@ -156,7 +157,7 @@ Acceptance: grounded-answer pass rate is at least 90%, high-risk recall is 100% 
 - Add upload progress, processing ETA, accessible error details, and persisted retry state.
 - Build an operator queue for unhandled questions, low-confidence retrieval, attachment failures, and overdue handoffs.
 - Show source URL, checked date, category, top score, n8n execution ID, and workflow version in the admin conversation detail.
-- Add lead ownership, SLA timers, status transitions, internal notes, and resolution feedback.
+- Extend the implemented ownership, SLA timers, status transitions, and internal notes with structured resolution feedback.
 - Add analytics for question categories, containment, handoff conversion, unanswered topics, latency, and cost.
 
 ### P4: Scale, Privacy, and Governance

@@ -485,7 +485,9 @@ try {
 
   const handoffs = await json(await handoffsRoute.GET(adminRequest("/api/admin/handoffs")));
   assert(Array.isArray(handoffs.tasks), "admin handoffs should expose a task list");
+  assert(Array.isArray(handoffs.assignees), "admin handoffs should expose validated partner assignees");
   assert(typeof handoffs.counts.active === "number", "admin handoffs should expose queue counts");
+  assert(typeof handoffs.counts.overdue === "number", "admin handoffs should expose overdue SLA counts");
   const invalidHandoffAction = await responseJson(
     await handoffsRoute.PATCH(
       adminRequest("/api/admin/handoffs", {

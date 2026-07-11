@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { db } from "@/lib/db";
 import { preparePiiField, readPiiField } from "@/lib/privacy/pii";
 
 const ACTIVE_STATUSES = new Set(["open", "review", "contact_requested", "contact_received", "assigned", "in_progress"]);
@@ -14,6 +15,14 @@ export type AdminHandoffTask = {
   riskLevel: string;
   leadStage: string;
   assignee: string | null;
+  assigneeUserId: string | null;
+  organizationId: string | null;
+  assignedAt: string | null;
+  slaPolicy: string | null;
+  slaTier: string | null;
+  slaMinutes: number | null;
+  slaDueAt: string | null;
+  slaStatus: string | null;
   question: string;
   answer: string;
   notes: string | null;
@@ -33,6 +42,13 @@ export type AdminHandoffTask = {
   createdAt: string;
   updatedAt: string;
   closedAt: string | null;
+};
+
+export type AdminHandoffAssignee = {
+  id: string;
+  email: string | null;
+  organizationId: string;
+  organizationName: string;
 };
 
 type LeadRow = {
@@ -86,6 +102,57 @@ function text(value: unknown) {
   return typeof value === "string" ? value : value == null ? null : String(value);
 }
 
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function finiteInteger(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
+}
+
+function assignmentMetadata(value: unknown) {
+  const metadata = record(value);
+  const assignment = record(metadata.assignment);
+  const sla = record(metadata.sla);
+  return {
+    assigneeUserId: text(assignment.assigneeUserId),
+    organizationId: text(assignment.organizationId),
+    assignedAt: text(assignment.assignedAt),
+    slaPolicy: text(sla.policyVersion),
+    slaTier: text(sla.tier),
+    slaMinutes: finiteInteger(sla.minutes),
+    slaDueAt: text(sla.dueAt),
+    slaStatus: text(sla.status),
+  };
+}
+
+function resolvedSlaStatus(taskStatus: string, dueAt: string | null, storedStatus: string | null) {
+  if (["resolved", "closed", "duplicate"].includes(taskStatus)) return storedStatus || "completed";
+  if (storedStatus && storedStatus !== "pending") return storedStatus;
+  if (dueAt && new Date(dueAt).getTime() < Date.now()) return "overdue";
+  return dueAt ? "pending" : null;
+}
+
+function markFirstResponse(value: unknown, respondedAt: Date) {
+  const metadata = record(value);
+  const sla = record(metadata.sla);
+  const dueAt = text(sla.dueAt);
+  if (!dueAt || text(sla.firstResponseAt)) return null;
+  const breached = respondedAt.getTime() > new Date(dueAt).getTime();
+  return {
+    ...metadata,
+    sla: {
+      ...sla,
+      status: breached ? "breached" : "met",
+      firstResponseAt: respondedAt.toISOString(),
+      ...(breached ? { breachedAt: respondedAt.toISOString() } : {}),
+    },
+  };
+}
+
 function parseSources(value: unknown): AdminHandoffTask["sources"] {
   if (typeof value !== "string" || !value.trim()) return [];
   try {
@@ -109,15 +176,26 @@ function readableField(
 
 export async function listAdminHandoffs(options: { revealPii: boolean; limit?: number }) {
   if (isolatedTestRuntime()) {
-    return { tasks: [] as AdminHandoffTask[], counts: { total: 0, active: 0, urgent: 0, unassigned: 0, contactReady: 0 } };
+    return {
+      tasks: [] as AdminHandoffTask[],
+      assignees: [] as AdminHandoffAssignee[],
+      counts: { total: 0, active: 0, urgent: 0, unassigned: 0, contactReady: 0, overdue: 0 },
+    };
   }
 
   const supabase = serviceClient();
-  const tasksResult = await supabase
-    .from("handoff_tasks")
-    .select("id,source_chat_message_id,session_id,tenant_id,question,question_ciphertext,answer,answer_ciphertext,risk_level,lead_stage,status,assignee,notes,notes_ciphertext,lead_id,lead_contact_id,contact_received_at,created_at,updated_at,closed_at")
-    .order("created_at", { ascending: false })
-    .limit(Math.min(200, Math.max(1, Math.trunc(options.limit || 100))));
+  const [tasksResult, partnerUsers] = await Promise.all([
+    supabase
+      .from("handoff_tasks")
+      .select("id,source_chat_message_id,session_id,tenant_id,question,question_ciphertext,answer,answer_ciphertext,risk_level,lead_stage,status,assignee,notes,notes_ciphertext,lead_id,lead_contact_id,contact_received_at,handoff_metadata,created_at,updated_at,closed_at")
+      .order("created_at", { ascending: false })
+      .limit(Math.min(200, Math.max(1, Math.trunc(options.limit || 100)))),
+    db.user.findMany({
+      where: { role: "PARTNER_AGENT", organization: { type: "PARTNER_AGENT_OFFICE" } },
+      select: { id: true, email: true, organizationId: true, organization: { select: { name: true } } },
+      orderBy: { email: "asc" },
+    }),
+  ]);
   if (tasksResult.error) throw tasksResult.error;
   const taskRows = tasksResult.data || [];
 
@@ -184,15 +262,25 @@ export async function listAdminHandoffs(options: { revealPii: boolean; limit?: n
       || readableField(options.revealPii, lead?.notes, lead?.notes_ciphertext);
     const contactValue = readableField(options.revealPii, contact?.contact_value, contact?.contact_ciphertext);
     const contactName = readableField(options.revealPii, contact?.name || lead?.name, contact?.name_ciphertext || lead?.name_ciphertext);
+    const assignment = assignmentMetadata(row.handoff_metadata);
+    const status = String(row.status || "open");
 
     return {
       id: String(row.id),
       sessionId: String(row.session_id),
       tenantId: String(row.tenant_id || "default"),
-      status: String(row.status || "open"),
+      status,
       riskLevel: String(row.risk_level || "medium"),
       leadStage: String(row.lead_stage || "review"),
       assignee: text(row.assignee),
+      assigneeUserId: assignment.assigneeUserId,
+      organizationId: assignment.organizationId,
+      assignedAt: assignment.assignedAt,
+      slaPolicy: assignment.slaPolicy,
+      slaTier: assignment.slaTier,
+      slaMinutes: assignment.slaMinutes,
+      slaDueAt: assignment.slaDueAt,
+      slaStatus: resolvedSlaStatus(status, assignment.slaDueAt, assignment.slaStatus),
       question,
       answer,
       notes,
@@ -218,12 +306,21 @@ export async function listAdminHandoffs(options: { revealPii: boolean; limit?: n
   const active = tasks.filter((task) => ACTIVE_STATUSES.has(task.status));
   return {
     tasks,
+    assignees: partnerUsers
+      .filter((user): user is typeof user & { organizationId: string } => Boolean(user.organizationId))
+      .map((user) => ({
+        id: user.id,
+        email: user.email,
+        organizationId: user.organizationId,
+        organizationName: user.organization?.name || user.organizationId,
+      })),
     counts: {
       total: tasks.length,
       active: active.length,
       urgent: active.filter((task) => task.riskLevel === "high" || task.leadStage === "urgent").length,
       unassigned: active.filter((task) => !task.assignee).length,
       contactReady: active.filter((task) => task.hasContact).length,
+      overdue: active.filter((task) => task.slaStatus === "overdue").length,
     },
   };
 }
@@ -233,6 +330,10 @@ export async function updateAdminHandoff(input: {
   action: HandoffAction;
   actor: string;
   assignee?: string;
+  assigneeUserId?: string;
+  organizationId?: string;
+  slaMinutes?: number;
+  slaPolicy?: string;
   note?: string;
 }) {
   if (isolatedTestRuntime()) throw new Error("SUPABASE_HANDOFFS_DISABLED_IN_TEST");
@@ -240,34 +341,76 @@ export async function updateAdminHandoff(input: {
   const supabase = serviceClient();
   const found = await supabase
     .from("handoff_tasks")
-    .select("id,status,assignee,lead_id,lead_contact_id,contact_received_at")
+    .select("id,status,risk_level,lead_stage,assignee,lead_id,lead_contact_id,contact_received_at,handoff_metadata")
     .eq("id", input.id)
     .maybeSingle();
   if (found.error) throw found.error;
   if (!found.data) throw new Error("HANDOFF_NOT_FOUND");
 
-  const now = new Date().toISOString();
+  const now = new Date();
+  const nowIso = now.toISOString();
   const update: Record<string, unknown> = {};
-  const assignee = input.assignee?.trim().slice(0, 160);
+  let assignee = input.assignee?.trim().slice(0, 160);
   if (input.action === "assign") {
-    if (!assignee) throw new Error("HANDOFF_ASSIGNEE_REQUIRED");
+    const assigneeUserId = input.assigneeUserId?.trim();
+    if (!assigneeUserId) throw new Error("HANDOFF_ASSIGNEE_INVALID");
+    const user = await db.user.findUnique({
+      where: { id: assigneeUserId },
+      include: { organization: true },
+    });
+    if (
+      !user
+      || user.role !== "PARTNER_AGENT"
+      || !user.organizationId
+      || user.organization?.type !== "PARTNER_AGENT_OFFICE"
+      || (input.organizationId && input.organizationId !== user.organizationId)
+    ) {
+      throw new Error("HANDOFF_ASSIGNEE_INVALID");
+    }
+    assignee = user.email || user.id;
+    const requestedMinutes = finiteInteger(input.slaMinutes);
+    const defaultMinutes = found.data.risk_level === "high" || found.data.lead_stage === "urgent" ? 120 : 1440;
+    const slaMinutes = requestedMinutes ?? defaultMinutes;
+    if (slaMinutes < 15 || slaMinutes > 10_080) throw new Error("HANDOFF_SLA_INVALID");
+    const dueAt = new Date(now.getTime() + slaMinutes * 60_000);
+    update.handoff_metadata = {
+      ...record(found.data.handoff_metadata),
+      assignment: {
+        organizationId: user.organizationId,
+        assigneeUserId: user.id,
+        assignedAt: nowIso,
+        assignedBy: input.actor.slice(0, 160),
+      },
+      sla: {
+        policyVersion: input.slaPolicy?.trim().slice(0, 80) || "kaxi-handoff-v1",
+        tier: slaMinutes === 120 ? "urgent-2h" : slaMinutes === 1440 ? "standard-24h" : "custom",
+        minutes: slaMinutes,
+        startsAt: nowIso,
+        dueAt: dueAt.toISOString(),
+        status: "pending",
+      },
+    };
     update.assignee = assignee;
     update.status = found.data.status === "open" ? "review" : found.data.status;
   } else if (input.action === "start") {
     update.assignee = assignee || found.data.assignee || input.actor.slice(0, 160);
     update.status = "in_progress";
     update.closed_at = null;
+    const metadata = markFirstResponse(found.data.handoff_metadata, now);
+    if (metadata) update.handoff_metadata = metadata;
   } else if (input.action === "contacted") {
     if (!found.data.lead_contact_id) throw new Error("HANDOFF_CONTACT_REQUIRED");
     update.assignee = assignee || found.data.assignee || input.actor.slice(0, 160);
     update.status = "in_progress";
     update.closed_at = null;
+    const metadata = markFirstResponse(found.data.handoff_metadata, now);
+    if (metadata) update.handoff_metadata = metadata;
   } else if (input.action === "resolve") {
     update.status = "resolved";
-    update.closed_at = now;
+    update.closed_at = nowIso;
   } else if (input.action === "close") {
     update.status = "closed";
-    update.closed_at = now;
+    update.closed_at = nowIso;
   } else if (input.action === "reopen") {
     update.status = found.data.contact_received_at ? "contact_received" : "open";
     update.closed_at = null;

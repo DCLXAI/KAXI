@@ -49,6 +49,10 @@ export async function PATCH(req: NextRequest) {
       action,
       actor: context?.actor || "admin",
       assignee: typeof body.assignee === "string" ? body.assignee : undefined,
+      assigneeUserId: typeof body.assigneeUserId === "string" ? body.assigneeUserId : undefined,
+      organizationId: typeof body.organizationId === "string" ? body.organizationId : undefined,
+      slaMinutes: typeof body.slaMinutes === "number" ? body.slaMinutes : undefined,
+      slaPolicy: typeof body.slaPolicy === "string" ? body.slaPolicy : undefined,
       note: typeof body.note === "string" ? body.note.slice(0, 2_000) : undefined,
     });
     await recordRequestAudit(req, {
@@ -57,7 +61,13 @@ export async function PATCH(req: NextRequest) {
       action: `admin.handoff.${action}`,
       targetType: "HandoffTask",
       targetId: id,
-      metadata: { status: result.status, assigneeSet: Boolean(result.assignee), noteProvided: Boolean(body.note) },
+      metadata: {
+        status: result.status,
+        assigneeSet: Boolean(result.assignee),
+        assigneeUserIdSet: Boolean(body.assigneeUserId),
+        slaMinutes: typeof body.slaMinutes === "number" ? body.slaMinutes : null,
+        noteProvided: Boolean(body.note),
+      },
     });
     return NextResponse.json({ task: result });
   } catch (error) {
@@ -65,7 +75,13 @@ export async function PATCH(req: NextRequest) {
     const message = error instanceof Error ? error.message : String(error);
     const status = message === "HANDOFF_NOT_FOUND"
       ? 404
-      : ["HANDOFF_ACTION_INVALID", "HANDOFF_ASSIGNEE_REQUIRED", "HANDOFF_CONTACT_REQUIRED"].includes(message)
+      : [
+          "HANDOFF_ACTION_INVALID",
+          "HANDOFF_ASSIGNEE_REQUIRED",
+          "HANDOFF_ASSIGNEE_INVALID",
+          "HANDOFF_SLA_INVALID",
+          "HANDOFF_CONTACT_REQUIRED",
+        ].includes(message)
         ? 400
         : 500;
     console.error("[PATCH /api/admin/handoffs]", error);
