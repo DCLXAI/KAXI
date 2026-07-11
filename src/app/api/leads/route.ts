@@ -101,10 +101,16 @@ export async function POST(req: NextRequest) {
       maxPlainLength: 160,
     });
     // 로그인 상태로 저장하면 계정에 연결(익명 저장은 그대로 null). 동일 오리진 fetch라 세션 쿠키 자동 전송.
-    const kaxiUser = await getCurrentKaxiUser();
+    // best-effort: 세션 조회가 일시적으로 실패해도 익명 저장은 깨지지 않게 null로 강등.
+    let linkedUserId: string | null = null;
+    try {
+      linkedUserId = (await getCurrentKaxiUser())?.id ?? null;
+    } catch (err) {
+      console.error("[POST /api/leads] session lookup failed, saving anonymously", err instanceof Error ? err.message : err);
+    }
     const lead = await db.diagnosisLead.create({
       data: {
-        userId: kaxiUser?.id ?? null,
+        userId: linkedUserId,
         nickname: data.nickname,
         nationality: data.nationality,
         age: data.age,
