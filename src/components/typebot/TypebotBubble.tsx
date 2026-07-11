@@ -1064,9 +1064,9 @@ export function TypebotBubble() {
         aria-pressed={isOpen}
         onClick={() => setIsOpen((current) => !current)}
         className={[
-          "group relative flex h-14 w-14 items-center justify-center rounded-full border border-white/20 bg-zinc-950 text-white shadow-[0_12px_34px_rgba(15,23,42,0.28)] transition-all",
+          "group relative flex h-14 w-14 items-center justify-center rounded-full border border-white/20 bg-zinc-950 text-white shadow-[0_12px_34px_rgba(15,23,42,0.28)] transition-[transform,background-color,box-shadow] duration-100 ease-snappy",
           "hover:-translate-y-0.5 hover:bg-zinc-900 hover:shadow-[0_16px_40px_rgba(15,23,42,0.32)]",
-          "active:scale-[0.97] transition-transform duration-100 ease-snappy",
+          "active:scale-[0.97]",
           "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-zinc-300",
         ].join(" ")}
       >
