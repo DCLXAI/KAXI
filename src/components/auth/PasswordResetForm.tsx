@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { KeyRound, Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -9,14 +9,63 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import type { SupabaseClientLike } from "@/lib/supabase/dynamic";
+
+function passwordUpdateError(error: unknown): string {
+  const message = error instanceof Error
+    ? error.message.toLowerCase()
+    : error && typeof error === "object" && "message" in error
+      ? String(error.message).toLowerCase()
+      : "";
+
+  if (message.includes("same password") || message.includes("different from the old")) {
+    return "기존 비밀번호와 다른 비밀번호를 입력해주세요.";
+  }
+  if (message.includes("weak") || message.includes("password should")) {
+    return "8자 이상의 더 안전한 비밀번호를 입력해주세요.";
+  }
+  if (message.includes("session") || message.includes("expired") || message.includes("jwt")) {
+    return "재설정 세션이 만료되었습니다. 새 링크를 요청해주세요.";
+  }
+  return "비밀번호를 변경할 수 없습니다. 잠시 후 다시 시도해주세요.";
+}
 
 export function PasswordResetForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const clientRef = useRef<SupabaseClientLike | null>(null);
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
+  const [sessionReady, setSessionReady] = useState(false);
+  const [initializing, setInitializing] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    async function initializeRecoverySession() {
+      try {
+        const client = await createSupabaseBrowserClient();
+        const authResult = await client.auth.getUser();
+        if (authResult.error || !authResult.data?.user) {
+          throw authResult.error || new Error("recovery_session_missing");
+        }
+        if (!active) return;
+        clientRef.current = client;
+        setSessionReady(true);
+      } catch (err) {
+        if (active) setError(passwordUpdateError(err));
+      } finally {
+        if (active) setInitializing(false);
+      }
+    }
+
+    void initializeRecoverySession();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -32,9 +81,10 @@ export function PasswordResetForm() {
     setLoading(true);
     setError(null);
     try {
-      const client = await createSupabaseBrowserClient();
+      const client = clientRef.current;
+      if (!client || !sessionReady) throw new Error("recovery_session_missing");
       const result = await client.auth.updateUser?.({ password });
-      if (!result || result.error) throw new Error("password_update_failed");
+      if (!result || result.error) throw result?.error || new Error("password_update_failed");
       await client.auth.signOut?.();
       const requestedPath = searchParams.get("next") || "";
       const loginPath = requestedPath.startsWith("/") && !requestedPath.startsWith("//")
@@ -42,8 +92,8 @@ export function PasswordResetForm() {
         : "/login";
       router.replace(loginPath);
       router.refresh();
-    } catch {
-      setError("재설정 링크가 만료되었거나 비밀번호를 변경할 수 없습니다.");
+    } catch (err) {
+      setError(passwordUpdateError(err));
     } finally {
       setLoading(false);
     }
@@ -57,7 +107,9 @@ export function PasswordResetForm() {
             <KeyRound className="h-5 w-5" />
           </div>
           <CardTitle>비밀번호 재설정</CardTitle>
-          <CardDescription>새 비밀번호를 입력하세요.</CardDescription>
+          <CardDescription>
+            {initializing ? "재설정 세션을 확인하고 있습니다." : "새 비밀번호를 입력하세요."}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={submit} className="space-y-3">
@@ -75,7 +127,7 @@ export function PasswordResetForm() {
                 minLength={8}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                disabled={loading}
+                disabled={loading || initializing || !sessionReady}
                 required
               />
             </div>
@@ -88,12 +140,16 @@ export function PasswordResetForm() {
                 minLength={8}
                 value={confirmation}
                 onChange={(event) => setConfirmation(event.target.value)}
-                disabled={loading}
+                disabled={loading || initializing || !sessionReady}
                 required
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading || !password || !confirmation}>
-              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={loading || initializing || !sessionReady || !password || !confirmation}
+            >
+              {(loading || initializing) && <Loader2 className="h-4 w-4 animate-spin" />}
               비밀번호 변경
             </Button>
           </form>

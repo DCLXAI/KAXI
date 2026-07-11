@@ -22,14 +22,19 @@ async function expectAuthError(operation: Promise<unknown>, code: string) {
 
 prepareTestDb("supabase auth bridge");
 
-const [otpRouteSource, bootstrapAdminSource] = await Promise.all([
+const [otpRouteSource, bootstrapAdminSource, passwordResetSource] = await Promise.all([
   Bun.file(new URL("../src/app/api/auth/supabase/otp/route.ts", import.meta.url)).text(),
   Bun.file(new URL("./bootstrap-supabase-admin.ts", import.meta.url)).text(),
+  Bun.file(new URL("../src/components/auth/PasswordResetForm.tsx", import.meta.url)).text(),
 ]);
 assert(otpRouteSource.includes('new URL("/auth/complete"'), "implicit email links should use the browser completion route");
 assert(
   bootstrapAdminSource.includes("/account/reset-password?next=/admin/cases"),
   "admin invitations should open the client-side password setup route"
+);
+assert(
+  passwordResetSource.indexOf("client.auth.getUser()") < passwordResetSource.indexOf("client.auth.updateUser"),
+  "password reset should validate and persist the recovery session before updating the password"
 );
 
 const { db } = await import("../src/lib/db");
