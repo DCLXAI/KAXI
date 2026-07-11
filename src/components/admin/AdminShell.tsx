@@ -113,7 +113,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
       <div className="min-h-screen bg-background text-foreground">
         <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
           <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4">
-            <Link href="/admin/cases" className="flex items-center gap-2 font-semibold">
+            <Link href="/" className="flex items-center gap-2 font-semibold" aria-label="KAXI 홈으로 이동">
               <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-black text-primary-foreground">
                 K
               </span>
