@@ -61,6 +61,10 @@ export interface SupabaseMfaApiLike {
 export interface SupabaseAuthClientLike {
   mfa?: SupabaseMfaApiLike;
   getUser(): Promise<SupabaseAuthResult<{ user: SupabaseAuthUser | null }>>;
+  setSession?(session: {
+    access_token: string;
+    refresh_token: string;
+  }): Promise<SupabaseAuthResult<{ user: SupabaseAuthUser | null; session: SupabaseSession | null }>>;
   exchangeCodeForSession?(code: string): Promise<SupabaseAuthResult<{ session: SupabaseSession | null }>>;
   signUp?(input: unknown): Promise<SupabaseAuthResult<{ user: SupabaseAuthUser | null; session: SupabaseSession | null }>>;
   signInWithPassword?(input: unknown): Promise<SupabaseAuthResult<{ user: SupabaseAuthUser | null; session: SupabaseSession | null }>>;

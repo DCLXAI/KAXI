@@ -35,8 +35,14 @@ assert(
   "admin invitations should open the client-side password setup route"
 );
 assert(
-  passwordResetSource.indexOf("client.auth.getUser()") < passwordResetSource.indexOf("client.auth.updateUser"),
-  "password reset should validate and persist the recovery session before updating the password"
+  passwordResetSource.indexOf("client.auth.setSession?.(recoveryTokens)") < passwordResetSource.indexOf("client.auth.getUser()") &&
+    passwordResetSource.indexOf("client.auth.getUser()") < passwordResetSource.indexOf("client.auth.updateUser"),
+  "password reset should convert implicit recovery tokens into a session before validation and update"
+);
+assert(
+  passwordResetSource.includes('params.get("type") !== "recovery"') &&
+    passwordResetSource.includes("window.history.replaceState"),
+  "password reset should accept only recovery fragments and remove tokens from the address bar"
 );
 assert(
   supabaseConfigSource.includes("process.env.NEXT_PUBLIC_SUPABASE_URL") &&

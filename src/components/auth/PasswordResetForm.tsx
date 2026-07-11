@@ -30,6 +30,22 @@ function passwordUpdateError(error: unknown): string {
   return "비밀번호를 변경할 수 없습니다. 잠시 후 다시 시도해주세요.";
 }
 
+function recoveryTokensFromUrl(): { access_token: string; refresh_token: string } | null {
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  if (params.get("type") !== "recovery") return null;
+
+  const accessToken = params.get("access_token");
+  const refreshToken = params.get("refresh_token");
+  if (!accessToken || !refreshToken) return null;
+  return { access_token: accessToken, refresh_token: refreshToken };
+}
+
+function removeRecoveryTokensFromUrl() {
+  const cleanUrl = new URL(window.location.href);
+  cleanUrl.hash = "";
+  window.history.replaceState(window.history.state, "", cleanUrl.toString());
+}
+
 export function PasswordResetForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -47,6 +63,14 @@ export function PasswordResetForm() {
     async function initializeRecoverySession() {
       try {
         const client = await createSupabaseBrowserClient();
+        const recoveryTokens = recoveryTokensFromUrl();
+        if (recoveryTokens) {
+          const sessionResult = await client.auth.setSession?.(recoveryTokens);
+          if (!sessionResult || sessionResult.error || !sessionResult.data?.session) {
+            throw sessionResult?.error || new Error("recovery_session_missing");
+          }
+          removeRecoveryTokensFromUrl();
+        }
         const authResult = await client.auth.getUser();
         if (authResult.error || !authResult.data?.user) {
           throw authResult.error || new Error("recovery_session_missing");
