@@ -16,6 +16,13 @@ type EvaluationCase = {
     expectedStrictCategory?: boolean;
     expectedLocaleHeadings?: boolean;
     hasSyntheticAttachment?: boolean;
+    expectedTopDocId?: string;
+    expectedReranker?: string;
+    expectedAnswerTerms?: string[];
+    minimumExpectedAnswerTerms?: number;
+    forbiddenDocIds?: string[];
+    forbiddenAnswerFragments?: string[];
+    incident?: string;
   } | null;
 };
 
@@ -32,7 +39,7 @@ type RagResponse = {
     language?: string;
     rerankScore?: number;
   }>;
-  searchMeta?: { topScore?: number; noContext?: boolean; retrievedCount?: number };
+  searchMeta?: { topScore?: number; noContext?: boolean; retrievedCount?: number; reranker?: string };
   executionId?: string;
   error?: string;
 };
@@ -43,6 +50,7 @@ const baseUrl = (process.env.KAXI_E2E_BASE_URL?.trim() || "http://localhost:3002
 if (!supabaseUrl || !serviceKey) throw new Error("Supabase service configuration is required");
 const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 const limit = Math.min(Math.max(Number(process.env.RAG_EVAL_LIMIT || 100), 1), 200);
+const caseIdFilter = process.env.RAG_EVAL_CASE_ID?.trim() || "";
 const transport = process.env.RAG_EVAL_TRANSPORT?.trim() === "gateway" ? "gateway" : "direct-n8n";
 
 function isRefusalAnswer(answer: string, locale: string) {
@@ -113,15 +121,18 @@ function syntheticAttachments(testCase: EvaluationCase) {
   }];
 }
 
-const casesResult = await supabase
+const casesQuery = supabase
   .from("rag_evaluation_cases")
   .select("id,locale,category,question,expected_doc_ids,expected_risk_level,expected_handoff,metadata")
-  .eq("active", true)
-  .order("id")
-  .limit(limit);
+  .eq("active", true);
+const casesResult = caseIdFilter
+  ? await casesQuery.eq("id", caseIdFilter).limit(1)
+  : await casesQuery.order("id").limit(limit);
 if (casesResult.error) throw casesResult.error;
 const cases = (casesResult.data || []) as EvaluationCase[];
-if (cases.length === 0) throw new Error("No active RAG evaluation cases");
+if (cases.length === 0) {
+  throw new Error(caseIdFilter ? `No active RAG evaluation case: ${caseIdFilter}` : "No active RAG evaluation cases");
+}
 
 const serving = await supabase.from("rag_serving_chunks").select("canonical_chunk_id,content_hash", { count: "exact" }).eq("status", "ready");
 if (serving.error) throw serving.error;
@@ -211,11 +222,40 @@ for (const testCase of cases) {
 
     const sources = payload.sources || [];
     const retrievedDocIds = sources.map((source) => source.docId).filter((id): id is string => Boolean(id));
+    const normalizedAnswer = (payload.answer || "").toLocaleLowerCase();
+    const expectedAnswerTerms = testCase.metadata?.expectedAnswerTerms || [];
+    const matchedExpectedAnswerTerms = expectedAnswerTerms.filter((term) =>
+      normalizedAnswer.includes(term.toLocaleLowerCase()),
+    );
+    const forbiddenDocIds = (testCase.metadata?.forbiddenDocIds || []).filter((id) => retrievedDocIds.includes(id));
+    const forbiddenAnswerFragments = (testCase.metadata?.forbiddenAnswerFragments || []).filter((fragment) =>
+      normalizedAnswer.includes(fragment.toLocaleLowerCase()),
+    );
     const expectedNoContext = testCase.metadata?.expectedNoContext === true;
     const expectedHit = testCase.expected_doc_ids.length === 0
       ? expectedNoContext
       : testCase.expected_doc_ids.some((id) => retrievedDocIds.includes(id));
     if (!expectedHit) failures.push("expected_document_not_retrieved");
+    if (
+      testCase.metadata?.expectedTopDocId &&
+      sources[0]?.docId !== testCase.metadata.expectedTopDocId
+    ) {
+      failures.push("top_document_mismatch");
+    }
+    if (
+      testCase.metadata?.expectedReranker &&
+      payload.searchMeta?.reranker !== testCase.metadata.expectedReranker
+    ) {
+      failures.push("reranker_mismatch");
+    }
+    if (forbiddenDocIds.length > 0) failures.push("forbidden_document_retrieved");
+    if (forbiddenAnswerFragments.length > 0) failures.push("forbidden_answer_fragment");
+    if (
+      expectedAnswerTerms.length > 0 &&
+      matchedExpectedAnswerTerms.length < Math.max(1, testCase.metadata?.minimumExpectedAnswerTerms || 1)
+    ) {
+      failures.push("expected_answer_terms_missing");
+    }
     const citationsValid = sources.every((source) => source.sourceUrl?.startsWith("https://") && Boolean(source.checkedAt));
     if (!citationsValid) failures.push("invalid_citation");
     if (
@@ -273,6 +313,11 @@ for (const testCase of cases) {
       response_snapshot: {
         answerHash: createHash("sha256").update(payload.answer || "").digest("hex"),
         sourceCount: sources.length,
+        topDocId: sources[0]?.docId || null,
+        reranker: payload.searchMeta?.reranker || null,
+        matchedExpectedAnswerTerms,
+        forbiddenDocIds,
+        forbiddenAnswerFragments,
         refusalExpected: testCase.metadata?.expectedRefusal === true,
         syntheticAttachment: testCase.metadata?.hasSyntheticAttachment === true,
         executionId: payload.executionId || null,
@@ -332,6 +377,7 @@ const completed = await supabase.from("rag_evaluation_runs").update({
     latencyMs: { p50: percentile(0.5), p95: percentile(0.95) },
     baseUrl,
     transport,
+    caseIdFilter: caseIdFilter || null,
   },
   completed_at: new Date().toISOString(),
 }).eq("id", runId);
@@ -339,4 +385,8 @@ if (completed.error) throw completed.error;
 
 console.log(`RAG evaluation ${passedCount}/${cases.length} passed (${(passRate * 100).toFixed(1)}%)`);
 console.log(`citation validity ${(citationValidityRate * 100).toFixed(1)}%, high-risk recall ${(highRiskRecall * 100).toFixed(1)}%, no-context ${(noContextAccuracy * 100).toFixed(1)}%`);
+if (caseIdFilter) {
+  const selectedResult = results.find((item) => item.case_id === caseIdFilter);
+  console.log(`${caseIdFilter}: ${selectedResult?.passed === true ? "passed" : "failed"} ${JSON.stringify(selectedResult?.failure_reasons || [])}`);
+}
 if (!qualityPassed) process.exitCode = 1;

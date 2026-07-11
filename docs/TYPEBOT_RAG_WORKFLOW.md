@@ -8,7 +8,7 @@ Typebot -> KAXI API -> signed n8n webhook -> Supabase pgvector
 
 KAXI owns request validation, UUID/idempotency normalization, HMAC signing, canonical chat/retrieval persistence, encrypted handoff-task creation, attachment ownership, and the handoff token. n8n owns retrieval, grounded answer construction, risk classification, and metadata-only execution telemetry.
 
-Active n8n production version: `f1a32f92-2211-44d7-bfc5-4d618c4ee02c` (41 nodes). The KAXI verifier, Supabase migrations, 201/201 serving projection, and 56/56 multilingual evaluation gates pass. Typebot is published and its normal-answer, high-risk, consent, and handoff paths have been verified against the production chain.
+Active n8n production version: `6d8f57f4-8c04-4c9c-917e-da3f632e823f` (41 nodes). The KAXI verifier, Supabase migrations, and 201/201 serving projection pass. The production evaluation table has 60 active governed cases; release decisions must use the latest recorded run rather than a historical pass count. Typebot is published and its normal-answer, high-risk, consent, and handoff paths have been verified against the production chain.
 
 ## Typebot Runtime Request
 
@@ -157,11 +157,13 @@ The three POST webhooks require KAXI HMAC verification. The capability endpoint 
 
 The same node applies deterministic reranker `deterministic-locale-v2` before context construction. It combines the governed hybrid score with question/body token overlap, title overlap, strict category fit, keyword score, and citation validity, then deduplicates and keeps at most six documents. Returned sources include `language`, `rerankScore`, `originalRank`, and `titleSanitized`; `searchMeta` exposes `rawRetrievedCount`, `languageRejectedCount`, and `titleSanitizedCount`. This reranker adds no external LLM call or provider dependency.
 
+Production regression `ko-cost-strict-locale` replays the exact cost question that previously returned visa documents and mixed-language headings. It requires `cost-breakdown` as the top document, `deterministic-locale-v2` metadata, at least two expected cost terms, and rejects the three incident document IDs and answer fragments. Run only this incident with `RAG_EVAL_CASE_ID=ko-cost-strict-locale bun run rag:evaluation:run`.
+
 No-context and citation-validation failures produce a bounded answer and a review handoff. A generic information question remains low risk; personal regulated actions, low-confidence personal cases, and high-consequence immigration/legal questions are classified separately.
 
 `Search Governed Serving Chunks` must pass both `locale={{ $json.locale }}` and `category_mode=strict` to `match_rag_documents`. The RPC projects only the requested `ko`, `en`, `vi`, or `mn` Markdown sections from a canonical multilingual chunk. Its strict category scopes are `cost -> cost`, `visa -> visa/legal/process/warning`, `documents -> documents/legal/process/warning`, and `school -> school/documents/process`. If no eligible category or locale section remains, the RPC returns zero rows and the workflow must route to `Fallback No Context Answer`; it must not reuse context from another category or language.
 
-The active workflow preserves canonical `docId` in every returned citation, expands Korean/English/Vietnamese/Mongolian retrieval queries with bounded canonical hints, and treats forged-document expressions in all four languages as high risk. Operational evaluation run `812f7634-d2c7-495b-8777-23634358d552` passed 56/56 cases with 100% citation validity, 100% high-risk recall, and 100% no-context accuracy. Overall citation coverage is 92.857% because the four intentional no-context cases correctly return no citations; citation-bearing answers have complete valid citations. Measured latency was p50 2543ms and p95 5392ms.
+The active workflow preserves canonical `docId` in every returned citation, expands Korean/English/Vietnamese/Mongolian retrieval queries with bounded canonical hints, and treats forged-document expressions in all four languages as high risk. Historical operational evaluation run `812f7634-d2c7-495b-8777-23634358d552` passed its then-current 56/56 cases with 100% citation validity, 100% high-risk recall, and 100% no-context accuracy. Overall citation coverage was 92.857% because the four intentional no-context cases correctly returned no citations; citation-bearing answers had complete valid citations. Measured latency was p50 2543ms and p95 5392ms.
 
 ## Release Order
 
