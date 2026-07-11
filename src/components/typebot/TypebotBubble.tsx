@@ -2,6 +2,7 @@
 
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowUp, MessageCircle, Paperclip, RefreshCcw, Smile, X } from "lucide-react";
 
 const HIDDEN_PATH_PREFIXES = ["/admin", "/partner", "/student", "/login"];
@@ -427,6 +428,7 @@ export function TypebotBubble() {
   const pathname = usePathname();
   const locale = (pathname.match(LOCALE_PREFIX_RE)?.[1] ?? "ko") as WidgetLocale;
   const copy = WIDGET_COPY[locale];
+  const prefersReducedMotion = useReducedMotion();
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -798,12 +800,37 @@ export function TypebotBubble() {
 
   return (
     <div className={`fixed bottom-4 right-4 z-[424243] sm:bottom-6 sm:right-6 ${hideOnMobile ? "max-sm:hidden" : ""}`}>
-      {isOpen && (
-        <section
-          lang={locale}
-          aria-label={copy.regionLabel}
-          className="relative mb-3 flex h-[min(680px,calc(100dvh-7rem))] w-[calc(100vw-2rem)] max-w-[430px] flex-col overflow-hidden rounded-[32px] border border-white/80 bg-white px-5 pb-4 pt-5 shadow-[0_22px_70px_rgba(15,23,42,0.16),-20px_24px_70px_rgba(236,72,153,0.14),20px_22px_70px_rgba(99,102,241,0.15)] max-[359px]:fixed max-[359px]:inset-x-2 max-[359px]:bottom-20 max-[359px]:top-2 max-[359px]:mb-0 max-[359px]:h-auto max-[359px]:w-auto max-[359px]:rounded-[24px] max-[359px]:px-4 max-[359px]:pb-3 max-[359px]:pt-4"
-        >
+      <AnimatePresence>
+        {isOpen && (
+          <motion.section
+            lang={locale}
+            aria-label={copy.regionLabel}
+            initial={
+              prefersReducedMotion
+                ? { opacity: 0 }
+                : { opacity: 0, transform: "translateY(8px) scale(0.97)" }
+            }
+            animate={
+              prefersReducedMotion
+                ? { opacity: 1, transition: { duration: 0.2, ease: [0.23, 1, 0.32, 1] } }
+                : {
+                    opacity: 1,
+                    transform: "translateY(0px) scale(1)",
+                    transition: { duration: 0.2, ease: [0.23, 1, 0.32, 1] },
+                  }
+            }
+            exit={
+              prefersReducedMotion
+                ? { opacity: 0, transition: { duration: 0.15, ease: [0.23, 1, 0.32, 1] } }
+                : {
+                    opacity: 0,
+                    transform: "translateY(8px) scale(0.97)",
+                    transition: { duration: 0.15, ease: [0.23, 1, 0.32, 1] },
+                  }
+            }
+            style={{ transformOrigin: "bottom right" }}
+            className="relative mb-3 flex h-[min(680px,calc(100dvh-7rem))] w-[calc(100vw-2rem)] max-w-[430px] flex-col overflow-hidden rounded-[32px] border border-white/80 bg-white px-5 pb-4 pt-5 shadow-[0_22px_70px_rgba(15,23,42,0.16),-20px_24px_70px_rgba(236,72,153,0.14),20px_22px_70px_rgba(99,102,241,0.15)] max-[359px]:fixed max-[359px]:inset-x-2 max-[359px]:bottom-20 max-[359px]:top-2 max-[359px]:mb-0 max-[359px]:h-auto max-[359px]:w-auto max-[359px]:rounded-[24px] max-[359px]:px-4 max-[359px]:pb-3 max-[359px]:pt-4"
+          >
           <div className="flex shrink-0 items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2.5">
               <KaxiFlowerMark className="h-8 w-8 max-[359px]:h-7 max-[359px]:w-7" />
@@ -1027,8 +1054,9 @@ export function TypebotBubble() {
           <p id="kaxi-chat-disclaimer" className="mt-3 shrink-0 text-center text-[13px] font-medium leading-tight text-zinc-400 max-[359px]:mt-2 max-[359px]:text-[11px]">
             {sessionError ? copy.sessionError : copy.footer}
           </p>
-        </section>
-      )}
+          </motion.section>
+        )}
+      </AnimatePresence>
 
       <button
         type="button"
@@ -1038,6 +1066,7 @@ export function TypebotBubble() {
         className={[
           "group relative flex h-14 w-14 items-center justify-center rounded-full border border-white/20 bg-zinc-950 text-white shadow-[0_12px_34px_rgba(15,23,42,0.28)] transition-all",
           "hover:-translate-y-0.5 hover:bg-zinc-900 hover:shadow-[0_16px_40px_rgba(15,23,42,0.32)]",
+          "active:scale-[0.97] transition-transform duration-100 ease-snappy",
           "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-zinc-300",
         ].join(" ")}
       >
