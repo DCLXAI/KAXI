@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { AgentToolSteps } from "./AgentToolSteps";
 import { AgentResponseCard } from "./AgentResponseCard";
@@ -34,13 +34,16 @@ export function AgentMessageList({
   onSend,
   onSendDraft,
 }: AgentMessageListProps) {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
     <div className="space-y-6 mb-32">
       {messages.map((message, index) => (
         <motion.div
           key={index}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, transform: "translateY(10px)" }}
+          animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, transform: "translateY(0px)" }}
+          transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
           className={message.role === "user" ? "flex justify-end" : "flex justify-start"}
         >
           <div className={`max-w-[95%] ${message.role === "user" ? "" : "w-full"}`}>
@@ -71,7 +74,12 @@ export function AgentMessageList({
       ))}
 
       {loading && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+          className="flex justify-start"
+        >
           <div className="bg-card border rounded-2xl rounded-bl-md p-4 max-w-[95%] w-full">
             <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
               <Loader2 className="h-4 w-4 animate-spin" />

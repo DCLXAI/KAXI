@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { AlertCircle, ArrowRight, Database, Loader2, Scale, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,13 +29,16 @@ export function ConsultMessageList({
   messages,
   onSend,
 }: ConsultMessageListProps) {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
     <div className="space-y-6 mb-32">
       {messages.map((message, index) => (
         <motion.div
           key={index}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, transform: "translateY(10px)" }}
+          animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, transform: "translateY(0px)" }}
+          transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
           className={message.role === "user" ? "flex justify-end" : "flex justify-start"}
         >
           <div className={`max-w-[90%] ${message.role === "user" ? "" : "w-full"}`}>
@@ -122,7 +125,12 @@ export function ConsultMessageList({
       ))}
 
       {loading && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+          className="flex justify-start"
+        >
           <div className="bg-card border rounded-2xl rounded-bl-md p-4 max-w-[90%]">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />

@@ -230,16 +230,26 @@ export function UnifiedAuthForm() {
                   copy={copy}
                 />
                 <Button type="submit" size="lg" className="w-full" disabled={Boolean(loading) || !email || !password}>
-                  {loading === "password" && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {loading === "password" && (
+                    <Loader2 className="h-4 w-4 animate-spin animate-in fade-in zoom-in-75 duration-150 ease-snappy motion-reduce:animate-none" />
+                  )}
                   {copy.signIn}
                 </Button>
                 <div className="grid grid-cols-2 gap-2">
                   <Button type="button" variant="outline" onClick={sendEmailLink} disabled={Boolean(loading) || !email}>
-                    {loading === "otp" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                    {loading === "otp" ? (
+                      <Loader2 className="h-4 w-4 animate-spin animate-in fade-in zoom-in-75 duration-150 ease-snappy motion-reduce:animate-none" />
+                    ) : (
+                      <Mail className="h-4 w-4 animate-in fade-in zoom-in-75 duration-150 ease-snappy motion-reduce:animate-none" />
+                    )}
                     {copy.loginLink}
                   </Button>
                   <Button type="button" variant="outline" onClick={sendPasswordReset} disabled={Boolean(loading) || !email}>
-                    {loading === "reset" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                    {loading === "reset" ? (
+                      <Loader2 className="h-4 w-4 animate-spin animate-in fade-in zoom-in-75 duration-150 ease-snappy motion-reduce:animate-none" />
+                    ) : (
+                      <RotateCcw className="h-4 w-4 animate-in fade-in zoom-in-75 duration-150 ease-snappy motion-reduce:animate-none" />
+                    )}
                     {copy.reset}
                   </Button>
                 </div>
@@ -258,7 +268,11 @@ export function UnifiedAuthForm() {
                   copy={copy}
                 />
                 <Button type="submit" size="lg" className="w-full" disabled={Boolean(loading) || !email || !password}>
-                  {loading === "password" ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                  {loading === "password" ? (
+                    <Loader2 className="h-4 w-4 animate-spin animate-in fade-in zoom-in-75 duration-150 ease-snappy motion-reduce:animate-none" />
+                  ) : (
+                    <UserPlus className="h-4 w-4 animate-in fade-in zoom-in-75 duration-150 ease-snappy motion-reduce:animate-none" />
+                  )}
                   {copy.signUp}
                 </Button>
               </form>

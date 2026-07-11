@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, ArrowUp, Brain, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -37,10 +37,16 @@ export function AgentLanding({
   onSend,
 }: AgentLandingProps) {
   const t = useTranslations();
+  const shouldReduceMotion = useReducedMotion();
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center px-4 py-12">
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-3xl">
+      <motion.div
+        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, transform: "translateY(10px)" }}
+        animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, transform: "translateY(0px)" }}
+        transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+        className="w-full max-w-3xl"
+      >
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
             <Sparkles className="h-3.5 w-3.5" />
