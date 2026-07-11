@@ -14,6 +14,16 @@ Active n8n production version: `1a65000a-f14e-4425-a926-992e573ad272` (`Response
 
 Use a Typebot HTTP Request/Webhook block with server-side execution.
 
+The published bot starts with a `locale` router. Embed and Runtime API callers must prefill `locale` with `ko`, `en`, `vi`, or `mn`; an absent or unsupported value falls back to Korean. Each branch owns all visible copy, input labels, privacy text, retry choices, no-context guidance, and its fixed webhook locale so a response can never switch languages mid-session.
+
+```json
+{
+  "prefilledVariables": {
+    "locale": "en"
+  }
+}
+```
+
 ```txt
 POST https://kaxi.vercel.app/api/typebot-rag
 Content-Type: application/json
@@ -27,9 +37,9 @@ Timeout: 45s
   "sessionId": "typebot-{{sessionId}}",
   "typebotResultId": "{{sessionId}}",
   "tenant_id": "default",
-  "category": "{{category}}",
+  "category": "general",
   "source": "typebot",
-  "locale": "ko"
+  "locale": "<fixed branch locale>"
 }
 ```
 
@@ -40,18 +50,23 @@ The `sessionId` variable is assigned from Typebot's Result ID before the request
 KAXI returns fields at the HTTP response top level. Typebot's current HTTP Request expression context exposes that response as `data`, so response-variable mappings use these expressions:
 
 ```txt
-answer        <- data.answer
-needsHuman    <- data.needsHuman
-riskLevel     <- data.riskLevel
-leadStage     <- data.leadStage
-nextStep      <- data.nextStep
-sources       <- data.sources
-handoffToken  <- data.handoffToken
-persisted     <- data.persisted
-persistenceMode <- data.persistenceMode
+answer        <- data?.answer ?? ""
+needsHuman    <- data?.needsHuman ?? false
+riskLevel     <- data?.riskLevel ?? "low"
+leadStage     <- data?.leadStage ?? "none"
+nextStep      <- data?.nextStep ?? ""
+sources       <- data?.sources ?? []
+handoffToken  <- data?.handoffToken ?? ""
+persisted     <- data?.persisted ?? false
+persistenceMode <- data?.persistenceMode ?? ""
+httpStatus    <- statusCode ?? 500
+noContext     <- data?.searchMeta?.noContext ?? false
+noContextReason <- data?.searchMeta?.noContextReason ?? ""
 ```
 
-The current Typebot MCP draft uses these exact body paths. A typical response is:
+All response mappings use null-safe expressions with explicit defaults. This clears values from the previous turn when an abnormal response omits its JSON body. The runtime checks `httpStatus=200` before reading `persisted` or rendering an answer. Any 4xx, 5xx, timeout, or network failure continues to a localized retry/ask-another choice instead of ending the chat or showing a stale answer.
+
+The Typebot flow uses these exact mapping expressions. A typical response is:
 
 ```json
 {
@@ -94,14 +109,23 @@ The same four provenance fields are returned on validation, authorization, upstr
 
 ```mermaid
 flowchart LR
-  A["Start / Welcome"] --> B["Question input"]
+  L{"locale: ko / en / vi / mn"} --> A["Localized welcome"]
+  A --> B["Localized question input"]
   B --> C["Set sessionId = typebot-Result ID"]
   C --> D["POST KAXI /api/typebot-rag"]
-  D --> P{"persisted = true?"}
-  P -- "yes" --> E["Show answer and nextStep"]
+  D --> S{"HTTP status = 200?"}
+  S -- "no" --> X["Localized service warning"]
+  X --> Y{"Retry / ask another"}
+  Y -- "retry" --> D
+  Y -- "ask another" --> B
+  S -- "yes" --> P{"persisted = true?"}
+  P -- "yes" --> N{"noContext = true?"}
   P -- "no / empty" --> W["Warn that chat history was not saved"]
-  W --> E
-  E --> F{"needsHuman or medium/high risk?"}
+  W --> N
+  N -- "yes" --> NC["Localized no-context guidance"]
+  N -- "no" --> E["Show answer and nextStep"]
+  NC --> F{"needsHuman or medium/high risk?"}
+  E --> F
   F -- "no" --> G["Ask another / Finish"]
   F -- "yes" --> H["Collect name, contact, note"]
   H --> I["POST KAXI /api/typebot-handoff"]
@@ -146,6 +170,8 @@ Timeout: 45s
 ```
 
 Map `handoffSaved <- data.ok`, plus `status <- data.status` and `leadId <- data.leadId`. `handoffSaved=true` shows the completed message. A false or empty value shows an explicit not-saved message with `retry` and `continue without handoff` choices; it never claims that an unconfirmed request was accepted. KAXI verifies the short-lived token, confirms that the Typebot session exists, encrypts contact and free-form handoff PII, then sends a second signed webhook to n8n. Supabase updates the existing KAXI-owned `handoff_tasks` row and writes `leads` plus `lead_contacts` without exposing service credentials to Typebot.
+
+The handoff HTTP block separately maps `statusCode ?? 500` and requires HTTP 200 before checking `data.ok`. This prevents a previous successful `handoffSaved` value from being reused after a later failed request. Privacy-declined and no-context messages live in isolated one-block groups because Typebot executes adjacent bubble blocks in a group sequentially before following the group's edge.
 
 ## n8n Contracts
 
@@ -204,8 +230,11 @@ The sync command refuses to write unless the active n8n capability contract matc
 ## Production Checks
 
 - Typebot response mappings use `data.answer` and the corresponding `data.*` expressions in the HTTP Request block context.
-- Typebot maps `data.persisted` and `data.persistenceMode`; an unconfirmed chat write shows `block_chat_persistence_warning` before the answer.
-- Typebot maps handoff `data.ok`; an unconfirmed handoff shows `block_handoff_save_failed` and offers retry or return to general consultation.
+- The published start router supports `ko`, `en`, `vi`, and `mn`; all visible flow copy and both webhook bodies stay in the selected locale.
+- Runtime and handoff HTTP blocks map `statusCode` with a `500` default and route non-200 responses to localized recovery choices.
+- `searchMeta.noContext=true` renders only the localized no-context message; the normal `answer` and `nextStep` blocks must not leak into that turn.
+- Typebot maps `data.persisted` and `data.persistenceMode`; an unconfirmed chat write shows `block_<locale>_persistence_warning` before the answer.
+- Typebot maps handoff `data.ok`; an unconfirmed handoff shows `block_<locale>_handoff_failed` and offers retry or return to general consultation.
 - `sessionId` remains stable for the Typebot Result ID.
 - Repeated high-risk requests create one open handoff task but still return and audit every execution.
 - Failed KAXI/n8n turns are stored with `status=failed` and an `error_code`; a successful retry with the same idempotency key upgrades the canonical row.

@@ -6,6 +6,7 @@ import { extractRagProvenance, resolveRagProvenance } from "@/lib/n8n/provenance
 import { signN8nPayload } from "@/lib/n8n/signature";
 import {
   TypebotRuntimeTurn,
+  typebotRuntimeBlockId,
   typebotRuntimeMessageTextById,
   validatePublishedTypebotRuntime,
 } from "@/lib/typebot/runtime-health";
@@ -79,7 +80,7 @@ export async function checkPublishedTypebotRuntime() {
     body: JSON.stringify({
       isOnlyRegistering: false,
       isStreamEnabled: false,
-      prefilledVariables: { KAXI_HEALTH_CHECK: "true" },
+      prefilledVariables: { KAXI_HEALTH_CHECK: "true", locale: "ko" },
       textBubbleContentFormat: "markdown",
     }),
     signal: AbortSignal.timeout(15_000),
@@ -108,7 +109,10 @@ export async function checkPublishedTypebotRuntime() {
   }
   const errors = validatePublishedTypebotRuntime(payload, continuation);
   if (errors.length > 0) throw new Error(errors.join("; "));
-  const answerLength = typebotRuntimeMessageTextById(continuation, "block_answer").length;
+  const answerLength = typebotRuntimeMessageTextById(
+    continuation,
+    typebotRuntimeBlockId("ko", "answer"),
+  ).length;
 
   return {
     ok: true,
