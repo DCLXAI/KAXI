@@ -117,14 +117,19 @@ function getVectorCacheDiagnostics() {
   }
 }
 
-function embeddingCacheKey(doc: KnowledgeDoc): string {
+// multilingual-e5-small (384d), passage/query prefix convention. Bumping this
+// invalidates the on-disk embedding cache whenever the model, dimension, or
+// prefix strategy changes (see transformer-embedder.ts MODEL_NAME/EMBED_DIM).
+export const EMBEDDING_CACHE_VERSION = "e5-small-384-passage-query-v1";
+
+export function embeddingCacheKey(doc: KnowledgeDoc): string {
   const text = multilingualText({
     title: doc.title,
     content: doc.content,
     keywords: doc.keywords,
   });
   const digest = createHash("sha256").update(text).digest("hex").slice(0, 16);
-  return `${doc.id}:${digest}`;
+  return `${EMBEDDING_CACHE_VERSION}:${doc.id}:${digest}`;
 }
 
 function reviewDateKey(date = new Date()): string {
@@ -213,7 +218,9 @@ function multilingualChunks(doc: KnowledgeDoc): string[] {
 
 // 문서 임베딩 (4개 언어 평균)
 async function embedDoc(doc: KnowledgeDoc): Promise<EmbeddingVector> {
-  const chunks = multilingualChunks(doc);
+  // multilingual-e5 expects a symmetric "passage: " / "query: " prefix
+  // convention (matches searchableTextForEmbedding in pgvector-rag.ts).
+  const chunks = multilingualChunks(doc).map((c) => `passage: ${c}`);
   const { vectors } = await embedBatch(chunks);
   // 4개 언어 벡터 평균
   const dim = vectors[0].length;
@@ -503,7 +510,7 @@ export async function hybridSearch(
 
   if (useTransformer && (store.method === "transformer" || store.method === "mixed")) {
     try {
-      const result = await embedText(query, { vectorizer: store.tfidfVectorizer! });
+      const result = await embedText(`query: ${query}`, { vectorizer: store.tfidfVectorizer! });
       queryVec = result.vector;
       method = result.method;
     } catch {
