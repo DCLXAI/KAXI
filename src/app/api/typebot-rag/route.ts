@@ -6,6 +6,7 @@ import { CHAT_SESSION_COOKIE, verifyChatSessionToken } from "@/lib/chat/session-
 import { getReadyChatAttachmentsForRuntime } from "@/lib/chat/attachment-processing";
 import { inferChatCategory } from "@/lib/chat/category";
 import { createChatRequestIdentity } from "@/lib/chat/request-identity";
+import { applyChatResponseGuardrail } from "@/lib/chat/response-guardrail";
 import { createTypebotHandoffToken, signN8nPayload } from "@/lib/n8n/signature";
 import { verifyTypebotGatewayHeaders } from "@/lib/typebot/gateway-auth";
 
@@ -185,7 +186,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const normalizedPayload = normalizeN8nPayload(payload);
+    const normalizedPayload = applyChatResponseGuardrail(normalizeN8nPayload(payload), question, locale);
     if (!response.ok) {
       console.error("[POST /api/typebot-rag] n8n error", response.status, rawText);
       await persistFailure(`n8n_http_${response.status}`, normalizedPayload.executionId);
