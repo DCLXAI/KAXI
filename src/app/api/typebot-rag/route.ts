@@ -265,32 +265,33 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const guardedPayload = applyChatResponseGuardrail(normalizeN8nPayload(payload), question, locale);
-    const provenance = resolveRagProvenance(guardedPayload);
-    const normalizedPayload = { ...guardedPayload, ...provenance };
+    const upstreamPayload = normalizeN8nPayload(payload);
+    const provenance = resolveRagProvenance(upstreamPayload);
     if (!response.ok) {
       console.error("[POST /api/typebot-rag] n8n error", response.status, rawText);
-      await persistFailure(`n8n_http_${response.status}`, provenance, normalizedPayload.executionId);
+      await persistFailure(`n8n_http_${response.status}`, provenance, upstreamPayload.executionId);
       reportOpsFailure(
         "n8n_runtime_http_error",
         `The n8n RAG runtime returned HTTP ${response.status}.`,
         provenance,
-        normalizedPayload.executionId,
+        upstreamPayload.executionId,
         { httpStatus: response.status },
       );
       return ragJson({ error: "n8n request failed" }, { status: 502 }, provenance);
     }
-    if (!normalizedPayload.answer?.trim()) {
+    if (!upstreamPayload.answer?.trim()) {
       console.error("[POST /api/typebot-rag] n8n response missing answer", rawText);
-      await persistFailure("n8n_invalid_response", provenance, normalizedPayload.executionId);
+      await persistFailure("n8n_invalid_response", provenance, upstreamPayload.executionId);
       reportOpsFailure(
         "n8n_runtime_invalid_response",
         "The n8n RAG runtime returned a response without an answer.",
         provenance,
-        normalizedPayload.executionId,
+        upstreamPayload.executionId,
       );
       return ragJson({ error: "n8n returned an invalid response" }, { status: 502 }, provenance);
     }
+    const guardedPayload = applyChatResponseGuardrail(upstreamPayload, question, locale);
+    const normalizedPayload = { ...guardedPayload, ...provenance };
 
     let storedMessageId: string | undefined;
     let persistenceMode: string | undefined;
