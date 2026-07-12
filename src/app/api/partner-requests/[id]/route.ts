@@ -70,12 +70,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
 
       const now = new Date();
-      const result = await tx.partnerRequest.update({
-        where: { id },
+      // Status precondition in the WHERE guards against concurrent admin
+      // PATCHes racing past the allow-map check (same pattern as
+      // updatePartnerRequestStatus in src/lib/partners/assignment.ts).
+      const transition = await tx.partnerRequest.updateMany({
+        where: { id, status: existing.status },
         data: {
           status: nextStatus,
           ...(nextStatus === "closed" ? { closedAt: now } : {}),
         },
+      });
+      if (transition.count !== 1) {
+        throw new PartnerRequestTransitionError(
+          "transition_conflict",
+          "Partner request status changed concurrently; reload and retry",
+          409
+        );
+      }
+      const result = await tx.partnerRequest.findUniqueOrThrow({
+        where: { id },
         include: { lead: true, organization: true, assignedUser: true },
       });
 
