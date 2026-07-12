@@ -419,7 +419,7 @@ model PartnerRequest {
   deleteRequestedAt  DateTime?
   deletedAt          DateTime?
   retentionUntil     DateTime?
-  status             String    @default("pending") // pending, matched, accepted, closed
+  status             String    @default("pending") // pending, contacted, matched, accepted, closed
   matchedAt          DateTime?
   acceptedAt         DateTime?
   closedAt           DateTime?
