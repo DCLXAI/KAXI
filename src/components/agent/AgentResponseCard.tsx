@@ -1,16 +1,20 @@
 "use client";
 
-import { ArrowRight, BookOpen, Bot, Brain, Database, Sparkles, Wrench } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, BookOpen, Bot, Brain, Database, ShieldCheck, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { MessageResponse } from "@/components/ai-elements/message";
 import {
   linkCitationMarkers,
   SourceAnnotations,
 } from "@/components/kbridge/SourceAnnotations";
-import { backendLabel, EMPTY_CLARIFY_DRAFT } from "./agent-config";
+import { EMPTY_CLARIFY_DRAFT } from "./agent-config";
 import { AgentClarifyPanel } from "./AgentClarifyPanel";
 import type { AgentLocale, AgentMessage, ClarifyDraft } from "./types";
 import { agentSourceAnnotations } from "./types";
+import { localePath } from "@/i18n/routing";
+import { unifiedRouteLabel } from "@/lib/ai/unified-router";
 
 interface AgentResponseCardProps {
   clarifyDraft?: ClarifyDraft;
@@ -42,18 +46,20 @@ export function AgentResponseCard({
           <Bot className="h-3 w-3 text-primary" />
         </div>
         <span className="text-xs font-medium text-muted-foreground">
-          {locale === "ko" ? "AI 에이전트" : "Agent"}
+          KAXI AI
         </span>
-        {message.toolResults && message.toolResults.length > 0 && (
+        {message.routing && (
+          <Badge variant={message.routing.capability === "expert" ? "default" : "outline"} className="text-[10px] gap-0.5">
+            {message.routing.capability === "expert"
+              ? <ShieldCheck className="h-2.5 w-2.5" />
+              : <Wrench className="h-2.5 w-2.5" />}
+            {unifiedRouteLabel(locale, message.routing.capability)}
+          </Badge>
+        )}
+        {message.routing?.capability !== "expert" && message.toolResults && message.toolResults.length > 0 && (
           <Badge variant="outline" className="text-[10px] gap-0.5">
             <Wrench className="h-2.5 w-2.5" />
             {message.toolResults.length} {locale === "ko" ? "도구 사용" : "tools"}
-          </Badge>
-        )}
-        {message.backend && (
-          <Badge variant="outline" className="text-[10px] gap-0.5">
-            <Sparkles className="h-2.5 w-2.5" />
-            {backendLabel(message.backend)}
           </Badge>
         )}
         {message.meta?.quality.retrievalBackends && message.meta.quality.retrievalBackends.length > 0 && (
@@ -130,6 +136,26 @@ export function AgentResponseCard({
         max={8}
         idPrefix={`agent-message-${messageIndex}`}
       />
+
+      {message.expert?.needsHumanExpert && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+          <p className="max-w-xl text-xs text-muted-foreground">
+            {locale === "ko"
+              ? "개별 판단이나 서류 대행이 필요한 사안입니다. 개인정보 동의 후 검증된 전문가에게 요청할 수 있습니다."
+              : locale === "vi"
+                ? "Trường hợp này cần đánh giá cá nhân. Sau khi đồng ý, bạn có thể gửi cho chuyên gia đã xác minh."
+                : locale === "mn"
+                  ? "Энэ тохиолдолд хувь хүний үнэлгээ шаардлагатай. Зөвшөөрсний дараа баталгаажсан мэргэжилтэнд илгээж болно."
+                  : "This case needs individual review. After consent, you can send it to a verified expert."}
+          </p>
+          <Button size="sm" asChild>
+            <Link href={`${localePath(locale, "/partners")}?type=admin&question=${encodeURIComponent(message.expert.consultationQuestion)}`}>
+              {locale === "ko" ? "전문가 연결" : locale === "vi" ? "Kết nối chuyên gia" : locale === "mn" ? "Мэргэжилтэнтэй холбогдох" : "Connect to an expert"}
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
+      )}
 
       {message.meta?.suggestions && message.meta.suggestions.length > 0 && (
         <div className="mt-4 border-t pt-3">

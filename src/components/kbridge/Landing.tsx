@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { KaxiCat } from "@/components/brand/KaxiCat";
-import { ArrowRight, Calculator, FileCheck, School as SchoolIcon, ShieldCheck, Users, Globe2, AlertTriangle, Scale, Sparkles } from "lucide-react";
+import { ArrowRight, Calculator, FileCheck, School as SchoolIcon, ShieldCheck, Users, Globe2, AlertTriangle, Sparkles } from "lucide-react";
 
 export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
   const { lang } = useLangStore();
@@ -166,8 +166,8 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
                     {tr("ai_banner_badge", lang)}
                   </Badge>
                   <Badge variant="outline" className="gap-1">
-                    <Scale className="h-3 w-3" />
-                    ReAct · 6 Tools
+                    <ShieldCheck className="h-3 w-3" />
+                    {lang === "ko" ? "도구 실행 · 공식 근거" : "Tools · Official sources"}
                   </Badge>
                 </div>
                 <h3 className="font-serif text-2xl md:text-3xl font-bold tracking-tight">
@@ -179,41 +179,6 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
               </div>
               <Button size="lg" className="gap-2 shrink-0">
                 {tr("ai_banner_cta", lang)}
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </section>
-
-      {/* 전문 상담 배너 */}
-      <section className="mx-auto max-w-5xl px-4">
-        <Card
-          className="cursor-pointer overflow-hidden border border-border hover:border-primary/40 hover:shadow-md transition-all"
-          onClick={() => onNavigate("consult")}
-        >
-          <CardContent className="p-0">
-            <div className="grid md:grid-cols-[1fr_auto] gap-6 p-6 md:p-8 items-center">
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge className="gap-1.5">
-                    <Scale className="h-3 w-3" />
-                    {tr("consult_banner_badge", lang)}
-                  </Badge>
-                  <Badge variant="outline" className="gap-1">
-                    <Sparkles className="h-3 w-3" />
-                    RAG · Deep Think
-                  </Badge>
-                </div>
-                <h3 className="font-serif text-xl md:text-2xl font-bold tracking-tight">
-                  {tr("consult_banner_title", lang)}
-                </h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {tr("consult_banner_desc", lang)}
-                </p>
-              </div>
-              <Button size="lg" className="gap-2 shrink-0">
-                {tr("consult_banner_cta", lang)}
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </div>

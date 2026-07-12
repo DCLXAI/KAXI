@@ -1,7 +1,6 @@
 "use client";
 
 import { Bot, RefreshCw } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { statusDotClass, statusText } from "./agent-config";
 import type { AgentLocale, AgentStatus } from "./types";
@@ -21,8 +20,7 @@ export function AgentChatHeader({ agentStatus, locale, onReset }: AgentChatHeade
         </div>
         <div>
           <div className="font-semibold text-sm flex items-center gap-1.5">
-            {locale === "ko" ? "AI 에이전트" : "AI Agent"}
-            <Badge variant="outline" className="text-[10px] py-0 h-4">ReAct</Badge>
+            KAXI AI
           </div>
           <div className="text-xs text-muted-foreground flex items-center gap-1.5">
             <span className={`h-1.5 w-1.5 rounded-full ${statusDotClass(agentStatus)}`} />

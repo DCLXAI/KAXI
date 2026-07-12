@@ -75,10 +75,10 @@ export function AgentMessageList({
           <div className="bg-card border rounded-2xl rounded-bl-md p-4 max-w-[95%] w-full">
             <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>{locale === "ko" ? "에이전트 추론 중..." : "Agent thinking..."}</span>
+              <span>{locale === "ko" ? "요청을 확인하고 있어요..." : locale === "vi" ? "Đang kiểm tra yêu cầu..." : locale === "mn" ? "Хүсэлтийг шалгаж байна..." : "Checking your request..."}</span>
             </div>
             <div className="text-xs text-muted-foreground pl-6">
-              {locale === "ko" ? "자료 검색, 비용/서류 계산, 출처 정리까지 순서대로 처리합니다" : "Checking tools, sources, and next actions"}
+              {locale === "ko" ? "필요한 도구와 공식 문서를 자동으로 선택합니다" : locale === "vi" ? "Tự chọn công cụ và nguồn chính thức phù hợp" : locale === "mn" ? "Тохирох хэрэгсэл, албан эх сурвалжийг автоматаар сонгоно" : "Selecting the right tools and official sources"}
             </div>
           </div>
         </motion.div>

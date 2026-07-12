@@ -10,7 +10,7 @@ import {
 import type { AgentLocale, AgentMessage, AgentStatus, ClarifyDraft } from "./types";
 
 async function fetchAgent(payload: unknown): Promise<Response> {
-  return fetch("/api/ai/agent", {
+  return fetch("/api/ai/unified", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -40,7 +40,7 @@ export function useAgentChat() {
   useEffect(() => {
     let alive = true;
 
-    fetch("/api/ai/agent")
+    fetch("/api/ai/unified")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (alive && data) setAgentStatus(data);
@@ -66,8 +66,15 @@ export function useAgentChat() {
         role: message.role === "user" ? "user" : "assistant",
         content: message.text,
       }));
+      const previousAgentMessage = messages.slice().reverse().find((message) => message.role === "agent");
 
-      const res = await fetchAgent({ question: userMsg, lang: locale, history });
+      const res = await fetchAgent({
+        question: userMsg,
+        lang: locale,
+        history,
+        previousCapability: previousAgentMessage?.routing?.capability,
+        previousExpertMode: previousAgentMessage?.expert?.mode,
+      });
 
       if (!res.ok) {
         const errorBody = await res.json().catch(() => ({}));
@@ -93,6 +100,8 @@ export function useAgentChat() {
           durationMs: data.durationMs,
           grounded: Boolean(data.grounded),
           meta: data.meta,
+          routing: data.routing,
+          expert: data.expert,
         },
       ]);
     } catch (error) {

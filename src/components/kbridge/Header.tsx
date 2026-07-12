@@ -37,7 +37,6 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
-  MessageCircle,
   School,
   User,
   type LucideIcon,
@@ -310,14 +309,6 @@ export function Header({
   const publicHref = (key: string) => viewToPath(key, locale);
   const navGroups: HeaderNavGroup[] = [
     {
-      key: "support",
-      label: tr("nav_ai_support", activeLang),
-      items: [
-        { key: "agent", label: tr("nav_agent", activeLang), href: publicHref("agent"), icon: Bot },
-        { key: "consult", label: tr("nav_consult", activeLang), href: publicHref("consult"), icon: MessageCircle },
-      ],
-    },
-    {
       key: "prepare",
       label: tr("nav_study_prep", activeLang),
       items: [
@@ -328,6 +319,7 @@ export function Header({
     },
   ];
   const directNavItems: HeaderNavItem[] = [
+    { key: "agent", label: tr("nav_agent", activeLang), href: publicHref("agent"), icon: Bot },
     { key: "docs", label: tr("nav_my_docs", activeLang), href: publicHref("docs"), icon: FileText },
     { key: "partners", label: tr("nav_expert_support", activeLang), href: publicHref("partners"), icon: Handshake },
   ];

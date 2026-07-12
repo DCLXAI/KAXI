@@ -29,6 +29,7 @@ export function AgentComposer({
         <Card className="p-3 shadow-lg border-2 focus-within:border-primary/50 transition-colors">
           <Textarea
             ref={inputRef}
+            aria-label={locale === "ko" ? "KAXI AI 후속 질문" : locale === "vi" ? "Câu hỏi tiếp theo cho KAXI AI" : locale === "mn" ? "KAXI AI-д дараагийн асуулт" : "Follow-up for KAXI AI"}
             value={input}
             onChange={(event) => onInputChange(event.target.value)}
             onKeyDown={(event) => {
@@ -37,7 +38,7 @@ export function AgentComposer({
                 onSend();
               }
             }}
-            placeholder={locale === "ko" ? "추가 질문 또는 다음 작업..." : "Follow-up..."}
+            placeholder={locale === "ko" ? "학교, 비용, 서류, 비자에 대해 물어보세요..." : "Ask about schools, costs, documents, or visas..."}
             className="border-0 resize-none focus-visible:ring-0 text-sm min-h-[40px] max-h-[120px]"
             rows={1}
             disabled={loading}

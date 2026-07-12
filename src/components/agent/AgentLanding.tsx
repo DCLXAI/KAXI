@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  backendLabel,
   EXAMPLE_PROMPTS,
   FALLBACK_TOOL_ICON,
   statusDotClass,
@@ -44,21 +43,21 @@ export function AgentLanding({
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
             <Sparkles className="h-3.5 w-3.5" />
-            {locale === "ko" ? "AI 에이전트 · 도구 호출 가능" : "AI Agent · Tool-Use"}
+            {locale === "ko" ? "KAXI AI · 실행과 상담을 한곳에서" : locale === "vi" ? "KAXI AI · Thực hiện và tư vấn" : locale === "mn" ? "KAXI AI · Гүйцэтгэл ба зөвлөгөө" : "KAXI AI · Actions and guidance"}
             <span className={`h-1.5 w-1.5 rounded-full ${statusDotClass(agentStatus)}`} />
             {statusText(locale, agentStatus)}
           </div>
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight italic mb-3" style={{ fontFamily: "Georgia, serif" }}>
-            {locale === "ko" ? "유학 준비, 에이전트에게 맡기세요" : locale === "vi" ? "Giao việc cho AI agent" : locale === "mn" ? "Агентэд даатгаарай" : "Delegate to the AI agent"}
+            {locale === "ko" ? "한국 유학, KAXI AI에게 물어보세요" : locale === "vi" ? "Hỏi KAXI AI về du học Hàn Quốc" : locale === "mn" ? "Солонгост сурах тухай KAXI AI-аас асуугаарай" : "Ask KAXI AI about studying in Korea"}
           </h1>
           <p className="text-muted-foreground text-base md:text-lg">
             {locale === "ko"
-              ? "학교 검색 · 비용 계산 · 서류 생성 · 비자 정보 · 전문가 연결 — 모든 것을 한 번에"
+              ? "학교 검색과 비용 계산은 직접 실행하고, 비자·체류 질문은 공식 문서를 근거로 안전하게 답합니다."
               : locale === "vi"
-                ? "Tìm trường · Tính chi phí · Hồ sơ · Visa · Chuyên gia — tất cả trong một"
+                ? "Tự thực hiện tìm trường và tính chi phí; trả lời visa bằng nguồn chính thức."
                 : locale === "mn"
-                  ? "Сургууль · Зардал · Баримт · Виз · Мэргэжилтэн — бүгд нэг дор"
-                  : "Search · Calculate · Documents · Visa · Experts — all in one"}
+                  ? "Сургууль, зардлын ажлыг гүйцэтгэж, визийн асуултад албан эх сурвалжаар хариулна."
+                  : "Runs school and cost tasks, then answers visa questions from official sources."}
           </p>
         </div>
 
@@ -77,6 +76,7 @@ export function AgentLanding({
         <Card className="p-4 shadow-lg border-2 focus-within:border-primary/50 transition-colors">
           <Textarea
             ref={inputRef}
+            aria-label={locale === "ko" ? "KAXI AI에 질문하기" : locale === "vi" ? "Hỏi KAXI AI" : locale === "mn" ? "KAXI AI-аас асуух" : "Ask KAXI AI"}
             value={input}
             onChange={(event) => onInputChange(event.target.value)}
             onKeyDown={(event) => {
@@ -92,18 +92,18 @@ export function AgentLanding({
           <div className="flex items-center justify-between mt-2 pt-2 border-t">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Brain className="h-3 w-3" />
-              <span>{backendLabel(agentStatus?.backend)} · 6 Tools · Max 5 steps</span>
+              <span>{locale === "ko" ? "도구 실행 · 공식 문서 RAG · 위험 신호 감지" : "Tools · Official-source RAG · Safety routing"}</span>
             </div>
             <Button size="sm" onClick={() => onSend()} disabled={!input.trim() || loading} className="gap-1.5">
               {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUp className="h-3.5 w-3.5" />}
-              {locale === "ko" ? "실행" : t("ai_send")}
+            {locale === "ko" ? "보내기" : t("ai_send")}
             </Button>
           </div>
         </Card>
 
         <div className="mt-8">
           <div className="text-xs text-muted-foreground text-center mb-3">
-            {locale === "ko" ? "💡 에이전트에게 시켜보세요" : "💡 Try these"}
+            {locale === "ko" ? "이렇게 물어보세요" : "Try asking"}
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {EXAMPLE_PROMPTS[locale].map((prompt) => (

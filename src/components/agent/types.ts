@@ -1,5 +1,6 @@
 import type { Locale } from "@/i18n/routing";
 import type { SourceAnnotation } from "@/components/kbridge/SourceAnnotations";
+import type { UnifiedAiRouteDecision, UnifiedExpertMode } from "@/lib/ai/unified-router";
 
 export interface ToolResult {
   tool: string;
@@ -27,6 +28,13 @@ export interface AgentMessage {
   durationMs?: number;
   grounded?: boolean;
   meta?: AgentMeta;
+  routing?: UnifiedAiRouteDecision;
+  expert?: {
+    mode: UnifiedExpertMode;
+    needsHumanExpert: boolean;
+    disclaimer?: string;
+    consultationQuestion: string;
+  };
 }
 
 export interface AgentStatus {
@@ -62,6 +70,10 @@ export interface AgentStatus {
     ledger: boolean;
     piiEncryption: boolean;
   };
+  capabilities?: {
+    action: { ready: boolean };
+    expert: { ready: boolean };
+  };
 }
 
 export interface AgentSource {
@@ -81,7 +93,7 @@ export interface AgentSource {
 }
 
 export interface AgentSuggestion {
-  kind: "school" | "cost" | "documents" | "partner";
+  kind: "school" | "cost" | "documents" | "partner" | "followup";
   label: string;
   prompt: string;
 }

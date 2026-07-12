@@ -4,7 +4,7 @@ import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { ArrowUp, MessageCircle, Paperclip, RefreshCcw, Smile, X } from "lucide-react";
 
-const HIDDEN_PATH_PREFIXES = ["/admin", "/partner", "/student", "/login"];
+const HIDDEN_PATH_PREFIXES = ["/admin", "/partner", "/student", "/login", "/agent", "/consult"];
 const LOCALE_PREFIX_RE = /^\/(ko|en|vi|mn)(?=\/|$)/;
 
 type ChatMessage = {
@@ -447,6 +447,8 @@ export function TypebotBubble() {
   const hasPendingAttachments = attachedFiles.some((file) => ["uploading", "processing", "deleting"].includes(file.status));
 
   useEffect(() => {
+    if (isHidden) return;
+
     let active = true;
     const controller = new AbortController();
     void (async () => {
@@ -515,7 +517,7 @@ export function TypebotBubble() {
       active = false;
       controller.abort();
     };
-  }, [copy, locale, pathname]);
+  }, [copy, isHidden, locale]);
 
   useEffect(() => {
     if (isHidden) {

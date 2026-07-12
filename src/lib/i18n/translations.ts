@@ -12,10 +12,8 @@ export const LANGS: { code: Lang; label: string; flag: string }[] = [
 export const t = {
   // 네비게이션
   brand: { ko: "KAXI", vi: "KAXI", mn: "KAXI", en: "KAXI" },
-  nav_ai_support: { ko: "AI 상담", vi: "Tư vấn AI", mn: "AI зөвлөгөө", en: "AI Support" },
   nav_study_prep: { ko: "유학 준비", vi: "Chuẩn bị du học", mn: "Суралцах бэлтгэл", en: "Study Prep" },
-  nav_agent: { ko: "AI 에이전트", vi: "AI Agent", mn: "AI Agent", en: "AI Agent" },
-  nav_consult: { ko: "전문 상담", vi: "Tư vấn chuyên môn", mn: "Мэргэжлийн зөвлөгөө", en: "Expert Consultation" },
+  nav_agent: { ko: "KAXI AI", vi: "KAXI AI", mn: "KAXI AI", en: "KAXI AI" },
   nav_diagnose: { ko: "유학 경로 진단", vi: "Đánh giá lộ trình", mn: "Маршрутын үнэлгээ", en: "Path Diagnosis" },
   nav_schools: { ko: "학교 비교", vi: "So sánh trường", mn: "Сургуулийн харьцуулалт", en: "Compare Schools" },
   nav_cost: { ko: "비용 계산기", vi: "Tính chi phí", mn: "Зардал тооцоолуур", en: "Cost Calculator" },
@@ -45,30 +43,20 @@ export const t = {
   hero_stat_schools: { ko: "검증 학교 DB", vi: "Trường đã xác minh", mn: "Шалгасан сургууль", en: "Verified schools" },
   hero_stat_accredited: { ko: "인증 {n}", vi: "Đã công nhận {n}", mn: "Гэрчлэгдсэн {n}", en: "{n} accredited" },
   hero_stat_langs: { ko: "지원 언어", vi: "Ngôn ngữ hỗ trợ", mn: "Дэмжих хэл", en: "Supported languages" },
-  hero_cta_agent: { ko: "AI 에이전트 시작", vi: "Bắt đầu Agent", mn: "Агент эхлэх", en: "Start AI Agent" },
+  hero_cta_agent: { ko: "KAXI AI 시작", vi: "Bắt đầu KAXI AI", mn: "KAXI AI эхлүүлэх", en: "Start KAXI AI" },
 
   features_title: { ko: "브로커가 하던 일을 플랫폼이 대체합니다", vi: "Nền tảng thay thế những gì môi giới làm", mn: "Зуучлагчийн ажлыг платформ орлоно", en: "The platform replaces what brokers do" },
   features_subtitle: { ko: "불법 기능은 차단하고, 정상 기능은 더 투명하게 제공합니다.", vi: "Chặn chức năng bất hợp pháp, minh bạch hóa chức năng hợp pháp.", mn: "Хууль бус үйлдлийг хааж, хууль ёсны үйлдлийг ил тод болгоно.", en: "Block illegal functions, make legal ones more transparent." },
 
-  ai_banner_badge: { ko: "네이티브 AI 에이전트", vi: "AI Agent gốc", mn: "Уугуул AI Agent", en: "Native AI Agent" },
-  ai_banner_title: { ko: "한 번에 끝내는 유학 준비", vi: "Hoàn tất trong một bước", mn: "Нэг удаад дуусгах", en: "Everything in one go" },
+  ai_banner_badge: { ko: "KAXI AI", vi: "KAXI AI", mn: "KAXI AI", en: "KAXI AI" },
+  ai_banner_title: { ko: "유학 준비와 비자 상담을 한곳에서", vi: "Chuẩn bị du học và tư vấn visa tại một nơi", mn: "Суралцах бэлтгэл ба визийн зөвлөгөө нэг дор", en: "Study preparation and visa guidance in one place" },
   ai_banner_desc: {
-    ko: "학교 검색 → 비용 계산 → 서류 생성 → 비자 정보 → 전문가 연결. 자연어로 요청하면 에이전트가 도구를 호출해 직접 실행합니다.",
-    vi: "Tìm trường → Chi phí → Hồ sơ → Visa → Chuyên gia. Nói tự nhiên, agent tự gọi công cụ.",
-    mn: "Сургууль → Зардал → Баримт → Виз → Мэргэжилтэн. Хэлж байгаа л агент гүйцэтгэнэ.",
-    en: "Search → Cost → Documents → Visa → Experts. Just ask, agent calls tools for you.",
+    ko: "학교 검색·비용 계산·서류 준비는 도구로 실행하고, 비자·체류 질문은 공식 문서 RAG와 위험 감지를 거쳐 답합니다.",
+    vi: "Thực hiện tìm trường, tính chi phí và hồ sơ bằng công cụ; trả lời visa bằng RAG nguồn chính thức và kiểm tra rủi ro.",
+    mn: "Сургууль, зардал, баримтын ажлыг хэрэгслээр гүйцэтгэж, визийн асуултад албан RAG ба эрсдэлийн шалгалтаар хариулна.",
+    en: "Runs school, cost, and document tasks with tools, then answers visa questions through official-source RAG and safety checks.",
   },
-  ai_banner_cta: { ko: "에이전트 실행", vi: "Khởi chạy", mn: "Эхлүүлэх", en: "Launch" },
-
-  consult_banner_badge: { ko: "행정사 AI 에이전트", vi: "AI luật sư", mn: "Зөвлөгөөний AI", en: "Admin Lawyer AI" },
-  consult_banner_title: { ko: "유학 비자·체류, 전문가에게 직접 물어보세요", vi: "Hỏi trực tiếp chuyên gia về visa du học", mn: "Мэргэжилтнээс шууд асуугаарай", en: "Ask an expert about study visa & stay" },
-  consult_banner_desc: {
-    ko: "공식 문서 기반 RAG · 5가지 전문 모드 (종합/비자/서류/거절대응/유학원운영) · 위험 신호 자동 감지 · 법적 경계 명확화",
-    vi: "RAG chính thức · 5 chế độ chuyên gia · phát hiện rủi ro · ranh giới pháp lý rõ ràng",
-    mn: "Албан баримт RAG · 5 төрөл · эрсдэл илрүүлэлт · хуулийн хязгаар",
-    en: "Official RAG · 5 expert modes · risk detection · clear legal boundaries",
-  },
-  consult_banner_cta: { ko: "상담 시작", vi: "Bắt đầu", mn: "Эхлэх", en: "Start" },
+  ai_banner_cta: { ko: "KAXI AI 시작", vi: "Bắt đầu KAXI AI", mn: "KAXI AI эхлүүлэх", en: "Start KAXI AI" },
 
   broker_compare_title: { ko: "브로커 vs KAXI, 이렇게 다릅니다", vi: "Môi giới và KAXI khác nhau thế nào", mn: "Зуучлагч ба KAXI ийм ялгаатай", en: "Broker vs. KAXI, here's the difference" },
   broker_compare_subtitle: { ko: "비용 투명성부터 비자 안전까지, 항목별로 비교해보세요.", vi: "Từ minh bạch chi phí đến an toàn visa, hãy so sánh từng mục.", mn: "Зардлын ил тод байдлаас эхлээд визийн аюулгүй байдал хүртэл харьцуулна уу.", en: "Compare item by item, from cost transparency to visa safety." },

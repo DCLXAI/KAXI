@@ -12,7 +12,6 @@ import { Documents } from "@/components/kbridge/Documents";
 import { Partners } from "@/components/kbridge/Partners";
 import { Admin } from "@/components/kbridge/Admin";
 import { Synonyms } from "@/components/kbridge/Synonyms";
-import { Consult } from "@/components/kbridge/Consult";
 import { Agent } from "@/components/kbridge/Agent";
 import { useLangStore } from "@/store/kbridge";
 import { tr, type Lang } from "@/lib/i18n/translations";
@@ -48,7 +47,6 @@ export function KaxiPage({ view, locale }: { view: ViewKey; locale?: Lang }) {
       <main className="flex-1">
         {view === "home" && <Landing onNavigate={navigate} />}
         {view === "agent" && <Agent />}
-        {view === "consult" && <Consult />}
         {view === "diagnose" && <Diagnosis onNavigate={navigate} />}
         {view === "schools" && <Schools />}
         {view === "cost" && <CostCalculator />}
@@ -58,7 +56,7 @@ export function KaxiPage({ view, locale }: { view: ViewKey; locale?: Lang }) {
         {view === "synonyms" && <Synonyms />}
       </main>
 
-      {view === "consult" || view === "agent" ? (
+      {view === "agent" ? (
         <footer className="mt-auto border-t bg-muted/30">
           <div className="mx-auto max-w-7xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
             <span className="truncate">⚠️ {tr("footer_disclaimer", activeLang)}</span>

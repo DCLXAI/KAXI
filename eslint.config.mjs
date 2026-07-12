@@ -47,7 +47,10 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
   ignores: [
     "node_modules/**",
     ".next/**",
+    "**/.next/**",
     ".vercel/**",
+    ".worktrees/**",
+    ".superpowers/**",
     "out/**",
     "build/**",
     "runtime-artifacts/**",
