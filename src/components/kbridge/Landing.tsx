@@ -97,8 +97,11 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
   ];
 
   const focusKaxiAi = () => {
-    document.getElementById("kaxi-ai")?.scrollIntoView({ behavior: "smooth", block: "center" });
-    window.setTimeout(() => document.querySelector<HTMLTextAreaElement>("#kaxi-ai textarea")?.focus(), 350);
+    const target = document.getElementById("kaxi-ai");
+    const input = target?.querySelector<HTMLTextAreaElement>("textarea");
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    input?.focus({ preventScroll: true });
+    window.setTimeout(() => input?.focus({ preventScroll: true }), 500);
   };
 
   return (
