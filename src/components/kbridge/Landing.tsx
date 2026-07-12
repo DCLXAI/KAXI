@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { KaxiCat } from "@/components/brand/KaxiCat";
-import { KcatParade } from "@/components/brand/KcatParade";
+import { KaxiRunningCat } from "@/components/brand/KaxiRunningCat";
 import { AgentExperience } from "@/components/agent/AgentExperience";
 import { HomeQuickDiagnosis } from "@/components/diagnosis/HomeQuickDiagnosis";
 import { ArrowRight, Calculator, FileCheck, School as SchoolIcon, ShieldCheck, Users, Globe2, AlertTriangle } from "lucide-react";
@@ -117,7 +117,7 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
           <p className="mt-6 text-base md:text-lg text-muted-foreground max-w-3xl mx-auto leading-relaxed">
             {tr("hero_subtitle", lang)}
           </p>
-          <KcatParade />
+          <KaxiRunningCat travel white size={54} />
         </div>
       </section>
 

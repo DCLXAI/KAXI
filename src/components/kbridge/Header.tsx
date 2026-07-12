@@ -10,6 +10,7 @@ import { viewToPath } from "@/lib/kbridge/views";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
 import { KaxiPawMark } from "@/components/brand/KaxiPawMark";
+import { KaxiRunningCat } from "@/components/brand/KaxiRunningCat";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -329,11 +330,10 @@ export function Header({
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4">
         <Link
           href={viewToPath("home", locale)}
+          aria-label="KAXI"
           className="flex items-center gap-2 font-bold"
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-black">
-            K
-          </div>
+          <KaxiRunningCat size={32} />
           <span className="hidden text-base xl:inline">KAXI</span>
         </Link>
         <nav className="ml-4 hidden items-center gap-1 lg:flex" aria-label={tr("nav_menu", activeLang)}>
