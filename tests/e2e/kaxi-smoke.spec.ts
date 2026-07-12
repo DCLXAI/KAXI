@@ -5,6 +5,7 @@ test("home quick diagnosis shows a path result on the first choice", async ({ pa
   await page.goto("/ko");
 
   const quickDiagnosis = page.getByTestId("home-quick-diagnosis");
+  await expect(page.getByTestId("home-hero-mascot")).toBeVisible();
   await expect(quickDiagnosis).toBeVisible();
   await expect(page.getByText("무료 진단 시작")).toHaveCount(0);
 

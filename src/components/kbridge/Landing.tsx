@@ -116,6 +116,9 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
           <p className="mt-6 text-base md:text-lg text-muted-foreground max-w-3xl mx-auto leading-relaxed">
             {tr("hero_subtitle", lang)}
           </p>
+          <div data-testid="home-hero-mascot" className="mt-6 flex justify-center">
+            <KaxiCat state="running" size={48} className="shrink-0" />
+          </div>
         </div>
       </section>
 
