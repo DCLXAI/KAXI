@@ -488,6 +488,9 @@ try {
   assert(Array.isArray(handoffs.assignees), "admin handoffs should expose validated partner assignees");
   assert(typeof handoffs.counts.active === "number", "admin handoffs should expose queue counts");
   assert(typeof handoffs.counts.overdue === "number", "admin handoffs should expose overdue SLA counts");
+  assert(typeof handoffs.counts.noContext === "number", "admin handoffs should expose no-context review counts");
+  assert(typeof handoffs.counts.lowConfidence === "number", "admin handoffs should expose low-confidence review counts");
+  assert(typeof handoffs.counts.pendingEvaluation === "number", "admin handoffs should expose pending evaluation counts");
   const invalidHandoffAction = await responseJson(
     await handoffsRoute.PATCH(
       adminRequest("/api/admin/handoffs", {

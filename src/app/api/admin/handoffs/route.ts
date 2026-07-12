@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminContext, requireAdmin } from "@/lib/api/security";
 import { JsonBodyError, readJsonBody } from "@/lib/api/json-body";
 import { recordRequestAudit } from "@/lib/audit";
-import { listAdminHandoffs, updateAdminHandoff, type HandoffAction } from "@/lib/handoffs/admin";
+import {
+  listAdminHandoffs,
+  updateAdminHandoff,
+  type HandoffAction,
+  type HandoffResolutionCode,
+} from "@/lib/handoffs/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,6 +59,9 @@ export async function PATCH(req: NextRequest) {
       slaMinutes: typeof body.slaMinutes === "number" ? body.slaMinutes : undefined,
       slaPolicy: typeof body.slaPolicy === "string" ? body.slaPolicy : undefined,
       note: typeof body.note === "string" ? body.note.slice(0, 2_000) : undefined,
+      resolutionCode: typeof body.resolutionCode === "string"
+        ? body.resolutionCode.trim() as HandoffResolutionCode
+        : undefined,
     });
     await recordRequestAudit(req, {
       actor: context?.actor || "admin",
@@ -67,6 +75,9 @@ export async function PATCH(req: NextRequest) {
         assigneeUserIdSet: Boolean(body.assigneeUserId),
         slaMinutes: typeof body.slaMinutes === "number" ? body.slaMinutes : null,
         noteProvided: Boolean(body.note),
+        resolutionCode: typeof body.resolutionCode === "string" ? body.resolutionCode : null,
+        evaluationCaseId: "evaluationCaseId" in result ? result.evaluationCaseId : null,
+        evaluationActive: "evaluationActive" in result ? result.evaluationActive : null,
       },
     });
     return NextResponse.json({ task: result });
@@ -81,6 +92,8 @@ export async function PATCH(req: NextRequest) {
           "HANDOFF_ASSIGNEE_INVALID",
           "HANDOFF_SLA_INVALID",
           "HANDOFF_CONTACT_REQUIRED",
+          "HANDOFF_RESOLUTION_INVALID",
+          "HANDOFF_REVIEWER_REQUIRED",
         ].includes(message)
         ? 400
         : 500;

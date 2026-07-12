@@ -719,6 +719,24 @@ model RetrievalRun {
   @@map("retrieval_runs")
 }
 
+model RagReviewFeedback {
+  id                  String   @id @default(uuid()) @db.Uuid
+  handoffTaskId       BigInt   @unique @map("handoff_task_id")
+  sourceChatMessageId BigInt?  @map("source_chat_message_id")
+  retrievalRunId      String?  @map("retrieval_run_id") @db.Uuid
+  verdict             String
+  reviewer            String
+  expectedDocIds      Json     @default("[]") @map("expected_doc_ids")
+  evaluationCaseId    String   @map("evaluation_case_id")
+  metadata            Json     @default("{}")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@index([verdict, createdAt])
+  @@index([evaluationCaseId])
+  @@map("rag_review_feedback")
+}
+
 model N8nAuditMessage {
   id                  BigInt   @id @default(autoincrement())
   executionId         String?  @unique @map("execution_id")

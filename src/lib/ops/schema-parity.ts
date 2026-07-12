@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 
-export const REQUIRED_PRODUCTION_MIGRATION = "20260712193000_rag_lexical_provider_fallback";
+export const REQUIRED_PRODUCTION_MIGRATION = "20260712233000_operator_review_loop";
 
 const REQUIRED_SCHEMA_OBJECTS = [
   "migration_ledger",
@@ -22,6 +22,9 @@ const REQUIRED_SCHEMA_OBJECTS = [
   "rag_lexical_fallback_function",
   "rag_provenance_columns",
   "legacy_cutover_function",
+  "operator_review_feedback",
+  "operator_review_function",
+  "retrieval_review_trigger",
 ] as const;
 
 type RequiredSchemaObject = (typeof REQUIRED_SCHEMA_OBJECTS)[number];
@@ -115,7 +118,14 @@ export async function checkProductionSchemaParity(): Promise<SchemaParityResult>
             'USING public.legacy_rag_chunks_quarantine' IN pg_get_functiondef(
               to_regprocedure('public.kaxi_finalize_legacy_rag_cutover(integer)')
             )
-          ) > 0 AS legacy_cutover_function
+          ) > 0 AS legacy_cutover_function,
+        to_regclass('public.rag_review_feedback') IS NOT NULL AS operator_review_feedback,
+        to_regprocedure('public.kaxi_resolve_handoff_review(bigint,text,text)') IS NOT NULL AS operator_review_function,
+        EXISTS (
+          SELECT 1 FROM pg_trigger
+          WHERE tgname = 'retrieval_runs_queue_review'
+            AND NOT tgisinternal
+        ) AS retrieval_review_trigger
     `;
     const row = rows[0];
     const missing = REQUIRED_SCHEMA_OBJECTS.filter((key) => row?.[key] !== true);
