@@ -1,7 +1,8 @@
 "use client";
 
-import { ArrowRight, BookOpen, Bot, Brain, Database, Sparkles, Wrench } from "lucide-react";
+import { ArrowRight, BookOpen, Brain, Database, Sparkles, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { KaxiCat } from "@/components/brand/KaxiCat";
 import { MessageResponse } from "@/components/ai-elements/message";
 import {
   linkCitationMarkers,
@@ -38,9 +39,7 @@ export function AgentResponseCard({
   return (
     <div className="bg-card border rounded-2xl rounded-bl-md p-4">
       <div className="flex items-center gap-2 mb-2">
-        <div className="flex h-6 w-6 items-center justify-center rounded bg-primary/10">
-          <Bot className="h-3 w-3 text-primary" />
-        </div>
+        <KaxiCat state="breath" size={24} inverted />
         <span className="text-xs font-medium text-muted-foreground">
           {locale === "ko" ? "AI 에이전트" : "Agent"}
         </span>

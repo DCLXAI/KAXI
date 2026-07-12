@@ -1,7 +1,8 @@
 "use client";
 
-import { RefreshCw, Scale } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { KaxiCat } from "@/components/brand/KaxiCat";
 import { MODE_LABELS } from "./consult-config";
 import type { ConsultLocale, ConsultMode } from "./types";
 
@@ -16,7 +17,7 @@ export function ConsultChatHeader({ locale, mode, onReset }: ConsultChatHeaderPr
     <div className="flex items-center justify-between mb-6 pb-4 border-b">
       <div className="flex items-center gap-2">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Scale className="h-4 w-4" />
+          <KaxiCat state="breath" size={28} inverted />
         </div>
         <div>
           <div className="font-semibold text-sm">

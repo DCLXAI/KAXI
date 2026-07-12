@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
-import { AlertCircle, ArrowRight, Database, Loader2, Scale, ShieldAlert } from "lucide-react";
+import { AlertCircle, ArrowRight, Database, Loader2, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { KaxiCat } from "@/components/brand/KaxiCat";
 import { MessageResponse } from "@/components/ai-elements/message";
 import {
   linkCitationMarkers,
@@ -50,9 +51,7 @@ export function ConsultMessageList({
               <div className="space-y-3">
                 <div className="bg-card border rounded-2xl rounded-bl-md p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <div className="flex h-6 w-6 items-center justify-center rounded bg-primary/10">
-                      <Scale className="h-3 w-3 text-primary" />
-                    </div>
+                    <KaxiCat state="breath" size={24} inverted />
                     <span className="text-xs font-medium text-muted-foreground">
                       {locale === "ko" ? "행정사 AI" : "Admin AI"}
                     </span>
@@ -98,7 +97,7 @@ export function ConsultMessageList({
                 </div>
 
                 {message.disclaimer && (
-                  <div className="ml-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 flex items-start gap-1.5">
+                  <div className="ml-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 flex items-start gap-1.5 dark:text-amber-200 dark:bg-amber-950/30 dark:border-amber-900/60">
                     <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
                     <span>{message.disclaimer}</span>
                   </div>
