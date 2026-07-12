@@ -3,6 +3,7 @@
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { ArrowUp, MessageCircle, Paperclip, RefreshCcw, Smile, X } from "lucide-react";
+import { KaxiCat } from "@/components/brand/KaxiCat";
 
 const HIDDEN_PATH_PREFIXES = ["/admin", "/partner", "/student", "/login", "/agent", "/consult"];
 const LOCALE_PREFIX_RE = /^\/(ko|en|vi|mn)(?=\/|$)/;
@@ -283,38 +284,6 @@ const INITIAL_MESSAGE_ID = "welcome";
 
 function initialMessage(copy: WidgetCopy): ChatMessage {
   return { id: INITIAL_MESSAGE_ID, role: "assistant", text: copy.greeting.join("\n") };
-}
-
-function KaxiFlowerMark({ className = "" }: { className?: string }) {
-  const petals = [
-    "left-1/2 top-[6px] -translate-x-1/2 bg-[#8B5CF6]",
-    "right-[7px] top-[11px] bg-[#6366F1]",
-    "right-[10px] bottom-[8px] bg-[#60A5FA]",
-    "left-1/2 bottom-[5px] -translate-x-1/2 bg-[#A78BFA]",
-    "left-[10px] bottom-[8px] bg-[#F472B6]",
-    "left-[7px] top-[11px] bg-[#FB7185]",
-  ];
-
-  return (
-    <span
-      className={[
-        "relative inline-flex shrink-0 items-center justify-center rounded-full bg-white shadow-[0_2px_10px_rgba(15,23,42,0.12)] ring-1 ring-zinc-100",
-        className,
-      ].join(" ")}
-      aria-hidden="true"
-    >
-      {petals.map((petal) => (
-        <span
-          key={petal}
-          className={[
-            "absolute h-[34%] w-[34%] rounded-full blur-[0.1px]",
-            petal,
-          ].join(" ")}
-        />
-      ))}
-      <span className="absolute h-[23%] w-[23%] rounded-full bg-white shadow-sm" />
-    </span>
-  );
 }
 
 function createId() {
@@ -808,7 +777,12 @@ export function TypebotBubble() {
         >
           <div className="flex shrink-0 items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2.5">
-              <KaxiFlowerMark className="h-8 w-8 max-[359px]:h-7 max-[359px]:w-7" />
+              <span
+                data-testid="kaxi-chat-mascot"
+                className="flex h-8 w-10 shrink-0 items-center justify-center"
+              >
+                <KaxiCat state="breath" size={32} />
+              </span>
               <span className="text-[22px] font-bold leading-none text-zinc-900 max-[359px]:text-[19px]">KAXI</span>
             </div>
             <button

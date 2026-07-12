@@ -80,6 +80,8 @@ assert.doesNotMatch(sitemap, /"\/consult"/, "legacy consult path must not be ind
 assert.match(widget, /"\/agent"/, "the compact widget must be hidden on the full KAXI AI screen");
 assert.doesNotMatch(widget, /publicPath === "\/"/, "Typebot must remain available on home");
 assert.match(widget, /kaxi-typebot-launcher/, "home must use the Typebot launcher");
+assert.match(widget, /KaxiCat state="breath"/, "the Typebot header must use the KAXI cat mascot");
+assert.doesNotMatch(widget, /KaxiFlowerMark/, "the legacy flower mark must be removed from Typebot");
 assert.match(quickDiagnosis, /aria-pressed/, "quick diagnosis choices must expose their selected state");
 assert.match(quickDiagnosis, /quick-diagnosis-result/, "quick diagnosis must render an in-page result");
 assert.match(quickDiagnosis, /onNavigate\("diagnose"\)/, "quick diagnosis must retain a detailed diagnosis path");

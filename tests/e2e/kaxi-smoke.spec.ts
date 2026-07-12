@@ -111,6 +111,8 @@ test("KAXI widget receives a server-owned session and rejects a forged session",
   await page.getByRole("button", { name: "KAXI 상담 열기" }).click();
   const panel = page.getByRole("region", { name: "KAXI 상담 채팅" });
   await expect(panel).toBeVisible();
+  await expect(panel.getByTestId("kaxi-chat-mascot")).toBeVisible();
+  await expect(panel.locator('img[src*="/mascot/pet_breath_"]')).toBeVisible();
   await expect(page.getByPlaceholder("KAXI에게 질문해 주세요.")).toBeEnabled();
 
   const box = await panel.boundingBox();
