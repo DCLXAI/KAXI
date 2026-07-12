@@ -97,10 +97,10 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
   ];
 
   return (
-    <div className="space-y-20">
+    <div className="space-y-12 md:space-y-16">
       {/* Hero */}
       <section className="relative overflow-hidden">
-        <div className="mx-auto max-w-5xl px-4 pt-12 pb-16 text-center">
+        <div className="mx-auto max-w-5xl px-4 pt-12 pb-0 text-center md:pt-16 md:pb-2">
           <Badge variant="secondary" className="mb-4 gap-1.5">
             <ShieldCheck className="h-3.5 w-3.5" />
             {tr("hero_badge", lang)}
@@ -111,18 +111,19 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
           <p className="mt-6 text-base md:text-lg text-muted-foreground max-w-3xl mx-auto leading-relaxed">
             {tr("hero_subtitle", lang)}
           </p>
-          <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
-            <div className="w-full">
-              <AgentExperience embedded />
-              <Button size="sm" variant="ghost" className="mt-4 gap-2" onClick={() => onNavigate("diagnose")}>
-                {tr("cta_start", lang)}
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
+          <Button size="sm" variant="outline" className="mt-7 gap-2" onClick={() => onNavigate("diagnose")}>
+            {tr("cta_start", lang)}
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </section>
 
-          {/* Stats */}
-          <div className="mt-12 grid grid-cols-3 gap-4 max-w-2xl mx-auto">
+      <section id="kaxi-ai" aria-label="KAXI AI" className="mx-auto w-full max-w-3xl px-4">
+        <AgentExperience embedded />
+      </section>
+
+      <section aria-label={tr("hero_stat_schools", lang)} className="mx-auto w-full max-w-2xl px-4">
+          <div className="grid grid-cols-3 gap-3 md:gap-4">
             <div className="rounded-xl border border-border/70 bg-card p-4 md:p-5 shadow-sm">
               <div className="font-serif text-2xl md:text-3xl font-semibold">{tr("hero_stat_students_value", lang)}</div>
               <div className="text-xs text-muted-foreground mt-1">{tr("hero_stat_students", lang)}</div>
@@ -141,7 +142,6 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
               <div className="text-xs text-muted-foreground mt-1">{tr("hero_stat_langs", lang)}</div>
             </div>
           </div>
-        </div>
       </section>
 
       {/* Features */}

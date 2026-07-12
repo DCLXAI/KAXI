@@ -67,17 +67,19 @@ export function AgentLanding({
           )}
         </div>
 
-        <div className={`grid grid-cols-3 md:grid-cols-6 gap-2 ${embedded ? "mb-4" : "mb-8"}`}>
-          {Object.entries(TOOL_LABELS).map(([key, labels]) => {
-            const Icon = TOOL_ICONS[key] || FALLBACK_TOOL_ICON;
-            return (
-              <div key={key} className="flex flex-col items-center gap-1 p-2 rounded-lg border bg-card">
-                <Icon className="h-4 w-4 text-primary" />
-                <span className="text-[10px] text-center text-muted-foreground">{labels[locale]}</span>
-              </div>
-            );
-          })}
-        </div>
+        {!embedded && (
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-8">
+            {Object.entries(TOOL_LABELS).map(([key, labels]) => {
+              const Icon = TOOL_ICONS[key] || FALLBACK_TOOL_ICON;
+              return (
+                <div key={key} className="flex flex-col items-center gap-1 p-2 rounded-lg border bg-card">
+                  <Icon className="h-4 w-4 text-primary" />
+                  <span className="text-[10px] text-center text-muted-foreground">{labels[locale]}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         <Card className="p-4 shadow-lg border-2 focus-within:border-primary/50 transition-colors">
           <Textarea
