@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { KaxiCat } from "@/components/brand/KaxiCat";
 import { AgentExperience } from "@/components/agent/AgentExperience";
-import { ArrowRight, Calculator, FileCheck, MessageCircle, School as SchoolIcon, ShieldCheck, Users, Globe2, AlertTriangle } from "lucide-react";
+import { ArrowRight, Calculator, FileCheck, School as SchoolIcon, ShieldCheck, Users, Globe2, AlertTriangle } from "lucide-react";
 
 export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
   const { lang } = useLangStore();
@@ -95,14 +95,6 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
     { broker: { ko: "비자 보장 거짓", vi: "Xạo", mn: "Хуурамч", en: "Fake" }, us: { ko: "보장 안 함 (솔직)", vi: "Thành thật", mn: "Шударга", en: "Honest" } },
     { broker: { ko: "불법취업 연결", vi: "Bất hợp pháp", mn: "Хууль бус", en: "Illegal" }, us: { ko: "제공 안 함", vi: "Không", mn: "Үгүй", en: "None" } },
   ];
-
-  const focusKaxiAi = () => {
-    const target = document.getElementById("kaxi-ai");
-    const input = target?.querySelector<HTMLTextAreaElement>("textarea");
-    target?.scrollIntoView({ behavior: "smooth", block: "center" });
-    input?.focus({ preventScroll: true });
-    window.setTimeout(() => input?.focus({ preventScroll: true }), 500);
-  };
 
   return (
     <div className="space-y-12 md:space-y-16">
@@ -237,16 +229,6 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
         </div>
       </section>
 
-      <button
-        type="button"
-        data-testid="kaxi-home-chat-launcher"
-        aria-label={lang === "ko" ? "KAXI AI 질문창 열기" : lang === "vi" ? "Mở ô hỏi KAXI AI" : lang === "mn" ? "KAXI AI асуултын цонх нээх" : "Open KAXI AI question box"}
-        title={lang === "ko" ? "KAXI AI에게 질문하기" : "Ask KAXI AI"}
-        onClick={focusKaxiAi}
-        className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_12px_30px_rgba(201,100,66,0.28)] transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-      >
-        <MessageCircle className="h-6 w-6" aria-hidden="true" />
-      </button>
     </div>
   );
 }

@@ -60,7 +60,7 @@ const widget = readFileSync("src/components/typebot/TypebotBubble.tsx", "utf8");
 assert.doesNotMatch(landing, /onNavigate\("consult"\)/, "landing must expose one AI entry point");
 assert.match(landing, /<AgentExperience embedded \/>/, "home must embed the working unified AI experience");
 assert.match(landing, /id="kaxi-ai"/, "home AI must have its own layout section outside the hero");
-assert.match(landing, /kaxi-home-chat-launcher/, "home must keep a floating AI launcher");
+assert.doesNotMatch(landing, /kaxi-home-chat-launcher/, "home must not keep a second floating AI launcher");
 assert.doesNotMatch(landing, /ai_banner_title/, "home must not keep a separate promotional AI banner");
 assert.doesNotMatch(header, /publicHref\("consult"\)/, "header must expose one AI entry point");
 assert.match(agentHook, /\/api\/ai\/unified/, "the single AI screen must use the server-side router");
@@ -69,7 +69,8 @@ assert.match(unifiedApi, /runActionAgent/, "task execution must retain the actio
 assert.match(consultPage, /redirect\(`\/\$\{locale\}\/agent`\)/, "legacy consult path must redirect to KAXI AI");
 assert.doesNotMatch(sitemap, /"\/consult"/, "legacy consult path must not be indexed as a separate product");
 assert.match(widget, /"\/agent"/, "the compact widget must be hidden on the full KAXI AI screen");
-assert.match(widget, /publicPath === "\/"/, "the compact widget must be hidden where KAXI AI is embedded on home");
+assert.doesNotMatch(widget, /publicPath === "\/"/, "Typebot must remain available on home");
+assert.match(widget, /kaxi-typebot-launcher/, "home must use the Typebot launcher");
 const consultFrontendFiles = existsSync("src/components/consult")
   ? readdirSync("src/components/consult")
   : [];

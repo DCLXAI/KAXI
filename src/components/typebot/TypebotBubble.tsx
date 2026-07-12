@@ -418,7 +418,6 @@ async function waitForAttachment(
 
 function shouldHideChatbot(pathname: string) {
   const publicPath = pathname.replace(LOCALE_PREFIX_RE, "") || "/";
-  if (publicPath === "/") return true;
   return HIDDEN_PATH_PREFIXES.some(
     (prefix) => publicPath === prefix || publicPath.startsWith(`${prefix}/`),
   );
@@ -1035,13 +1034,14 @@ export function TypebotBubble() {
 
       <button
         type="button"
+        data-testid="kaxi-typebot-launcher"
         aria-label={isOpen ? copy.closeLabel : copy.openLabel}
         aria-pressed={isOpen}
         onClick={() => setIsOpen((current) => !current)}
         className={[
-          "group relative flex h-14 w-14 items-center justify-center rounded-full border border-white/20 bg-zinc-950 text-white shadow-[0_12px_34px_rgba(15,23,42,0.28)] transition-all",
-          "hover:-translate-y-0.5 hover:bg-zinc-900 hover:shadow-[0_16px_40px_rgba(15,23,42,0.32)]",
-          "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-zinc-300",
+          "group relative flex h-14 w-14 items-center justify-center rounded-full border border-white/30 bg-primary text-primary-foreground shadow-[0_12px_34px_rgba(201,100,66,0.28)] transition-all",
+          "hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-[0_16px_40px_rgba(201,100,66,0.34)]",
+          "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/30",
         ].join(" ")}
       >
         {isOpen ? (
@@ -1049,7 +1049,7 @@ export function TypebotBubble() {
         ) : (
           <>
             <MessageCircle className="size-6 transition-transform group-hover:scale-105" />
-            <span className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-white text-[10px] font-bold text-zinc-950">
+            <span className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-white text-[10px] font-bold text-primary">
               K
             </span>
           </>
