@@ -5,10 +5,7 @@ test("home quick diagnosis shows a path result on the first choice", async ({ pa
   await page.goto("/ko");
 
   const quickDiagnosis = page.getByTestId("home-quick-diagnosis");
-  const runningCat = page.getByTestId("home-kaxi-runner");
-  await expect(runningCat).toBeVisible();
-  await expect(page.locator('[data-kaxi-running-cat="travel"]')).toHaveCount(1);
-  await expect(runningCat.locator('img[src*="/mascot/cat_running_"]')).toBeVisible();
+  await expect(page.locator('[data-kaxi-running-cat="travel"]')).toHaveCount(0);
   await expect(quickDiagnosis.locator('[data-kaxi-mark="paw"]')).toBeVisible();
   await expect(page.locator('#kaxi-ai [data-kaxi-mark="paw"]')).toBeVisible();
   await expect(quickDiagnosis).toBeVisible();

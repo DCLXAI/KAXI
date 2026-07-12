@@ -91,9 +91,10 @@ assert.doesNotMatch(widget, /publicPath === "\/"/, "Typebot must remain availabl
 assert.match(widget, /kaxi-typebot-launcher/, "home must use the Typebot launcher");
 assert.match(widget, /<KaxiRunningCat size=\{42\} \/>/, "the Typebot header must use a stationary running cat");
 assert.doesNotMatch(widget, /KaxiFlowerMark/, "the legacy flower mark must be removed from Typebot");
-assert.match(landing, /<KaxiRunningCat travel white size=\{54\} \/>/, "home must show one travelling white cat");
+assert.doesNotMatch(landing, /KaxiRunningCat/, "home must not show a decorative running cat");
 assert.match(runningCat, /state="running"/, "both surfaces must use the running animation");
 assert.match(runningCat, /data-kaxi-running-cat="stationary"/, "Typebot cat must stay in place");
+assert.doesNotMatch(runningCat, /travel|white/, "the removed homepage travel variant must not remain");
 assert.match(pawMark, /data-kaxi-mark="paw"/, "the public AI brand must expose the KAXI paw mark");
 assert.match(globalTheme, /--primary: #c96442;/, "the main KAXI action color must remain orange");
 assert.match(globalTheme, /--icon-accent: #e5a0b3;/, "public icons must use the light-pink accent");

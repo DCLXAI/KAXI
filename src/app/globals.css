@@ -127,41 +127,6 @@
 }
 
 @layer components {
-  @keyframes kaxi-cat-travel {
-    0% {
-      left: 0;
-      transform: scaleX(1);
-    }
-    47% {
-      left: calc(100% - 65px);
-      transform: scaleX(1);
-    }
-    50% {
-      left: calc(100% - 65px);
-      transform: scaleX(-1);
-    }
-    97% {
-      left: 0;
-      transform: scaleX(-1);
-    }
-    100% {
-      left: 0;
-      transform: scaleX(1);
-    }
-  }
-
-  .kaxi-cat-travel {
-    animation: kaxi-cat-travel 7s linear infinite;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .kaxi-cat-travel {
-      left: 50%;
-      animation: none;
-      transform: translateX(-50%);
-    }
-  }
-
   .kaxi-cited-answer a[href^="#"][title] {
     display: inline-flex;
     min-width: 1.15rem;
