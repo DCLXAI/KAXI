@@ -6,8 +6,6 @@ import {
 } from "../src/lib/ai/unified-router";
 import { recommendPath } from "../src/lib/data/diagnosis";
 import {
-  QUICK_DIAGNOSIS_EXPECTED_VISA,
-  QUICK_DIAGNOSIS_IDS,
   quickDiagnosisInput,
 } from "../src/lib/data/quick-diagnosis";
 
@@ -110,13 +108,22 @@ for (const [name, source] of [
   assert.doesNotMatch(source, /<(?:Sparkles|Bot)\b/, `${name} must not use a generic AI mark`);
 }
 assert.match(quickDiagnosis, /aria-pressed/, "quick diagnosis choices must expose their selected state");
+assert.match(quickDiagnosis, /quick-diagnosis-step-goal/, "quick diagnosis must ask for the user's goal");
+assert.match(quickDiagnosis, /quick-diagnosis-step-korean/, "quick diagnosis must ask for Korean level");
+assert.match(quickDiagnosis, /quick-diagnosis-step-budget/, "quick diagnosis must ask for a real budget band");
 assert.match(quickDiagnosis, /quick-diagnosis-result/, "quick diagnosis must render an in-page result");
 assert.match(quickDiagnosis, /onNavigate\("diagnose"\)/, "quick diagnosis must retain a detailed diagnosis path");
-for (const id of QUICK_DIAGNOSIS_IDS) {
+for (const scenario of [
+  { goal: "language", korean: "topik3", budget: "8to12", expected: "D-4" },
+  { goal: "degree", korean: "none", budget: "12to18", expected: "D-4" },
+  { goal: "degree", korean: "topik3", budget: "12to18", expected: "D-2" },
+  { goal: "transfer", korean: "topik1", budget: "over18", expected: "D-4" },
+  { goal: "unsure", korean: "topik2", budget: "8to12", expected: "D-2" },
+] as const) {
   assert.equal(
-    recommendPath(quickDiagnosisInput(id)).visaType,
-    QUICK_DIAGNOSIS_EXPECTED_VISA[id],
-    `quick diagnosis ${id} must keep its expected visa path`,
+    recommendPath(quickDiagnosisInput(scenario)).visaType,
+    scenario.expected,
+    `quick diagnosis must use real answers for ${JSON.stringify(scenario)}`,
   );
 }
 const consultFrontendFiles = existsSync("src/components/consult")

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("home quick diagnosis shows a path result on the first choice", async ({ page }) => {
+test("home quick diagnosis uses three answers for its path result", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await page.goto("/ko");
 
@@ -11,32 +11,40 @@ test("home quick diagnosis shows a path result on the first choice", async ({ pa
   await expect(quickDiagnosis).toBeVisible();
   await expect(page.getByText("무료 진단 시작")).toHaveCount(0);
 
-  await page.getByTestId("quick-diagnosis-option-language").click();
-
-  const result = page.getByTestId("quick-diagnosis-result");
-  await expect(result).toBeVisible();
-  await expect(result).toContainText("D-4");
-  await expect(result).toContainText("8,000,000 KRW");
-  await expect(result.getByRole("button", { name: "내 조건으로 정밀 진단" })).toBeVisible();
-  await page.waitForTimeout(250);
-
-  const palette = await page.evaluate(() => {
+  const initialPalette = await page.evaluate(() => {
     const paw = document.querySelector('[data-testid="home-quick-diagnosis"] [data-kaxi-mark="paw"]');
     const option = document.querySelector('[data-testid="quick-diagnosis-option-language"]');
-    const primaryButton = document.querySelector('[data-testid="quick-diagnosis-result"] button');
     return {
       iconToken: getComputedStyle(document.documentElement).getPropertyValue("--icon-accent").trim(),
       pawColor: paw ? getComputedStyle(paw).color : "",
       optionBorder: option ? getComputedStyle(option).borderColor : "",
-      primaryButtonBackground: primaryButton ? getComputedStyle(primaryButton).backgroundColor : "",
     };
   });
-  expect(palette).toEqual({
+  expect(initialPalette).toMatchObject({
     iconToken: "#e5a0b3",
     pawColor: "rgb(229, 160, 179)",
-    optionBorder: "rgb(229, 160, 179)",
-    primaryButtonBackground: "rgb(201, 100, 66)",
   });
+  expect(initialPalette.optionBorder).toContain("0.45");
+
+  await page.getByTestId("quick-diagnosis-option-language").click();
+  await expect(page.getByTestId("quick-diagnosis-step-korean")).toBeVisible();
+  await page.getByTestId("quick-diagnosis-korean-none").click();
+  await expect(page.getByTestId("quick-diagnosis-step-budget")).toBeVisible();
+  await page.getByTestId("quick-diagnosis-budget-8to12").click();
+
+  const result = page.getByTestId("quick-diagnosis-result");
+  await expect(result).toBeVisible();
+  await expect(result).toContainText("D-4");
+  await expect(result).toContainText("7,000,000–9,000,000 KRW");
+  await expect(result).toContainText("이렇게 추천한 이유");
+  await expect(result.getByRole("button", { name: "내 조건으로 정밀 진단" })).toBeVisible();
+  await page.waitForTimeout(250);
+
+  const primaryButtonBackground = await page.evaluate(() => {
+    const primaryButton = document.querySelector('[data-testid="quick-diagnosis-result"] button');
+    return primaryButton ? getComputedStyle(primaryButton).backgroundColor : "";
+  });
+  expect(primaryButtonBackground).toBe("rgb(201, 100, 66)");
 
   const resultBox = await result.boundingBox();
   expect(resultBox).not.toBeNull();
