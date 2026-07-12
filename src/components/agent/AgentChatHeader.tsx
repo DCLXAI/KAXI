@@ -1,7 +1,8 @@
 "use client";
 
-import { Bot, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { KaxiPawMark } from "@/components/brand/KaxiPawMark";
 import { statusDotClass, statusText } from "./agent-config";
 import type { AgentLocale, AgentStatus } from "./types";
 
@@ -16,7 +17,7 @@ export function AgentChatHeader({ agentStatus, locale, onReset }: AgentChatHeade
     <div className="flex items-center justify-between mb-6 pb-4 border-b">
       <div className="flex items-center gap-2">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Bot className="h-4 w-4" />
+          <KaxiPawMark className="h-4 w-4" />
         </div>
         <div>
           <div className="font-semibold text-sm flex items-center gap-1.5">

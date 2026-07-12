@@ -63,6 +63,10 @@ const consultPage = readFileSync("src/app/[locale]/consult/page.tsx", "utf8");
 const sitemap = readFileSync("src/app/sitemap.ts", "utf8");
 const widget = readFileSync("src/components/typebot/TypebotBubble.tsx", "utf8");
 const quickDiagnosis = readFileSync("src/components/diagnosis/HomeQuickDiagnosis.tsx", "utf8");
+const pawMark = readFileSync("src/components/brand/KaxiPawMark.tsx", "utf8");
+const agentLanding = readFileSync("src/components/agent/AgentLanding.tsx", "utf8");
+const agentChatHeader = readFileSync("src/components/agent/AgentChatHeader.tsx", "utf8");
+const agentResponseCard = readFileSync("src/components/agent/AgentResponseCard.tsx", "utf8");
 
 assert.doesNotMatch(landing, /onNavigate\("consult"\)/, "landing must expose one AI entry point");
 assert.match(landing, /<AgentExperience embedded \/>/, "home must embed the working unified AI experience");
@@ -82,6 +86,17 @@ assert.doesNotMatch(widget, /publicPath === "\/"/, "Typebot must remain availabl
 assert.match(widget, /kaxi-typebot-launcher/, "home must use the Typebot launcher");
 assert.match(widget, /KaxiCat state="breath"/, "the Typebot header must use the KAXI cat mascot");
 assert.doesNotMatch(widget, /KaxiFlowerMark/, "the legacy flower mark must be removed from Typebot");
+assert.match(pawMark, /data-kaxi-mark="paw"/, "the public AI brand must expose the KAXI paw mark");
+assert.match(header, /icon: KaxiPawMark/, "the public AI navigation must use the KAXI paw mark");
+assert.match(quickDiagnosis, /<KaxiPawMark/, "quick diagnosis must use the KAXI paw mark");
+for (const [name, source] of [
+  ["agent landing", agentLanding],
+  ["agent chat header", agentChatHeader],
+  ["agent response", agentResponseCard],
+] as const) {
+  assert.match(source, /<KaxiPawMark/, `${name} must use the KAXI paw mark`);
+  assert.doesNotMatch(source, /<(?:Sparkles|Bot)\b/, `${name} must not use a generic AI mark`);
+}
 assert.match(quickDiagnosis, /aria-pressed/, "quick diagnosis choices must expose their selected state");
 assert.match(quickDiagnosis, /quick-diagnosis-result/, "quick diagnosis must render an in-page result");
 assert.match(quickDiagnosis, /onNavigate\("diagnose"\)/, "quick diagnosis must retain a detailed diagnosis path");

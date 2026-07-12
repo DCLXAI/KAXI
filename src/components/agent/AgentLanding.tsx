@@ -2,10 +2,11 @@
 
 import { useTranslations } from "next-intl";
 import { motion } from "framer-motion";
-import { ArrowRight, ArrowUp, Brain, Loader2, Sparkles } from "lucide-react";
+import { ArrowRight, ArrowUp, Brain, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { KaxiPawMark } from "@/components/brand/KaxiPawMark";
 import {
   EXAMPLE_PROMPTS,
   FALLBACK_TOOL_ICON,
@@ -44,7 +45,7 @@ export function AgentLanding({
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-3xl">
         <div className={embedded ? "text-center mb-5" : "text-center mb-10"}>
           <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
-            <Sparkles className="h-3.5 w-3.5" />
+            <KaxiPawMark className="h-3.5 w-3.5" />
             {locale === "ko" ? "KAXI AI · 실행과 상담을 한곳에서" : locale === "vi" ? "KAXI AI · Thực hiện và tư vấn" : locale === "mn" ? "KAXI AI · Гүйцэтгэл ба зөвлөгөө" : "KAXI AI · Actions and guidance"}
             <span className={`h-1.5 w-1.5 rounded-full ${statusDotClass(agentStatus)}`} />
             {statusText(locale, agentStatus)}

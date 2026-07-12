@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { GraduationCap, HelpCircle, Languages, Repeat2, Sparkles } from "lucide-react";
+import { GraduationCap, HelpCircle, Languages, Repeat2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { KaxiPawMark } from "@/components/brand/KaxiPawMark";
 import { tr, translationKey, type Lang } from "@/lib/i18n/translations";
 import { pickLang, recommendPath } from "@/lib/data/diagnosis";
 import {
@@ -65,7 +66,7 @@ export function HomeQuickDiagnosis({
     >
       <div className="mb-5 text-center">
         <div className="mb-2 flex items-center justify-center gap-1.5 text-sm font-semibold text-primary">
-          <Sparkles className="h-4 w-4" aria-hidden="true" />
+          <KaxiPawMark className="h-4 w-4" />
           {tr("quick_diagnosis_eyebrow", lang)}
         </div>
         <h2 id="quick-diagnosis-title" className="font-serif text-2xl font-bold sm:text-3xl">
