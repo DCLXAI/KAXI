@@ -59,7 +59,7 @@ export default function RootLayout({
     >
       <body className="antialiased bg-background text-foreground">
         {children}
-        <TypebotBubble />
+        <TypebotBubble publicUrl={process.env.TYPEBOT_PUBLIC_URL ?? null} />
         <Toaster />
       </body>
     </html>
