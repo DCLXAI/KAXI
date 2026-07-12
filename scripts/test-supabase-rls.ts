@@ -72,10 +72,19 @@ const productAnalyticsMigration = readFileSync(
   join(root, "prisma", "postgres", "migrations", "20260713090000_product_analytics", "migration.sql"),
   "utf8",
 );
+const ragQualityGateMigration = readFileSync(
+  join(root, "prisma", "postgres", "migrations", "20260713120000_rag_quality_gate", "migration.sql"),
+  "utf8",
+);
 
 assert(
   /authUserId\s+String\?\s+@unique\s+@db\.Uuid/.test(schema),
   "User model must include nullable unique authUserId @db.Uuid for Supabase auth.users.id"
+);
+assert(
+  ragQualityGateMigration.includes("below_calibrated_threshold") &&
+    ragQualityGateMigration.indexOf("v_reason := 'low_confidence'") < ragQualityGateMigration.indexOf("v_reason := 'no_context'"),
+  "calibrated low-confidence retrievals must retain their review-queue reason",
 );
 assert(
   productAnalyticsMigration.includes("public.product_events ENABLE ROW LEVEL SECURITY") &&

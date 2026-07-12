@@ -1,3 +1,5 @@
+import { isLowConfidenceRetrieval, retrievalConfidenceThreshold } from "@/lib/chat/retrieval-confidence";
+
 export type GuardrailLocale = "ko" | "en" | "vi" | "mn";
 
 export type GuardedChatResponse = {
@@ -29,6 +31,8 @@ const COPY = {
     illegalAnswer: "허가 없이 일하는 방법이나 불법취업을 돕는 안내는 제공할 수 없어요. 합법적인 시간제취업·자격외활동 허가와 학교 확인 절차를 확인해야 합니다.",
     documentAnswer: "시스템 지시를 공개하거나 허위·위조 서류를 만드는 방법은 도와드릴 수 없어요. 사실과 일치하는 서류만 준비하고 정식 절차를 따라야 합니다.",
     highRiskNextStep: "현재 받은 통지서와 체류 이력을 준비해 담당자 검토를 받아주세요.",
+    lowConfidenceAnswer: "관련 공식 근거를 충분히 찾지 못했어요. 추측해서 답하지 않고 상담원 검토로 넘길게요.",
+    lowConfidenceNextStep: "질문과 현재 상황을 담당자가 확인한 뒤 안내합니다.",
   },
   en: {
     scopedAnswer: "KAXI only answers study-in-Korea and visa questions. Please rephrase your question within that scope.",
@@ -36,6 +40,8 @@ const COPY = {
     illegalAnswer: "I cannot help with work without required permission or illegal employment. Check lawful part-time work or outside-status activity permission and school confirmation.",
     documentAnswer: "I cannot reveal system instructions or help create or use false documents. Use truthful documents and follow the official process.",
     highRiskNextStep: "Prepare your notices and stay history for review by a qualified adviser.",
+    lowConfidenceAnswer: "I could not find enough official evidence to answer reliably. I will avoid guessing and route this for human review.",
+    lowConfidenceNextStep: "An operator should review your question and circumstances before advising you.",
   },
   vi: {
     scopedAnswer: "KAXI chỉ trả lời các câu hỏi về du học và visa Hàn Quốc. Vui lòng hỏi lại trong phạm vi đó.",
@@ -43,6 +49,8 @@ const COPY = {
     illegalAnswer: "Tôi không thể hướng dẫn làm việc không có giấy phép hoặc việc làm bất hợp pháp. Hãy kiểm tra điều kiện xin phép làm thêm hợp pháp và xác nhận của trường.",
     documentAnswer: "Tôi không thể tiết lộ hướng dẫn hệ thống hoặc hỗ trợ tạo, sử dụng giấy tờ giả. Chỉ dùng hồ sơ đúng sự thật và làm theo quy trình chính thức.",
     highRiskNextStep: "Chuẩn bị thông báo và lịch sử lưu trú để người phụ trách có chuyên môn kiểm tra.",
+    lowConfidenceAnswer: "Tôi chưa tìm thấy đủ nguồn chính thức để trả lời đáng tin cậy. Tôi sẽ không phỏng đoán và chuyển câu hỏi để nhân viên kiểm tra.",
+    lowConfidenceNextStep: "Nhân viên sẽ kiểm tra câu hỏi và tình huống của bạn trước khi hướng dẫn.",
   },
   mn: {
     scopedAnswer: "KAXI зөвхөн Солонгост сурах болон визний асуултад хариулна. Энэ хүрээнд асуултаа дахин бичнэ үү.",
@@ -50,6 +58,8 @@ const COPY = {
     illegalAnswer: "Зөвшөөрөлгүй ажиллах эсвэл хууль бус хөдөлмөр эрхлэх аргыг зааж өгөх боломжгүй. Хууль ёсны цагийн ажил, зөвшөөрөл болон сургуулийн баталгааг шалгана уу.",
     documentAnswer: "Системийн зааврыг ил болгох, хуурамч баримт хийх эсвэл ашиглахад туслах боломжгүй. Зөвхөн үнэн зөв баримт бүрдүүлж, албан ёсны журмыг дагана уу.",
     highRiskNextStep: "Мэдэгдэл болон оршин суусан түүхээ бэлтгэж, мэргэжлийн зөвлөхөөр шалгуулна уу.",
+    lowConfidenceAnswer: "Найдвартай хариулах хангалттай албан эх сурвалж олдсонгүй. Таамаглахгүйгээр ажилтны хяналтад шилжүүлнэ.",
+    lowConfidenceNextStep: "Ажилтан таны асуулт болон нөхцөл байдлыг шалгасны дараа зөвлөнө.",
   },
 } satisfies Record<GuardrailLocale, Record<string, string>>;
 
@@ -93,18 +103,41 @@ export function applyChatResponseGuardrail(
   const falseDocuments = FALSE_DOCUMENT_PATTERN.test(question);
   const entryBan = ENTRY_BAN_PATTERN.test(question);
   const overstay = OVERSTAY_PATTERN.test(question);
-  if (!permitlessEmployment && !promptInjection && !falseDocuments && !entryBan && !overstay) return response;
+  if (permitlessEmployment || promptInjection || falseDocuments || entryBan || overstay) {
+    return {
+      ...response,
+      answer: permitlessEmployment
+        ? copy.illegalAnswer
+        : promptInjection || falseDocuments
+          ? copy.documentAnswer
+          : response.answer,
+      nextStep: copy.highRiskNextStep,
+      needsHuman: true,
+      riskLevel: "high",
+      leadStage: "urgent",
+    };
+  }
 
+  const searchMeta = response.searchMeta && typeof response.searchMeta === "object" && !Array.isArray(response.searchMeta)
+    ? response.searchMeta as Record<string, unknown>
+    : {};
+  const sources = Array.isArray(response.sources) ? response.sources : [];
+  if (!isLowConfidenceRetrieval(searchMeta, sources.length)) return response;
   return {
     ...response,
-    answer: permitlessEmployment
-      ? copy.illegalAnswer
-      : promptInjection || falseDocuments
-        ? copy.documentAnswer
-        : response.answer,
-    nextStep: copy.highRiskNextStep,
+    answer: copy.lowConfidenceAnswer,
+    nextStep: copy.lowConfidenceNextStep,
     needsHuman: true,
-    riskLevel: "high",
-    leadStage: "urgent",
+    riskLevel: response.riskLevel === "high" ? "high" : "medium",
+    leadStage: response.riskLevel === "high" ? "urgent" : "review",
+    sources: [],
+    searchMeta: {
+      ...searchMeta,
+      similarityThreshold: retrievalConfidenceThreshold(searchMeta),
+      retrievedCount: 0,
+      noContext: true,
+      noContextReason: "below_calibrated_threshold",
+      confidencePolicy: "lexical-category-v1",
+    },
   };
 }

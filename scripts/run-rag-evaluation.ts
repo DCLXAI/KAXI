@@ -40,7 +40,7 @@ type RagResponse = {
     language?: string;
     rerankScore?: number;
   }>;
-  searchMeta?: { topScore?: number; noContext?: boolean; retrievedCount?: number; reranker?: string };
+  searchMeta?: { topScore?: number; noContext?: boolean; retrievedCount?: number; reranker?: string; category?: string };
   executionId?: string;
   workflowId?: string;
   workflowVersionId?: string;
@@ -164,6 +164,18 @@ let highRiskExpected = 0;
 let highRiskCorrect = 0;
 let noContextExpected = 0;
 let noContextCorrect = 0;
+let contextExpected = 0;
+let expectedDocumentHit = 0;
+let strictCategoryExpected = 0;
+let strictCategoryCorrect = 0;
+let localeSourceExpected = 0;
+let localeSourceCorrect = 0;
+let topDocumentExpected = 0;
+let topDocumentCorrect = 0;
+let answerTermsExpected = 0;
+let answerTermsCorrect = 0;
+let categoryInferenceExpected = 0;
+let categoryInferenceCorrect = 0;
 const results: Array<Record<string, unknown>> = [];
 for (const testCase of cases) {
   const started = Date.now();
@@ -204,6 +216,7 @@ for (const testCase of cases) {
       const session = await sessionResponse.json() as { sessionId?: string };
       const cookie = sessionResponse.headers.get("set-cookie")?.split(";")[0] || "";
       if (!sessionResponse.ok || !session.sessionId || !cookie) throw new Error("session_creation_failed");
+      auditSessionId = session.sessionId;
 
       response = await fetch(`${baseUrl}/api/typebot-rag`, {
         method: "POST",
@@ -214,7 +227,6 @@ for (const testCase of cases) {
           requestId: randomUUID(),
           source: "kaxi-site",
           locale: testCase.locale,
-          category: testCase.category,
         }),
       });
     }
@@ -257,11 +269,19 @@ for (const testCase of cases) {
       ? expectedNoContext
       : testCase.expected_doc_ids.some((id) => retrievedDocIds.includes(id));
     if (!expectedHit) failures.push("expected_document_not_retrieved");
+    if (!expectedNoContext && testCase.expected_doc_ids.length > 0) {
+      contextExpected += 1;
+      if (expectedHit) expectedDocumentHit += 1;
+    }
     if (
       testCase.metadata?.expectedTopDocId &&
       sources[0]?.docId !== testCase.metadata.expectedTopDocId
     ) {
       failures.push("top_document_mismatch");
+    }
+    if (testCase.metadata?.expectedTopDocId) {
+      topDocumentExpected += 1;
+      if (sources[0]?.docId === testCase.metadata.expectedTopDocId) topDocumentCorrect += 1;
     }
     if (
       testCase.metadata?.expectedReranker &&
@@ -277,13 +297,21 @@ for (const testCase of cases) {
     ) {
       failures.push("expected_answer_terms_missing");
     }
+    if (expectedAnswerTerms.length > 0) {
+      answerTermsExpected += 1;
+      if (matchedExpectedAnswerTerms.length >= Math.max(1, testCase.metadata?.minimumExpectedAnswerTerms || 1)) {
+        answerTermsCorrect += 1;
+      }
+    }
     const citationsValid = sources.every((source) => source.sourceUrl?.startsWith("https://") && Boolean(source.checkedAt));
     if (!citationsValid) failures.push("invalid_citation");
-    if (
-      testCase.metadata?.expectedStrictCategory === true &&
-      !sources.every((source) => strictCategoryAllows(testCase.category, source.category))
-    ) {
-      failures.push("category_scope_mismatch");
+    if (testCase.metadata?.expectedStrictCategory === true) {
+      strictCategoryExpected += 1;
+      if (sources.every((source) => strictCategoryAllows(testCase.category, source.category))) {
+        strictCategoryCorrect += 1;
+      } else {
+        failures.push("category_scope_mismatch");
+      }
     }
     if (
       testCase.metadata?.expectedLocaleHeadings === true &&
@@ -291,18 +319,23 @@ for (const testCase of cases) {
     ) {
       failures.push("answer_locale_heading_mismatch");
     }
-    if (
-      testCase.metadata?.expectedLocaleHeadings === true &&
-      !sources.every((source) =>
+    if (testCase.metadata?.expectedLocaleHeadings === true) {
+      localeSourceExpected += 1;
+      const localeSourcesValid = sources.every((source) =>
         source.language === testCase.locale &&
         titleMatchesLocale(source.title || "", testCase.locale) &&
         Number.isFinite(source.rerankScore)
-      )
-    ) {
-      failures.push("source_locale_or_rerank_mismatch");
+      );
+      if (localeSourcesValid) localeSourceCorrect += 1;
+      else failures.push("source_locale_or_rerank_mismatch");
     }
     if (sources.length > 0) citedCaseCount += 1;
-    if (citationsValid) validCitationCaseCount += 1;
+    if (sources.length > 0 && citationsValid) validCitationCaseCount += 1;
+    if (transport === "gateway") {
+      categoryInferenceExpected += 1;
+      if (payload.searchMeta?.category === testCase.category) categoryInferenceCorrect += 1;
+      else failures.push("category_inference_mismatch");
+    }
     if (expectedNoContext) {
       noContextExpected += 1;
       const correctlyDeclined = payload.searchMeta?.noContext === true && sources.length === 0;
@@ -365,13 +398,19 @@ for (const testCase of cases) {
   if (auditSessionId) {
     const cleanup = await supabase.from("n8n_audit_messages").delete().eq("session_id", auditSessionId);
     if (cleanup.error) throw cleanup.error;
+    if (transport === "gateway") {
+      const taskCleanup = await supabase.from("handoff_tasks").delete().eq("session_id", auditSessionId);
+      if (taskCleanup.error) throw taskCleanup.error;
+      const sessionCleanup = await supabase.from("chat_sessions").delete().eq("session_id", auditSessionId);
+      if (sessionCleanup.error) throw sessionCleanup.error;
+    }
   }
 }
 
 const saved = await supabase.from("rag_evaluation_results").insert(results);
 if (saved.error) throw saved.error;
 const passRate = passedCount / cases.length;
-const citationValidityRate = validCitationCaseCount / cases.length;
+const citationValidityRate = citedCaseCount > 0 ? validCitationCaseCount / citedCaseCount : 1;
 const highRiskRecall = highRiskExpected > 0 ? highRiskCorrect / highRiskExpected : 1;
 const noContextAccuracy = noContextExpected > 0 ? noContextCorrect / noContextExpected : 1;
 const grouped = (key: "locale" | "category") => Object.fromEntries(
@@ -387,7 +426,31 @@ const grouped = (key: "locale" | "category") => Object.fromEntries(
 );
 const latencies = results.map((item) => Number(item.latency_ms)).filter(Number.isFinite).sort((a, b) => a - b);
 const percentile = (ratio: number) => latencies[Math.min(latencies.length - 1, Math.max(0, Math.ceil(latencies.length * ratio) - 1))] || null;
-const qualityPassed = passRate >= 0.85 && citationValidityRate === 1 && highRiskRecall === 1 && noContextAccuracy >= 0.75;
+const byLocale = grouped("locale");
+const byCategory = grouped("category");
+const minimumGroupPassRate = Math.min(
+  ...Object.values(byLocale).map((group) => group.passRate),
+  ...Object.values(byCategory).map((group) => group.passRate),
+);
+const expectedDocumentRecall = contextExpected > 0 ? expectedDocumentHit / contextExpected : 1;
+const strictCategoryAccuracy = strictCategoryExpected > 0 ? strictCategoryCorrect / strictCategoryExpected : 1;
+const localeSourceAccuracy = localeSourceExpected > 0 ? localeSourceCorrect / localeSourceExpected : 1;
+const topDocumentAccuracy = topDocumentExpected > 0 ? topDocumentCorrect / topDocumentExpected : 1;
+const answerTermAccuracy = answerTermsExpected > 0 ? answerTermsCorrect / answerTermsExpected : 1;
+const categoryInferenceAccuracy = categoryInferenceExpected > 0 ? categoryInferenceCorrect / categoryInferenceExpected : 1;
+const p95LatencyMs = percentile(0.95);
+const qualityPassed = passRate >= 0.95
+  && minimumGroupPassRate >= 0.9
+  && expectedDocumentRecall >= 0.95
+  && citationValidityRate === 1
+  && strictCategoryAccuracy === 1
+  && localeSourceAccuracy === 1
+  && topDocumentAccuracy === 1
+  && answerTermAccuracy === 1
+  && categoryInferenceAccuracy === 1
+  && highRiskRecall === 1
+  && noContextAccuracy >= 0.95
+  && (p95LatencyMs === null || p95LatencyMs <= 10_000);
 const completed = await supabase.from("rag_evaluation_runs").update({
   status: qualityPassed ? "passed" : "failed",
   passed_count: passedCount,
@@ -395,11 +458,18 @@ const completed = await supabase.from("rag_evaluation_runs").update({
     passRate,
     citationCoverage: citedCaseCount / cases.length,
     citationValidityRate,
+    expectedDocumentRecall,
+    strictCategoryAccuracy,
+    localeSourceAccuracy,
+    topDocumentAccuracy,
+    answerTermAccuracy,
+    categoryInferenceAccuracy,
+    minimumGroupPassRate,
     highRiskRecall,
     noContextAccuracy,
-    byLocale: grouped("locale"),
-    byCategory: grouped("category"),
-    latencyMs: { p50: percentile(0.5), p95: percentile(0.95) },
+    byLocale,
+    byCategory,
+    latencyMs: { p50: percentile(0.5), p95: p95LatencyMs },
     baseUrl,
     transport,
     caseIdFilter: caseIdFilter || null,
@@ -410,7 +480,8 @@ const completed = await supabase.from("rag_evaluation_runs").update({
 if (completed.error) throw completed.error;
 
 console.log(`RAG evaluation ${passedCount}/${cases.length} passed (${(passRate * 100).toFixed(1)}%)`);
-console.log(`citation validity ${(citationValidityRate * 100).toFixed(1)}%, high-risk recall ${(highRiskRecall * 100).toFixed(1)}%, no-context ${(noContextAccuracy * 100).toFixed(1)}%`);
+console.log(`document recall ${(expectedDocumentRecall * 100).toFixed(1)}%, citation validity ${(citationValidityRate * 100).toFixed(1)}%, strict category ${(strictCategoryAccuracy * 100).toFixed(1)}%`);
+console.log(`locale/rerank ${(localeSourceAccuracy * 100).toFixed(1)}%, category inference ${(categoryInferenceAccuracy * 100).toFixed(1)}%, high-risk recall ${(highRiskRecall * 100).toFixed(1)}%, no-context ${(noContextAccuracy * 100).toFixed(1)}%`);
 if (caseIdFilter) {
   const selectedResult = results.find((item) => item.case_id === caseIdFilter);
   console.log(`${caseIdFilter}: ${selectedResult?.passed === true ? "passed" : "failed"} ${JSON.stringify(selectedResult?.failure_reasons || [])}`);

@@ -10,7 +10,7 @@ const { rateLimit } = await import("../src/lib/api/security");
 const { KNOWLEDGE_DOCS } = await import("../src/lib/data/knowledge");
 const { canUseSchoolSeedFallback } = await import("../src/lib/schools/repository");
 const { getOpsAlertDiagnostics, sendOpsAlert } = await import("../src/lib/ops/alerts");
-const { summarizeRagSystemHealth } = await import("../src/lib/ops/rag-system-health");
+const { evaluateRagQualityRun, summarizeRagSystemHealth } = await import("../src/lib/ops/rag-system-health");
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -439,6 +439,63 @@ function testRagSystemHealthSummary() {
   }
 }
 
+function testRagQualityGate() {
+  const provenance = {
+    workflowId: "workflow",
+    workflowVersionId: "workflow-version",
+    modelVersion: "model",
+    promptVersion: "prompt",
+  };
+  const passing = evaluateRagQualityRun({
+    id: "run",
+    status: "passed",
+    case_count: 64,
+    passed_count: 64,
+    workflow_id: provenance.workflowId,
+    workflow_version_id: provenance.workflowVersionId,
+    model_version: provenance.modelVersion,
+    prompt_version: provenance.promptVersion,
+    completed_at: new Date().toISOString(),
+    metrics: {
+      passRate: 1,
+      minimumGroupPassRate: 1,
+      expectedDocumentRecall: 1,
+      citationValidityRate: 1,
+      strictCategoryAccuracy: 1,
+      localeSourceAccuracy: 1,
+      highRiskRecall: 1,
+      noContextAccuracy: 1,
+    },
+  }, provenance);
+  if (!passing.ok) fail(`complete quality metrics should pass: ${JSON.stringify(passing)}`);
+
+  const weakRecall = evaluateRagQualityRun({
+    ...passing.metadata,
+    id: "weak-run",
+    status: "passed",
+    case_count: 64,
+    passed_count: 63,
+    workflow_id: provenance.workflowId,
+    workflow_version_id: provenance.workflowVersionId,
+    model_version: provenance.modelVersion,
+    prompt_version: provenance.promptVersion,
+    completed_at: new Date().toISOString(),
+    metrics: {
+      passRate: 0.98,
+      minimumGroupPassRate: 0.95,
+      expectedDocumentRecall: 0.9,
+      citationValidityRate: 1,
+      strictCategoryAccuracy: 1,
+      localeSourceAccuracy: 1,
+      highRiskRecall: 1,
+      noContextAccuracy: 1,
+    },
+  }, provenance);
+  if (weakRecall.ok || !(weakRecall.metadata.failures as string[]).includes("expectedDocumentRecall")) {
+    fail(`weak document recall must fail closed: ${JSON.stringify(weakRecall)}`);
+  }
+}
+
 await testProductionReadinessFlagsMissingOpsConfig();
 await testImageOcrReadiness();
 await testProductionReadinessRejectsWeakPrivacyConfig();
@@ -449,4 +506,5 @@ testSchoolSeedFallbackIsLocalOnly();
 await testSupabaseAdminReadinessContract();
 await testOpsAlertDeliveryContract();
 testRagSystemHealthSummary();
+testRagQualityGate();
 console.log("PASS readiness guards");

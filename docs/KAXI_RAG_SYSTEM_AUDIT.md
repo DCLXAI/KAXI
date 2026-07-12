@@ -12,7 +12,7 @@ KAXI remains the public security and persistence boundary, n8n owns retrieval/or
 | n8n main workflow | 42-node workflow with shared Error Workflow, verifier-first webhooks, and provider-independent runtime retrieval | active version `681ce8dd-5e00-4c9d-8f1a-896940e394d9`; semantic release `kaxi-rag-runtime@2026-07-12.lexical-fallback-v2` | published; runtime and provenance verified |
 | Typebot | `data.*` response mappings, stable Result ID session, and matching server-side gateway headers | published as `kaxi-rag-typebot`; normal, high-risk, consent, and handoff E2E pass | released; continue synthetic observation |
 | Supabase canonical corpus | 94 eligible documents, 201 eligible chunks, 201 citation-ready | migration ledger is current through `20260712193000_rag_lexical_provider_fallback` | released |
-| governed serving projection | pgvector corpus plus strict lexical runtime fallback | 201/201 ready, 0 pending, 0 quarantined; operational evaluation 60/60 | released |
+| governed serving projection | pgvector corpus plus strict lexical runtime fallback | 201/201 ready, 0 pending, 0 quarantined; operational evaluation 64/64 | released |
 | legacy RAG | quarantine and transactional cutover gate verified | 100 rows retained in server-only quarantine; `knowledge_chunks` is empty | cutover complete |
 | Prisma operational DB | pooled runtime and direct migration URLs verified | managed Supabase PostgreSQL is writable and schema parity passes | released |
 | school directory | 50 current rows with source metadata | readiness reports 50 active, 0 expired, 0 missing-source rows | operational; continue source review |
@@ -51,7 +51,7 @@ KAXI remains the public security and persistence boundary, n8n owns retrieval/or
 - Production session endpoints use the managed PostgreSQL-backed shared rate limiter and keep session responses `private, no-store` with `Vary: Cookie`.
 - Production readiness confirms the managed database, latest migration, gateway signing, Typebot gateway authentication, private attachment storage, privacy controls, school metadata, and shared rate limiting. Managed provider availability and OCR failover remain independently monitored operational dependencies.
 - Active n8n version `681ce8dd-5e00-4c9d-8f1a-896940e394d9` preserves verifier-first runtime, ingestion, and handoff paths; carries canonical `docId` through citations; uses strict provider-independent lexical retrieval for the answer path; and emits executable provenance JSON on every response branch.
-- The serving projection is 201/201 ready with zero pending or quarantined chunks. Evaluation run `be9d9350-e4dd-4bed-8e41-0310093cacca` passed 60/60 cases with 100% citation validity, high-risk recall, and no-context accuracy across Korean, English, Vietnamese, and Mongolian; p95 latency was 1840ms.
+- The serving projection is 201/201 ready with zero pending or quarantined chunks. Evaluation run `2951b9be-e4af-489b-b6ae-8253afd369c7` passed 64/64 cases with 100% document recall, citation validity, strict category, locale/rerank consistency, high-risk recall, and no-context accuracy across Korean, English, Vietnamese, and Mongolian; p95 latency was 1823ms.
 - Published Typebot normal and high-risk turns returned the real `block_answer`, persisted Typebot sessions, and routed high risk through privacy consent. The completed consent flow created and linked the lead, encrypted contact, handoff task/update, and versioned consent evidence.
 - System-health run `a0a3e18b-d552-4d8b-b2fe-8fceb16c1db8` recorded `healthy`: Supabase, private storage, signed n8n runtime, published Typebot, result retention, serving projection, operations events, and the attachment queue all passed.
 
@@ -74,7 +74,7 @@ KAXI remains the public security and persistence boundary, n8n owns retrieval/or
 | mobile UI | pass | no horizontal overflow at 390x844; the 320x568 layout keeps controls separated, uses accessible labels, and exposes answer updates through a live region |
 | chat and RAG E2E | pass | published Typebot session persisted canonical message `90`, retrieval, and metadata-only audit against n8n execution `759` with matching `v2` provenance |
 | serving projection | pass | 201/201 ready, 0 pending, 0 quarantined, 201 citation-ready |
-| evaluation | pass | run `be9d9350-e4dd-4bed-8e41-0310093cacca`: 60/60 cases, 100% citation validity, high-risk recall, and no-context accuracy; p95 1840ms |
+| evaluation | pass | run `2951b9be-e4af-489b-b6ae-8253afd369c7`: 64/64 cases; 100% expected-document recall, citation validity, strict category, locale/rerank, high-risk recall, and no-context accuracy; p95 1823ms |
 | Typebot channel | pass | published normal and high-risk turns returned a real answer; consent and handoff created linked session, lead, contact, task, update, and consent evidence |
 
 ## 3.2 Local Evidence
@@ -122,7 +122,7 @@ Release status on 2026-07-12: managed database configuration, backup, migrations
 8. Remove or archive Typebot smoke/test results and document the Typebot retention processor agreement. Complete: the daily retention job deletes provider Results after seven days with a dedicated token.
 9. Publish the validated n8n draft and verify the capability contract. Complete.
 10. Sync the serving projection to 201/201 in resumable batches. Complete.
-11. Run the governed RAG evaluation; require at least 85% overall and 100% citation validity/high-risk routing. Complete at 60/60 with all critical quality metrics at 100%.
+11. Run the governed RAG evaluation; require at least 95% overall, 90% per locale/category, 95% document recall/no-context accuracy, and 100% citation validity/strict category/locale-rerank/high-risk routing. Complete at 64/64 with all critical quality metrics at 100%.
 12. Execute the guarded legacy cutover only at 201/201 readiness. Complete: 100 rows quarantined and removed; zero legacy rows remain live.
 13. Publish Typebot and run channel-specific tests. Publication plus normal, high-risk, consent, and handoff E2E are complete; no-context and retry remain observation probes.
 

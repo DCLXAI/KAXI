@@ -43,6 +43,70 @@ function configured(value: string | undefined) {
   return text && !/^replace-with-/i.test(text) ? text : "";
 }
 
+type EvaluationHealthRow = {
+  id?: string;
+  status?: string;
+  case_count?: number;
+  passed_count?: number;
+  metrics?: unknown;
+  workflow_id?: string;
+  workflow_version_id?: string;
+  model_version?: string;
+  prompt_version?: string;
+  completed_at?: string;
+};
+
+function metric(value: unknown, key: string) {
+  const metrics = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const result = Number(metrics[key]);
+  return Number.isFinite(result) ? result : null;
+}
+
+export function evaluateRagQualityRun(
+  row: EvaluationHealthRow | null,
+  expected = resolveRagProvenance(),
+  now = Date.now(),
+) {
+  if (!row) return { ok: false, detail: "No complete full-suite RAG evaluation run exists.", metadata: {} };
+  const completedAt = row.completed_at ? new Date(row.completed_at).getTime() : Number.NaN;
+  const ageHours = Number.isFinite(completedAt) ? Math.max(0, (now - completedAt) / 3_600_000) : null;
+  const thresholds = {
+    passRate: 0.95,
+    minimumGroupPassRate: 0.9,
+    expectedDocumentRecall: 0.95,
+    citationValidityRate: 1,
+    strictCategoryAccuracy: 1,
+    localeSourceAccuracy: 1,
+    highRiskRecall: 1,
+    noContextAccuracy: 0.95,
+  } as const;
+  const failures = Object.entries(thresholds)
+    .filter(([key, threshold]) => (metric(row.metrics, key) ?? -1) < threshold)
+    .map(([key]) => key);
+  const provenanceMatches = row.workflow_id === expected.workflowId
+    && row.workflow_version_id === expected.workflowVersionId
+    && row.model_version === expected.modelVersion
+    && row.prompt_version === expected.promptVersion;
+  if (!provenanceMatches) failures.push("provenance");
+  if (row.status !== "passed") failures.push("status");
+  if ((row.case_count || 0) < 64) failures.push("caseCount");
+  if (ageHours === null || ageHours > 24 * 7) failures.push("freshness");
+  return {
+    ok: failures.length === 0,
+    detail: failures.length === 0
+      ? `Latest ${row.case_count}-case RAG evaluation meets the production quality gate.`
+      : `Latest full-suite RAG evaluation failed: ${failures.join(", ")}.`,
+    metadata: {
+      runId: row.id || null,
+      caseCount: row.case_count || 0,
+      passedCount: row.passed_count || 0,
+      ageHours,
+      failures,
+      metrics: row.metrics || {},
+    },
+  };
+}
+
 async function timed(key: string, required: boolean, run: () => Promise<Omit<SystemHealthCheck, "key" | "required" | "latencyMs">>) {
   const started = Date.now();
   try {
@@ -254,6 +318,18 @@ export async function runRagSystemHealth(triggerSource = "manual") {
       const status = await getRagServingProjectionStatus();
       const ok = status.eligibleChunks > 0 && status.readyChunks === status.eligibleChunks && status.citationReadyChunks === status.eligibleChunks;
       return { ok, detail: ok ? "All eligible chunks are embedded and citation-ready." : "Serving projection is incomplete.", metadata: status as unknown as Record<string, unknown> };
+    }),
+    timed("rag.quality_evaluation", true, async () => {
+      const result = await supabase
+        .from("rag_evaluation_runs")
+        .select("id,status,case_count,passed_count,metrics,workflow_id,workflow_version_id,model_version,prompt_version,completed_at")
+        .gte("case_count", 64)
+        .not("completed_at", "is", null)
+        .order("completed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (result.error) throw result.error;
+      return evaluateRagQualityRun(result.data as EvaluationHealthRow | null, provenance);
     }),
     timed("ops.open_events", false, async () => {
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();

@@ -178,7 +178,7 @@ bun run rag:serving:sync --execute --confirm-contract 2026-07-10.v1 --batch-size
 
 The first command is a read-only status check. The execute command first calls the active n8n capability endpoint and refuses to ingest when the workflow contract, target table, model, dimensions, or signed-ingestion flag differs. It stops on a failed batch or when ready count makes no progress, and can be rerun to continue.
 
-Only after `readyChunks == eligibleChunks`, `citationReadyChunks == eligibleChunks`, and the evaluation pass rate is at least 85%:
+Only after `readyChunks == eligibleChunks`, `citationReadyChunks == eligibleChunks`, and the full evaluation meets the production gate (at least 95% overall, 90% in every locale/category, 95% expected-document recall and no-context accuracy, and 100% citation/category/locale/high-risk checks):
 
 ```bash
 bun run rag:evaluation:run

@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 
-export const REQUIRED_PRODUCTION_MIGRATION = "20260713090000_product_analytics";
+export const REQUIRED_PRODUCTION_MIGRATION = "20260713120000_rag_quality_gate";
 
 const REQUIRED_SCHEMA_OBJECTS = [
   "migration_ledger",
@@ -26,6 +26,7 @@ const REQUIRED_SCHEMA_OBJECTS = [
   "operator_review_function",
   "retrieval_review_trigger",
   "product_analytics_events",
+  "rag_confidence_policy",
 ] as const;
 
 type RequiredSchemaObject = (typeof REQUIRED_SCHEMA_OBJECTS)[number];
@@ -127,7 +128,12 @@ export async function checkProductionSchemaParity(): Promise<SchemaParityResult>
           WHERE tgname = 'retrieval_runs_queue_review'
             AND NOT tgisinternal
         ) AS retrieval_review_trigger,
-        to_regclass('public.product_events') IS NOT NULL AS product_analytics_events
+        to_regclass('public.product_events') IS NOT NULL AS product_analytics_events,
+        position(
+          'below_calibrated_threshold' IN pg_get_functiondef(
+            to_regprocedure('public.kaxi_queue_retrieval_review()')
+          )
+        ) > 0 AS rag_confidence_policy
     `;
     const row = rows[0];
     const missing = REQUIRED_SCHEMA_OBJECTS.filter((key) => row?.[key] !== true);

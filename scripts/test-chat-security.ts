@@ -172,7 +172,15 @@ assert.equal(inferChatCategory("입학허가서와 재정 증빙 서류"), "docu
 assert.equal(inferChatCategory("어학당과 대학교를 비교해 주세요"), "school");
 assert.equal(inferChatCategory("학비와 수수료가 얼마예요?"), "cost");
 assert.equal(inferChatCategory("D-2 서류", "school"), "school");
-assert.equal(inferChatCategory("D-2 서류", "{{category}}"), "visa");
+assert.equal(inferChatCategory("D-2 서류", "{{category}}"), "documents");
+assert.equal(inferChatCategory("D-2 visa tuition and living costs"), "cost");
+assert.equal(inferChatCategory("Hồ sơ và chứng minh tài chính cho visa D-4"), "documents");
+assert.equal(inferChatCategory("Gia hạn thời hạn lưu trú D-2 như thế nào?"), "visa");
+assert.equal(inferChatCategory("Chi phí ký túc xá và học phí là bao nhiêu?"), "cost");
+assert.equal(inferChatCategory("Солонгост сурахад нийт ямар зардал гарах вэ?"), "cost");
+assert.equal(inferChatCategory("D-4 визний бичиг баримт юу хэрэгтэй вэ?"), "documents");
+assert.equal(inferChatCategory("Оршин суух хугацааг хэрхэн сунгах вэ?"), "visa");
+assert.equal(inferChatCategory("Ямар их сургууль сонгох вэ?"), "school");
 
 const guardrailBase = {
   answer: "upstream answer",
@@ -237,6 +245,33 @@ assert.equal(weather.needsHuman, false);
 assert.deepEqual(weather.sources, []);
 assert.equal((weather.searchMeta as { noContext?: boolean }).noContext, true);
 assert.match(weather.answer || "", /only answers study-in-Korea and visa questions/i);
+
+const lowConfidence = applyChatResponseGuardrail({
+  ...guardrailBase,
+  searchMeta: {
+    category: "visa",
+    topScore: 1.2,
+    similarityThreshold: "category-default",
+    reranker: "deterministic-locale-v2",
+  },
+}, "D-4 비자 조건을 알려주세요.", "ko");
+assert.equal(lowConfidence.needsHuman, true);
+assert.equal(lowConfidence.riskLevel, "medium");
+assert.deepEqual(lowConfidence.sources, []);
+assert.equal((lowConfidence.searchMeta as { noContext?: boolean }).noContext, true);
+assert.equal((lowConfidence.searchMeta as { similarityThreshold?: number }).similarityThreshold, 1.8);
+
+const confident = applyChatResponseGuardrail({
+  ...guardrailBase,
+  searchMeta: {
+    category: "visa",
+    topScore: 2.2,
+    similarityThreshold: "category-default",
+    reranker: "deterministic-locale-v2",
+  },
+}, "D-4 비자 조건을 알려주세요.", "ko");
+assert.equal(confident.answer, guardrailBase.answer);
+assert.equal(confident.needsHuman, false);
 
 const typebotEnv = {
   NODE_ENV: "test",

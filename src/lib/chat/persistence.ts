@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import type { RagProvenance } from "@/lib/n8n/provenance";
 import { preparePiiField } from "@/lib/privacy/pii";
+import { retrievalConfidenceThreshold } from "@/lib/chat/retrieval-confidence";
 
 type SupabaseErrorLike = {
   code?: string;
@@ -333,7 +334,7 @@ async function persistRetrievalRun(input: PersistChatExchangeInput, messageId: n
     query_redacted: protectedQuery.redacted,
     retrieval_type: String(searchMeta.type || "hybrid"),
     category: String(searchMeta.category || "general"),
-    similarity_threshold: finiteNumber(searchMeta.similarityThreshold),
+    similarity_threshold: retrievalConfidenceThreshold(searchMeta),
     top_score: finiteNumber(searchMeta.topScore),
     retrieved_count: retrievedCount,
     rejected_citation_count: Math.max(0, Math.trunc(finiteNumber(searchMeta.rejectedCitationCount) || 0)),

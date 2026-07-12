@@ -109,7 +109,29 @@ const noContextRows = [
   metadata: { source: "governed-no-context-regression", expectedNoContext: true },
 }));
 
-const evaluationRows = [...rows, ...productionRegressionRows, ...strictCategoryLocaleRows, ...noContextRows];
+const schoolCategoryLocaleRows = [
+  { id: "ko-school-accreditation", locale: "ko", question: "교육국제화역량 인증대학은 유학생에게 어떤 의미인가요?" },
+  { id: "en-school-accreditation", locale: "en", question: "What does an accredited university mean for an international student in Korea?" },
+  { id: "vi-school-accreditation", locale: "vi", question: "Trường đại học được chứng nhận có ý nghĩa gì đối với du học sinh tại Hàn Quốc?" },
+  { id: "mn-school-accreditation", locale: "mn", question: "Итгэмжлэгдсэн их сургууль нь Солонгост сурах гадаад оюутанд ямар ач холбогдолтой вэ?" },
+].map((item) => ({
+  ...item,
+  category: "school",
+  expected_doc_ids: ["accredited-university"],
+  expected_risk_level: "low",
+  expected_handoff: false,
+  active: true,
+  metadata: {
+    source: "school-category-locale-regression",
+    expectedNoContext: false,
+    expectedRefusal: false,
+    expectedStrictCategory: true,
+    expectedLocaleHeadings: true,
+    hasSyntheticAttachment: false,
+  },
+}));
+
+const evaluationRows = [...rows, ...productionRegressionRows, ...strictCategoryLocaleRows, ...noContextRows, ...schoolCategoryLocaleRows];
 const result = await supabase.from("rag_evaluation_cases").upsert(evaluationRows, { onConflict: "id" });
 if (result.error) throw result.error;
 console.log(`PASS seeded ${evaluationRows.length} governed RAG evaluation cases`);

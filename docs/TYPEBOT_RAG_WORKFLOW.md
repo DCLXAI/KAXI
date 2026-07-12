@@ -8,7 +8,7 @@ Typebot -> KAXI API -> signed n8n webhook -> governed Supabase RAG serving
 
 KAXI owns request validation, UUID/idempotency normalization, HMAC signing, canonical chat/retrieval persistence, encrypted handoff-task creation, attachment ownership, and the handoff token. n8n owns retrieval, grounded answer construction, risk classification, and metadata-only execution telemetry.
 
-Active n8n production version: `681ce8dd-5e00-4c9d-8f1a-896940e394d9` (42 nodes). Its immutable response contract uses semantic workflow release ID `kaxi-rag-runtime@2026-07-12.lexical-fallback-v2`. Runtime retrieval uses the governed `match_rag_documents_lexical` RPC, so serving no longer depends on n8n Connect credits; existing embeddings remain part of the approved corpus and ingestion contract. The active release passed 60/60 multilingual regression cases, a published Typebot-to-Supabase turn, and system health run `a0a3e18b-d552-4d8b-b2fe-8fceb16c1db8` with all checks healthy.
+Active n8n production version: `681ce8dd-5e00-4c9d-8f1a-896940e394d9` (42 nodes). Its immutable response contract uses semantic workflow release ID `kaxi-rag-runtime@2026-07-12.lexical-fallback-v2`. Runtime retrieval uses the governed `match_rag_documents_lexical` RPC, so serving no longer depends on n8n Connect credits; existing embeddings remain part of the approved corpus and ingestion contract. The active release passed 64/64 multilingual regression cases, including strict school retrieval in all four locales.
 
 ## Typebot Runtime Request
 
@@ -207,7 +207,7 @@ No-context and citation-validation failures produce a bounded answer and a revie
 
 `Search Governed Serving Chunks Lexical` must pass `locale`, `category_mode=strict`, and the bounded multilingual `query_text` to `match_rag_documents_lexical`. The RPC projects only the requested `ko`, `en`, `vi`, or `mn` Markdown sections from a canonical multilingual chunk. Its strict category scopes are `cost -> cost`, `visa -> visa/legal/process/warning`, `documents -> documents/legal/process/warning`, and `school -> school/documents/process`. If no eligible category or locale section remains, the RPC returns zero rows and the workflow routes to `Fallback No Context Answer`; it never reuses context from another category or language.
 
-The active workflow preserves canonical `docId` in every returned citation, expands Korean/English/Vietnamese/Mongolian retrieval queries with bounded canonical hints, and treats forged-document expressions in all four languages as high risk. Operational evaluation run `be9d9350-e4dd-4bed-8e41-0310093cacca` passed 60/60 cases with 100% citation validity, 100% high-risk recall, and 100% no-context accuracy. Intentional no-context cases correctly returned no citations; citation-bearing answers had complete valid citations. Measured latency was p50 1342ms and p95 1840ms.
+The active workflow preserves canonical `docId` in every returned citation, expands Korean/English/Vietnamese/Mongolian retrieval queries with bounded canonical hints, and treats forged-document expressions in all four languages as high risk. Operational evaluation run `2951b9be-e4af-489b-b6ae-8253afd369c7` passed 64/64 cases with 100% expected-document recall, citation validity, strict category, locale/rerank consistency, high-risk recall, and no-context accuracy. Intentional no-context cases correctly returned no citations; citation-bearing answers had complete valid citations. Measured latency was p50 1301ms and p95 1823ms.
 
 ## Release Order
 
@@ -218,7 +218,7 @@ Do not change this order:
 3. Deploy KAXI and verify `/api/internal/n8n/verify` exists.
 4. Publish the validated n8n draft and confirm the capability endpoint.
 5. Run `bun run rag:serving:sync --execute --confirm-contract 2026-07-10.v1` until 201/201 eligible chunks are ready.
-6. Run the RAG evaluation suite and require at least 85% pass rate.
+6. Run the RAG evaluation suite and require at least 95% overall, 90% in every locale/category, 95% expected-document recall and no-context accuracy, 100% citation validity/strict category/locale-rerank/high-risk checks, and p95 latency at or below 10 seconds. Gateway-mode evaluation must omit an explicit category so KAXI's multilingual intent classifier is exercised.
 7. Run `bun run rag:serving:cutover --execute --confirm CUTOVER_LEGACY_RAG --expected-ready 201`.
 8. Publish the Typebot draft.
 9. Test Typebot -> KAXI -> n8n -> Supabase, including no-context and handoff branches.
