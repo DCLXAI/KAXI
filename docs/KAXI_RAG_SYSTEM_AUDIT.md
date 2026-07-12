@@ -163,7 +163,7 @@ Acceptance: grounded-answer pass rate is at least 90%, high-risk recall is 100% 
 ### P4: Scale, Privacy, and Governance
 
 - Replace hard-coded `tenant_id=default` with authenticated tenant resolution and tenant-scoped uniqueness/RLS tests.
-- Add key rotation procedures for session, Typebot, n8n, encryption, hash, admin, and cron secrets.
+- Dual-key overlap and rotation evidence are implemented for session, Typebot, n8n, admin, and cron secrets. Encryption-key re-encryption, hash backfill, and provider-side key regeneration remain coordinated runbook operations.
 - Test backup/restore for canonical corpus, conversations, handoffs, and evaluation history.
 - Add load, timeout, provider-failure, replay, forged-source, and storage-failure tests in preview.
 - Review school data and legal sources with named reviewers before approval; never promote crawler output directly.

@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { sendOpsAlert, type OpsAlertResult } from "@/lib/ops/alerts";
 
 export type OpsEvent = {
   id: string;
@@ -15,6 +16,26 @@ export type OpsEvent = {
   acknowledgedAt: string | null;
   acknowledgedBy: string | null;
   createdAt: string;
+};
+
+export type RecordOpsEventInput = {
+  source: string;
+  severity: OpsEvent["severity"];
+  eventType: string;
+  message: string;
+  workflowId?: string;
+  workflowVersionId?: string;
+  modelVersion?: string;
+  promptVersion?: string;
+  executionId?: string;
+  payload?: Record<string, unknown>;
+  adminUrl?: string;
+};
+
+export type RecordOpsEventResult = {
+  id: string | null;
+  duplicate: boolean;
+  alert: OpsAlertResult | null;
 };
 
 function isolatedTestRuntime() {
@@ -75,4 +96,45 @@ export async function acknowledgeOpsEvent(id: string, actor: string) {
     .maybeSingle();
   if (result.error) throw result.error;
   return result.data ? mapEvent(result.data) : null;
+}
+
+export async function recordOpsEvent(input: RecordOpsEventInput): Promise<RecordOpsEventResult> {
+  if (isolatedTestRuntime()) return { id: null, duplicate: false, alert: null };
+
+  const occurredAt = new Date().toISOString();
+  const result = await serviceClient().from("ops_events").insert({
+    source: input.source.slice(0, 120),
+    severity: input.severity,
+    event_type: input.eventType.slice(0, 160),
+    workflow_id: input.workflowId?.slice(0, 200) || null,
+    workflow_version_id: input.workflowVersionId?.slice(0, 240) || null,
+    model_version: input.modelVersion?.slice(0, 240) || null,
+    prompt_version: input.promptVersion?.slice(0, 240) || null,
+    execution_id: input.executionId?.slice(0, 240) || null,
+    message: input.message.slice(0, 500),
+    payload: input.payload || {},
+  }).select("id").single();
+
+  if (result.error?.code === "23505") {
+    return { id: null, duplicate: true, alert: null };
+  }
+  if (result.error) throw result.error;
+
+  const alert = await sendOpsAlert({
+    kind: "kaxi_ops_alert",
+    source: input.source,
+    severity: input.severity,
+    eventType: input.eventType,
+    message: input.message,
+    occurredAt,
+    details: {
+      eventId: result.data.id,
+      executionId: input.executionId || null,
+      workflowId: input.workflowId || null,
+      ...(input.payload || {}),
+    },
+    adminUrl: input.adminUrl || `${process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://kaxi.vercel.app"}/admin`,
+  });
+
+  return { id: String(result.data.id), duplicate: false, alert };
 }

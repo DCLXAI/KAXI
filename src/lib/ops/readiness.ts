@@ -10,6 +10,8 @@ import { getSchoolSourceAudit } from "@/lib/schools/repository";
 import { isTypebotGatewayAuthConfigured } from "@/lib/typebot/gateway-auth";
 import { checkProductionSchemaParity } from "@/lib/ops/schema-parity";
 import { getChatAttachmentSecurityDiagnostics } from "@/lib/chat/attachment-security";
+import { getOpsAlertDiagnostics } from "@/lib/ops/alerts";
+import { getCredentialRotationDiagnostics } from "@/lib/security/rotating-secret";
 
 export type ReadinessStatus = "ready" | "degraded";
 
@@ -122,6 +124,8 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
   const chatGatewaySecurityReady = strongSecret(env.N8N_WEBHOOK_SIGNING_SECRET) && strongSecret(env.CHAT_SESSION_SIGNING_SECRET);
   const chatImageOcrReady = aiBackendDiagnostics.llm.apiKeyConfigured;
   const attachmentSecurity = getChatAttachmentSecurityDiagnostics(env);
+  const opsAlerts = getOpsAlertDiagnostics(env);
+  const credentialRotation = getCredentialRotationDiagnostics(env);
 
   const managedDatabase = databaseInfo.sharedWritable && databaseConnectivity.ok;
   const linkedAdminCount = databaseConnectivity.ok
@@ -217,6 +221,34 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
       attachmentSecurity.uploadsRequested && attachmentSecurity.externalScannerRequired ? "required" : "warning",
     ),
     check(
+      "chat.external_malware_scanner",
+      "Managed external malware scanner",
+      !attachmentSecurity.uploadsRequested || attachmentSecurity.externalScannerConfigured,
+      !attachmentSecurity.uploadsRequested
+        ? "Chat attachment uploads are disabled."
+        : attachmentSecurity.externalScannerConfigured
+          ? "A managed external malware scanner is configured before private storage."
+          : "Only structural sanitization is active; configure a private managed scanner endpoint before treating uploads as fully scanned.",
+      {
+        externalScannerConfigured: attachmentSecurity.externalScannerConfigured,
+        externalScannerRequired: attachmentSecurity.externalScannerRequired,
+        uploadsEnabled: attachmentSecurity.uploadsEnabled,
+      },
+      attachmentSecurity.externalScannerRequired ? "required" : "warning",
+    ),
+    check(
+      "ops.realtime_alerts",
+      "Real-time operations alert delivery",
+      opsAlerts.required ? opsAlerts.ready : opsAlerts.configuredChannels.length > 0,
+      opsAlerts.configuredChannels.length === 0
+        ? "Configure Slack and email delivery so runtime failures reach an operator immediately."
+        : opsAlerts.ready
+          ? `Operations alerts are configured for: ${opsAlerts.configuredChannels.join(", ")}.`
+          : `Missing required alert channels: ${opsAlerts.missingRequiredChannels.join(", ")}.`,
+      { ...opsAlerts },
+      opsAlerts.required ? "required" : "warning",
+    ),
+    check(
       "rag.review_after",
       "RAG review freshness",
       ragReviewReady,
@@ -299,6 +331,16 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
         ? "DATA_ENCRYPTION_KEY and PII_HASH_SECRET are strong, non-placeholder, and separate."
         : "DATA_ENCRYPTION_KEY and PII_HASH_SECRET must be strong, non-placeholder, and separate before production writes.",
       privacyReadiness.metadata
+    ),
+    check(
+      "security.credential_rotation",
+      "Credential rotation evidence",
+      credentialRotation.ready,
+      credentialRotation.ready
+        ? `Application credentials were rotated ${credentialRotation.ageDays} day(s) ago.`
+        : `Record a coordinated credential rotation within ${credentialRotation.maxAgeDays} days.`,
+      credentialRotation,
+      production ? "required" : "warning",
     ),
     check(
       "privacy.plaintext_override",

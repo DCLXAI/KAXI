@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recordRequestAudit } from "@/lib/audit";
-import { getAdminContext, jsonError, requireAdmin } from "@/lib/api/security";
+import { getAdminContext, requireAdmin } from "@/lib/api/security";
 import { canWriteRuntimeDatabase } from "@/lib/db";
 import {
   getCronOfficialKnowledgeSources,
@@ -8,22 +8,11 @@ import {
   runOfficialKnowledgeSourceMonitor,
 } from "@/lib/knowledge/source-monitor";
 import { sendKnowledgeMonitorAlert } from "@/lib/knowledge/monitor-alerts";
+import { authorizeCronRequest } from "@/lib/security/cron-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
-
-function authorizeCron(req: NextRequest): NextResponse | null {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    return process.env.NODE_ENV === "production"
-      ? jsonError("CRON_SECRET is not configured", 503)
-      : null;
-  }
-
-  const auth = req.headers.get("authorization");
-  return auth === `Bearer ${secret}` ? null : jsonError("Unauthorized", 401);
-}
 
 function auditMetadata(result: Awaited<ReturnType<typeof runOfficialKnowledgeSourceMonitor>>) {
   return {
@@ -66,7 +55,7 @@ export async function GET(req: NextRequest) {
     }, { status: 202 });
   }
 
-  const unauthorized = authorizeCron(req);
+  const unauthorized = authorizeCronRequest(req);
   if (unauthorized) return unauthorized;
 
   const writesEnabled = candidateWritesEnabled();

@@ -1,17 +1,9 @@
-import { timingSafeEqual } from "crypto";
+import { bearerToken, matchesRotatingSecret, primarySecret } from "@/lib/security/rotating-secret";
 
 export const TYPEBOT_GATEWAY_HEADER = "x-kaxi-typebot-token";
 
 function configuredSecret(env: NodeJS.ProcessEnv = process.env) {
-  const value = env.TYPEBOT_GATEWAY_SECRET?.trim() || "";
-  if (value.length < 32 || /^(replace-with-|change_me)/i.test(value)) return "";
-  return value;
-}
-
-function safeEqual(left: string, right: string) {
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
-  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+  return primarySecret(env, "TYPEBOT_GATEWAY_SECRET");
 }
 
 export function isTypebotGatewayAuthConfigured(env: NodeJS.ProcessEnv = process.env) {
@@ -22,12 +14,9 @@ export function verifyTypebotGatewayHeaders(
   headers: Pick<Headers, "get">,
   env: NodeJS.ProcessEnv = process.env,
 ) {
-  const expected = configuredSecret(env);
-  if (!expected) return false;
+  if (!configuredSecret(env)) return false;
 
   const direct = headers.get(TYPEBOT_GATEWAY_HEADER)?.trim() || "";
-  const authorization = headers.get("authorization") || "";
-  const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || "";
-  const provided = direct || bearer;
-  return Boolean(provided) && safeEqual(provided, expected);
+  const provided = direct || bearerToken(headers);
+  return matchesRotatingSecret(provided, env, "TYPEBOT_GATEWAY_SECRET");
 }

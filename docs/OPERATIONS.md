@@ -47,6 +47,7 @@
 - `ATTACHMENT_MALWARE_SCAN_MODE`: `structural` performs local image re-encoding and active-PDF rejection; `http` additionally requires an external scanner verdict before storage. Structural mode is defense in depth, not a managed malware-scanning service.
 - `ATTACHMENT_MALWARE_SCAN_URL`, `ATTACHMENT_MALWARE_SCAN_TOKEN`, `ATTACHMENT_MALWARE_SCAN_TIMEOUT_MS`: HTTPS scanner endpoint, bearer token, and timeout used when scan mode is `http`. The endpoint receives the file bytes and must return JSON containing `{ "clean": true }` to accept the upload.
 - `ATTACHMENT_MALWARE_SCAN_REQUIRED`: Set `true` in production when uploads must fail closed unless the external scanner is configured and healthy. `/api/readiness` reports the effective scanner posture.
+- Daily system health sends a generated one-pixel PNG through the configured scanner and requires an external `clean` verdict. The probe contains no user data. Scanner outages and terminal attachment jobs create real-time operations events.
 - `CHAT_ATTACHMENTS_ENABLED`: Production defaults to disabled. Set `true` only after the managed scanner URL and token are configured; the chat-session capability response then enables the attachment control. Local development remains enabled unless explicitly set to `false`.
 - GitHub secret `KAXI_ADMIN_API_KEY`: Also required by `.github/workflows/chat-attachment-worker.yml`, which retries queued attachment extraction jobs every five minutes through the internal worker API.
 - `N8N_TYPEBOT_RAG_WEBHOOK_URL`, `N8N_RAG_INGESTION_WEBHOOK_URL`, `N8N_TYPEBOT_HANDOFF_WEBHOOK_URL`: Production n8n webhook URLs called only by KAXI server routes.
@@ -58,9 +59,21 @@
 - `TYPEBOT_API_BASE_URL`, `TYPEBOT_BOT_ID`, `TYPEBOT_API_TOKEN`, `TYPEBOT_RESULT_RETENTION_DAYS`: Dedicated provider API contract for daily Typebot Result deletion. Production uses a separate `kaxi-retention` token and a seven-day window; never reuse or expose the gateway secret.
 - `KNOWLEDGE_MONITOR_CRON_SOURCE_IDS`, `KNOWLEDGE_MONITOR_FETCH_TIMEOUT_MS`, `KNOWLEDGE_MONITOR_CONCURRENCY`: Bound the Vercel daily critical-source monitor. The GitHub matrix remains responsible for the complete watchlist.
 
-Daily RAG health records `degraded` for required dependency failures and `warning` for operational issues such as stale attachment jobs or unacknowledged events. The check starts the published Typebot through its `startChat` runtime API, verifies the provider-side Result retention API, and sends a signed grounded-answer probe through the active n8n RAG webhook; health-only n8n audit rows are removed after the probe. Both failure levels are sent through `OPS_ALERT_WEBHOOK_URL` when configured, while an already-open event does not create another summary event. A healthy run does not emit an alert.
-- `OPS_ALERT_WEBHOOK_URL`, `OPS_ALERT_FORMAT`, `OPS_ALERT_SIGNING_SECRET`: Optional HTTPS destination for degraded daily-health notifications. JSON and Slack incoming-webhook payloads are supported.
+Daily RAG health records `degraded` for required dependency failures and `warning` for operational issues such as stale attachment jobs, a missing external scanner, or unacknowledged events. The check starts the published Typebot through its `startChat` runtime API, verifies the provider-side Result retention API, and sends a signed grounded-answer probe through the active n8n RAG webhook; health-only n8n audit rows are removed after the probe. A healthy run does not emit an alert.
+- `OPS_ALERT_SLACK_WEBHOOK_URL`: Slack incoming webhook used for immediate runtime alerts.
+- `RESEND_API_KEY`, `OPS_ALERT_EMAIL_FROM`, `OPS_ALERT_EMAIL_TO`: Resend delivery contract. `OPS_ALERT_EMAIL_TO` accepts up to five comma-separated recipients.
+- `OPS_ALERT_WEBHOOK_URL`, `OPS_ALERT_FORMAT`, `OPS_ALERT_SIGNING_SECRET`: Optional signed JSON destination. The legacy URL can still be a Slack incoming webhook.
+- `OPS_ALERT_REQUIRED`, `OPS_ALERT_REQUIRED_CHANNELS`: Set `true` and `slack,email` after both channels pass a synthetic test. Readiness then fails closed when either channel is missing.
+- Chat gateway failures, invalid n8n responses, chat/handoff persistence failures, malware verdicts, scanner outages, terminal attachment jobs, source-monitor changes, and daily-health failures share this fan-out path. Alert payloads contain identifiers and compact status metadata, not questions, files, or contact data.
 - `.github/workflows/ops-health-alert.yml`: Independent daily and manual production probe. It opens or updates one `ops-health` GitHub issue on failure, fails the Actions run for native notification delivery, and comments/closes the issue after recovery. This path does not depend on n8n and uses the existing `KAXI_ADMIN_API_KEY` Actions secret.
+
+## Credential Rotation
+
+- `SECURITY_CREDENTIALS_ROTATED_AT` records the last coordinated application-secret rotation. `/api/readiness` requires it to be no older than `SECURITY_CREDENTIAL_ROTATION_DAYS` in production.
+- `ADMIN_API_KEY_PREVIOUS`, `CRON_SECRET_PREVIOUS`, `CHAT_SESSION_SIGNING_SECRET_PREVIOUS`, `N8N_WEBHOOK_SIGNING_SECRET_PREVIOUS`, and `TYPEBOT_GATEWAY_SECRET_PREVIOUS` provide a short overlap window. New tokens and signatures always use the primary value; verification accepts either value.
+- Rotation order is: deploy dual-key support, set `*_PREVIOUS` to the current value, set the primary to a new random value, update every caller, run readiness plus Typebot/n8n E2E, then remove `*_PREVIOUS` after at most 24 hours.
+- Rotate `ADMIN_API_KEY` together with the GitHub `KAXI_ADMIN_API_KEY` secret. Rotate `TYPEBOT_GATEWAY_SECRET` together with both published Typebot webhook headers. `N8N_WEBHOOK_SIGNING_SECRET` is owned by KAXI; n8n forwards the signed envelope to KAXI verification and does not need the raw secret.
+- Do not rotate `DATA_ENCRYPTION_KEY` by replacement: add a versioned keyring and re-encrypt stored ciphertext first. Do not rotate `PII_HASH_SECRET` without dual-hash lookup and a backfill. Supabase service-role/anon keys, database passwords, Typebot API tokens, and AI-provider keys must be regenerated at their provider and then updated in every consumer before the old credential is revoked.
 
 ## Handoff Assignment SLA
 

@@ -9,7 +9,7 @@ const { shouldUsePgvector } = await import("../src/lib/embeddings/pgvector-rag")
 const { rateLimit } = await import("../src/lib/api/security");
 const { KNOWLEDGE_DOCS } = await import("../src/lib/data/knowledge");
 const { canUseSchoolSeedFallback } = await import("../src/lib/schools/repository");
-const { sendOpsAlert } = await import("../src/lib/ops/alerts");
+const { getOpsAlertDiagnostics, sendOpsAlert } = await import("../src/lib/ops/alerts");
 const { summarizeRagSystemHealth } = await import("../src/lib/ops/rag-system-health");
 
 function fail(message: string): never {
@@ -56,12 +56,15 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
       "chat.attachments_storage",
       "chat.attachment_ocr_provider",
       "chat.attachment_malware_scanner",
+      "chat.external_malware_scanner",
+      "ops.realtime_alerts",
       "rag.review_after",
       "schools.source_metadata",
       "database.postgresql_operational",
       "database.managed_writable",
       "database.schema_parity",
       "privacy.encryption",
+      "security.credential_rotation",
       "privacy.plaintext_override",
       "privacy.retention",
       "documents.upload_workspace",
@@ -386,6 +389,33 @@ async function testOpsAlertDeliveryContract() {
     fetchImpl: async () => new Response("down", { status: 503 }),
   });
   if (failedDelivery.sent || failedDelivery.status !== 503) fail("ops alert HTTP failures must be observable without throwing");
+
+  const multiChannelEnv = {
+    NODE_ENV: "test",
+    OPS_ALERT_SLACK_WEBHOOK_URL: "https://hooks.slack.com/services/test/kaxi/alerts",
+    RESEND_API_KEY: "re_test_operations_alert_key",
+    OPS_ALERT_EMAIL_FROM: "KAXI Ops <ops@kaxi.test>",
+    OPS_ALERT_EMAIL_TO: "primary@kaxi.test,secondary@kaxi.test",
+    OPS_ALERT_REQUIRED: "true",
+  } as NodeJS.ProcessEnv;
+  const requestedUrls: string[] = [];
+  const multiChannel = await sendOpsAlert(payload, {
+    env: multiChannelEnv,
+    fetchImpl: async (input) => {
+      requestedUrls.push(input);
+      return new Response("accepted", { status: 202 });
+    },
+  });
+  if (!multiChannel.allSent || multiChannel.channels.length !== 2) {
+    fail(`Slack and email alerts should fan out independently: ${JSON.stringify(multiChannel)}`);
+  }
+  if (!requestedUrls.includes("https://api.resend.com/emails") || !requestedUrls.some((url) => url.includes("hooks.slack.com"))) {
+    fail(`Slack and Resend endpoints should both be called: ${JSON.stringify(requestedUrls)}`);
+  }
+  const diagnostics = getOpsAlertDiagnostics(multiChannelEnv);
+  if (!diagnostics.ready || diagnostics.missingRequiredChannels.length > 0) {
+    fail(`configured Slack and email channels should pass alert readiness: ${JSON.stringify(diagnostics)}`);
+  }
 }
 
 function testRagSystemHealthSummary() {

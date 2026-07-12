@@ -24,6 +24,15 @@ const signed = signN8nPayload("typebot-runtime", payload, {
 });
 
 assert(verifyN8nSignature(signed.envelope, { env, now }).ok, "valid signature should pass");
+const rotatedEnv = {
+  ...env,
+  N8N_WEBHOOK_SIGNING_SECRET: "rotated-signing-secret-that-is-longer-than-32-characters",
+  N8N_WEBHOOK_SIGNING_SECRET_PREVIOUS: env.N8N_WEBHOOK_SIGNING_SECRET,
+};
+assert(
+  verifyN8nSignature(signed.envelope, { env: rotatedEnv, now }).ok,
+  "previous n8n signature should pass during the overlap window",
+);
 assert(
   !verifyN8nSignature({ ...signed.envelope, payload: { question: "tampered" } }, { env, now }).ok,
   "tampered payload should fail",
@@ -33,6 +42,10 @@ const handoffToken = createTypebotHandoffToken("typebot-result-123", { env, now 
 assert(
   verifyTypebotHandoffToken("typebot-result-123", handoffToken, { env, now }),
   "matching Typebot handoff token should pass",
+);
+assert(
+  verifyTypebotHandoffToken("typebot-result-123", handoffToken, { env: rotatedEnv, now }),
+  "previous Typebot handoff token should pass during n8n secret rotation",
 );
 assert(
   !verifyTypebotHandoffToken("typebot-another-result", handoffToken, { env, now }),

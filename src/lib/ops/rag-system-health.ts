@@ -11,6 +11,10 @@ import {
   validatePublishedTypebotRuntime,
 } from "@/lib/typebot/runtime-health";
 import { enforceTypebotResultRetention } from "@/lib/typebot/result-retention";
+import {
+  checkManagedAttachmentScanner,
+  getChatAttachmentSecurityDiagnostics,
+} from "@/lib/chat/attachment-security";
 
 export type SystemHealthCheck = {
   key: string;
@@ -192,6 +196,7 @@ export async function runRagSystemHealth(triggerSource = "manual") {
   const bucket = configured(process.env.SUPABASE_CHAT_ATTACHMENTS_BUCKET) || configured(process.env.SUPABASE_STORAGE_BUCKET) || "kaxi-documents";
   const n8nWebhook = configured(process.env.N8N_TYPEBOT_RAG_WEBHOOK_URL);
   const typebotUrl = configured(process.env.TYPEBOT_PUBLIC_URL);
+  const attachmentSecurity = getChatAttachmentSecurityDiagnostics();
 
   const checks = await Promise.all([
     timed("supabase.database", true, async () => {
@@ -203,6 +208,19 @@ export async function runRagSystemHealth(triggerSource = "manual") {
       const result = await supabase.storage.getBucket(bucket);
       if (result.error || !result.data) throw new Error(result.error?.message || "Attachment bucket not found");
       return { ok: result.data.public === false, detail: result.data.public ? "Attachment bucket must be private." : "Private attachment bucket is reachable.", metadata: { bucket, public: result.data.public } };
+    }),
+    timed("attachments.external_malware_scanner", attachmentSecurity.externalScannerRequired, async () => {
+      const result = await checkManagedAttachmentScanner();
+      return {
+        ok: result.ok,
+        detail: result.detail,
+        metadata: {
+          engine: result.engine,
+          configured: attachmentSecurity.externalScannerConfigured,
+          required: attachmentSecurity.externalScannerRequired,
+          uploadsEnabled: attachmentSecurity.uploadsEnabled,
+        },
+      };
     }),
     timed("n8n.workflow", true, async () => {
       if (!n8nWebhook) throw new Error("N8N_TYPEBOT_RAG_WEBHOOK_URL is not configured");

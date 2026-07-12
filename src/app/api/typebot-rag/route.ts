@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { parseLimit, rateLimit } from "@/lib/api/security";
 import { JsonBodyError, readJsonBody } from "@/lib/api/json-body";
 import { persistCanonicalHandoffTask, persistChatExchange } from "@/lib/chat/persistence";
@@ -13,6 +13,7 @@ import {
   type RagProvenance,
 } from "@/lib/n8n/provenance";
 import { createTypebotHandoffToken, signN8nPayload } from "@/lib/n8n/signature";
+import { recordOpsEvent } from "@/lib/ops/events";
 import { verifyTypebotGatewayHeaders } from "@/lib/typebot/gateway-auth";
 
 const SUPPORTED_LOCALES = new Set(["ko", "en", "vi", "mn"]);
@@ -202,6 +203,37 @@ export async function POST(req: NextRequest) {
       }
     };
 
+    const reportOpsFailure = (
+      eventType: string,
+      message: string,
+      provenance: RagProvenance,
+      executionId?: string,
+      payload: Record<string, unknown> = {},
+    ) => {
+      after(async () => {
+        await recordOpsEvent({
+          source: "kaxi-typebot-gateway",
+          severity: "error",
+          eventType,
+          message,
+          workflowId: provenance.workflowId,
+          workflowVersionId: provenance.workflowVersionId,
+          modelVersion: provenance.modelVersion,
+          promptVersion: provenance.promptVersion,
+          executionId: executionId || identity.requestId,
+          payload: {
+            requestId: identity.requestId,
+            source,
+            locale,
+            category,
+            ...payload,
+          },
+        }).catch((alertError) => {
+          console.error("[POST /api/typebot-rag] operations alert failed", alertError);
+        });
+      });
+    };
+
     const signed = signN8nPayload("typebot-runtime", n8nRequest);
     let response: Response;
     try {
@@ -215,6 +247,11 @@ export async function POST(req: NextRequest) {
       console.error("[POST /api/typebot-rag] n8n unavailable", error);
       const provenance = resolveRagProvenance();
       await persistFailure("n8n_unavailable", provenance);
+      reportOpsFailure(
+        "n8n_runtime_unavailable",
+        "KAXI could not reach the n8n RAG runtime.",
+        provenance,
+      );
       return ragJson({ error: "n8n request failed" }, { status: 502 }, provenance);
     }
 
@@ -234,11 +271,24 @@ export async function POST(req: NextRequest) {
     if (!response.ok) {
       console.error("[POST /api/typebot-rag] n8n error", response.status, rawText);
       await persistFailure(`n8n_http_${response.status}`, provenance, normalizedPayload.executionId);
+      reportOpsFailure(
+        "n8n_runtime_http_error",
+        `The n8n RAG runtime returned HTTP ${response.status}.`,
+        provenance,
+        normalizedPayload.executionId,
+        { httpStatus: response.status },
+      );
       return ragJson({ error: "n8n request failed" }, { status: 502 }, provenance);
     }
     if (!normalizedPayload.answer?.trim()) {
       console.error("[POST /api/typebot-rag] n8n response missing answer", rawText);
       await persistFailure("n8n_invalid_response", provenance, normalizedPayload.executionId);
+      reportOpsFailure(
+        "n8n_runtime_invalid_response",
+        "The n8n RAG runtime returned a response without an answer.",
+        provenance,
+        normalizedPayload.executionId,
+      );
       return ragJson({ error: "n8n returned an invalid response" }, { status: 502 }, provenance);
     }
 
@@ -296,10 +346,22 @@ export async function POST(req: NextRequest) {
           });
         } catch (handoffError) {
           console.error("[POST /api/typebot-rag] canonical handoff persistence failed", handoffError);
+          reportOpsFailure(
+            "handoff_persistence_failed",
+            "A required human handoff could not be persisted.",
+            provenance,
+            normalizedPayload.executionId,
+          );
         }
       }
     } catch (persistError) {
       console.error("[POST /api/typebot-rag] chat persistence failed", persistError);
+      reportOpsFailure(
+        "chat_persistence_failed",
+        "A chatbot exchange could not be persisted.",
+        provenance,
+        normalizedPayload.executionId,
+      );
     }
 
     const handoffToken = source === "typebot" ? createTypebotHandoffToken(sessionId) : undefined;

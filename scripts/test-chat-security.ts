@@ -3,6 +3,7 @@ import { JsonBodyError, readJsonBody } from "../src/lib/api/json-body";
 import { CHAT_ATTACHMENT_MIME_TYPES, detectChatAttachmentMimeType } from "../src/lib/chat/attachment-files";
 import sharp from "sharp";
 import {
+  checkManagedAttachmentScanner,
   getChatAttachmentSecurityDiagnostics,
   isTerminalChatAttachmentError,
   secureChatAttachmentUpload,
@@ -52,6 +53,16 @@ const sessionId = createKaxiSessionId();
 const token = issueChatSessionToken(sessionId, now);
 
 assert.equal(verifyChatSessionToken(token, sessionId, now + 1000)?.sessionId, sessionId);
+const previousChatSecret = process.env.CHAT_SESSION_SIGNING_SECRET;
+process.env.CHAT_SESSION_SIGNING_SECRET = "rotated-chat-session-secret-that-is-longer-than-thirty-two-characters";
+process.env.CHAT_SESSION_SIGNING_SECRET_PREVIOUS = previousChatSecret;
+assert.equal(
+  verifyChatSessionToken(token, sessionId, now + 1000)?.sessionId,
+  sessionId,
+  "tokens signed before rotation should pass during the overlap window",
+);
+process.env.CHAT_SESSION_SIGNING_SECRET = previousChatSecret;
+delete process.env.CHAT_SESSION_SIGNING_SECRET_PREVIOUS;
 assert.equal(verifyChatSessionToken(`${token.slice(0, -1)}x`, sessionId, now + 1000), null);
 assert.equal(verifyChatSessionToken(token, createKaxiSessionId(), now + 1000), null);
 assert.equal(verifyChatSessionToken(token, sessionId, now + (CHAT_SESSION_MAX_AGE_SECONDS + 1) * 1000), null);
@@ -127,6 +138,34 @@ const productionManagedDiagnostics = getChatAttachmentSecurityDiagnostics({
 assert.equal(productionManagedDiagnostics.externalScannerConfigured, true);
 assert.equal(productionManagedDiagnostics.uploadsEnabled, true);
 assert.equal(productionManagedDiagnostics.ready, true);
+
+const originalFetch = globalThis.fetch;
+let scannerCalls = 0;
+try {
+  globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+    scannerCalls += 1;
+    assert.equal(new Headers(init?.headers).get("x-kaxi-content-sha256")?.length, 64);
+    return new Response(JSON.stringify({ clean: true, engine: "test-managed-scanner" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+  const managedEnv = {
+    NODE_ENV: "production",
+    CHAT_ATTACHMENTS_ENABLED: "true",
+    ATTACHMENT_MALWARE_SCAN_MODE: "http",
+    ATTACHMENT_MALWARE_SCAN_URL: "https://scanner.example.test/v1/scan",
+    ATTACHMENT_MALWARE_SCAN_TOKEN: "managed-scanner-test-token",
+  } as NodeJS.ProcessEnv;
+  const managedUpload = await secureChatAttachmentUpload(safeImage, "image/jpeg", managedEnv);
+  assert.equal(managedUpload.scan.status, "clean");
+  const managedHealth = await checkManagedAttachmentScanner(managedEnv);
+  assert.equal(managedHealth.ok, true);
+  assert.equal(managedHealth.engine, "test-managed-scanner");
+  assert.equal(scannerCalls, 2);
+} finally {
+  globalThis.fetch = originalFetch;
+}
 
 assert.equal(inferChatCategory("D-4 비자 연장 방법"), "visa");
 assert.equal(inferChatCategory("입학허가서와 재정 증빙 서류"), "documents");
@@ -220,6 +259,19 @@ assert.equal(
   true,
 );
 assert.equal(verifyTypebotGatewayHeaders(new Headers({ [TYPEBOT_GATEWAY_HEADER]: "wrong" }), typebotEnv), false);
+const rotatedTypebotEnv = {
+  ...typebotEnv,
+  TYPEBOT_GATEWAY_SECRET: "rotated-typebot-gateway-secret-that-is-longer-than-thirty-two-characters",
+  TYPEBOT_GATEWAY_SECRET_PREVIOUS: typebotEnv.TYPEBOT_GATEWAY_SECRET,
+} as NodeJS.ProcessEnv;
+assert.equal(
+  verifyTypebotGatewayHeaders(
+    new Headers({ [TYPEBOT_GATEWAY_HEADER]: typebotEnv.TYPEBOT_GATEWAY_SECRET || "" }),
+    rotatedTypebotEnv,
+  ),
+  true,
+  "Typebot should accept the previous gateway secret during rotation",
+);
 
 const externalRequestId = "86d859c4-fb4d-4c74-b5c9-15e35c331ad4";
 const firstIdentity = createChatRequestIdentity({

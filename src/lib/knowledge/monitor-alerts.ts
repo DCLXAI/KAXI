@@ -1,5 +1,6 @@
 import { createHmac } from "crypto";
 import type { OfficialKnowledgeMonitorSummary } from "./source-monitor";
+import { sendOpsAlert, type OpsAlertChannelResult } from "@/lib/ops/alerts";
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -16,6 +17,7 @@ export interface KnowledgeMonitorAlertResult {
   skippedReason?: "not_configured" | "no_change";
   status?: number;
   error?: string;
+  channels?: OpsAlertChannelResult[];
 }
 
 export interface KnowledgeMonitorAlertPayload {
@@ -188,14 +190,36 @@ export async function sendKnowledgeMonitorAlert(
   context: KnowledgeMonitorAlertContext
 ): Promise<KnowledgeMonitorAlertResult> {
   const webhookUrl = process.env.KNOWLEDGE_MONITOR_ALERT_WEBHOOK_URL?.trim() || "";
-  if (!configured(webhookUrl)) {
-    return { attempted: false, sent: false, skippedReason: "not_configured" };
-  }
   if (!shouldAlert(summary)) {
     return { attempted: false, sent: false, skippedReason: "no_change" };
   }
 
   const payload = buildKnowledgeMonitorAlertPayload(summary, context);
+  if (!configured(webhookUrl)) {
+    const shared = await sendOpsAlert({
+      kind: "kaxi_ops_alert",
+      source: "kaxi-knowledge-monitor",
+      severity: summary.failed > 0 ? "error" : "warning",
+      eventType: summary.failed > 0 ? "knowledge_monitor_failed" : "knowledge_source_changed",
+      message: payload.message,
+      occurredAt: payload.generatedAt,
+      details: {
+        ...payload.summary,
+        changedSourceIds: payload.changedSources.map((source) => source.docId),
+        failedSourceIds: payload.failedSources.map((source) => source.docId),
+      },
+      adminUrl: payload.adminUrl,
+    }, { fetchImpl: context.fetchImpl });
+    return {
+      attempted: shared.attempted,
+      sent: shared.sent,
+      skippedReason: shared.skippedReason,
+      status: shared.status,
+      error: shared.error,
+      channels: shared.channels,
+    };
+  }
+
   const format = process.env.KNOWLEDGE_MONITOR_ALERT_FORMAT?.trim().toLowerCase();
   const body = JSON.stringify(
     format === "slack" || webhookUrl.includes("hooks.slack.com")

@@ -1,5 +1,6 @@
 import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 import { createClient } from "@supabase/supabase-js";
+import { primarySecret, rotatingSecrets } from "@/lib/security/rotating-secret";
 
 export const N8N_SIGNATURE_HEADER = "x-kaxi-signature";
 export const N8N_TIMESTAMP_HEADER = "x-kaxi-timestamp";
@@ -27,8 +28,7 @@ function configured(value: string | undefined) {
 }
 
 function signingSecret(env: NodeJS.ProcessEnv = process.env) {
-  const secret = configured(env.N8N_WEBHOOK_SIGNING_SECRET);
-  return secret.length >= 32 ? secret : "";
+  return primarySecret(env, "N8N_WEBHOOK_SIGNING_SECRET");
 }
 
 function maxAgeSeconds(env: NodeJS.ProcessEnv = process.env) {
@@ -82,8 +82,8 @@ export function verifyTypebotHandoffToken(
   options: { now?: number; env?: NodeJS.ProcessEnv } = {},
 ) {
   const env = options.env || process.env;
-  const secret = signingSecret(env);
-  if (!secret) return false;
+  const secrets = rotatingSecrets(env, "N8N_WEBHOOK_SIGNING_SECRET");
+  if (secrets.length === 0) return false;
   const [timestamp, signature, ...rest] = token.split(".");
   if (rest.length > 0 || !/^\d{13}$/.test(timestamp || "") || !/^[a-f0-9]{64}$/i.test(signature || "")) {
     return false;
@@ -91,7 +91,9 @@ export function verifyTypebotHandoffToken(
   const timestampMs = Number(timestamp);
   const now = options.now ?? Date.now();
   if (timestampMs > now + 30_000 || now - timestampMs > 24 * 60 * 60 * 1000) return false;
-  return safeEqual(signature.toLowerCase(), typebotTokenDigest(secret, sessionId, timestamp));
+  return secrets.some((secret) =>
+    safeEqual(signature.toLowerCase(), typebotTokenDigest(secret, sessionId, timestamp))
+  );
 }
 
 export function getN8nWebhookConfig(purpose: N8nWebhookPurpose, env: NodeJS.ProcessEnv = process.env) {
@@ -153,8 +155,8 @@ export function verifyN8nSignature(
   options: { now?: number; env?: NodeJS.ProcessEnv } = {},
 ): SignatureVerification {
   const env = options.env || process.env;
-  const secret = signingSecret(env);
-  if (!secret) return { ok: false, reason: "misconfigured" };
+  const secrets = rotatingSecrets(env, "N8N_WEBHOOK_SIGNING_SECRET");
+  if (secrets.length === 0) return { ok: false, reason: "misconfigured" };
   if (!/^[a-z0-9-]{16,128}$/i.test(envelope.nonce)) return { ok: false, reason: "invalid" };
   if (!/^sha256=[a-f0-9]{64}$/i.test(envelope.signature)) return { ok: false, reason: "invalid" };
 
@@ -166,13 +168,16 @@ export function verifyN8nSignature(
   if (timestampMs > now + 30_000) return { ok: false, reason: "future" };
   if (now - timestampMs > maxAgeMs) return { ok: false, reason: "expired" };
 
-  const expected = digest(secret, {
+  const unsigned = {
     purpose: envelope.purpose,
     timestamp: envelope.timestamp,
     nonce: envelope.nonce,
     payload: envelope.payload,
-  });
-  if (!safeEqual(envelope.signature.slice("sha256=".length).toLowerCase(), expected)) {
+  };
+  const valid = secrets.some((secret) =>
+    safeEqual(envelope.signature.slice("sha256=".length).toLowerCase(), digest(secret, unsigned))
+  );
+  if (!valid) {
     return { ok: false, reason: "invalid" };
   }
 

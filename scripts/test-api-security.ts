@@ -11,6 +11,7 @@ process.env.ADMIN_API_KEY = "test-admin-api-key-for-security-test";
 
 const { NextRequest } = await import("next/server");
 const { getClientIp, getAdminContext, sanitizeAiBody } = await import("../src/lib/api/security");
+const { authorizeCronRequest } = await import("../src/lib/security/cron-auth");
 
 function req(headers: Record<string, string>) {
   return new NextRequest("http://localhost/api/test", { headers });
@@ -71,7 +72,25 @@ delete process.env.ADMIN_API_KEY_ROLE;
 const wrongKeyContext = await getAdminContext(req({ "x-admin-key": "wrong-key" }));
 assert.equal(wrongKeyContext, null);
 
+process.env.ADMIN_API_KEY_PREVIOUS = process.env.ADMIN_API_KEY;
+process.env.ADMIN_API_KEY = "rotated-admin-api-key-for-security-test";
+const previousKeyContext = await getAdminContext(req({ "x-admin-key": "test-admin-api-key-for-security-test" }));
+assert.equal(previousKeyContext?.authType, "api-key", "previous admin key should pass during the overlap window");
+delete process.env.ADMIN_API_KEY_PREVIOUS;
+process.env.ADMIN_API_KEY = "test-admin-api-key-for-security-test";
+
 console.log("PASS getAdminContext: ADMIN_API_KEY defaults to 'admin' role, scoped via ADMIN_API_KEY_ROLE");
+
+process.env.CRON_SECRET = "rotated-cron-secret-for-security-test";
+process.env.CRON_SECRET_PREVIOUS = "previous-cron-secret-for-security-test";
+assert.equal(
+  authorizeCronRequest(req({ authorization: "Bearer previous-cron-secret-for-security-test" })),
+  null,
+  "previous cron secret should pass during the overlap window",
+);
+assert.equal(authorizeCronRequest(req({ authorization: "Bearer wrong-cron-secret" }))?.status, 401);
+delete process.env.CRON_SECRET;
+delete process.env.CRON_SECRET_PREVIOUS;
 
 // --- sanitizeAiBody: forged assistant history must be dropped ---------
 

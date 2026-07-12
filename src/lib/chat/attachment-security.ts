@@ -175,6 +175,33 @@ export async function verifyStoredChatAttachment(bytes: Buffer, mimeType: string
   else await assertImageSafe(bytes, mimeType);
 }
 
+export async function checkManagedAttachmentScanner(env: NodeJS.ProcessEnv = process.env) {
+  const diagnostics = getChatAttachmentSecurityDiagnostics(env);
+  if (!diagnostics.uploadsRequested) {
+    return { ok: true, detail: "Chat attachment uploads are disabled.", engine: null };
+  }
+  if (!diagnostics.externalScannerConfigured) {
+    return { ok: false, detail: "Managed attachment scanner is not configured.", engine: null };
+  }
+
+  const probe = await sharp({
+    create: {
+      width: 1,
+      height: 1,
+      channels: 3,
+      background: { r: 255, g: 255, b: 255 },
+    },
+  }).png().toBuffer();
+  const result = await externalScan(probe, "image/png", env);
+  return {
+    ok: result.status === "clean",
+    detail: result.status === "clean"
+      ? "Managed attachment scanner accepted a safe synthetic probe."
+      : "Managed attachment scanner did not return an external clean verdict.",
+    engine: result.engine,
+  };
+}
+
 export function isTerminalChatAttachmentError(error: unknown) {
   if (error instanceof UnsafeChatAttachmentError) return true;
   const code = error instanceof Error ? error.message : String(error);
