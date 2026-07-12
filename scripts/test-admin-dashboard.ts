@@ -56,6 +56,11 @@ try {
   const auditRoute = await import("../src/app/api/admin/audit/route");
   const opsRoute = await import("../src/app/api/admin/ops/route");
   const handoffsRoute = await import("../src/app/api/admin/handoffs/route");
+  const analyticsRoute = await import("../src/app/api/admin/analytics/route");
+
+  const analytics = await json(await analyticsRoute.GET(adminRequest("/api/admin/analytics?days=30")));
+  assert(typeof analytics.funnel.answerSuccessRate === "number", "admin analytics should expose answer success rate");
+  assert(Array.isArray(analytics.locales), "admin analytics should expose locale funnels");
 
   const caseList = await json(await casesRoute.GET(adminRequest("/api/admin/cases")));
   assert(caseList.counts.total >= 5, `expected at least 5 cases, got ${caseList.counts.total}`);

@@ -68,10 +68,20 @@ const operatorReviewMigration = readFileSync(
   join(root, "prisma", "postgres", "migrations", "20260712233000_operator_review_loop", "migration.sql"),
   "utf8",
 );
+const productAnalyticsMigration = readFileSync(
+  join(root, "prisma", "postgres", "migrations", "20260713090000_product_analytics", "migration.sql"),
+  "utf8",
+);
 
 assert(
   /authUserId\s+String\?\s+@unique\s+@db\.Uuid/.test(schema),
   "User model must include nullable unique authUserId @db.Uuid for Supabase auth.users.id"
+);
+assert(
+  productAnalyticsMigration.includes("public.product_events ENABLE ROW LEVEL SECURITY") &&
+    productAnalyticsMigration.includes("public.product_events FROM PUBLIC") &&
+    productAnalyticsMigration.includes("Never store question, answer, contact, or raw document URL"),
+  "product analytics must be server-owned and explicitly privacy-minimized",
 );
 assert(
   chatTurnMigration.includes("public.retrieval_runs ENABLE ROW LEVEL SECURITY;"),

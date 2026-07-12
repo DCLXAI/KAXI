@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { db } from "@/lib/db";
 import { preparePiiField, readPiiField } from "@/lib/privacy/pii";
+import { productLocale } from "@/lib/analytics/events";
+import { recordServerProductEvent } from "@/lib/analytics/server";
 
 const ACTIVE_STATUSES = new Set(["open", "review", "contact_requested", "contact_received", "assigned", "in_progress"]);
 const ACTIONS = new Set(["assign", "start", "contacted", "resolve", "close", "reopen"]);
@@ -419,11 +421,18 @@ export async function updateAdminHandoff(input: {
   const supabase = serviceClient();
   const found = await supabase
     .from("handoff_tasks")
-    .select("id,status,risk_level,lead_stage,assignee,lead_id,lead_contact_id,contact_received_at,handoff_metadata,source_chat_message_id,queue_reason")
+    .select("id,session_id,status,risk_level,lead_stage,assignee,lead_id,lead_contact_id,contact_received_at,handoff_metadata,source_chat_message_id,queue_reason")
     .eq("id", input.id)
     .maybeSingle();
   if (found.error) throw found.error;
   if (!found.data) throw new Error("HANDOFF_NOT_FOUND");
+  const foundTask = found.data;
+
+  const eventLocale = async () => {
+    if (!foundTask.source_chat_message_id) return "ko" as const;
+    const message = await supabase.from("chat_messages").select("locale").eq("id", foundTask.source_chat_message_id).maybeSingle();
+    return productLocale(message.data?.locale);
+  };
 
   if (input.action === "resolve") {
     if (!input.resolutionCode || !RESOLUTION_CODES.has(input.resolutionCode)) {
@@ -456,6 +465,13 @@ export async function updateAdminHandoff(input: {
       const contactUpdate = await supabase.from("lead_contacts").update({ status: "handled" }).eq("id", found.data.lead_contact_id);
       if (contactUpdate.error) throw contactUpdate.error;
     }
+    await recordServerProductEvent({
+      eventName: "handoff_response_completed",
+      sessionId: String(found.data.session_id),
+      locale: await eventLocale(),
+      surface: "admin_handoff",
+      properties: { taskId: input.id, verdict: input.resolutionCode },
+    }).catch((error) => console.warn("[handoff analytics]", error instanceof Error ? error.message : error));
 
     return {
       id: input.id,
@@ -571,6 +587,25 @@ export async function updateAdminHandoff(input: {
   if (found.data.lead_contact_id && input.action === "close") {
     const contactUpdate = await supabase.from("lead_contacts").update({ status: "handled" }).eq("id", found.data.lead_contact_id);
     if (contactUpdate.error) throw contactUpdate.error;
+  }
+
+  if (input.action === "assign") {
+    await recordServerProductEvent({
+      eventName: "handoff_assigned",
+      sessionId: String(found.data.session_id),
+      locale: await eventLocale(),
+      surface: "admin_handoff",
+      properties: { taskId: input.id, slaMinutes: finiteInteger(input.slaMinutes) || 0 },
+    }).catch((error) => console.warn("[handoff analytics]", error instanceof Error ? error.message : error));
+  }
+  if (input.action === "start" || input.action === "contacted") {
+    await recordServerProductEvent({
+      eventName: "handoff_response_completed",
+      sessionId: String(found.data.session_id),
+      locale: await eventLocale(),
+      surface: "admin_handoff",
+      properties: { taskId: input.id, action: input.action },
+    }).catch((error) => console.warn("[handoff analytics]", error instanceof Error ? error.message : error));
   }
 
   return {

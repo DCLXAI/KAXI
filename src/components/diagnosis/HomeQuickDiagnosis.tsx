@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   Award,
@@ -34,6 +34,7 @@ import {
   type QuickKoreanId,
 } from "@/lib/data/quick-diagnosis";
 import { useLeadStore } from "@/store/kbridge";
+import { trackProductEvent } from "@/lib/analytics/client";
 
 type LocalizedText = Record<Lang, string>;
 
@@ -144,6 +145,26 @@ export function HomeQuickDiagnosis({ lang, onNavigate }: { lang: Lang; onNavigat
   const [budget, setBudget] = useState<QuickBudgetId | null>(null);
   const updateCurrentDiagnosisRecommendation = useLeadStore((state) => state.updateCurrentDiagnosisRecommendation);
 
+  useEffect(() => {
+    trackProductEvent("diagnosis_viewed", { locale: lang, surface: "home_quick_diagnosis" });
+  }, [lang]);
+
+  const selectGoal = (id: QuickDiagnosisId) => {
+    trackProductEvent("diagnosis_card_selected", { locale: lang, surface: "home_quick_diagnosis", properties: { step: "goal", optionId: id } });
+    setGoal(id);
+  };
+
+  const selectKorean = (id: QuickKoreanId) => {
+    trackProductEvent("diagnosis_card_selected", { locale: lang, surface: "home_quick_diagnosis", properties: { step: "korean", optionId: id } });
+    setKorean(id);
+  };
+
+  const selectBudget = (id: QuickBudgetId) => {
+    trackProductEvent("diagnosis_card_selected", { locale: lang, surface: "home_quick_diagnosis", properties: { step: "budget", optionId: id } });
+    trackProductEvent("diagnosis_completed", { locale: lang, surface: "home_quick_diagnosis", properties: { goal: goal || "unknown", korean: korean || "unknown", budget: id } });
+    setBudget(id);
+  };
+
   const answers: QuickDiagnosisAnswers | null = goal && korean && budget ? { goal, korean, budget } : null;
   const input = answers ? quickDiagnosisInput(answers) : null;
   const result = input ? recommendPath(input) : null;
@@ -208,7 +229,7 @@ export function HomeQuickDiagnosis({ lang, onNavigate }: { lang: Lang; onNavigat
               const Icon = meta.icon;
               return (
                 <li key={id}>
-                  <button type="button" data-testid={`quick-diagnosis-option-${id}`} aria-pressed={goal === id} onClick={() => setGoal(id)} className="h-full min-h-32 w-full rounded-lg border border-icon-accent/45 bg-card p-4 text-left transition hover:-translate-y-0.5 hover:border-icon-accent hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-icon-accent focus-visible:ring-offset-2">
+                  <button type="button" data-testid={`quick-diagnosis-option-${id}`} aria-pressed={goal === id} onClick={() => selectGoal(id)} className="h-full min-h-32 w-full rounded-lg border border-icon-accent/45 bg-card p-4 text-left transition hover:-translate-y-0.5 hover:border-icon-accent hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-icon-accent focus-visible:ring-offset-2">
                     <span className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-icon-accent/15 text-icon-accent"><Icon className="h-[18px] w-[18px]" aria-hidden="true" /></span>
                     <span className="block text-sm font-semibold leading-snug sm:text-base">{tr(meta.title, lang)}</span>
                     <span className="mt-1.5 block text-xs leading-relaxed text-muted-foreground">{tr(meta.description, lang)}</span>
@@ -229,7 +250,7 @@ export function HomeQuickDiagnosis({ lang, onNavigate }: { lang: Lang; onNavigat
               const Icon = meta.icon;
               return (
                 <li key={id}>
-                  <button type="button" data-testid={`quick-diagnosis-korean-${id}`} aria-pressed={korean === id} onClick={() => setKorean(id)} className="h-full min-h-28 w-full rounded-lg border border-icon-accent/45 bg-card p-4 text-left transition hover:-translate-y-0.5 hover:border-icon-accent hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-icon-accent focus-visible:ring-offset-2">
+                  <button type="button" data-testid={`quick-diagnosis-korean-${id}`} aria-pressed={korean === id} onClick={() => selectKorean(id)} className="h-full min-h-28 w-full rounded-lg border border-icon-accent/45 bg-card p-4 text-left transition hover:-translate-y-0.5 hover:border-icon-accent hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-icon-accent focus-visible:ring-offset-2">
                     <Icon className="mb-3 size-5 text-icon-accent" aria-hidden="true" />
                     <span className="block text-sm font-semibold">{localized(meta.label, lang)}</span>
                     <span className="mt-1 block text-xs text-muted-foreground">{localized(meta.description, lang)}</span>
@@ -250,7 +271,7 @@ export function HomeQuickDiagnosis({ lang, onNavigate }: { lang: Lang; onNavigat
               const Icon = meta.icon;
               return (
                 <li key={id}>
-                  <button type="button" data-testid={`quick-diagnosis-budget-${id}`} aria-pressed={budget === id} onClick={() => setBudget(id)} className="h-full min-h-28 w-full rounded-lg border border-icon-accent/45 bg-card p-4 text-left transition hover:-translate-y-0.5 hover:border-icon-accent hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-icon-accent focus-visible:ring-offset-2">
+                  <button type="button" data-testid={`quick-diagnosis-budget-${id}`} aria-pressed={budget === id} onClick={() => selectBudget(id)} className="h-full min-h-28 w-full rounded-lg border border-icon-accent/45 bg-card p-4 text-left transition hover:-translate-y-0.5 hover:border-icon-accent hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-icon-accent focus-visible:ring-offset-2">
                     <Icon className="mb-3 size-5 text-icon-accent" aria-hidden="true" />
                     <span className="block text-sm font-semibold">{localized(meta.label, lang)}</span>
                     <span className="mt-1 block text-xs text-muted-foreground">{localized(meta.description, lang)}</span>

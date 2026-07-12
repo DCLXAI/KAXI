@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import {
   Activity,
+  BarChart3,
   BookMarked,
   ChevronDown,
   ClipboardList,
@@ -89,6 +90,7 @@ const navGroups: AdminNavGroup[] = [
     key: "system",
     label: "시스템",
     items: [
+      { href: "/admin/analytics", label: "제품 분석", icon: BarChart3 },
       { href: "/admin/ops", label: "운영", icon: Activity },
       { href: "/admin/audit", label: "감사", icon: FileClock },
     ],

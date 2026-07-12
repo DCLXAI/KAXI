@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { TypebotBubble } from "@/components/typebot/TypebotBubble";
+import { ProductAnalyticsTracker } from "@/components/analytics/ProductAnalyticsTracker";
 import { pretendard, notoSerifKr, nanumMyeongjo } from "./fonts";
 
 export const metadata: Metadata = {
@@ -59,6 +60,7 @@ export default function RootLayout({
     >
       <body className="antialiased bg-background text-foreground">
         {children}
+        <ProductAnalyticsTracker />
         <TypebotBubble />
         <Toaster />
       </body>

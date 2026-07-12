@@ -4,6 +4,7 @@ import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { ArrowUp, MessageCircle, Paperclip, RefreshCcw, Smile, X } from "lucide-react";
 import { KaxiRunningCat } from "@/components/brand/KaxiRunningCat";
+import { trackProductEvent } from "@/lib/analytics/client";
 
 const HIDDEN_PATH_PREFIXES = ["/admin", "/partner", "/student", "/login", "/agent", "/consult"];
 const LOCALE_PREFIX_RE = /^\/(ko|en|vi|mn)(?=\/|$)/;
@@ -29,6 +30,10 @@ type RagResponse = {
   answer?: string;
   nextStep?: string;
   sources?: ChatSource[];
+  searchMeta?: { noContext?: boolean };
+  needsHuman?: boolean;
+  handoffTaskPersisted?: boolean;
+  requestId?: string;
   error?: string;
 };
 
@@ -525,6 +530,15 @@ export function TypebotBubble() {
       : [...current, { id: createId(), role: "user", text: messageText }]);
     setIsLoading(true);
     const requestId = retryRequestId || createId();
+    trackProductEvent("chatbot_question_sent", {
+      locale,
+      surface: "chat_widget",
+      sessionId,
+      properties: { retry: Boolean(retryRequestId), hasAttachments: requestAttachments.length > 0 },
+    });
+    if (retryRequestId) {
+      trackProductEvent("chatbot_retry", { locale, surface: "chat_widget", sessionId });
+    }
 
     try {
       const response = await fetch("/api/typebot-rag", {
@@ -563,6 +577,18 @@ export function TypebotBubble() {
           sources: (data.sources || []).filter((source) => source.sourceUrl?.startsWith("https://")).slice(0, 3),
         },
       ]);
+      trackProductEvent("chatbot_answer_succeeded", {
+        locale,
+        surface: "chat_widget",
+        sessionId,
+        properties: { sourceCount: data.sources?.length || 0, needsHuman: data.needsHuman === true },
+      });
+      if (data.searchMeta?.noContext === true) {
+        trackProductEvent("chatbot_no_context", { locale, surface: "chat_widget", sessionId });
+      }
+      if (data.needsHuman === true && data.handoffTaskPersisted === true) {
+        trackProductEvent("handoff_created", { locale, surface: "chat_widget", sessionId });
+      }
       const sentIds = new Set(requestAttachments.map((file) => file.id));
       setAttachedFiles((current) => current.filter((file) => !sentIds.has(file.id)));
     } catch (error) {
@@ -577,6 +603,7 @@ export function TypebotBubble() {
           retryRequestId: requestId,
         },
       ]);
+      trackProductEvent("chatbot_answer_failed", { locale, surface: "chat_widget", sessionId });
     } finally {
       setIsLoading(false);
     }
@@ -840,6 +867,7 @@ export function TypebotBubble() {
                               href={source.sourceUrl}
                               target="_blank"
                               rel="noreferrer"
+                              onClick={() => trackProductEvent("citation_clicked", { locale, surface: "chat_widget", sessionId, properties: { sourceIndex: index } })}
                               className="block truncate underline decoration-current/40 underline-offset-2 hover:opacity-70"
                             >
                               {source.title || source.source || copy.officialSource}
@@ -1011,7 +1039,11 @@ export function TypebotBubble() {
         data-testid="kaxi-typebot-launcher"
         aria-label={isOpen ? copy.closeLabel : copy.openLabel}
         aria-pressed={isOpen}
-        onClick={() => setIsOpen((current) => !current)}
+        onClick={() => setIsOpen((current) => {
+          const next = !current;
+          if (next) trackProductEvent("chatbot_opened", { locale, surface: "chat_widget", sessionId: sessionId || undefined });
+          return next;
+        })}
         className={[
           "group relative flex h-14 w-14 items-center justify-center rounded-full border border-white/30 bg-primary text-primary-foreground shadow-[0_12px_34px_rgba(201,100,66,0.28)] transition-all",
           "hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-[0_16px_40px_rgba(201,100,66,0.34)]",

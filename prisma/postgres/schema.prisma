@@ -737,6 +737,26 @@ model RagReviewFeedback {
   @@map("rag_review_feedback")
 }
 
+model ProductEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  eventId     String   @unique @map("event_id") @db.Uuid
+  eventName   String   @map("event_name")
+  anonymousId String   @map("anonymous_id") @db.Uuid
+  sessionId   String?  @map("session_id")
+  locale      String   @default("ko")
+  surface     String
+  path        String?
+  properties  Json     @default("{}")
+  occurredAt  DateTime @default(now()) @map("occurred_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([eventName, occurredAt])
+  @@index([locale, occurredAt])
+  @@index([anonymousId, occurredAt])
+  @@index([sessionId, occurredAt])
+  @@map("product_events")
+}
+
 model N8nAuditMessage {
   id                  BigInt   @id @default(autoincrement())
   executionId         String?  @unique @map("execution_id")
