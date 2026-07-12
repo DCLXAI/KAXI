@@ -154,12 +154,15 @@ export function HomeQuickDiagnosis({
               </div>
             </div>
 
-            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="mt-5 flex flex-col gap-2 pr-16 sm:flex-row sm:items-center sm:pr-20 xl:pr-0">
               <Button onClick={continueToSchools}>{tr("quick_result_schools", lang)}</Button>
               <Button variant="outline" onClick={() => onNavigate("diagnose")}>
                 {tr("quick_result_refine", lang)}
               </Button>
-              <p className="text-xs leading-relaxed text-muted-foreground sm:ml-auto sm:max-w-xs sm:text-right">
+              <p
+                data-testid="quick-diagnosis-note"
+                className="text-xs leading-relaxed text-muted-foreground sm:ml-auto sm:max-w-xs sm:text-right"
+              >
                 {tr("quick_result_note", lang)}
               </p>
             </div>

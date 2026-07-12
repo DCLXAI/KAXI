@@ -21,6 +21,19 @@ test("home quick diagnosis shows a path result on the first choice", async ({ pa
   expect(resultBox?.x || 0).toBeGreaterThanOrEqual(0);
   expect((resultBox?.x || 0) + (resultBox?.width || 0)).toBeLessThanOrEqual(320);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  const note = page.getByTestId("quick-diagnosis-note");
+  await note.scrollIntoViewIfNeeded();
+  const noteBox = await note.boundingBox();
+  const launcherBox = await page.getByRole("button", { name: "KAXI 상담 열기" }).boundingBox();
+  expect(noteBox).not.toBeNull();
+  expect(launcherBox).not.toBeNull();
+  const overlapsLauncher =
+    (noteBox?.x || 0) < (launcherBox?.x || 0) + (launcherBox?.width || 0) &&
+    (noteBox?.x || 0) + (noteBox?.width || 0) > (launcherBox?.x || 0) &&
+    (noteBox?.y || 0) < (launcherBox?.y || 0) + (launcherBox?.height || 0) &&
+    (noteBox?.y || 0) + (noteBox?.height || 0) > (launcherBox?.y || 0);
+  expect(overlapsLauncher).toBe(false);
 });
 
 test("landing -> diagnosis save -> admin lookup -> Agent question -> RAG consult", async ({ page, request }) => {
