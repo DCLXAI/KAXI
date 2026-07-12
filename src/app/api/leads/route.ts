@@ -6,6 +6,7 @@ import { parseJsonBody } from "@/lib/api/validation";
 import { canPersistPiiValue, preparePiiField, retentionUntil } from "@/lib/privacy/pii";
 import { serializeLeadForResponse } from "@/lib/privacy/serializers";
 import { getCurrentKaxiUser } from "@/lib/supabase/auth";
+import { sendOpsAlert } from "@/lib/ops/alerts";
 
 // Prisma's DiagnosisLead.age/budget/brokerCost/estimatedCost are all Int
 // columns, so every numeric field here is coerced and validated as an
@@ -136,6 +137,17 @@ export async function POST(req: NextRequest) {
         retentionUntil: retentionUntil(parsePositiveInt(process.env.PRIVACY_LEAD_RETENTION_DAYS, 365)),
       },
     });
+
+    sendOpsAlert({
+      kind: "kaxi_ops_alert",
+      source: "kaxi-leads",
+      severity: "warning",
+      eventType: "lead_created",
+      message: "새 진단 리드가 생성되었습니다.",
+      occurredAt: new Date().toISOString(),
+      details: { leadId: lead.id, pathKey: lead.pathKey, nationality: lead.nationality, linked: Boolean(lead.userId) },
+      adminUrl: `${process.env.NEXT_PUBLIC_APP_URL || "https://kaxi.vercel.app"}/admin/leads`,
+    }).catch((err) => console.warn("[ops alert] lead", err instanceof Error ? err.message : err));
 
     return NextResponse.json({ lead: serializeLeadForResponse(lead) }, { status: 201 });
   } catch (e) {
