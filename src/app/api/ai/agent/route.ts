@@ -317,26 +317,31 @@ export async function POST(req: NextRequest) {
       toolCount: toolResults.length,
     });
 
-    if (hasHighRiskAgentSignal(toolResults)) {
-      const studentProfileId = await currentAuthenticatedStudentProfileId();
-      maybeCreateHighRiskEscalationCase({
-        studentProfileId,
-        category: "agent:high-risk",
-        summary: "에이전트 상담 고위험 판정",
-        conversationSummary: question,
-        ruleSnapshot: {
-          backend,
-          toolResults: toolResults.map((item) => ({
-            tool: item.tool,
-            summary: item.summary,
-            success: item.success,
-          })),
-        },
-        aiDraft: result.answer,
-        source: "agent",
-      }).catch((err) => {
+    const needsHumanExpert = hasHighRiskAgentSignal(toolResults);
+    let escalationCaseCreated = false;
+    if (needsHumanExpert) {
+      try {
+        const studentProfileId = await currentAuthenticatedStudentProfileId();
+        const created = await maybeCreateHighRiskEscalationCase({
+          studentProfileId,
+          category: "agent:high-risk",
+          summary: "에이전트 상담 고위험 판정",
+          conversationSummary: question,
+          ruleSnapshot: {
+            backend,
+            toolResults: toolResults.map((item) => ({
+              tool: item.tool,
+              summary: item.summary,
+              success: item.success,
+            })),
+          },
+          aiDraft: result.answer,
+          source: "agent",
+        });
+        escalationCaseCreated = Boolean(created);
+      } catch (err) {
         console.warn("[agent high-risk escalation skipped]", err instanceof Error ? err.message : err);
-      });
+      }
     }
 
     return NextResponse.json({
@@ -347,6 +352,8 @@ export async function POST(req: NextRequest) {
       iterations: result.iterations,
       durationMs: Date.now() - requestStartedAt,
       grounded: Boolean(preflight.groundingContext),
+      needsHumanExpert,
+      escalationCaseCreated,
       meta: buildAgentMeta({
         lang,
         question,

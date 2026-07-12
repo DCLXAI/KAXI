@@ -93,6 +93,8 @@ export function useAgentChat() {
           durationMs: data.durationMs,
           grounded: Boolean(data.grounded),
           meta: data.meta,
+          needsHumanExpert: data.needsHumanExpert,
+          escalationCaseCreated: data.escalationCaseCreated,
         },
       ]);
     } catch (error) {

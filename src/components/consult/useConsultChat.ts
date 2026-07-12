@@ -55,6 +55,7 @@ export function useConsultChat() {
           searchMeta: data.searchMeta,
           suggestedFollowups: data.suggestedFollowups,
           needsHumanExpert: data.needsHumanExpert,
+          escalationCaseCreated: data.escalationCaseCreated,
           consultationQuestion: userMsg,
           backend: data.backend,
         },

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
-import { AlertCircle, ArrowRight, Database, Loader2, ShieldAlert } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2, Database, Loader2, LogIn, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { KaxiCat } from "@/components/brand/KaxiCat";
@@ -81,17 +81,68 @@ export function ConsultMessageList({
                     idPrefix={`consult-message-${index}`}
                   />
 
-                  {message.needsHumanExpert && (
+                  {message.needsHumanExpert && message.escalationCaseCreated && (
                     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
-                      <p className="text-xs text-muted-foreground">
-                        {locale === "ko" ? "개인정보 동의 후 검증된 파트너에게 상담을 요청할 수 있습니다." : locale === "vi" ? "Bạn có thể đồng ý và gửi yêu cầu tới đối tác đã xác minh." : locale === "mn" ? "Зөвшөөрөл өгсний дараа баталгаажсан түншээс зөвлөгөө хүсэж болно." : "After consent, you can send this to a verified partner."}
+                      <p className="text-xs text-muted-foreground flex items-start gap-1.5">
+                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+                        <span>
+                          {locale === "ko"
+                            ? "행정사가 검토합니다. 케이스가 접수되어 마이페이지에서 진행 상황을 확인할 수 있어요."
+                            : locale === "vi"
+                              ? "Chuyên gia hành chính sẽ xem xét. Hồ sơ đã được tiếp nhận, bạn có thể theo dõi tiến độ tại trang cá nhân."
+                              : locale === "mn"
+                                ? "Мэргэжилтэн шалгах болно. Кейс бүртгэгдсэн тул хувийн хуудаснаас явцыг харах боломжтой."
+                                : "An administrative scrivener will review this. The case has been filed — you can track progress in My Page."}
+                        </span>
                       </p>
-                      <Button size="sm" asChild>
-                        <Link href={`${localePath(locale, "/partners")}?type=admin&question=${encodeURIComponent(message.consultationQuestion || "")}`}>
-                          {locale === "ko" ? "전문가 상담 요청" : locale === "vi" ? "Yêu cầu chuyên gia" : locale === "mn" ? "Мэргэжилтэн хүсэх" : "Request an expert"}
-                          <ArrowRight className="h-4 w-4" />
-                        </Link>
-                      </Button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button size="sm" asChild>
+                          <Link href="/student">
+                            {locale === "ko" ? "마이페이지에서 보기" : locale === "vi" ? "Xem tại trang cá nhân" : locale === "mn" ? "Хувийн хуудаснаас харах" : "View in My Page"}
+                            <ArrowRight className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                        <Button size="sm" variant="outline" asChild>
+                          <Link href={`${localePath(locale, "/partners")}?type=admin&question=${encodeURIComponent(message.consultationQuestion || "")}`}>
+                            {locale === "ko" ? "전문가 상담 요청" : locale === "vi" ? "Yêu cầu chuyên gia" : locale === "mn" ? "Мэргэжилтэн хүсэх" : "Request an expert"}
+                          </Link>
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {message.needsHumanExpert && !message.escalationCaseCreated && (
+                    <div className="mt-4 space-y-3 border-t pt-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-xs text-muted-foreground">
+                          {locale === "ko" ? "개인정보 동의 후 검증된 파트너에게 상담을 요청할 수 있습니다." : locale === "vi" ? "Bạn có thể đồng ý và gửi yêu cầu tới đối tác đã xác minh." : locale === "mn" ? "Зөвшөөрөл өгсний дараа баталгаажсан түншээс зөвлөгөө хүсэж болно." : "After consent, you can send this to a verified partner."}
+                        </p>
+                        <Button size="sm" asChild>
+                          <Link href={`${localePath(locale, "/partners")}?type=admin&question=${encodeURIComponent(message.consultationQuestion || "")}`}>
+                            {locale === "ko" ? "전문가 상담 요청" : locale === "vi" ? "Yêu cầu chuyên gia" : locale === "mn" ? "Мэргэжилтэн хүсэх" : "Request an expert"}
+                            <ArrowRight className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+                        <p className="text-xs text-muted-foreground flex items-start gap-1.5">
+                          <LogIn className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                          <span>
+                            {locale === "ko"
+                              ? "로그인하면 행정사 검토 케이스가 자동 접수됩니다."
+                              : locale === "vi"
+                                ? "Đăng nhập để hồ sơ được tự động chuyển cho chuyên gia hành chính xem xét."
+                                : locale === "mn"
+                                  ? "Нэвтэрвэл мэргэжилтний шалгах кейс автоматаар бүртгэгдэнэ."
+                                  : "Log in to automatically file this case for administrative scrivener review."}
+                          </span>
+                        </p>
+                        <Button size="sm" variant="outline" asChild>
+                          <Link href={`/login?lang=${locale}`}>
+                            {locale === "ko" ? "로그인" : locale === "vi" ? "Đăng nhập" : locale === "mn" ? "Нэвтрэх" : "Log in"}
+                          </Link>
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>

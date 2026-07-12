@@ -13,6 +13,7 @@ export interface ConsultMessage {
   searchMeta?: SearchMeta[];
   suggestedFollowups?: string[];
   needsHumanExpert?: boolean;
+  escalationCaseCreated?: boolean;
   consultationQuestion?: string;
   backend?: string;
 }

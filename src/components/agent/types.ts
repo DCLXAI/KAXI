@@ -27,6 +27,8 @@ export interface AgentMessage {
   durationMs?: number;
   grounded?: boolean;
   meta?: AgentMeta;
+  needsHumanExpert?: boolean;
+  escalationCaseCreated?: boolean;
 }
 
 export interface AgentStatus {

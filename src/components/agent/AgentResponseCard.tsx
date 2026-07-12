@@ -1,7 +1,9 @@
 "use client";
 
-import { ArrowRight, BookOpen, Brain, Database, Sparkles, Wrench } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, BookOpen, Brain, CheckCircle2, Database, LogIn, ShieldAlert, Sparkles, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { KaxiCat } from "@/components/brand/KaxiCat";
 import { MessageResponse } from "@/components/ai-elements/message";
 import {
@@ -12,6 +14,7 @@ import { backendLabel, EMPTY_CLARIFY_DRAFT } from "./agent-config";
 import { AgentClarifyPanel } from "./AgentClarifyPanel";
 import type { AgentLocale, AgentMessage, ClarifyDraft } from "./types";
 import { agentSourceAnnotations } from "./types";
+import { localePath } from "@/i18n/routing";
 
 interface AgentResponseCardProps {
   clarifyDraft?: ClarifyDraft;
@@ -43,6 +46,12 @@ export function AgentResponseCard({
         <span className="text-xs font-medium text-muted-foreground">
           {locale === "ko" ? "AI 에이전트" : "Agent"}
         </span>
+        {message.needsHumanExpert && (
+          <Badge variant="destructive" className="text-[10px] gap-0.5">
+            <ShieldAlert className="h-2.5 w-2.5" />
+            {locale === "ko" ? "전문가 상담 필요" : "Expert needed"}
+          </Badge>
+        )}
         {message.toolResults && message.toolResults.length > 0 && (
           <Badge variant="outline" className="text-[10px] gap-0.5">
             <Wrench className="h-2.5 w-2.5" />
@@ -108,6 +117,71 @@ export function AgentResponseCard({
       {message.meta?.sourceNotice && (
         <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
           {message.meta.sourceNotice}
+        </div>
+      )}
+
+      {message.needsHumanExpert && message.escalationCaseCreated && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+          <p className="text-xs text-muted-foreground flex items-start gap-1.5">
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+            <span>
+              {locale === "ko"
+                ? "행정사가 검토합니다. 케이스가 접수되어 마이페이지에서 진행 상황을 확인할 수 있어요."
+                : locale === "vi"
+                  ? "Chuyên gia hành chính sẽ xem xét. Hồ sơ đã được tiếp nhận, bạn có thể theo dõi tiến độ tại trang cá nhân."
+                  : locale === "mn"
+                    ? "Мэргэжилтэн шалгах болно. Кейс бүртгэгдсэн тул хувийн хуудаснаас явцыг харах боломжтой."
+                    : "An administrative scrivener will review this. The case has been filed — you can track progress in My Page."}
+            </span>
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" asChild>
+              <Link href="/student">
+                {locale === "ko" ? "마이페이지에서 보기" : locale === "vi" ? "Xem tại trang cá nhân" : locale === "mn" ? "Хувийн хуудаснаас харах" : "View in My Page"}
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+            <Button size="sm" variant="outline" asChild>
+              <Link href={`${localePath(locale, "/partners")}?type=admin&question=${encodeURIComponent(originalRequest || "")}`}>
+                {locale === "ko" ? "전문가 상담 요청" : locale === "vi" ? "Yêu cầu chuyên gia" : locale === "mn" ? "Мэргэжилтэн хүсэх" : "Request an expert"}
+              </Link>
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {message.needsHumanExpert && !message.escalationCaseCreated && (
+        <div className="mt-4 space-y-3 border-t pt-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-muted-foreground">
+              {locale === "ko" ? "개인정보 동의 후 검증된 파트너에게 상담을 요청할 수 있습니다." : locale === "vi" ? "Bạn có thể đồng ý và gửi yêu cầu tới đối tác đã xác minh." : locale === "mn" ? "Зөвшөөрөл өгсний дараа баталгаажсан түншээс зөвлөгөө хүсэж болно." : "After consent, you can send this to a verified partner."}
+            </p>
+            <Button size="sm" asChild>
+              <Link href={`${localePath(locale, "/partners")}?type=admin&question=${encodeURIComponent(originalRequest || "")}`}>
+                {locale === "ko" ? "전문가 상담 요청" : locale === "vi" ? "Yêu cầu chuyên gia" : locale === "mn" ? "Мэргэжилтэн хүсэх" : "Request an expert"}
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+            <p className="text-xs text-muted-foreground flex items-start gap-1.5">
+              <LogIn className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>
+                {locale === "ko"
+                  ? "로그인하면 행정사 검토 케이스가 자동 접수됩니다."
+                  : locale === "vi"
+                    ? "Đăng nhập để hồ sơ được tự động chuyển cho chuyên gia hành chính xem xét."
+                    : locale === "mn"
+                      ? "Нэвтэрвэл мэргэжилтний шалгах кейс автоматаар бүртгэгдэнэ."
+                      : "Log in to automatically file this case for administrative scrivener review."}
+              </span>
+            </p>
+            <Button size="sm" variant="outline" asChild>
+              <Link href={`/login?lang=${locale}`}>
+                {locale === "ko" ? "로그인" : locale === "vi" ? "Đăng nhập" : locale === "mn" ? "Нэвтрэх" : "Log in"}
+              </Link>
+            </Button>
+          </div>
         </div>
       )}
 
