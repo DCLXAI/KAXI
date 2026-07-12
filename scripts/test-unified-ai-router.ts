@@ -69,6 +69,11 @@ const agentChatHeader = readFileSync("src/components/agent/AgentChatHeader.tsx",
 const agentResponseCard = readFileSync("src/components/agent/AgentResponseCard.tsx", "utf8");
 const globalTheme = readFileSync("src/app/globals.css", "utf8");
 const button = readFileSync("src/components/ui/button.tsx", "utf8");
+const kcatActionCat = readFileSync("src/components/brand/KcatActionCat.tsx", "utf8");
+const kcatParade = readFileSync("src/components/brand/KcatParade.tsx", "utf8");
+const kcatManifest = JSON.parse(readFileSync("public/mascot/pet-actions/pet_animations.json", "utf8")) as {
+  clips: Array<{ prefix: string; frameDurationsMs: number[] }>;
+};
 
 assert.doesNotMatch(landing, /onNavigate\("consult"\)/, "landing must expose one AI entry point");
 assert.match(landing, /<AgentExperience embedded \/>/, "home must embed the working unified AI experience");
@@ -86,8 +91,28 @@ assert.doesNotMatch(sitemap, /"\/consult"/, "legacy consult path must not be ind
 assert.match(widget, /"\/agent"/, "the compact widget must be hidden on the full KAXI AI screen");
 assert.doesNotMatch(widget, /publicPath === "\/"/, "Typebot must remain available on home");
 assert.match(widget, /kaxi-typebot-launcher/, "home must use the Typebot launcher");
-assert.match(widget, /KaxiCat state="breath"/, "the Typebot header must use the KAXI cat mascot");
+assert.match(widget, /KcatActionCat clip="lookAround"/, "the Typebot header must use a full KCAT action clip");
 assert.doesNotMatch(widget, /KaxiFlowerMark/, "the legacy flower mark must be removed from Typebot");
+assert.match(landing, /<KcatParade \/>/, "home must show the KCAT animation group");
+assert.equal((kcatParade.match(/<KcatActionCat/g) || []).length, 4, "home must show four animated cats");
+assert.match(kcatActionCat, /frameDurationsMs\[visibleFrame\]/, "web animation must honor KCAT frame timing");
+assert.match(kcatActionCat, /prefers-reduced-motion/, "KCAT animation must respect reduced motion");
+assert.equal(kcatManifest.clips.length, 8, "the complete eight-clip KCAT catalog must ship");
+assert.equal(
+  kcatManifest.clips.reduce((total, clip) => total + clip.frameDurationsMs.length, 0),
+  53,
+  "the complete 53-frame KCAT catalog must ship",
+);
+for (const clip of kcatManifest.clips) {
+  clip.frameDurationsMs.forEach((_, index) => {
+    const filename = `${clip.prefix}${String(index).padStart(2, "0")}.png`;
+    assert.equal(
+      existsSync(`public/mascot/pet-actions/${filename}`),
+      true,
+      `KCAT frame ${filename} must ship`,
+    );
+  });
+}
 assert.match(pawMark, /data-kaxi-mark="paw"/, "the public AI brand must expose the KAXI paw mark");
 assert.match(globalTheme, /--primary: #c96442;/, "the main KAXI action color must remain orange");
 assert.match(globalTheme, /--icon-accent: #e5a0b3;/, "public icons must use the light-pink accent");

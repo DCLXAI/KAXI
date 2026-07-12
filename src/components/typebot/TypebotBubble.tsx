@@ -3,7 +3,7 @@
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { ArrowUp, MessageCircle, Paperclip, RefreshCcw, Smile, X } from "lucide-react";
-import { KaxiCat } from "@/components/brand/KaxiCat";
+import { KcatActionCat } from "@/components/brand/KcatActionCat";
 
 const HIDDEN_PATH_PREFIXES = ["/admin", "/partner", "/student", "/login", "/agent", "/consult"];
 const LOCALE_PREFIX_RE = /^\/(ko|en|vi|mn)(?=\/|$)/;
@@ -779,9 +779,9 @@ export function TypebotBubble() {
             <div className="flex min-w-0 items-center gap-2.5">
               <span
                 data-testid="kaxi-chat-mascot"
-                className="flex h-8 w-10 shrink-0 items-center justify-center"
+                className="flex h-10 w-[52px] shrink-0 items-end justify-center max-[359px]:h-9 max-[359px]:w-11"
               >
-                <KaxiCat state="breath" size={32} />
+                <KcatActionCat clip="lookAround" size={42} pauseMs={1600} />
               </span>
               <span className="text-[22px] font-bold leading-none text-zinc-900 max-[359px]:text-[19px]">KAXI</span>
             </div>

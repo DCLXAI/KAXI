@@ -5,7 +5,9 @@ test("home quick diagnosis shows a path result on the first choice", async ({ pa
   await page.goto("/ko");
 
   const quickDiagnosis = page.getByTestId("home-quick-diagnosis");
-  await expect(page.getByTestId("home-hero-mascot")).toBeVisible();
+  const catParade = page.getByTestId("home-kcat-parade");
+  await expect(catParade).toBeVisible();
+  await expect(catParade.locator("[data-kcat-action-cat]")).toHaveCount(4);
   await expect(quickDiagnosis.locator('[data-kaxi-mark="paw"]')).toBeVisible();
   await expect(page.locator('#kaxi-ai [data-kaxi-mark="paw"]')).toBeVisible();
   await expect(quickDiagnosis).toBeVisible();
@@ -133,7 +135,9 @@ test("KAXI widget receives a server-owned session and rejects a forged session",
   const panel = page.getByRole("region", { name: "KAXI 상담 채팅" });
   await expect(panel).toBeVisible();
   await expect(panel.getByTestId("kaxi-chat-mascot")).toBeVisible();
-  await expect(panel.locator('img[src*="/mascot/pet_breath_"]')).toBeVisible();
+  const animatedMascot = panel.locator('[data-kcat-action-cat="lookAround"] img');
+  await expect(animatedMascot).toBeVisible();
+  await expect(animatedMascot).toHaveAttribute("src", /\/mascot\/pet-actions\/pet_look_/);
   await expect(page.getByPlaceholder("KAXI에게 질문해 주세요.")).toBeEnabled();
 
   const box = await panel.boundingBox();
