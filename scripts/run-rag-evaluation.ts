@@ -59,6 +59,26 @@ const caseIdFilter = process.env.RAG_EVAL_CASE_ID?.trim() || "";
 const transport = process.env.RAG_EVAL_TRANSPORT?.trim() === "gateway" ? "gateway" : "direct-n8n";
 const expectedProvenance = resolveRagProvenance();
 
+async function fetchWithRateLimitRetry(url: string, init: RequestInit, attempts = 4) {
+  let response: Response | null = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    response = await fetch(url, init);
+    if (response.status !== 429 || attempt === attempts - 1) return response;
+    const retryAfter = response.headers.get("retry-after")?.trim() || "";
+    const numericDelay = Number(retryAfter);
+    const datedDelay = retryAfter ? (Date.parse(retryAfter) - Date.now()) / 1_000 : Number.NaN;
+    const requestedDelay = Number.isFinite(numericDelay)
+      ? numericDelay
+      : Number.isFinite(datedDelay)
+        ? datedDelay
+        : 5;
+    const retryAfterSeconds = Math.max(1, Math.min(90, requestedDelay));
+    await new Promise((resolve) => setTimeout(resolve, retryAfterSeconds * 1_000 + 250));
+  }
+  if (!response) throw new Error("request_not_attempted");
+  return response;
+}
+
 function isRefusalAnswer(answer: string, locale: string) {
   const patterns: Record<string, RegExp> = {
     ko: /도와드릴\s*수\s*없|제공할\s*수\s*없|사용하면\s*안|해서는\s*안/iu,
@@ -208,7 +228,7 @@ for (const testCase of cases) {
         signal: AbortSignal.timeout(45_000),
       });
     } else {
-      const sessionResponse = await fetch(`${baseUrl}/api/chat-session`, {
+      const sessionResponse = await fetchWithRateLimitRetry(`${baseUrl}/api/chat-session`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ forceNew: true, locale: testCase.locale }),
@@ -218,7 +238,7 @@ for (const testCase of cases) {
       if (!sessionResponse.ok || !session.sessionId || !cookie) throw new Error("session_creation_failed");
       auditSessionId = session.sessionId;
 
-      response = await fetch(`${baseUrl}/api/typebot-rag`, {
+      response = await fetchWithRateLimitRetry(`${baseUrl}/api/typebot-rag`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie },
         body: JSON.stringify({
@@ -401,7 +421,7 @@ for (const testCase of cases) {
     if (transport === "gateway") {
       const taskCleanup = await supabase.from("handoff_tasks").delete().eq("session_id", auditSessionId);
       if (taskCleanup.error) throw taskCleanup.error;
-      const sessionCleanup = await supabase.from("chat_sessions").delete().eq("session_id", auditSessionId);
+      const sessionCleanup = await supabase.from("chat_sessions").delete().eq("session_key", auditSessionId);
       if (sessionCleanup.error) throw sessionCleanup.error;
     }
   }
