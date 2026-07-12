@@ -7,6 +7,7 @@ import { AgentResponseCard } from "./AgentResponseCard";
 import type { AgentLocale, AgentMessage, ClarifyDraft } from "./types";
 
 interface AgentMessageListProps {
+  compact?: boolean;
   clarifyDrafts: Record<number, ClarifyDraft>;
   endRef: React.RefObject<HTMLDivElement | null>;
   loading: boolean;
@@ -25,6 +26,7 @@ function originalRequestFor(messages: AgentMessage[], messageIndex: number): str
 }
 
 export function AgentMessageList({
+  compact = false,
   clarifyDrafts,
   endRef,
   loading,
@@ -35,7 +37,7 @@ export function AgentMessageList({
   onSendDraft,
 }: AgentMessageListProps) {
   return (
-    <div className="space-y-6 mb-32">
+    <div className={compact ? "space-y-6 mb-4" : "space-y-6 mb-32"} aria-live="polite">
       {messages.map((message, index) => (
         <motion.div
           key={index}
@@ -83,7 +85,7 @@ export function AgentMessageList({
           </div>
         </motion.div>
       )}
-      <div ref={endRef} className="h-44" />
+      <div ref={endRef} className={compact ? "h-4" : "h-44"} />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { AgentLocale } from "./types";
 
 interface AgentComposerProps {
+  fixed?: boolean;
   input: string;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   loading: boolean;
@@ -16,6 +17,7 @@ interface AgentComposerProps {
 }
 
 export function AgentComposer({
+  fixed = true,
   input,
   inputRef,
   loading,
@@ -24,7 +26,7 @@ export function AgentComposer({
   onSend,
 }: AgentComposerProps) {
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-background via-background to-transparent pt-6 pb-4">
+    <div className={fixed ? "fixed bottom-0 left-0 right-0 bg-gradient-to-t from-background via-background to-transparent pt-6 pb-4" : "border-t bg-background pt-4 pb-1"}>
       <div className="mx-auto max-w-3xl px-4">
         <Card className="p-3 shadow-lg border-2 focus-within:border-primary/50 transition-colors">
           <Textarea

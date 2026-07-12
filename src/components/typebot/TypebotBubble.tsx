@@ -418,6 +418,7 @@ async function waitForAttachment(
 
 function shouldHideChatbot(pathname: string) {
   const publicPath = pathname.replace(LOCALE_PREFIX_RE, "") || "/";
+  if (publicPath === "/") return true;
   return HIDDEN_PATH_PREFIXES.some(
     (prefix) => publicPath === prefix || publicPath.startsWith(`${prefix}/`),
   );

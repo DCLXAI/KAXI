@@ -22,6 +22,7 @@ interface AgentLandingProps {
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   loading: boolean;
   locale: AgentLocale;
+  embedded?: boolean;
   onInputChange: (value: string) => void;
   onSend: (text?: string) => void;
 }
@@ -32,36 +33,41 @@ export function AgentLanding({
   inputRef,
   loading,
   locale,
+  embedded = false,
   onInputChange,
   onSend,
 }: AgentLandingProps) {
   const t = useTranslations();
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center px-4 py-12">
+    <div className={embedded ? "w-full" : "min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center px-4 py-12"}>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-3xl">
-        <div className="text-center mb-10">
+        <div className={embedded ? "text-center mb-5" : "text-center mb-10"}>
           <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
             <Sparkles className="h-3.5 w-3.5" />
             {locale === "ko" ? "KAXI AI · 실행과 상담을 한곳에서" : locale === "vi" ? "KAXI AI · Thực hiện và tư vấn" : locale === "mn" ? "KAXI AI · Гүйцэтгэл ба зөвлөгөө" : "KAXI AI · Actions and guidance"}
             <span className={`h-1.5 w-1.5 rounded-full ${statusDotClass(agentStatus)}`} />
             {statusText(locale, agentStatus)}
           </div>
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight italic mb-3" style={{ fontFamily: "Georgia, serif" }}>
-            {locale === "ko" ? "한국 유학, KAXI AI에게 물어보세요" : locale === "vi" ? "Hỏi KAXI AI về du học Hàn Quốc" : locale === "mn" ? "Солонгост сурах тухай KAXI AI-аас асуугаарай" : "Ask KAXI AI about studying in Korea"}
-          </h1>
-          <p className="text-muted-foreground text-base md:text-lg">
-            {locale === "ko"
-              ? "학교 검색과 비용 계산은 직접 실행하고, 비자·체류 질문은 공식 문서를 근거로 안전하게 답합니다."
-              : locale === "vi"
-                ? "Tự thực hiện tìm trường và tính chi phí; trả lời visa bằng nguồn chính thức."
-                : locale === "mn"
-                  ? "Сургууль, зардлын ажлыг гүйцэтгэж, визийн асуултад албан эх сурвалжаар хариулна."
-                  : "Runs school and cost tasks, then answers visa questions from official sources."}
-          </p>
+          {!embedded && (
+            <>
+              <h1 className="text-4xl md:text-5xl font-bold tracking-tight italic mb-3" style={{ fontFamily: "Georgia, serif" }}>
+                {locale === "ko" ? "한국 유학, KAXI AI에게 물어보세요" : locale === "vi" ? "Hỏi KAXI AI về du học Hàn Quốc" : locale === "mn" ? "Солонгост сурах тухай KAXI AI-аас асуугаарай" : "Ask KAXI AI about studying in Korea"}
+              </h1>
+              <p className="text-muted-foreground text-base md:text-lg">
+                {locale === "ko"
+                  ? "학교 검색과 비용 계산은 직접 실행하고, 비자·체류 질문은 공식 문서를 근거로 안전하게 답합니다."
+                  : locale === "vi"
+                    ? "Tự thực hiện tìm trường và tính chi phí; trả lời visa bằng nguồn chính thức."
+                    : locale === "mn"
+                      ? "Сургууль, зардлын ажлыг гүйцэтгэж, визийн асуултад албан эх сурвалжаар хариулна."
+                      : "Runs school and cost tasks, then answers visa questions from official sources."}
+              </p>
+            </>
+          )}
         </div>
 
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-8">
+        <div className={`grid grid-cols-3 md:grid-cols-6 gap-2 ${embedded ? "mb-4" : "mb-8"}`}>
           {Object.entries(TOOL_LABELS).map(([key, labels]) => {
             const Icon = TOOL_ICONS[key] || FALLBACK_TOOL_ICON;
             return (
@@ -101,7 +107,7 @@ export function AgentLanding({
           </div>
         </Card>
 
-        <div className="mt-8">
+        <div className={embedded ? "mt-4" : "mt-8"}>
           <div className="text-xs text-muted-foreground text-center mb-3">
             {locale === "ko" ? "이렇게 물어보세요" : "Try asking"}
           </div>
