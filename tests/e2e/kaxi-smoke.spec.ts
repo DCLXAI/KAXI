@@ -1,5 +1,28 @@
 import { expect, test } from "@playwright/test";
 
+test("home quick diagnosis shows a path result on the first choice", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto("/ko");
+
+  const quickDiagnosis = page.getByTestId("home-quick-diagnosis");
+  await expect(quickDiagnosis).toBeVisible();
+  await expect(page.getByText("무료 진단 시작")).toHaveCount(0);
+
+  await page.getByTestId("quick-diagnosis-option-language").click();
+
+  const result = page.getByTestId("quick-diagnosis-result");
+  await expect(result).toBeVisible();
+  await expect(result).toContainText("D-4");
+  await expect(result).toContainText("8,000,000 KRW");
+  await expect(result.getByRole("button", { name: "내 조건으로 정밀 진단" })).toBeVisible();
+
+  const resultBox = await result.boundingBox();
+  expect(resultBox).not.toBeNull();
+  expect(resultBox?.x || 0).toBeGreaterThanOrEqual(0);
+  expect((resultBox?.x || 0) + (resultBox?.width || 0)).toBeLessThanOrEqual(320);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
 test("landing -> diagnosis save -> admin lookup -> Agent question -> RAG consult", async ({ page, request }) => {
   await page.goto("/ko");
   await expect(page.getByText("KAXI").first()).toBeVisible();

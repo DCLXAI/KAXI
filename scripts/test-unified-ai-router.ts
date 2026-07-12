@@ -4,6 +4,12 @@ import {
   decideUnifiedAiRoute,
   unifiedRouteLabel,
 } from "../src/lib/ai/unified-router";
+import { recommendPath } from "../src/lib/data/diagnosis";
+import {
+  QUICK_DIAGNOSIS_EXPECTED_VISA,
+  QUICK_DIAGNOSIS_IDS,
+  quickDiagnosisInput,
+} from "../src/lib/data/quick-diagnosis";
 
 assert.deepEqual(
   decideUnifiedAiRoute("서울 인증대학 3곳 찾아서 비용을 계산해줘"),
@@ -56,10 +62,13 @@ const unifiedApi = readFileSync("src/app/api/ai/unified/route.ts", "utf8");
 const consultPage = readFileSync("src/app/[locale]/consult/page.tsx", "utf8");
 const sitemap = readFileSync("src/app/sitemap.ts", "utf8");
 const widget = readFileSync("src/components/typebot/TypebotBubble.tsx", "utf8");
+const quickDiagnosis = readFileSync("src/components/diagnosis/HomeQuickDiagnosis.tsx", "utf8");
 
 assert.doesNotMatch(landing, /onNavigate\("consult"\)/, "landing must expose one AI entry point");
 assert.match(landing, /<AgentExperience embedded \/>/, "home must embed the working unified AI experience");
 assert.match(landing, /id="kaxi-ai"/, "home AI must have its own layout section outside the hero");
+assert.match(landing, /<HomeQuickDiagnosis/, "home must show an immediate card-based path finder");
+assert.doesNotMatch(landing, /tr\("cta_start"/, "home must not gate participation behind a generic diagnosis CTA");
 assert.doesNotMatch(landing, /kaxi-home-chat-launcher/, "home must not keep a second floating AI launcher");
 assert.doesNotMatch(landing, /ai_banner_title/, "home must not keep a separate promotional AI banner");
 assert.doesNotMatch(header, /publicHref\("consult"\)/, "header must expose one AI entry point");
@@ -71,6 +80,16 @@ assert.doesNotMatch(sitemap, /"\/consult"/, "legacy consult path must not be ind
 assert.match(widget, /"\/agent"/, "the compact widget must be hidden on the full KAXI AI screen");
 assert.doesNotMatch(widget, /publicPath === "\/"/, "Typebot must remain available on home");
 assert.match(widget, /kaxi-typebot-launcher/, "home must use the Typebot launcher");
+assert.match(quickDiagnosis, /aria-pressed/, "quick diagnosis choices must expose their selected state");
+assert.match(quickDiagnosis, /quick-diagnosis-result/, "quick diagnosis must render an in-page result");
+assert.match(quickDiagnosis, /onNavigate\("diagnose"\)/, "quick diagnosis must retain a detailed diagnosis path");
+for (const id of QUICK_DIAGNOSIS_IDS) {
+  assert.equal(
+    recommendPath(quickDiagnosisInput(id)).visaType,
+    QUICK_DIAGNOSIS_EXPECTED_VISA[id],
+    `quick diagnosis ${id} must keep its expected visa path`,
+  );
+}
 const consultFrontendFiles = existsSync("src/components/consult")
   ? readdirSync("src/components/consult")
   : [];

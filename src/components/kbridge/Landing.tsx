@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { KaxiCat } from "@/components/brand/KaxiCat";
 import { AgentExperience } from "@/components/agent/AgentExperience";
+import { HomeQuickDiagnosis } from "@/components/diagnosis/HomeQuickDiagnosis";
 import { ArrowRight, Calculator, FileCheck, School as SchoolIcon, ShieldCheck, Users, Globe2, AlertTriangle } from "lucide-react";
 
 export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
@@ -96,6 +97,10 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
     { broker: { ko: "불법취업 연결", vi: "Bất hợp pháp", mn: "Хууль бус", en: "Illegal" }, us: { ko: "제공 안 함", vi: "Không", mn: "Үгүй", en: "None" } },
   ];
 
+  const scrollToQuickDiagnosis = () => {
+    document.getElementById("quick-diagnosis")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
   return (
     <div className="space-y-12 md:space-y-16">
       {/* Hero */}
@@ -111,12 +116,10 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
           <p className="mt-6 text-base md:text-lg text-muted-foreground max-w-3xl mx-auto leading-relaxed">
             {tr("hero_subtitle", lang)}
           </p>
-          <Button size="sm" variant="outline" className="mt-7 gap-2" onClick={() => onNavigate("diagnose")}>
-            {tr("cta_start", lang)}
-            <ArrowRight className="h-4 w-4" />
-          </Button>
         </div>
       </section>
+
+      <HomeQuickDiagnosis lang={lang} onNavigate={onNavigate} />
 
       <section id="kaxi-ai" aria-label="KAXI AI" className="mx-auto w-full max-w-3xl px-4">
         <AgentExperience embedded />
@@ -168,7 +171,7 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
                 </CardHeader>
                 <CardContent>
                   <Button variant="ghost" size="sm" className="w-full justify-between">
-                    {tr("cta_start", lang)}
+                    {tr("feature_open", lang)}
                     <ArrowRight className="h-3.5 w-3.5" />
                   </Button>
                 </CardContent>
@@ -222,8 +225,8 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
           </div>
           <h2 className="font-serif text-2xl md:text-3xl font-bold mb-3">{tr("hero_title", lang)}</h2>
           <p className="text-primary-foreground/80 mb-6 max-w-2xl mx-auto">{tr("hero_subtitle", lang)}</p>
-          <Button size="lg" variant="secondary" className="gap-2" onClick={() => onNavigate("diagnose")}>
-            {tr("cta_start", lang)}
+          <Button size="lg" variant="secondary" className="gap-2" onClick={scrollToQuickDiagnosis}>
+            {tr("quick_diagnosis_return", lang)}
             <ArrowRight className="h-4 w-4" />
           </Button>
         </div>
