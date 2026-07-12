@@ -74,7 +74,7 @@ export function AgentLanding({
               const Icon = TOOL_ICONS[key] || FALLBACK_TOOL_ICON;
               return (
                 <div key={key} className="flex flex-col items-center gap-1 p-2 rounded-lg border bg-card">
-                  <Icon className="h-4 w-4 text-primary" />
+                  <Icon className="h-4 w-4 text-icon-accent" />
                   <span className="text-[10px] text-center text-muted-foreground">{labels[locale]}</span>
                 </div>
               );
@@ -119,9 +119,9 @@ export function AgentLanding({
               <button
                 key={prompt}
                 onClick={() => onSend(prompt)}
-                className="text-left text-sm p-3 rounded-lg border bg-card hover:bg-muted/50 hover:border-primary/30 transition-all flex items-start gap-2"
+                className="text-left text-sm p-3 rounded-lg border border-icon-accent/55 bg-card hover:bg-muted/50 hover:border-icon-accent transition-all flex items-start gap-2"
               >
-                <ArrowRight className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                <ArrowRight className="h-3.5 w-3.5 text-icon-accent shrink-0 mt-0.5" />
                 <span className="flex-1">{prompt}</span>
               </button>
             ))}

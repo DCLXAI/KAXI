@@ -11,7 +11,7 @@ export function KaxiPawMark({
       viewBox="0 0 24 24"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className={cn("shrink-0", className)}
+      className={cn("shrink-0 text-icon-accent", className)}
       aria-label={ariaLabel}
       aria-hidden={ariaLabel ? undefined : true}
       role={ariaLabel ? "img" : undefined}

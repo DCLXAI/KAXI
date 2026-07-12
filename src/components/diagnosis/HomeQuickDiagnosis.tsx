@@ -91,16 +91,16 @@ export function HomeQuickDiagnosis({
                 aria-pressed={selected}
                 onClick={() => setSelectedId(id)}
                 className={[
-                  "h-full min-h-36 w-full rounded-lg border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+                  "h-full min-h-36 w-full rounded-lg border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-icon-accent focus-visible:ring-offset-2",
                   selected
-                    ? "border-primary bg-primary/5 shadow-sm"
-                    : "border-border/70 bg-card hover:border-primary/50 hover:bg-muted/30",
+                    ? "border-icon-accent bg-primary/5 shadow-sm"
+                    : "border-icon-accent/45 bg-card hover:border-icon-accent hover:bg-muted/30",
                 ].join(" ")}
               >
                 <span
                   className={[
                     "mb-4 flex h-9 w-9 items-center justify-center rounded-lg",
-                    selected ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary",
+                    selected ? "bg-icon-accent/25 text-icon-accent" : "bg-icon-accent/15 text-icon-accent",
                   ].join(" ")}
                 >
                   <Icon className="h-[18px] w-[18px]" aria-hidden="true" />

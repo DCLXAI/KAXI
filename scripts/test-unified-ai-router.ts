@@ -67,6 +67,8 @@ const pawMark = readFileSync("src/components/brand/KaxiPawMark.tsx", "utf8");
 const agentLanding = readFileSync("src/components/agent/AgentLanding.tsx", "utf8");
 const agentChatHeader = readFileSync("src/components/agent/AgentChatHeader.tsx", "utf8");
 const agentResponseCard = readFileSync("src/components/agent/AgentResponseCard.tsx", "utf8");
+const globalTheme = readFileSync("src/app/globals.css", "utf8");
+const button = readFileSync("src/components/ui/button.tsx", "utf8");
 
 assert.doesNotMatch(landing, /onNavigate\("consult"\)/, "landing must expose one AI entry point");
 assert.match(landing, /<AgentExperience embedded \/>/, "home must embed the working unified AI experience");
@@ -87,6 +89,9 @@ assert.match(widget, /kaxi-typebot-launcher/, "home must use the Typebot launche
 assert.match(widget, /KaxiCat state="breath"/, "the Typebot header must use the KAXI cat mascot");
 assert.doesNotMatch(widget, /KaxiFlowerMark/, "the legacy flower mark must be removed from Typebot");
 assert.match(pawMark, /data-kaxi-mark="paw"/, "the public AI brand must expose the KAXI paw mark");
+assert.match(globalTheme, /--primary: #c96442;/, "the main KAXI action color must remain orange");
+assert.match(globalTheme, /--icon-accent: #e5a0b3;/, "public icons must use the light-pink accent");
+assert.match(button, /border-icon-accent/, "outline buttons must use the light-pink border accent");
 assert.match(header, /icon: KaxiPawMark/, "the public AI navigation must use the KAXI paw mark");
 assert.match(quickDiagnosis, /<KaxiPawMark/, "quick diagnosis must use the KAXI paw mark");
 for (const [name, source] of [

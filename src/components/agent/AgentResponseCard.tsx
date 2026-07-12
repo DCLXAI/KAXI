@@ -43,8 +43,8 @@ export function AgentResponseCard({
   return (
     <div className="bg-card border rounded-2xl rounded-bl-md p-4">
       <div className="flex items-center gap-2 mb-2">
-        <div className="flex h-6 w-6 items-center justify-center rounded bg-primary/10">
-          <KaxiPawMark className="h-3 w-3 text-primary" />
+        <div className="flex h-6 w-6 items-center justify-center rounded bg-icon-accent/15">
+          <KaxiPawMark className="h-3 w-3" />
         </div>
         <span className="text-xs font-medium text-muted-foreground">
           KAXI AI
@@ -170,9 +170,9 @@ export function AgentResponseCard({
                 type="button"
                 disabled={loading}
                 onClick={() => onSend(suggestion.prompt)}
-                className="inline-flex max-w-full items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-left text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-icon-accent/55 bg-background px-2.5 py-1.5 text-left text-xs hover:border-icon-accent hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <ArrowRight className="h-3 w-3 text-primary" />
+                <ArrowRight className="h-3 w-3 text-icon-accent" />
                 <span className="font-medium">{suggestion.label}</span>
               </button>
             ))}

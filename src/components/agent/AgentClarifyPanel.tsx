@@ -151,7 +151,7 @@ export function AgentClarifyPanel({
             type="button"
             disabled={loading}
             onClick={() => onSend(item.prompt)}
-            className="inline-flex max-w-full items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-left text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-icon-accent/55 bg-background px-2.5 py-1.5 text-left text-xs hover:border-icon-accent hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
           >
             <span className="font-medium">{labels.quickAsk}: {item.label}</span>
           </button>

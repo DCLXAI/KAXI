@@ -18,6 +18,25 @@ test("home quick diagnosis shows a path result on the first choice", async ({ pa
   await expect(result).toContainText("D-4");
   await expect(result).toContainText("8,000,000 KRW");
   await expect(result.getByRole("button", { name: "내 조건으로 정밀 진단" })).toBeVisible();
+  await page.waitForTimeout(250);
+
+  const palette = await page.evaluate(() => {
+    const paw = document.querySelector('[data-testid="home-quick-diagnosis"] [data-kaxi-mark="paw"]');
+    const option = document.querySelector('[data-testid="quick-diagnosis-option-language"]');
+    const primaryButton = document.querySelector('[data-testid="quick-diagnosis-result"] button');
+    return {
+      iconToken: getComputedStyle(document.documentElement).getPropertyValue("--icon-accent").trim(),
+      pawColor: paw ? getComputedStyle(paw).color : "",
+      optionBorder: option ? getComputedStyle(option).borderColor : "",
+      primaryButtonBackground: primaryButton ? getComputedStyle(primaryButton).backgroundColor : "",
+    };
+  });
+  expect(palette).toEqual({
+    iconToken: "#e5a0b3",
+    pawColor: "rgb(229, 160, 179)",
+    optionBorder: "rgb(229, 160, 179)",
+    primaryButtonBackground: "rgb(201, 100, 66)",
+  });
 
   const resultBox = await result.boundingBox();
   expect(resultBox).not.toBeNull();

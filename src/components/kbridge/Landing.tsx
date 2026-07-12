@@ -166,8 +166,8 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
                 onClick={() => onNavigate(f.action)}
               >
                 <CardHeader>
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                    <Icon className="h-5 w-5 text-primary" />
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-icon-accent/15">
+                    <Icon className="h-5 w-5 text-icon-accent" />
                   </div>
                   <CardTitle className="font-serif mt-2 text-lg">{f.title}</CardTitle>
                   <CardDescription className="text-sm leading-relaxed">{f.desc}</CardDescription>
