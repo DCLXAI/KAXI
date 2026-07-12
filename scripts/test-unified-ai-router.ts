@@ -60,6 +60,7 @@ const widget = readFileSync("src/components/typebot/TypebotBubble.tsx", "utf8");
 assert.doesNotMatch(landing, /onNavigate\("consult"\)/, "landing must expose one AI entry point");
 assert.match(landing, /<AgentExperience embedded \/>/, "home must embed the working unified AI experience");
 assert.match(landing, /id="kaxi-ai"/, "home AI must have its own layout section outside the hero");
+assert.match(landing, /kaxi-home-chat-launcher/, "home must keep a floating AI launcher");
 assert.doesNotMatch(landing, /ai_banner_title/, "home must not keep a separate promotional AI banner");
 assert.doesNotMatch(header, /publicHref\("consult"\)/, "header must expose one AI entry point");
 assert.match(agentHook, /\/api\/ai\/unified/, "the single AI screen must use the server-side router");
