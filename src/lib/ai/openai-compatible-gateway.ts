@@ -194,14 +194,16 @@ function textFromResponse(value: unknown): { text: string; model: string } {
   const message = asRecord(first?.message);
   const text = completionText(message?.content);
   const model = typeof payload?.model === "string" ? payload.model : getOpenAICompatibleModel();
+  const finishReason = typeof first?.finish_reason === "string" ? first.finish_reason : "unknown";
+  const reasoningLength = typeof message?.reasoning_content === "string"
+    ? message.reasoning_content.length
+    : 0;
+  if (finishReason === "length") {
+    throw new Error(
+      `Kimi API exhausted the output budget before completing the final answer${reasoningLength > 0 ? " after reasoning" : ""}`,
+    );
+  }
   if (!text) {
-    const finishReason = typeof first?.finish_reason === "string" ? first.finish_reason : "unknown";
-    const reasoningLength = typeof message?.reasoning_content === "string"
-      ? message.reasoning_content.length
-      : 0;
-    if (finishReason === "length" && reasoningLength > 0) {
-      throw new Error("Kimi API exhausted the output budget before returning a final answer");
-    }
     throw new Error(`Kimi API returned an empty completion (finish_reason=${finishReason})`);
   }
   return { text, model };

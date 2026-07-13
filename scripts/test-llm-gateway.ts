@@ -1,5 +1,6 @@
 import {
   generateLlmJson,
+  generateLlmText,
   getConfiguredLlmBackend,
   getLlmGatewayDiagnostics,
   isLlmNotConfiguredError,
@@ -156,6 +157,26 @@ try {
   if (!JSON.stringify(pdfCompletionBody).includes("Passport Number P1234567")) {
     fail("extracted PDF text was not forwarded to the structured completion");
   }
+
+  const truncatedFetch = async () => Response.json({
+    model: "kimi-k2.6-test",
+    choices: [{
+      finish_reason: "length",
+      message: { content: "This answer was cut off in the middle of a sent" },
+    }],
+  });
+  globalThis.fetch = Object.assign(truncatedFetch, { preconnect: originalFetch.preconnect });
+  let truncatedCompletionRejected = false;
+  try {
+    await generateLlmText({
+      feature: "agent",
+      maxTokens: 1200,
+      messages: [{ role: "user", content: "Return a complete answer." }],
+    });
+  } catch (error) {
+    truncatedCompletionRejected = error instanceof Error && error.message.includes("output budget");
+  }
+  if (!truncatedCompletionRejected) fail("Kimi length-truncated text must not be accepted as a complete answer");
 
   process.env.OPENAI_API_KEY = "";
   let missingKeyDetected = false;
