@@ -1045,8 +1045,8 @@ export function TypebotBubble() {
           return next;
         })}
         className={[
-          "group relative flex h-14 w-14 items-center justify-center rounded-full border border-white/30 bg-primary text-primary-foreground shadow-[0_12px_34px_rgba(201,100,66,0.28)] transition-all",
-          "hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-[0_16px_40px_rgba(201,100,66,0.34)]",
+          "group relative flex h-14 w-14 items-center justify-center rounded-full border border-white/30 bg-primary text-primary-foreground shadow-[0_12px_34px_rgba(113,139,255,0.28)] transition-all",
+          "hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-[0_16px_40px_rgba(113,139,255,0.34)]",
           "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/30",
         ].join(" ")}
       >
