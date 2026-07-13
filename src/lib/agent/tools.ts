@@ -351,7 +351,7 @@ const searchKnowledgeTool: Tool = {
     const docs = withImmigrationLegalBasisDocs(
       query,
       results.map((r) => r.doc),
-      { maxDocs: Math.max(requestedTopK, 5) }
+      { maxDocs: Math.max(requestedTopK, 5), minRetrievedDocs: 2 }
     );
     return {
       result: docs.map((doc) => ({

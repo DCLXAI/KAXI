@@ -6,6 +6,7 @@ import { prepareTestDb } from "./prepare-test-db";
 prepareTestDb("agent guards");
 
 const { runAgentPreflight } = await import("../src/lib/agent/preflight");
+const { runAgent } = await import("../src/lib/agent/agent");
 const { runFallbackAgent } = await import("../src/lib/agent/fallback");
 const { buildAgentMeta } = await import("../src/lib/agent/meta");
 const { analyzeAgentIntent } = await import("../src/lib/agent/planner");
@@ -352,6 +353,52 @@ async function testFallbackAnswerIncludesCitationMarkers() {
   }
 }
 
+async function testAgentEscalatesTransientLlmFailure() {
+  let thrownMessage = "";
+  try {
+    await runAgent(
+      "D-10 변경 요건을 알려줘",
+      "ko",
+      [],
+      { lang: "ko", leadId: "local-agent-guard" },
+      {
+        generateText: async () => {
+          throw new Error("simulated upstream timeout");
+        },
+      },
+    );
+  } catch (error) {
+    thrownMessage = error instanceof Error ? error.message : String(error);
+  }
+  if (!thrownMessage.includes("simulated upstream timeout")) {
+    fail(`transient LLM errors must reach the route fallback: ${thrownMessage || "not thrown"}`);
+  }
+}
+
+async function testD10KnowledgeKeepsQuestionSpecificDocuments() {
+  const snapshot = { ...process.env };
+  try {
+    process.env.AI_AGENT_USE_TRANSFORMER_RAG = "false";
+    const tool = TOOL_MAP.search_knowledge;
+    if (!tool) fail("search_knowledge tool missing");
+    const { result } = await tool.execute(
+      {
+        query: "D-10 구직 체류자격으로 변경할 때 핵심 요건과 제출 서류",
+        top_k: 4,
+      },
+      { lang: "ko", leadId: "local-agent-guard", dryRun: true },
+    );
+    const ids = Array.isArray(result)
+      ? result.flatMap((item) => isRecord(item) && typeof item.id === "string" ? [item.id] : [])
+      : [];
+    if (!ids.includes("d10-overview") || !ids.includes("study-in-korea-d10-change-documents")) {
+      fail(`D-10 agent retrieval lost question-specific documents: ${JSON.stringify(ids)}`);
+    }
+  } finally {
+    restoreEnv(snapshot);
+  }
+}
+
 async function testAgentStatusRoute() {
   const snapshot = { ...process.env };
   try {
@@ -670,6 +717,8 @@ await testPreflightUsesDiagnosisPlanner();
 await testPreflightCarriesPlannerContext();
 await testFallbackPartnerRequestStaysDraft();
 await testFallbackAnswerIncludesCitationMarkers();
+await testAgentEscalatesTransientLlmFailure();
+await testD10KnowledgeKeepsQuestionSpecificDocuments();
 await testAgentStatusRoute();
 await testClaudeMissingKeyFallsBackToTools();
 await testClaudeStrictModeBlocksWithoutKey();

@@ -4,7 +4,7 @@
 
 import { TOOL_MAP, getToolsDescription, parseToolCall, sanitizeToolArgsForDisplay, type ToolArgs, type ToolResult, type ToolContext } from "./tools";
 import type { Lang } from "../i18n/translations";
-import { LlmNotConfiguredError, generateLlmText, type LlmGatewayMessage } from "../ai/llm-gateway";
+import { generateLlmText, type LlmGatewayMessage } from "../ai/llm-gateway";
 
 export interface AgentStep {
   type: "thinking" | "tool_call" | "tool_result" | "final_answer" | "error";
@@ -20,6 +20,10 @@ export interface AgentResponse {
   toolResults: ToolResult[];
   iterations: number;
 }
+
+type AgentDependencies = {
+  generateText?: typeof generateLlmText;
+};
 
 const MAX_ITERATIONS = 5;
 
@@ -76,7 +80,8 @@ export async function runAgent(
   question: string,
   lang: Lang,
   history: { role: string; content: string }[],
-  ctx: ToolContext
+  ctx: ToolContext,
+  dependencies: AgentDependencies = {},
 ): Promise<AgentResponse> {
   const steps: AgentStep[] = [];
   const toolResults: ToolResult[] = [];
@@ -138,7 +143,7 @@ ${getToolsDescription()}
     iteration++;
 
     try {
-      const completion = await generateLlmText({
+      const completion = await (dependencies.generateText || generateLlmText)({
         feature: "agent",
         messages,
         temperature: 0.2,
@@ -216,11 +221,6 @@ ${getToolsDescription()}
       });
       break;
     } catch (e) {
-      if (e instanceof LlmNotConfiguredError) {
-        // 키/SDK 부재는 여기서 삼키지 않고 라우트의 deterministic tool
-        // fallback으로 승격시킨다.
-        throw e;
-      }
       console.error("[Agent iteration error]", e);
       const errMsg = errorMessage(e);
       steps.push({
@@ -228,10 +228,10 @@ ${getToolsDescription()}
         content: `LLM 오류: ${errMsg}`,
         timestamp: Date.now(),
       });
-      finalAnswer = lang === "ko"
-        ? "일시적 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
-        : "Temporary error. Please retry.";
-      break;
+      // Route-level recovery reruns the deterministic plan and tools. Returning
+      // a generic error here would incorrectly record the request as successful
+      // even when grounded tool results are already available.
+      throw e instanceof Error ? e : new Error(errMsg);
     }
   }
 
