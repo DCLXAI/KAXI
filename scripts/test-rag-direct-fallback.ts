@@ -713,6 +713,44 @@ const d10DocumentRow = {
     category: "documents",
   },
 };
+
+const mixedD10Input: DirectLexicalFallbackInput = {
+  ...wrongD10DocumentInput,
+  question: "D-10 구직 체류자격으로 변경할 때 핵심 요건과 서류를 공식 출처 기준으로 알려주세요.",
+  category: "visa",
+  mediation: {
+    ...mediatedD10,
+    category: "visa",
+    intents: ["eligibility", "required_documents", "status_change"],
+    answerFocus: "D-10 변경 신청의 핵심 요건과 제출 서류",
+  },
+};
+const d10EligibilityRow = {
+  ...validRow,
+  id: 24,
+  content: [
+    "## D-10 구직 체류자격 변경 요건",
+    "D-10 구직 체류자격 변경 대상은 국내 대학 졸업자 등 구직 활동 자격 요건을 충족하고 구직활동계획을 제출할 수 있는 사람입니다.",
+    "신청인의 현재 체류자격과 학력에 따라 추가 조건이 적용될 수 있습니다.",
+  ].join("\n"),
+  metadata: {
+    ...validRow.metadata,
+    doc_id: "VISA-D10-CHANGE-ELIGIBILITY",
+    title: "D-10 구직 체류자격 변경 요건",
+    category: "visa",
+  },
+};
+const mixedD10Response = buildDirectLexicalResponseFromRows(
+  [d10EligibilityRow, d10DocumentRow],
+  mixedD10Input,
+);
+const mixedD10SearchMeta = mixedD10Response.searchMeta as Record<string, unknown>;
+assert.equal(mixedD10SearchMeta.noContext, false);
+assert.equal(mixedD10SearchMeta.categoryMode, "strict");
+assert.equal(mixedD10SearchMeta.categoryScopeMode, "intent-aware-strict");
+assert.deepEqual(mixedD10SearchMeta.allowedCategories, ["visa", "legal", "process", "warning", "documents"]);
+assert.match(mixedD10Response.answer, /D-10/);
+
 const extractiveD10 = buildDirectLexicalResponseFromRows(
   [d10DocumentRow],
   wrongD10DocumentInput,

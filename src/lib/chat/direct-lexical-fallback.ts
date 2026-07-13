@@ -29,14 +29,14 @@ export type DirectRagRuntimePath = typeof DIRECT_LEXICAL_RUNTIME_PATH | typeof D
 
 export const DIRECT_LEXICAL_PROVENANCE = {
   workflowId: DIRECT_LEXICAL_RUNTIME_PATH,
-  workflowVersionId: "kaxi-direct-lexical@2026-07-14.p1-v3",
+  workflowVersionId: "kaxi-direct-lexical@2026-07-14.p2-v4",
   modelVersion: "retrieval/lexical-v2@2026-07-13",
   promptVersion: GROUNDED_RAG_PROMPT_VERSION,
 } satisfies RagProvenance;
 
 export const DIRECT_HYBRID_PROVENANCE = {
   workflowId: DIRECT_HYBRID_RUNTIME_PATH,
-  workflowVersionId: "kaxi-direct-hybrid@2026-07-14.p3-v3",
+  workflowVersionId: "kaxi-direct-hybrid@2026-07-14.p4-v4",
   modelVersion: "retrieval/hybrid-rrf-v3@2026-07-14",
   promptVersion: GROUNDED_RAG_PROMPT_VERSION,
 } satisfies RagProvenance;
@@ -408,11 +408,6 @@ function normalizeLocale(value: unknown): GuardrailLocale | null {
   return SUPPORTED_LOCALES.has(resolved as GuardrailLocale) ? resolved as GuardrailLocale : null;
 }
 
-function categoryAllowed(requested: ChatCategory, candidate: string) {
-  if (requested === "general") return true;
-  return CATEGORY_SCOPES[requested].includes(candidate.toLowerCase());
-}
-
 function tokenize(value: string) {
   return Array.from(new Set(
     (value.normalize("NFKC").toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}-]*/gu) || [])
@@ -452,6 +447,29 @@ function questionIntents(input: DirectLexicalFallbackInput) {
     if (fallbackIntent) intents.push(fallbackIntent);
   }
   return intents;
+}
+
+const VISA_SUPPORTING_INTENTS = new Set([
+  "deadline_or_timing",
+  "eligibility",
+  "refusal_or_reapplication",
+  "status_change",
+  "work_permission_or_hours",
+]);
+
+function answerableCategoryScopes(input: DirectLexicalFallbackInput) {
+  if (input.category === "general") return [];
+
+  const scopes = new Set(CATEGORY_SCOPES[input.category]);
+  const intentIds = new Set(questionIntents(input).map((intent) => intent.id));
+
+  // Keep category filtering strict while allowing only the supporting category
+  // explicitly required by a multi-intent question (for example D-10 eligibility + documents).
+  if (intentIds.has("required_documents")) scopes.add("documents");
+  if (intentIds.has("cost")) scopes.add("cost");
+  if ([...VISA_SUPPORTING_INTENTS].some((intent) => intentIds.has(intent))) scopes.add("visa");
+
+  return [...scopes];
 }
 
 function candidateSearchText(document: CandidateDocument) {
@@ -670,6 +688,7 @@ function rpcErrorMessage(error: unknown) {
 function parseCandidates(rows: unknown, input: DirectLexicalFallbackInput) {
   const rawRows = Array.isArray(rows) ? rows : [];
   const queryTokens = tokenize(input.retrievalQuery || input.question);
+  const allowedCategories = answerableCategoryScopes(input);
   let citationRejectedCount = 0;
   let languageRejectedCount = 0;
   let categoryRejectedCount = 0;
@@ -691,7 +710,7 @@ function parseCandidates(rows: unknown, input: DirectLexicalFallbackInput) {
       return;
     }
     const candidateCategory = firstText(metadata.category, "general").toLowerCase();
-    if (!categoryAllowed(input.category, candidateCategory)) {
+    if (input.category !== "general" && !allowedCategories.includes(candidateCategory)) {
       categoryRejectedCount += 1;
       return;
     }
@@ -947,10 +966,12 @@ export function buildDirectLexicalResponseFromRows(
     vectorSeedCount: numberOrNull(firstMetadata.vector_seed_count) ?? 0,
     category: input.category,
     categoryMode: "strict",
+    categoryScopeMode: "intent-aware-strict",
+    allowedCategories: answerableCategoryScopes(input),
     tenant_id: input.tenantId,
     locale: input.locale,
     similarityThreshold: "category-default",
-    reranker: "deterministic-locale-intent-v3",
+    reranker: "deterministic-locale-intent-v4",
     reranked: true,
     retrievedCount: hasContext ? selection.documents.length : 0,
     validatedCandidateCount: parsed.documents.length,
