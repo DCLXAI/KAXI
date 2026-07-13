@@ -41,6 +41,28 @@ export function extractRagProvenance(value: unknown): RagProvenance | null {
   return { workflowId, workflowVersionId, modelVersion, promptVersion };
 }
 
+export function summarizeRagProvenance(
+  values: unknown[],
+  fallback: RagProvenance = DEFAULT_RAG_PROVENANCE,
+) {
+  const counts = new Map<string, { provenance: RagProvenance; count: number }>();
+  for (const value of values) {
+    const provenance = extractRagProvenance(value);
+    if (!provenance) continue;
+    const key = JSON.stringify(provenance);
+    const existing = counts.get(key);
+    if (existing) existing.count += 1;
+    else counts.set(key, { provenance, count: 1 });
+  }
+
+  const observed = [...counts.values()].sort((left, right) => right.count - left.count);
+  return {
+    effective: observed.length === 1 ? observed[0].provenance : fallback,
+    observed,
+    mixed: observed.length > 1,
+  };
+}
+
 export function resolveRagProvenance(
   value?: unknown,
   env: NodeJS.ProcessEnv = process.env,

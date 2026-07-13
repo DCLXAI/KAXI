@@ -7,7 +7,11 @@ import {
 } from "../src/lib/chat/direct-lexical-fallback";
 import { inferChatCategory } from "../src/lib/chat/category";
 import { createRagQueryEmbedding } from "../src/lib/chat/query-embedding";
-import { extractRagProvenance, resolveRagProvenance } from "../src/lib/n8n/provenance";
+import {
+  extractRagProvenance,
+  resolveRagProvenance,
+  summarizeRagProvenance,
+} from "../src/lib/n8n/provenance";
 import { signN8nPayload } from "../src/lib/n8n/signature";
 
 type EvaluationCase = {
@@ -680,6 +684,8 @@ const distribution = (field: string) => Object.fromEntries(
 );
 const runtimePathDistribution = distribution("runtimePath");
 const retrievalPathDistribution = distribution("retrievalRuntimePath");
+const provenanceSummary = summarizeRagProvenance(responseSnapshots, expectedProvenance);
+const runProvenance = provenanceSummary.effective;
 const shadowExpectedCases = cases.filter((item) => item.expected_doc_ids.length > 0);
 const shadowPairs = shadowExpectedCases.flatMap((testCase) => {
   const resultIndex = results.findIndex((result) => result.case_id === testCase.id);
@@ -746,6 +752,10 @@ const qualityPassed = passRate >= 0.95
 const completed = await supabase.from("rag_evaluation_runs").update({
   status: qualityPassed ? "passed" : "failed",
   passed_count: passedCount,
+  workflow_id: runProvenance.workflowId,
+  workflow_version_id: runProvenance.workflowVersionId,
+  model_version: runProvenance.modelVersion,
+  prompt_version: runProvenance.promptVersion,
   metrics: {
     passRate,
     citationCoverage: citedCaseCount / cases.length,
@@ -769,7 +779,10 @@ const completed = await supabase.from("rag_evaluation_runs").update({
     retrievalPathDistribution,
     shadow: shadowMetrics,
     caseIdFilter: caseIdFilter || null,
-    provenance: expectedProvenance,
+    provenance: runProvenance,
+    configuredProvenance: expectedProvenance,
+    observedProvenance: provenanceSummary.observed,
+    mixedProvenance: provenanceSummary.mixed,
   },
   completed_at: new Date().toISOString(),
 }).eq("id", runId);

@@ -17,6 +17,7 @@ import {
   extractRagProvenance,
   ragProvenanceHeaders,
   resolveRagProvenance,
+  summarizeRagProvenance,
 } from "../src/lib/n8n/provenance";
 import {
   isTypebotGatewayAuthConfigured,
@@ -46,6 +47,24 @@ const explicitProvenance = resolveRagProvenance({
 }, {} as NodeJS.ProcessEnv);
 assert.deepEqual(extractRagProvenance(explicitProvenance), explicitProvenance);
 assert.equal(extractRagProvenance({ workflowId: "workflow-test" }), null);
+const observedProvenance = {
+  workflowId: "workflow-live",
+  workflowVersionId: "workflow-live@v3",
+  modelVersion: "retrieval-live@v3",
+  promptVersion: "prompt-live@v2",
+};
+assert.deepEqual(
+  summarizeRagProvenance([observedProvenance, observedProvenance], explicitProvenance),
+  {
+    effective: observedProvenance,
+    observed: [{ provenance: observedProvenance, count: 2 }],
+    mixed: false,
+  },
+);
+assert.deepEqual(
+  summarizeRagProvenance([observedProvenance, explicitProvenance], explicitProvenance).effective,
+  explicitProvenance,
+);
 assert.equal(ragProvenanceHeaders(explicitProvenance)["x-kaxi-workflow-version-id"], "workflow-version-test");
 
 const now = Date.UTC(2026, 6, 10, 0, 0, 0);
