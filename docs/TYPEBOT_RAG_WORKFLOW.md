@@ -3,12 +3,12 @@
 Typebot never receives Supabase, OpenAI, or n8n signing secrets. The production request path is:
 
 ```txt
-Typebot -> KAXI API -> signed n8n webhook -> governed Supabase RAG serving
+Typebot -> KAXI API -> signed n8n webhook -> KAXI RAG core -> governed Supabase RAG serving
 ```
 
-KAXI owns request validation, UUID/idempotency normalization, HMAC signing, canonical chat/retrieval persistence, encrypted handoff-task creation, attachment ownership, and the handoff token. n8n owns retrieval, grounded answer construction, risk classification, and metadata-only execution telemetry.
+KAXI owns request validation, UUID/idempotency normalization, HMAC signing, canonical chat/retrieval persistence, encrypted handoff-task creation, attachment ownership, retrieval, confidence policy, grounded answer construction, and risk classification. n8n verifies the signed request, obtains a short-lived payload-bound verification receipt, invokes the KAXI RAG core, and returns the response. Supabase owns the governed corpus and lexical/vector search functions.
 
-Active n8n production version: `681ce8dd-5e00-4c9d-8f1a-896940e394d9` (42 nodes). Its immutable response contract uses semantic workflow release ID `kaxi-rag-runtime@2026-07-12.lexical-fallback-v2`. Runtime retrieval uses the governed `match_rag_documents_lexical` RPC, so serving no longer depends on n8n Connect credits; existing embeddings remain part of the approved corpus and ingestion contract. The active release passed 64/64 multilingual regression cases, including strict school retrieval in all four locales.
+The Promete workflow ID is `rB3nfjvCyTODP803`. The target semantic release is `kaxi-rag-runtime@2026-07-13.hybrid-orchestrator-v1`, using capability contract `2026-07-13.v2`. KAXI retrieves 20 lexical and, when a query embedding is available, 20 vector candidates; Reciprocal Rank Fusion selects the final six. An embedding outage degrades to lexical-only retrieval. An n8n transport, quota, timeout, or response-contract failure falls back to the same KAXI/Supabase policy with `runtimePath=kaxi-direct-lexical` or `kaxi-direct-hybrid`. Only a simultaneous n8n and Supabase failure returns the user-facing service failure.
 
 ## Typebot Runtime Request
 
@@ -90,10 +90,10 @@ The Typebot flow uses these exact mapping expressions. A typical response is:
   },
   "requestId": "uuid",
   "executionId": "n8n-execution-id",
-  "workflowId": "EqX3C5c2WNWoKkSR",
-  "workflowVersionId": "kaxi-rag-runtime@2026-07-12.lexical-fallback-v2",
-  "modelVersion": "retrieval/lexical-provider-fallback@v1",
-  "promptVersion": "kaxi-grounded-context-answer@2026-07-12.lexical-fallback-v2",
+  "workflowId": "rB3nfjvCyTODP803",
+  "workflowVersionId": "kaxi-rag-runtime@2026-07-13.hybrid-orchestrator-v1",
+  "modelVersion": "retrieval/hybrid-rrf-v2@2026-07-13",
+  "promptVersion": "kaxi-grounded-extractive@2026-07-13.p0-v1",
   "handoffToken": "short-lived-signed-token",
   "persisted": true,
   "messageId": "123",
@@ -189,25 +189,26 @@ The three POST webhooks require KAXI HMAC verification. The capability endpoint 
 ```json
 {
   "service": "kaxi-rag-serving",
-  "contractVersion": "2026-07-10.v1",
+  "contractVersion": "2026-07-13.v2",
   "ingestionTarget": "rag_serving_chunks",
+  "retrievalMode": "hybrid-rrf-v2-with-lexical-fallback",
+  "lexicalCandidateCount": 20,
+  "vectorCandidateCount": 20,
+  "finalMatchCount": 6,
   "embeddingModel": "text-embedding-3-small",
   "dimensions": 1536,
+  "queryEmbeddingOptional": true,
   "signedIngestionRequired": true
 }
 ```
 
-`Build Context` accepts only citation-valid HTTPS sources with `checkedAt` and `checkedBy`. It validates `metadata.language`, `locale_filter`, the localized Markdown heading, and body script against the requested locale. Mismatched documents are rejected; if every citation-valid result is rejected, the workflow emits `noContextReason=locale_validation_failed` instead of leaking another language. Document titles come only from a heading that passes the locale check, otherwise a locale-specific neutral title is used.
+The active runtime graph is intentionally small: `Typebot Runtime Webhook -> Verify Runtime Signature -> Input Guard -> Run KAXI RAG Core -> Respond to Typebot`. The verifier returns a short-lived HMAC receipt bound to the exact request payload; the RAG core rejects expired, reused-purpose, or payload-tampered receipts. n8n does not duplicate category inference, query expansion, reranking, confidence, answer, or risk logic.
 
-The same node applies deterministic reranker `deterministic-locale-v2` before context construction. It combines the governed hybrid score with question/body token overlap, title overlap, strict category fit, keyword score, and citation validity, then deduplicates and keeps at most six documents. Returned sources include `language`, `rerankScore`, `originalRank`, and `titleSanitized`; `searchMeta` exposes `rawRetrievedCount`, `languageRejectedCount`, and `titleSanitizedCount`. This reranker adds no external LLM call or provider dependency.
+KAXI calls `match_rag_documents_lexical_v2` and optionally `match_rag_documents_hybrid_v2`. Retrieval always passes a strict locale and category scope. Each candidate must have a citation-valid HTTPS source, `checkedAt`, `checkedBy`, and locale-consistent title/body. Locale mismatch, category mismatch, weak token coverage, or an insufficient top-score margin produces bounded `noContext` rather than borrowing another language or category.
 
-Production regression `ko-cost-strict-locale` replays the exact cost question that previously returned visa documents and mixed-language headings. It requires `cost-breakdown` as the top document, `deterministic-locale-v2` metadata, at least two expected cost terms, and rejects the three incident document IDs and answer fragments. Run only this incident with `RAG_EVAL_CASE_ID=ko-cost-strict-locale bun run rag:evaluation:run`.
+The lexical rank combines normalized query aliases, title/doc ID/keyword/body weights, trigram similarity, exact match, source authority, freshness, and operational intent hints. Hybrid mode retrieves 20 lexical and 20 vector candidates and uses RRF to select six. Query embeddings use a dedicated optional `OPENAI_EMBEDDING_API_KEY`; missing or failed embeddings keep lexical retrieval available and are recorded in `searchMeta.embeddingStatus`.
 
-No-context and citation-validation failures produce a bounded answer and a review handoff. A generic information question remains low risk; personal regulated actions, low-confidence personal cases, and high-consequence immigration/legal questions are classified separately.
-
-`Search Governed Serving Chunks Lexical` must pass `locale`, `category_mode=strict`, and the bounded multilingual `query_text` to `match_rag_documents_lexical`. The RPC projects only the requested `ko`, `en`, `vi`, or `mn` Markdown sections from a canonical multilingual chunk. Its strict category scopes are `cost -> cost`, `visa -> visa/legal/process/warning`, `documents -> documents/legal/process/warning`, and `school -> school/documents/process`. If no eligible category or locale section remains, the RPC returns zero rows and the workflow routes to `Fallback No Context Answer`; it never reuses context from another category or language.
-
-The active workflow preserves canonical `docId` in every returned citation, expands Korean/English/Vietnamese/Mongolian retrieval queries with bounded canonical hints, and treats forged-document expressions in all four languages as high risk. Operational evaluation run `2951b9be-e4af-489b-b6ae-8253afd369c7` passed 64/64 cases with 100% expected-document recall, citation validity, strict category, locale/rerank consistency, high-risk recall, and no-context accuracy. Intentional no-context cases correctly returned no citations; citation-bearing answers had complete valid citations. Measured latency was p50 1301ms and p95 1823ms.
+Run the staged suite with `bun run rag:evaluation:staged`. It executes 8 smoke, 16 locale, and 64 full cases. Each result records `runtimePath`, `retrievalRuntimePath`, fallback reason, embedding status, workflow/model/prompt provenance, persistence status, and citation IDs. Set `RAG_EVAL_SHADOW=true` only when the query-embedding credential is configured to compare lexical, vector-only, and hybrid candidate sets.
 
 ## Release Order
 
@@ -217,13 +218,13 @@ Do not change this order:
 2. Configure KAXI production secrets and webhook URLs.
 3. Deploy KAXI and verify `/api/internal/n8n/verify` exists.
 4. Publish the validated n8n draft and confirm the capability endpoint.
-5. Run `bun run rag:serving:sync --execute --confirm-contract 2026-07-10.v1` until 201/201 eligible chunks are ready.
+5. Run `bun run rag:serving:sync --execute --confirm-contract 2026-07-13.v2` until all eligible chunks are ready.
 6. Run the RAG evaluation suite and require at least 95% overall, 90% in every locale/category, 95% expected-document recall and no-context accuracy, 100% citation validity/strict category/locale-rerank/high-risk checks, and p95 latency at or below 10 seconds. Gateway-mode evaluation must omit an explicit category so KAXI's multilingual intent classifier is exercised.
 7. Run `bun run rag:serving:cutover --execute --confirm CUTOVER_LEGACY_RAG --expected-ready 201`.
 8. Publish the Typebot draft.
 9. Test Typebot -> KAXI -> n8n -> Supabase, including no-context and handoff branches.
 
-Current status: steps 1-8 are complete. Step 7 quarantined and removed all 100 legacy `knowledge_chunks` rows at 201/201 readiness. The normal-answer, high-risk, privacy-consent, and handoff portions of step 9 passed against the published bot; no-context and retry channel probes remain part of the next observation run after n8n credits recover.
+Current status: the Supabase migrations, direct fallback, thin n8n graph, and staged evaluation code are complete locally. The forced-n8n-outage full gateway suite passed 64/64 with canonical persistence after the digest search-path fix. The Promete workflow still must be published with contract `2026-07-13.v2`, followed by production Typebot -> KAXI -> n8n -> Supabase normal, no-context, and handoff probes. Vector/hybrid shadow comparison additionally requires the optional query-embedding credential.
 
 The sync command refuses to write unless the active n8n capability contract matches. The cutover command refuses to remove legacy rows until every eligible chunk has a ready 1536-dimensional embedding and citation metadata.
 
@@ -242,6 +243,6 @@ The sync command refuses to write unless the active n8n capability contract matc
 - Database migration `20260710180000_n8n_audit_metadata_only` enforces that boundary even if a stale workflow attempts to write raw conversation content.
 - Attachment buckets are private and attachment ownership is verified with the signed KAXI session cookie.
 - Typebot was published only after the KAXI and n8n production contracts were live.
-- The runtime vector-search node sends an explicit locale and strict category mode; an empty strict result terminates in the no-context branch.
+- The KAXI RAG core sends an explicit locale and strict category mode to lexical and optional vector retrieval; an empty or low-confidence strict result terminates in the no-context branch.
 - KAXI, n8n, and Typebot are live; the explicitly approved legacy cutover completed with 100 rows retained in server-only quarantine and zero rows left in `knowledge_chunks`.
 - Daily privacy retention deletes Typebot Results older than seven days through a dedicated provider API token; the token is never exposed to the browser or Typebot flow.

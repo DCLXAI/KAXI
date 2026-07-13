@@ -1,15 +1,15 @@
 # KAXI RAG System Audit and Delivery Plan
 
-Checked: 2026-07-12 (Asia/Seoul)
+Checked: 2026-07-13 (Asia/Seoul)
 
 ## 1. Executive Status
 
-KAXI remains the public security and persistence boundary, n8n owns retrieval/orchestration, Supabase owns canonical state and governed serving data, and the published Typebot is an alternate conversation channel. Runtime retrieval now uses a provider-independent lexical RPC with strict category and locale projection while preserving the approved embedded corpus. The active release passed all 60 multilingual evaluation cases, a real Typebot -> KAXI -> n8n -> Supabase turn, and a fully healthy operations check.
+KAXI remains the public security, retrieval-policy, answer, and persistence boundary. n8n is being reduced to signed verification, orchestration, and response return; Supabase owns canonical state and governed lexical/vector serving data, and Typebot remains an alternate conversation channel. The new local release passes the 64-case gateway suite during a forced n8n outage, including canonical persistence. Promete publication and post-deploy Typebot -> KAXI -> n8n -> Supabase verification remain release gates.
 
 | Area | Local/draft state | Live state | Release status |
 | --- | --- | --- | --- |
 | KAXI app | Full TypeScript, cutover, readiness, lint, and production builds pass | `https://kaxi.vercel.app` is `Ready` at commit `78b0396` | released |
-| n8n main workflow | 42-node workflow with shared Error Workflow, verifier-first webhooks, and provider-independent runtime retrieval | active version `681ce8dd-5e00-4c9d-8f1a-896940e394d9`; semantic release `kaxi-rag-runtime@2026-07-12.lexical-fallback-v2` | published; runtime and provenance verified |
+| n8n main workflow | thin signed orchestrator targeting workflow `rB3nfjvCyTODP803`; capability contract `2026-07-13.v2` | previous Promete release remains live until the new draft is published | publication and production E2E pending |
 | Typebot | `data.*` response mappings, stable Result ID session, and matching server-side gateway headers | published as `kaxi-rag-typebot`; normal, high-risk, consent, and handoff E2E pass | released; continue synthetic observation |
 | Supabase canonical corpus | 94 eligible documents, 201 eligible chunks, 201 citation-ready | migration ledger is current through `20260712193000_rag_lexical_provider_fallback` | released |
 | governed serving projection | pgvector corpus plus strict lexical runtime fallback | 201/201 ready, 0 pending, 0 quarantined; operational evaluation 64/64 | released |
@@ -50,7 +50,7 @@ KAXI remains the public security and persistence boundary, n8n owns retrieval/or
 - Vercel production at commit `78b0396` is `Ready`, includes the lexical fallback schema/provenance contract, and retains the verifier/readiness/session-history routes.
 - Production session endpoints use the managed PostgreSQL-backed shared rate limiter and keep session responses `private, no-store` with `Vary: Cookie`.
 - Production readiness confirms the managed database, latest migration, gateway signing, Typebot gateway authentication, private attachment storage, privacy controls, school metadata, and shared rate limiting. Managed provider availability and OCR failover remain independently monitored operational dependencies.
-- Active n8n version `681ce8dd-5e00-4c9d-8f1a-896940e394d9` preserves verifier-first runtime, ingestion, and handoff paths; carries canonical `docId` through citations; uses strict provider-independent lexical retrieval for the answer path; and emits executable provenance JSON on every response branch.
+- Target n8n release `kaxi-rag-runtime@2026-07-13.hybrid-orchestrator-v1` preserves verifier-first runtime, ingestion, and handoff paths while moving retrieval and policy decisions into KAXI/SQL. Every response branch emits executable workflow/model/prompt provenance.
 - The serving projection is 201/201 ready with zero pending or quarantined chunks. Evaluation run `2951b9be-e4af-489b-b6ae-8253afd369c7` passed 64/64 cases with 100% document recall, citation validity, strict category, locale/rerank consistency, high-risk recall, and no-context accuracy across Korean, English, Vietnamese, and Mongolian; p95 latency was 1823ms.
 - Published Typebot normal and high-risk turns returned the real `block_answer`, persisted Typebot sessions, and routed high risk through privacy consent. The completed consent flow created and linked the lead, encrypted contact, handoff task/update, and versioned consent evidence.
 - System-health run `a0a3e18b-d552-4d8b-b2fe-8fceb16c1db8` recorded `healthy`: Supabase, private storage, signed n8n runtime, published Typebot, result retention, serving projection, operations events, and the attachment queue all passed.
@@ -87,7 +87,7 @@ KAXI remains the public security and persistence boundary, n8n owns retrieval/or
 | visa document matrix | pass | 50/50 rows seeded idempotently with all 50 validation-rule rows and D-2, D-4, D-10, E-7, F-2, and F-5 coverage |
 | corpus policy regression | pass | strict default official-source floor still rejects internal-only capacity; explicitly reviewed mixed floors pass without weakening URL, freshness, or vector-presence checks |
 | n8n OAuth callback | pass, management only | the browser approval callback authorized the Codex n8n MCP connection; it is separate from KAXI HMAC runtime authorization and does not activate draft workflows |
-| n8n workflow invariant | pass, published | active/current version `681ce8dd-5e00-4c9d-8f1a-896940e394d9` has 42 nodes, verifier-first webhook edges, executable response provenance, no placeholder secret, canonical citations, and multilingual risk/query handling |
+| n8n workflow invariant | pass locally; publish pending | target workflow `rB3nfjvCyTODP803` has verifier-first webhook edges, a payload-bound verification receipt, executable response provenance, and no duplicate retrieval/classification code |
 | Typebot session/handoff contract | pass, published | the Result ID variable produces `typebot-{{sessionId}}`, handoff reuses that session plus `handoffToken`, both server-side HTTP Request blocks authenticate, and live consent/handoff persistence passes |
 
 ## 4. Target Runtime Contract

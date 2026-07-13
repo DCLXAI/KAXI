@@ -5,8 +5,19 @@ import { persistCanonicalHandoffTask, persistChatExchange } from "@/lib/chat/per
 import { CHAT_SESSION_COOKIE, verifyChatSessionToken } from "@/lib/chat/session-token";
 import { getReadyChatAttachmentsForRuntime } from "@/lib/chat/attachment-processing";
 import { inferChatCategory } from "@/lib/chat/category";
+import {
+  DIRECT_LEXICAL_PROVENANCE,
+  DIRECT_LEXICAL_RUNTIME_PATH,
+  DIRECT_HYBRID_RUNTIME_PATH,
+  runDirectRagFallback,
+  shouldUseDirectLexicalFallback,
+  type DirectLexicalResponse,
+} from "@/lib/chat/direct-lexical-fallback";
 import { createChatRequestIdentity } from "@/lib/chat/request-identity";
-import { applyChatResponseGuardrail } from "@/lib/chat/response-guardrail";
+import {
+  applyChatResponseGuardrail,
+  type GuardrailLocale,
+} from "@/lib/chat/response-guardrail";
 import {
   ragProvenanceHeaders,
   resolveRagProvenance,
@@ -16,7 +27,7 @@ import { createTypebotHandoffToken, signN8nPayload } from "@/lib/n8n/signature";
 import { recordOpsEvent } from "@/lib/ops/events";
 import { verifyTypebotGatewayHeaders } from "@/lib/typebot/gateway-auth";
 
-const SUPPORTED_LOCALES = new Set(["ko", "en", "vi", "mn"]);
+const SUPPORTED_LOCALES = new Set<GuardrailLocale>(["ko", "en", "vi", "mn"]);
 
 type ChatAttachment = {
   id?: unknown;
@@ -33,9 +44,9 @@ function normalizeText(value: unknown, maxLength: number) {
   return value.trim().slice(0, maxLength);
 }
 
-function normalizeLocale(value: unknown) {
+function normalizeLocale(value: unknown): GuardrailLocale {
   if (typeof value !== "string") return "ko";
-  return SUPPORTED_LOCALES.has(value) ? value : "ko";
+  return SUPPORTED_LOCALES.has(value as GuardrailLocale) ? value as GuardrailLocale : "ko";
 }
 
 function normalizeSource(value: unknown) {
@@ -66,6 +77,13 @@ function normalizeN8nPayload(payload: unknown) {
   const data = payload as Record<string, unknown>;
   const nested = data.data && typeof data.data === "object" ? (data.data as Record<string, unknown>) : data;
 
+  const runtimePath = typeof nested.runtimePath === "string" && nested.runtimePath.trim()
+    ? nested.runtimePath.trim().slice(0, 80)
+    : "n8n-workflow";
+  const searchMeta = nested.searchMeta && typeof nested.searchMeta === "object" && !Array.isArray(nested.searchMeta)
+    ? { ...(nested.searchMeta as Record<string, unknown>), runtimePath }
+    : { runtimePath };
+
   return {
     answer: typeof nested.answer === "string" ? nested.answer : undefined,
     nextStep: typeof nested.nextStep === "string" ? nested.nextStep : undefined,
@@ -73,12 +91,13 @@ function normalizeN8nPayload(payload: unknown) {
     riskLevel: nested.riskLevel,
     leadStage: nested.leadStage,
     sources: nested.sources,
-    searchMeta: nested.searchMeta,
+    searchMeta,
     executionId: typeof nested.executionId === "string" ? nested.executionId : undefined,
     workflowId: typeof nested.workflowId === "string" ? nested.workflowId : undefined,
     workflowVersionId: typeof nested.workflowVersionId === "string" ? nested.workflowVersionId : undefined,
     modelVersion: typeof nested.modelVersion === "string" ? nested.modelVersion : undefined,
     promptVersion: typeof nested.promptVersion === "string" ? nested.promptVersion : undefined,
+    runtimePath,
   };
 }
 
@@ -113,6 +132,126 @@ function normalizeBoolean(value: unknown) {
   if (typeof value === "boolean") return value;
   if (typeof value === "string") return value.toLowerCase() === "true";
   return false;
+}
+
+function n8nRuntimeTimeoutMs() {
+  const configured = Number(process.env.N8N_RAG_TIMEOUT_MS);
+  if (!Number.isFinite(configured)) return 15_000;
+  return Math.min(Math.max(Math.trunc(configured), 1_000), 45_000);
+}
+
+function runtimeErrorReason(error: unknown) {
+  if (error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError")) {
+    return "n8n_timeout";
+  }
+  if (error instanceof Error && error.message === "N8N_WEBHOOK_NOT_CONFIGURED") {
+    return "n8n_not_configured";
+  }
+  return "n8n_unavailable";
+}
+
+type N8nRuntimeFailure = {
+  ok: false;
+  fallbackReason: string;
+  provenance: RagProvenance;
+  executionId?: string;
+  httpStatus?: number;
+};
+
+type N8nRuntimeSuccess = {
+  ok: true;
+  payload: ReturnType<typeof normalizeN8nPayload>;
+  provenance: RagProvenance;
+};
+
+export async function requestN8nRuntime(
+  request: Record<string, unknown>,
+): Promise<N8nRuntimeSuccess | N8nRuntimeFailure> {
+  let signed: ReturnType<typeof signN8nPayload>;
+  try {
+    signed = signN8nPayload("typebot-runtime", request);
+  } catch (error) {
+    const fallbackReason = runtimeErrorReason(error);
+    if (!shouldUseDirectLexicalFallback({ configurationError: true })) throw error;
+    return { ok: false, fallbackReason, provenance: resolveRagProvenance() };
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(signed.url, {
+      method: "POST",
+      headers: signed.headers,
+      body: signed.body,
+      signal: AbortSignal.timeout(n8nRuntimeTimeoutMs()),
+    });
+  } catch (error) {
+    const fallbackReason = runtimeErrorReason(error);
+    if (!shouldUseDirectLexicalFallback({ transportError: error })) throw error;
+    return { ok: false, fallbackReason, provenance: resolveRagProvenance() };
+  }
+
+  let rawText = "";
+  try {
+    rawText = await response.text();
+  } catch (error) {
+    return {
+      ok: false,
+      fallbackReason: runtimeErrorReason(error),
+      provenance: resolveRagProvenance(),
+      httpStatus: response.status,
+    };
+  }
+
+  let parsedPayload: unknown = {};
+  let invalidJson = false;
+  if (rawText.trim()) {
+    try {
+      parsedPayload = JSON.parse(rawText);
+    } catch {
+      invalidJson = true;
+    }
+  }
+  const normalized = normalizeN8nPayload(parsedPayload);
+  const provenance = resolveRagProvenance(normalized);
+
+  if (!response.ok && shouldUseDirectLexicalFallback({ status: response.status })) {
+    return {
+      ok: false,
+      fallbackReason: `n8n_http_${response.status}`,
+      provenance,
+      executionId: normalized.executionId,
+      httpStatus: response.status,
+    };
+  }
+  if (!rawText.trim() && shouldUseDirectLexicalFallback({ emptyResponse: true })) {
+    return {
+      ok: false,
+      fallbackReason: "n8n_empty_response",
+      provenance,
+      executionId: normalized.executionId,
+      httpStatus: response.status,
+    };
+  }
+  if (invalidJson && shouldUseDirectLexicalFallback({ invalidResponse: true })) {
+    return {
+      ok: false,
+      fallbackReason: "n8n_invalid_json",
+      provenance,
+      executionId: normalized.executionId,
+      httpStatus: response.status,
+    };
+  }
+  if (!normalized.answer?.trim() && shouldUseDirectLexicalFallback({ invalidResponse: true })) {
+    return {
+      ok: false,
+      fallbackReason: "n8n_invalid_response",
+      provenance,
+      executionId: normalized.executionId,
+      httpStatus: response.status,
+    };
+  }
+
+  return { ok: true, payload: normalized, provenance };
 }
 
 export async function POST(req: NextRequest) {
@@ -203,17 +342,18 @@ export async function POST(req: NextRequest) {
       }
     };
 
-    const reportOpsFailure = (
+    const reportOpsEventAsync = (
       eventType: string,
       message: string,
       provenance: RagProvenance,
       executionId?: string,
       payload: Record<string, unknown> = {},
+      severity: "warning" | "error" = "error",
     ) => {
       after(async () => {
         await recordOpsEvent({
           source: "kaxi-typebot-gateway",
-          severity: "error",
+          severity,
           eventType,
           message,
           workflowId: provenance.workflowId,
@@ -234,62 +374,67 @@ export async function POST(req: NextRequest) {
       });
     };
 
-    const signed = signN8nPayload("typebot-runtime", n8nRequest);
-    let response: Response;
-    try {
-      response = await fetch(signed.url, {
-        method: "POST",
-        headers: signed.headers,
-        body: signed.body,
-        signal: AbortSignal.timeout(45_000),
-      });
-    } catch (error) {
-      console.error("[POST /api/typebot-rag] n8n unavailable", error);
-      const provenance = resolveRagProvenance();
-      await persistFailure("n8n_unavailable", provenance);
-      reportOpsFailure(
-        "n8n_runtime_unavailable",
-        "KAXI could not reach the n8n RAG runtime.",
-        provenance,
-      );
-      return ragJson({ error: "n8n request failed" }, { status: 502 }, provenance);
-    }
+    const n8nAttempt = await requestN8nRuntime(n8nRequest);
+    let upstreamPayload: ReturnType<typeof normalizeN8nPayload> | DirectLexicalResponse;
+    let provenance: RagProvenance;
 
-    const rawText = await response.text();
-    let payload: unknown = {};
-    if (rawText) {
+    if (n8nAttempt.ok) {
+      upstreamPayload = n8nAttempt.payload;
+      provenance = n8nAttempt.provenance;
+    } else {
+      console.warn("[POST /api/typebot-rag] using direct lexical fallback", {
+        reason: n8nAttempt.fallbackReason,
+        httpStatus: n8nAttempt.httpStatus,
+      });
       try {
-        payload = JSON.parse(rawText);
-      } catch {
-        payload = { answer: rawText };
+        upstreamPayload = await runDirectRagFallback({
+          question,
+          category,
+          locale,
+          tenantId: "default",
+          requestId: identity.requestId,
+          fallbackReason: n8nAttempt.fallbackReason,
+          attachmentCount: verifiedAttachments.length,
+        });
+        provenance = resolveRagProvenance(upstreamPayload);
+        reportOpsEventAsync(
+          "n8n_runtime_fallback_succeeded",
+          "KAXI served the request through its direct Supabase RAG fallback.",
+          provenance,
+          upstreamPayload.executionId,
+          {
+            runtimePath: upstreamPayload.runtimePath,
+            fallbackReason: n8nAttempt.fallbackReason,
+            n8nHttpStatus: n8nAttempt.httpStatus,
+            n8nWorkflowId: n8nAttempt.provenance.workflowId,
+          },
+          "warning",
+        );
+      } catch (fallbackError) {
+        console.error("[POST /api/typebot-rag] direct lexical fallback failed", fallbackError);
+        const directExecutionId = `direct-${identity.requestId}`;
+        await persistFailure("rag_runtime_unavailable", DIRECT_LEXICAL_PROVENANCE, directExecutionId);
+        reportOpsEventAsync(
+          "rag_runtime_unavailable",
+          "Both the n8n runtime and KAXI direct Supabase fallback failed.",
+          DIRECT_LEXICAL_PROVENANCE,
+          directExecutionId,
+          {
+            runtimePath: "unavailable",
+            attemptedRuntimePaths: ["n8n-workflow", DIRECT_HYBRID_RUNTIME_PATH, DIRECT_LEXICAL_RUNTIME_PATH],
+            fallbackReason: n8nAttempt.fallbackReason,
+            n8nHttpStatus: n8nAttempt.httpStatus,
+            directError: fallbackError instanceof Error ? fallbackError.message.slice(0, 240) : "unknown",
+          },
+        );
+        return ragJson({
+          error: "RAG runtime unavailable",
+          runtimePath: "unavailable",
+          attemptedRuntimePaths: ["n8n-workflow", DIRECT_HYBRID_RUNTIME_PATH, DIRECT_LEXICAL_RUNTIME_PATH],
+        }, { status: 502 }, DIRECT_LEXICAL_PROVENANCE);
       }
     }
 
-    const upstreamPayload = normalizeN8nPayload(payload);
-    const provenance = resolveRagProvenance(upstreamPayload);
-    if (!response.ok) {
-      console.error("[POST /api/typebot-rag] n8n error", response.status, rawText);
-      await persistFailure(`n8n_http_${response.status}`, provenance, upstreamPayload.executionId);
-      reportOpsFailure(
-        "n8n_runtime_http_error",
-        `The n8n RAG runtime returned HTTP ${response.status}.`,
-        provenance,
-        upstreamPayload.executionId,
-        { httpStatus: response.status },
-      );
-      return ragJson({ error: "n8n request failed" }, { status: 502 }, provenance);
-    }
-    if (!upstreamPayload.answer?.trim()) {
-      console.error("[POST /api/typebot-rag] n8n response missing answer", rawText);
-      await persistFailure("n8n_invalid_response", provenance, upstreamPayload.executionId);
-      reportOpsFailure(
-        "n8n_runtime_invalid_response",
-        "The n8n RAG runtime returned a response without an answer.",
-        provenance,
-        upstreamPayload.executionId,
-      );
-      return ragJson({ error: "n8n returned an invalid response" }, { status: 502 }, provenance);
-    }
     const guardedPayload = applyChatResponseGuardrail(upstreamPayload, question, locale);
     const normalizedPayload = { ...guardedPayload, ...provenance };
 
@@ -347,7 +492,7 @@ export async function POST(req: NextRequest) {
           });
         } catch (handoffError) {
           console.error("[POST /api/typebot-rag] canonical handoff persistence failed", handoffError);
-          reportOpsFailure(
+          reportOpsEventAsync(
             "handoff_persistence_failed",
             "A required human handoff could not be persisted.",
             provenance,
@@ -357,7 +502,7 @@ export async function POST(req: NextRequest) {
       }
     } catch (persistError) {
       console.error("[POST /api/typebot-rag] chat persistence failed", persistError);
-      reportOpsFailure(
+      reportOpsEventAsync(
         "chat_persistence_failed",
         "A chatbot exchange could not be persisted.",
         provenance,

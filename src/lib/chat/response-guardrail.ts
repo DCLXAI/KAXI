@@ -1,4 +1,8 @@
-import { isLowConfidenceRetrieval, retrievalConfidenceThreshold } from "@/lib/chat/retrieval-confidence";
+import {
+  isLowConfidenceRetrieval,
+  RETRIEVAL_CONFIDENCE_POLICY_VERSION,
+  retrievalConfidenceThreshold,
+} from "@/lib/chat/retrieval-confidence";
 
 export type GuardrailLocale = "ko" | "en" | "vi" | "mn";
 
@@ -15,6 +19,7 @@ export type GuardedChatResponse = {
   workflowVersionId?: string;
   modelVersion?: string;
   promptVersion?: string;
+  runtimePath?: string;
 };
 
 const WEATHER_PATTERN = /날씨|강수|기온|weather|rain probability|thời\s*tiết|khả\s*năng\s*mưa|nhiệt\s*độ|цаг\s*агаар|бороо|температур/iu;
@@ -137,7 +142,7 @@ export function applyChatResponseGuardrail(
       retrievedCount: 0,
       noContext: true,
       noContextReason: "below_calibrated_threshold",
-      confidencePolicy: "lexical-category-v1",
+      confidencePolicy: RETRIEVAL_CONFIDENCE_POLICY_VERSION,
     },
   };
 }

@@ -54,6 +54,9 @@
 - `N8N_RAG_CAPABILITY_URL`: Read-only active-contract probe used before bulk serving-projection sync.
 - `N8N_RAG_WORKFLOW_ID`, `N8N_RAG_WORKFLOW_VERSION_ID`, `N8N_RAG_MODEL_VERSION`, `N8N_RAG_PROMPT_VERSION`: Expected RAG provenance contract used for fail-closed gateway responses, persistence, health, and evaluation checks. `N8N_RAG_WORKFLOW_VERSION_ID` is the immutable semantic release ID returned at runtime; record the separate n8n history UUID in the release evidence because n8n runtime expressions do not expose it.
 - `N8N_WEBHOOK_SIGNING_SECRET`, `N8N_WEBHOOK_MAX_AGE_SECONDS`: Shared HMAC/replay-window contract between KAXI and the n8n verification nodes. The secret must match in every KAXI environment that calls n8n.
+- `N8N_VERIFICATION_RECEIPT_TTL_SECONDS`, `N8N_RAG_CORE_RATE_LIMIT`: Bound the short-lived, payload-bound receipt issued after nonce consumption and the internal KAXI RAG-core endpoint that accepts it. n8n never receives the signing secret.
+- `N8N_RAG_TIMEOUT_MS`, `KAXI_DIRECT_RAG_TIMEOUT_MS`: Bound the n8n attempt and direct Supabase fallback. HTTP errors, timeout, empty or invalid responses move to the direct path; the user sees a runtime failure only when both paths fail.
+- `OPENAI_EMBEDDING_API_KEY`, `OPENAI_EMBEDDING_BASE_URL`, `OPENAI_EMBEDDING_MODEL`, `OPENAI_EMBEDDING_TIMEOUT_MS`, `KAXI_QUERY_EMBEDDINGS_ENABLED`: Optional, dedicated query-embedding contract. Only `text-embedding-3-small` at 1536 dimensions is accepted. Missing or failed credentials automatically select lexical-only retrieval; generic chat-provider keys are never reused.
 - `TYPEBOT_PUBLIC_ID`, `TYPEBOT_PUBLIC_URL`: Published Typebot identity and public health target. Keep Typebot unpublished during backend cutover.
 - `TYPEBOT_GATEWAY_SECRET`: Separate 32-byte secret sent by both server-side Typebot webhook blocks as `x-kaxi-typebot-token`. It prevents callers from forging `source=typebot`; do not reuse the n8n signing secret.
 - `TYPEBOT_API_BASE_URL`, `TYPEBOT_BOT_ID`, `TYPEBOT_API_TOKEN`, `TYPEBOT_RESULT_RETENTION_DAYS`: Dedicated provider API contract for daily Typebot Result deletion. Production uses a separate `kaxi-retention` token and a seven-day window; never reuse or expose the gateway secret.
@@ -173,7 +176,7 @@ After KAXI production is deployed and the validated n8n draft is published:
 
 ```bash
 bun run rag:serving:sync
-bun run rag:serving:sync --execute --confirm-contract 2026-07-10.v1 --batch-size 10
+bun run rag:serving:sync --execute --confirm-contract 2026-07-13.v2 --batch-size 10
 ```
 
 The first command is a read-only status check. The execute command first calls the active n8n capability endpoint and refuses to ingest when the workflow contract, target table, model, dimensions, or signed-ingestion flag differs. It stops on a failed batch or when ready count makes no progress, and can be rerun to continue.

@@ -1,7 +1,9 @@
 import {
+  createN8nVerificationReceipt,
   createTypebotHandoffToken,
   signN8nPayload,
   verifyN8nSignature,
+  verifyN8nVerificationReceipt,
   verifyTypebotHandoffToken,
 } from "../src/lib/n8n/signature";
 
@@ -60,4 +62,36 @@ assert(
   "invalid nonce should fail",
 );
 
-console.log("PASS n8n HMAC signature: valid, tampered, expired, and malformed requests verified");
+const verificationReceipt = createN8nVerificationReceipt(
+  "typebot-runtime",
+  payload,
+  signed.envelope.nonce,
+  { env, now },
+);
+assert(
+  verifyN8nVerificationReceipt(verificationReceipt, "typebot-runtime", payload, { env, now }).ok,
+  "verified n8n payload receipt should pass",
+);
+assert(
+  verifyN8nVerificationReceipt(verificationReceipt, "typebot-runtime", payload, { env: rotatedEnv, now }).ok,
+  "verification receipt should pass during secret rotation",
+);
+assert(
+  !verifyN8nVerificationReceipt(
+    verificationReceipt,
+    "typebot-runtime",
+    { ...payload, question: "tampered" },
+    { env, now },
+  ).ok,
+  "verification receipt must be bound to the exact payload",
+);
+assert(
+  !verifyN8nVerificationReceipt(verificationReceipt, "rag-ingestion", payload, { env, now }).ok,
+  "verification receipt must be bound to its purpose",
+);
+assert(
+  !verifyN8nVerificationReceipt(verificationReceipt, "typebot-runtime", payload, { env, now: now + 61_000 }).ok,
+  "expired verification receipt should fail",
+);
+
+console.log("PASS n8n HMAC signature and short-lived payload receipt verification");

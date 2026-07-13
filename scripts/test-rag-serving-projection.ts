@@ -166,6 +166,105 @@ try {
     assert(result[0].metadata.title === expected, `${locale} citation title must use the localized heading`);
   }
 
+  await db.$executeRawUnsafe(
+    `UPDATE public.rag_serving_chunks SET embedding = NULL WHERE canonical_chunk_id = $1`,
+    chunk.id,
+  );
+  const lexicalWithoutEmbedding = await db.$queryRawUnsafe<Array<{
+    content: string;
+    metadata: Record<string, unknown>;
+    similarity: number;
+  }>>(
+    `SELECT content, metadata, similarity
+     FROM public.match_rag_documents_lexical(5, $1::jsonb)`,
+    JSON.stringify({
+      tenant_id: "default",
+      category: "visa",
+      category_mode: "strict",
+      query_text: "유학비자 어학연쑤",
+      locale: "ko",
+    }),
+  );
+  assert(lexicalWithoutEmbedding.length === 1, "lexical v2 must retrieve approved chunks without embeddings");
+  assert(lexicalWithoutEmbedding[0].content.includes("D-4 비자 신청 서류"), "alias and typo tolerant search must return the Korean section");
+  assert(lexicalWithoutEmbedding[0].metadata.retrieval_type === "lexical-v2", "lexical v2 retrieval type must be observable");
+  assert(lexicalWithoutEmbedding[0].metadata.score_version === "absolute-weighted-v2", "absolute score version must be observable");
+  assert(Number(lexicalWithoutEmbedding[0].metadata.source_authority_score) > 0, "source authority must contribute to lexical score");
+  assert(Number(lexicalWithoutEmbedding[0].metadata.freshness_score) > 0, "freshness must contribute to lexical score");
+  assert(lexicalWithoutEmbedding[0].similarity > 0, "lexical v2 must return an absolute score");
+
+  const unaccentedVietnamese = await db.$queryRawUnsafe<Array<{ content: string }>>(
+    `SELECT content FROM public.match_rag_documents_lexical(5, $1::jsonb)`,
+    JSON.stringify({
+      tenant_id: "default",
+      category: "visa",
+      category_mode: "strict",
+      query_text: "ho so xin visa D4",
+      locale: "vi",
+    }),
+  );
+  assert(unaccentedVietnamese.length === 1, "Vietnamese search must normalize missing accents");
+  assert(unaccentedVietnamese[0].content.includes("Hồ sơ xin visa D-4"), "Vietnamese locale projection must remain intact after unaccent search");
+
+  const aliasRows = await db.$queryRawUnsafe<Array<{ count: bigint }>>(
+    `SELECT count(*)::bigint AS count FROM public.rag_query_aliases WHERE enabled = true`,
+  );
+  assert(Number(aliasRows[0]?.count || 0) >= 12, "locale and visa aliases must be stored in the database");
+
+  await db.$executeRawUnsafe(
+    `UPDATE public.rag_serving_chunks SET embedding = $1::vector WHERE canonical_chunk_id = $2`,
+    vectorLiteral(1536, 0),
+    chunk.id,
+  );
+
+  const lexicalOnlyRrf = await db.$queryRawUnsafe<Array<{ metadata: Record<string, unknown> }>>(
+    `SELECT metadata
+     FROM public.match_rag_documents_hybrid_v2(NULL::vector, 6, $1::jsonb)`,
+    JSON.stringify({
+      tenant_id: "default",
+      category: "visa",
+      category_mode: "strict",
+      query_text: "D-4 유학비자 서류",
+      locale: "ko",
+      embedding_failure_reason: "provider_not_configured",
+    }),
+  );
+  assert(lexicalOnlyRrf.length === 1, "hybrid v2 must return lexical results when query embedding is null");
+  assert(lexicalOnlyRrf[0].metadata.retrieval_mode === "lexical-only", "null embeddings must make lexical-only mode observable");
+  assert(lexicalOnlyRrf[0].metadata.embedding_available === false, "null query embeddings must not run vector retrieval");
+  assert(Number(lexicalOnlyRrf[0].metadata.vector_candidate_count) === 0, "lexical-only mode must have zero vector candidates");
+  assert(Number(lexicalOnlyRrf[0].metadata.lexical_candidate_count) <= 20, "lexical candidate pool must be capped at 20");
+
+  const hybridRrf = await db.$queryRawUnsafe<Array<{ metadata: Record<string, unknown> }>>(
+    `SELECT metadata
+     FROM public.match_rag_documents_hybrid_v2($1::vector, 6, $2::jsonb)`,
+    vectorLiteral(1536, 0),
+    JSON.stringify({
+      tenant_id: "default",
+      category: "visa",
+      category_mode: "strict",
+      query_text: "D-4 유학비자 서류",
+      locale: "ko",
+    }),
+  );
+  assert(hybridRrf.length === 1, "hybrid v2 must fuse lexical and vector candidates");
+  assert(hybridRrf[0].metadata.retrieval_type === "hybrid-rrf-v2", "hybrid RRF mode must be observable");
+  assert(hybridRrf[0].metadata.embedding_available === true, "provided query embeddings must enable vector retrieval");
+  assert(Number(hybridRrf[0].metadata.vector_candidate_count) <= 20, "vector candidate pool must be capped at 20");
+  assert(Number(hybridRrf[0].metadata.rrf_score) > 0, "hybrid results must expose a positive RRF score");
+  assert(Number(hybridRrf[0].metadata.rrf_k) === 60, "hybrid results must use RRF k=60");
+
+  const reviewFunctionConfig = await db.$queryRawUnsafe<Array<{ config: string[] | null }>>(
+    `SELECT p.proconfig AS config
+     FROM pg_proc p
+     JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public' AND p.proname = 'kaxi_queue_retrieval_review'`,
+  );
+  assert(
+    reviewFunctionConfig[0]?.config?.some((value) => value === "search_path=public, extensions"),
+    "operator review trigger must resolve pgcrypto digest through the extensions schema",
+  );
+
   const noContext = await db.$queryRawUnsafe<Array<{ id: bigint }>>(
     `SELECT id FROM public.match_rag_documents($1::vector, 5, $2::jsonb)`,
     vectorLiteral(1536, 1),

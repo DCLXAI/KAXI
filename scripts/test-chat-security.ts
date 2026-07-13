@@ -259,7 +259,11 @@ const lowConfidence = applyChatResponseGuardrail({
   ...guardrailBase,
   searchMeta: {
     category: "visa",
-    topScore: 1.2,
+    locale: "ko",
+    topScore: 0.42,
+    secondScore: 0.4,
+    top1Top2Margin: 0.02,
+    tokenCoverage: 0.1,
     similarityThreshold: "category-default",
     reranker: "deterministic-locale-v2",
   },
@@ -268,19 +272,46 @@ assert.equal(lowConfidence.needsHuman, true);
 assert.equal(lowConfidence.riskLevel, "medium");
 assert.deepEqual(lowConfidence.sources, []);
 assert.equal((lowConfidence.searchMeta as { noContext?: boolean }).noContext, true);
-assert.equal((lowConfidence.searchMeta as { similarityThreshold?: number }).similarityThreshold, 1.8);
+assert.equal((lowConfidence.searchMeta as { similarityThreshold?: number }).similarityThreshold, 0.62);
+assert.equal(
+  (lowConfidence.searchMeta as { confidencePolicy?: string }).confidencePolicy,
+  "locale-category-margin-v2",
+);
 
 const confident = applyChatResponseGuardrail({
   ...guardrailBase,
   searchMeta: {
     category: "visa",
-    topScore: 2.2,
+    locale: "ko",
+    topScore: 1.1,
+    secondScore: 0.8,
+    top1Top2Margin: 0.3,
+    tokenCoverage: 0.4,
     similarityThreshold: "category-default",
     reranker: "deterministic-locale-v2",
   },
 }, "D-4 비자 조건을 알려주세요.", "ko");
 assert.equal(confident.answer, guardrailBase.answer);
 assert.equal(confident.needsHuman, false);
+
+const ambiguousTopResults = applyChatResponseGuardrail({
+  ...guardrailBase,
+  searchMeta: {
+    category: "visa",
+    locale: "vi",
+    topScore: 0.7,
+    secondScore: 0.69,
+    top1Top2Margin: 0.01,
+    tokenCoverage: 0.3,
+    similarityThreshold: "category-default",
+    reranker: "deterministic-locale-v2",
+  },
+}, "Điều kiện visa D-4 là gì?", "vi");
+assert.equal(ambiguousTopResults.needsHuman, true);
+assert.equal(
+  (ambiguousTopResults.searchMeta as { similarityThreshold?: number }).similarityThreshold,
+  0.54,
+);
 
 const typebotEnv = {
   NODE_ENV: "test",

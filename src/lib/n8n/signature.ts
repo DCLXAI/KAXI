@@ -1,4 +1,4 @@
-import { createHmac, randomUUID, timingSafeEqual } from "crypto";
+import { createHash, createHmac, randomUUID, timingSafeEqual } from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { primarySecret, rotatingSecrets } from "@/lib/security/rotating-secret";
 
@@ -21,6 +21,19 @@ type SignatureVerification =
   | { ok: true; requestTimestamp: Date; expiresAt: Date }
   | { ok: false; reason: "invalid" | "expired" | "future" | "misconfigured" };
 
+type VerificationReceiptClaims = {
+  version: 1;
+  purpose: N8nWebhookPurpose;
+  nonce: string;
+  payloadHash: string;
+  issuedAt: number;
+  expiresAt: number;
+};
+
+type ReceiptVerification =
+  | { ok: true; claims: VerificationReceiptClaims }
+  | { ok: false; reason: "invalid" | "expired" | "future" | "misconfigured" };
+
 function configured(value: string | undefined) {
   const text = value?.trim() || "";
   if (!text || /^(replace-with-|change_me)/i.test(text)) return "";
@@ -34,6 +47,11 @@ function signingSecret(env: NodeJS.ProcessEnv = process.env) {
 function maxAgeSeconds(env: NodeJS.ProcessEnv = process.env) {
   const parsed = Number.parseInt(env.N8N_WEBHOOK_MAX_AGE_SECONDS || "300", 10);
   return Number.isFinite(parsed) ? Math.min(Math.max(parsed, 30), 900) : 300;
+}
+
+function receiptTtlSeconds(env: NodeJS.ProcessEnv = process.env) {
+  const parsed = Number.parseInt(env.N8N_VERIFICATION_RECEIPT_TTL_SECONDS || "60", 10);
+  return Number.isFinite(parsed) ? Math.min(Math.max(parsed, 15), 120) : 60;
 }
 
 function stableJson(value: unknown): string {
@@ -56,6 +74,16 @@ function canonicalRequest(envelope: Omit<N8nSignatureEnvelope, "signature">) {
 
 function digest(secret: string, envelope: Omit<N8nSignatureEnvelope, "signature">) {
   return createHmac("sha256", secret).update(canonicalRequest(envelope)).digest("hex");
+}
+
+function payloadHash(payload: unknown) {
+  return createHash("sha256").update(stableJson(payload)).digest("hex");
+}
+
+function receiptDigest(secret: string, encodedClaims: string) {
+  return createHmac("sha256", secret)
+    .update(`n8n-verification-receipt\n${encodedClaims}`)
+    .digest("hex");
 }
 
 function safeEqual(left: string, right: string) {
@@ -186,6 +214,79 @@ export function verifyN8nSignature(
     requestTimestamp: new Date(timestampMs),
     expiresAt: new Date(timestampMs + maxAgeMs),
   };
+}
+
+export function createN8nVerificationReceipt(
+  purpose: N8nWebhookPurpose,
+  payload: unknown,
+  nonce: string,
+  options: { now?: number; env?: NodeJS.ProcessEnv } = {},
+) {
+  const env = options.env || process.env;
+  const secret = signingSecret(env);
+  if (!secret) throw new Error("N8N_WEBHOOK_NOT_CONFIGURED");
+  if (!/^[a-z0-9-]{16,128}$/i.test(nonce)) throw new Error("N8N_RECEIPT_INVALID_NONCE");
+
+  const issuedAt = options.now ?? Date.now();
+  const claims: VerificationReceiptClaims = {
+    version: 1,
+    purpose,
+    nonce,
+    payloadHash: payloadHash(payload),
+    issuedAt,
+    expiresAt: issuedAt + receiptTtlSeconds(env) * 1000,
+  };
+  const encodedClaims = Buffer.from(stableJson(claims)).toString("base64url");
+  return `${encodedClaims}.${receiptDigest(secret, encodedClaims)}`;
+}
+
+export function verifyN8nVerificationReceipt(
+  token: string,
+  purpose: N8nWebhookPurpose,
+  payload: unknown,
+  options: { now?: number; env?: NodeJS.ProcessEnv } = {},
+): ReceiptVerification {
+  const env = options.env || process.env;
+  const secrets = rotatingSecrets(env, "N8N_WEBHOOK_SIGNING_SECRET");
+  if (secrets.length === 0) return { ok: false, reason: "misconfigured" };
+
+  const [encodedClaims, signature, ...rest] = token.split(".");
+  if (
+    rest.length > 0
+    || !/^[a-z0-9_-]{16,4096}$/i.test(encodedClaims || "")
+    || !/^[a-f0-9]{64}$/i.test(signature || "")
+  ) {
+    return { ok: false, reason: "invalid" };
+  }
+  const signatureValid = secrets.some((secret) =>
+    safeEqual(signature.toLowerCase(), receiptDigest(secret, encodedClaims))
+  );
+  if (!signatureValid) return { ok: false, reason: "invalid" };
+
+  let claims: VerificationReceiptClaims;
+  try {
+    claims = JSON.parse(Buffer.from(encodedClaims, "base64url").toString("utf8")) as VerificationReceiptClaims;
+  } catch {
+    return { ok: false, reason: "invalid" };
+  }
+  if (
+    claims?.version !== 1
+    || claims.purpose !== purpose
+    || !/^[a-z0-9-]{16,128}$/i.test(claims.nonce || "")
+    || !/^[a-f0-9]{64}$/i.test(claims.payloadHash || "")
+    || !Number.isSafeInteger(claims.issuedAt)
+    || !Number.isSafeInteger(claims.expiresAt)
+    || claims.expiresAt <= claims.issuedAt
+    || claims.expiresAt - claims.issuedAt > 120_000
+    || !safeEqual(claims.payloadHash.toLowerCase(), payloadHash(payload))
+  ) {
+    return { ok: false, reason: "invalid" };
+  }
+
+  const now = options.now ?? Date.now();
+  if (claims.issuedAt > now + 30_000) return { ok: false, reason: "future" };
+  if (now > claims.expiresAt) return { ok: false, reason: "expired" };
+  return { ok: true, claims };
 }
 
 export async function verifyAndConsumeN8nSignature(envelope: N8nSignatureEnvelope) {
