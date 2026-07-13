@@ -77,6 +77,14 @@ assert(
     && String(respond?.parameters?.responseBody || "").includes("provider-independent-hybrid-v2"),
   "Typebot response must expose orchestrated runtime provenance",
 );
+const responseBody = String(respond?.parameters?.responseBody || "");
+assert(
+  responseBody.includes("JSON.stringify({ answer: $('Run KAXI RAG Core').item.json.answer")
+    && !responseBody.includes("const searchMeta")
+    && !responseBody.includes("const retrieval")
+    && !responseBody.includes("...$json"),
+  "Typebot response must use explicit core fields without self-referential initializers",
+);
 assert(capability?.type === "n8n-nodes-base.respondToWebhook", "capability responder missing");
 const capabilityBody = String(capability.parameters?.responseBody || "");
 for (const requiredContractValue of [

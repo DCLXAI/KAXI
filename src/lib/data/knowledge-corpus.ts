@@ -150,9 +150,9 @@ export const KNOWLEDGE_DOCS: KnowledgeDoc[] = [
     id: "visa-portal-visa-types",
     category: "visa",
     title: {
-      ko: "Korea Visa Portal 비자 유형 목록",
+      ko: "대한민국 비자포털 비자 유형 목록",
       vi: "Danh mục loại visa trên Korea Visa Portal",
-      mn: "Korea Visa Portal визийн төрлийн жагсаалт",
+      mn: "БНСУ-ын визийн порталын визийн төрлийн жагсаалт",
       en: "Korea Visa Portal visa-type list",
     },
     keywords: ["visa portal", "비자포털", "비자 유형", "d-2", "d-4", "d-10", "e-7", "f-2", "f-5", "visa navigator"],

@@ -18,7 +18,7 @@ import {
 } from "../src/lib/typebot/runtime-health";
 
 const expectedMigration = latestMigrationName();
-assert.equal(expectedMigration, "20260714090000_rag_provider_independent_hybrid");
+assert.equal(expectedMigration, "20260714100000_localized_knowledge_titles");
 assert.equal(declaredRequiredMigration(), expectedMigration);
 
 const readyPayload = {

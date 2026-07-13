@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 
-export const REQUIRED_PRODUCTION_MIGRATION = "20260714090000_rag_provider_independent_hybrid";
+export const REQUIRED_PRODUCTION_MIGRATION = "20260714100000_localized_knowledge_titles";
 
 const REQUIRED_SCHEMA_OBJECTS = [
   "migration_ledger",
