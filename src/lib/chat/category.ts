@@ -13,7 +13,7 @@ export function inferChatCategory(question: string, explicitValue?: unknown): Ch
   // Classify the requested task before the visa/school entity. This keeps
   // "D-2 cost" in cost and "D-4 documents" in documents under strict search.
   if (
-    /비용|학비|등록금|수수료|예산|기숙사비|생활비|costs?|tuition|fees?|budget|living\s*expenses?|chi\s*phí|học\s*phí|lệ\s*phí|ngân\s*sách|ký\s*túc\s*xá|зард(?:ал|лууд?|лын)|сургалтын\s*төлбөр|хураамж|төсөв|дотуур\s*байр/u.test(normalized)
+    /비용|학비(?!자)|등록금|수수료|예산|기숙사비|생활비|costs?|tuition|fees?|budget|living\s*expenses?|chi\s*phí|học\s*phí|lệ\s*phí|ngân\s*sách|ký\s*túc\s*xá|зард(?:ал|лууд?|лын)|сургалтын\s*төлбөр|хураамж|төсөв|дотуур\s*байр/u.test(normalized)
   ) return "cost";
   if (
     /체류.{0,20}(?:만료|연장|변경|전환)|연장\s*신청|체류기간|status\s*of\s*stay|permitted\s*stay|stay\s*period|stay.{0,20}(?:expir|extension)|change\s*of\s*status|lưu\s*trú|hết\s*hạn|gia\s*hạn|chuyển\s*đổi|хугацаа.{0,20}(?:дуус|сунг)|сунгалт|оршин\s*суух/u.test(normalized)

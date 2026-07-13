@@ -6,7 +6,7 @@ export type RagProvenance = {
 };
 
 export const DEFAULT_RAG_PROVENANCE: RagProvenance = {
-  workflowId: "EqX3C5c2WNWoKkSR",
+  workflowId: "rB3nfjvCyTODP803",
   workflowVersionId: "kaxi-rag-runtime@2026-07-12.lexical-fallback-v2",
   modelVersion: "retrieval/lexical-provider-fallback@v1",
   promptVersion: "kaxi-grounded-context-answer@2026-07-12.lexical-fallback-v2",

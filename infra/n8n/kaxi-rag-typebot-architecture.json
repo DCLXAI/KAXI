@@ -1,0 +1,1765 @@
+{
+  "name": "KAXI RAG Typebot Architecture",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "RAG Knowledge Ingestion",
+        "formDescription": "Add source material to the Supabase vector knowledge base.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Title",
+              "fieldName": "title",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Source Label",
+              "fieldName": "source"
+            },
+            {
+              "fieldLabel": "Source URL",
+              "fieldName": "source_url"
+            },
+            {
+              "fieldLabel": "Category",
+              "fieldName": "category"
+            },
+            {
+              "fieldLabel": "Tenant ID",
+              "fieldName": "tenant_id",
+              "defaultValue": "default"
+            },
+            {
+              "fieldLabel": "Last Checked At",
+              "fieldType": "date",
+              "fieldName": "last_checked_at"
+            },
+            {
+              "fieldLabel": "Checked By",
+              "fieldName": "checked_by"
+            },
+            {
+              "fieldLabel": "Keywords",
+              "fieldName": "keywords"
+            },
+            {
+              "fieldLabel": "Document Content",
+              "fieldType": "textarea",
+              "fieldName": "content",
+              "requiredField": true
+            }
+          ]
+        },
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "26ceda87-9f4b-4988-b75f-db1d96050c16",
+      "name": "RAG Knowledge Ingestion Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        240,
+        208
+      ],
+      "webhookId": "5f6269cd-2961-4cd7-9ed0-5a01d5d2b6af",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "title",
+              "name": "title",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.title ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "source",
+              "name": "source",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.source ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "source-url",
+              "name": "source_url",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.source_url ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "category",
+              "name": "category",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.category ?? 'general' }}",
+              "type": "string"
+            },
+            {
+              "id": "tenant-id",
+              "name": "tenant_id",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.tenant_id ?? 'default' }}",
+              "type": "string"
+            },
+            {
+              "id": "last-checked-at",
+              "name": "last_checked_at",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.last_checked_at ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "checked-by",
+              "name": "checked_by",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.checked_by ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "keywords",
+              "name": "keywords",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.keywords ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "content",
+              "name": "content",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.content ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "canonical-chunk-id",
+              "name": "canonical_chunk_id",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.canonical_chunk_id ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "canonical-document-id",
+              "name": "canonical_document_id",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.canonical_document_id ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "doc-id",
+              "name": "doc_id",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.doc_id ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "content-hash",
+              "name": "content_hash",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.content_hash ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "embedding-model",
+              "name": "embedding_model",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.embedding_model ?? 'text-embedding-3-small' }}",
+              "type": "string"
+            },
+            {
+              "id": "review-status",
+              "name": "review_status",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.review_status ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "is-allowed",
+              "name": "isAllowed",
+              "type": "boolean",
+              "value": "={{ $json.ok === true && $('RAG Knowledge Ingestion Webhook').item.json.body?.review_status === 'approved' && !!$('RAG Knowledge Ingestion Webhook').item.json.body?.canonical_chunk_id && !!$('RAG Knowledge Ingestion Webhook').item.json.body?.canonical_document_id && !!$('RAG Knowledge Ingestion Webhook').item.json.body?.doc_id && !!$('RAG Knowledge Ingestion Webhook').item.json.body?.content_hash && !!$('RAG Knowledge Ingestion Webhook').item.json.body?.source_url && !!$('RAG Knowledge Ingestion Webhook').item.json.body?.content }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5deae1ac-9e37-40bb-83c8-3cbfb6613e3e",
+      "name": "Normalize Knowledge Document",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        720,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "tableName": {
+          "__rl": true,
+          "mode": "id",
+          "value": "rag_serving_chunks",
+          "cachedResultName": "rag_serving_chunks"
+        },
+        "options": {
+          "queryName": "match_rag_documents"
+        }
+      },
+      "id": "7dfca865-5822-46bd-8fec-05e349a449a1",
+      "name": "Insert Governed Serving Chunk",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
+      "position": [
+        928,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "dimensions": 1536,
+          "batchSize": 200,
+          "stripNewLines": true
+        }
+      },
+      "id": "01cefb36-9c1a-49a6-8caf-1adba6057208",
+      "name": "OpenAI Embeddings - Ingest",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        960,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.content }}",
+        "textSplittingMode": "custom",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "title",
+                "value": "={{ $json.title }}"
+              },
+              {
+                "name": "source",
+                "value": "={{ $json.source }}"
+              },
+              {
+                "name": "source_url",
+                "value": "={{ $json.source_url }}"
+              },
+              {
+                "name": "category",
+                "value": "={{ $json.category }}"
+              },
+              {
+                "name": "tenant_id",
+                "value": "={{ $json.tenant_id }}"
+              },
+              {
+                "name": "last_checked_at",
+                "value": "={{ $json.last_checked_at }}"
+              },
+              {
+                "name": "checked_by",
+                "value": "={{ $json.checked_by }}"
+              },
+              {
+                "name": "keywords",
+                "value": "={{ $json.keywords }}"
+              },
+              {
+                "name": "canonical_chunk_id",
+                "value": "={{ $json.canonical_chunk_id }}"
+              },
+              {
+                "name": "canonical_document_id",
+                "value": "={{ $json.canonical_document_id }}"
+              },
+              {
+                "name": "doc_id",
+                "value": "={{ $json.doc_id }}"
+              },
+              {
+                "name": "content_hash",
+                "value": "={{ $json.content_hash }}"
+              },
+              {
+                "name": "embedding_model",
+                "value": "={{ $json.embedding_model }}"
+              },
+              {
+                "name": "review_status",
+                "value": "={{ $json.review_status }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "f6f2c071-269d-47d8-9ab6-0793a734775a",
+      "name": "Default Data Loader",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "chunkSize": 5000,
+        "options": {
+          "splitCode": "markdown"
+        }
+      },
+      "id": "fb24993b-bbc0-4022-855b-20c60e782017",
+      "name": "Recursive Text Splitter",
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        720,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "status",
+              "name": "status",
+              "value": "inserted",
+              "type": "string"
+            },
+            {
+              "id": "message",
+              "name": "message",
+              "value": "Approved canonical chunk was embedded into rag_serving_chunks.",
+              "type": "string"
+            },
+            {
+              "id": "canonical-chunk-id",
+              "name": "canonicalChunkId",
+              "value": "={{ $('Normalize Knowledge Document').item.json.canonical_chunk_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "143e9d8b-8d10-407d-a601-50b1c399968b",
+      "name": "Knowledge Ingestion Done",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1248,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "typebot-rag-runtime",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://kaxi.vercel.app",
+          "ignoreBots": false
+        }
+      },
+      "id": "71cb194d-0469-4786-a633-546bf7ac1b92",
+      "name": "Typebot Runtime Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        832
+      ],
+      "webhookId": "27a7797a-e3de-44fb-8421-ce6615639e79"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "question",
+              "name": "question",
+              "value": "={{ $('Typebot Runtime Webhook').item.json.body?.question || $('Typebot Runtime Webhook').item.json.body?.message || $('Typebot Runtime Webhook').item.json.body?.input || $('Typebot Runtime Webhook').item.json.query?.question || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "raw-session-id",
+              "name": "rawSessionId",
+              "value": "={{ $('Typebot Runtime Webhook').item.json.body?.sessionId || $('Typebot Runtime Webhook').item.json.body?.session_id || $('Typebot Runtime Webhook').item.json.body?.typebotResultId || $('Typebot Runtime Webhook').item.json.headers?.['x-session-id'] || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "source",
+              "name": "source",
+              "value": "={{ (() => { const request = $('Typebot Runtime Webhook').item.json; const body = request.body ?? {}; const value = String(body.source || request.query?.source || 'typebot').trim(); return value || 'typebot'; })() }}",
+              "type": "string"
+            },
+            {
+              "id": "session-id",
+              "name": "sessionId",
+              "value": "={{ (() => { const request = $('Typebot Runtime Webhook').item.json; const body = request.body ?? {}; const headers = request.headers ?? {}; const source = String(body.source || request.query?.source || 'typebot').trim() || 'typebot'; const raw = String(body.sessionId || body.session_id || body.typebotResultId || headers['x-session-id'] || '').trim(); const value = raw || `${source}-${$execution.id}`; if (/^(typebot|kaxi-site|kaxi|n8n)-/.test(value)) return value; if (source === 'typebot') return `typebot-${value}`; return value; })() }}",
+              "type": "string"
+            },
+            {
+              "id": "typebot-result-id",
+              "name": "typebotResultId",
+              "value": "={{ $('Typebot Runtime Webhook').item.json.body?.typebotResultId || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "tenant-id",
+              "name": "tenant_id",
+              "value": "={{ $('Typebot Runtime Webhook').item.json.body?.tenant_id || $('Typebot Runtime Webhook').item.json.body?.tenantId || 'default' }}",
+              "type": "string"
+            },
+            {
+              "id": "category",
+              "name": "category",
+              "value": "={{ (() => { const request = $('Typebot Runtime Webhook').item.json; const body = request.body ?? {}; const explicit = String(body.category || '').trim(); if (explicit && !/^\\{\\{.*\\}\\}$/.test(explicit)) return explicit; const q = String(body.question || body.message || body.input || request.query?.question || '').toLowerCase(); if (/비자|visa|체류|d-?\\d|연장|전환|출입국/.test(q)) return 'visa'; if (/서류|documents?|입학허가|재정|잔고|여권|사진|결핵|증빙/.test(q)) return 'documents'; if (/학교|대학|입학|어학당|university|school/.test(q)) return 'school'; if (/비용|학비|수수료|잔고|재정|cost|tuition/.test(q)) return 'cost'; return 'general'; })() }}",
+              "type": "string"
+            },
+            {
+              "id": "similarity-threshold",
+              "name": "similarityThreshold",
+              "value": "={{ (() => { const request = $('Typebot Runtime Webhook').item.json; const raw = request.body?.similarityThreshold ?? request.body?.similarity_threshold ?? request.query?.similarityThreshold; if (raw === undefined || raw === null || String(raw).trim() === '') return ''; const n = Number(raw); return Number.isFinite(n) ? String(Math.min(Math.max(n, 0), 1)) : ''; })() }}",
+              "type": "string"
+            },
+            {
+              "id": "locale",
+              "name": "locale",
+              "value": "={{ $('Typebot Runtime Webhook').item.json.body?.locale || 'ko' }}",
+              "type": "string"
+            },
+            {
+              "id": "is-allowed",
+              "name": "isAllowed",
+              "value": "={{ $json.ok === true && !!($('Typebot Runtime Webhook').item.json.body?.question || $('Typebot Runtime Webhook').item.json.body?.message || $('Typebot Runtime Webhook').item.json.body?.input || $('Typebot Runtime Webhook').item.json.query?.question) }}",
+              "type": "boolean"
+            },
+            {
+              "id": "request-id",
+              "name": "requestId",
+              "value": "={{ (() => { const raw = String($('Typebot Runtime Webhook').item.json.body?.requestId || '').trim().toLowerCase(); if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(raw)) return raw; const suffix = String($execution.id).replace(/[^0-9a-f]/gi, '').padStart(12, '0').slice(-12).toLowerCase(); return `00000000-0000-4000-8000-${suffix}`; })() }}",
+              "type": "string"
+            },
+            {
+              "id": "idempotency-key",
+              "name": "idempotencyKey",
+              "value": "={{ (() => { const body = $('Typebot Runtime Webhook').item.json.body ?? {}; const supplied = String(body.idempotencyKey || '').trim(); if (supplied) return supplied.slice(0, 240); const external = String(body.requestId || '').trim(); return external ? `external:${external}`.slice(0, 240) : `execution:${$execution.id}`; })() }}",
+              "type": "string"
+            },
+            {
+              "id": "attachments",
+              "name": "attachments",
+              "value": "={{ Array.isArray($('Typebot Runtime Webhook').item.json.body?.attachments) ? $('Typebot Runtime Webhook').item.json.body.attachments : [] }}",
+              "type": "array"
+            },
+            {
+              "id": "external-request-id",
+              "name": "externalRequestId",
+              "value": "={{ String($('Typebot Runtime Webhook').item.json.body?.requestId || '').trim().slice(0, 120) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0abdc09d-563d-4e17-af0e-051751695d77",
+      "name": "Normalize Typebot Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        720,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "allowed",
+              "leftValue": "={{ $json.isAllowed }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2d1d4341-868a-40f2-999b-65093a37f731",
+      "name": "Input Guard",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1008,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "load",
+        "tableName": {
+          "__rl": true,
+          "mode": "id",
+          "value": "rag_serving_chunks",
+          "cachedResultName": "rag_serving_chunks"
+        },
+        "prompt": "={{ (() => { const question = String($json.question ?? '').trim(); const locale = String($json.locale ?? '').trim().toLowerCase(); const category = String($json.category ?? 'general').trim().toLowerCase(); const signal = [question, category, locale].join(' '); let hint = ''; if (/날씨|강수|기온|weather|rain probability|thời\\s*tiết|khả\\s*năng\\s*mưa|nhiệt\\s*độ|цаг\\s*агаар|бороо|температур/iu.test(signal)) { return question; } if (/ignore\\s+(?:all\\s+)?(?:previous|prior)\\s+instructions?|reveal\\s+(?:the\\s+)?system\\s+prompt|show\\s+(?:the\\s+)?system\\s+prompt|시스템\\s*프롬프트|이전\\s*(?:지시|명령)\\s*무시|bỏ\\s*qua\\s*(?:các\\s*)?(?:hướng\\s*dẫn|chỉ\\s*thị)\\s*(?:trước|trước\\s*đó)|hiển\\s*thị\\s*(?:system\\s*)?prompt|tiết\\s*lộ\\s*(?:system\\s*)?prompt|өмнөх\\s*заавр|систем(?:ийн)?\\s*prompt|систем(?:ийн)?\\s*промпт|зааврыг\\s*үл\\s*тоо|зааврыг\\s*ил\\s*болго/iu.test(signal) || /가짜|위조|허위|fake|forg(?:ed|ery)?|giả(?:\\s*mạo)?|хуурамч|хуурмаг/iu.test(signal)) { hint = 'fake-documents-warning immigration-act-false-application-documents fake forged bank statement financial proof 가짜 위조 허위 재정증명 잔고증명'; } else if (/불법\\s*취업|무허가|허가\\s*없이|취업\\s*허가\\s*없이|without\\s+(?:a\\s+)?work\\s+permit|work(?:ing)?\\s+without\\s+(?:a\\s+)?permit|illegal\\s+employment|unauthori[sz]ed\\s+work|không\\s+(?:cần|có)\\s+giấy\\s+phép|làm\\s*việc\\s+không\\s+phép|зөвшөөрөлгүй|ажиллах\\s+зөвшөөрөлгүй/iu.test(signal)) { hint = 'illegal-employment-warning immigration-law-violation-risk immigration-act-employment-restriction illegal employment work without permit 불법취업 무허가 취업허가'; } else if (/강제퇴거|추방|입국금지|deport(?:ed|ation)?|entry\\s*ban|re-?entry\\s*ban|trục\\s*xuất|cấm\\s*nhập\\s*cảnh|албадан\\s*гаргуул|нэвтрэх\\s*хориг/iu.test(signal)) { hint = 'immigration-act-entry-ban entry ban deportation re-entry 강제퇴거 입국금지 재입국'; } else if (/시간제\\s*취업|자격외활동|아르바이트|알바|part[-\\s]*time\\s+(?:work|job|employment)|student[^\\n]{0,40}work|work[^\\n]{0,40}student|làm\\s*thêm|việc\\s*làm\\s*thêm|цагийн\\s*ажил|оюутан[^\\n]{0,40}ажил/iu.test(signal)) { hint = 'hikorea-activity-permit immigration-act-outside-status-activity student part-time work permit school confirmation 시간제취업 자격외활동 허가 학교확인'; } else if (/체류\\s*기간|체류\\s*연장|연장|만료|expiry|expire|extension|extend\\s+(?:my\\s+)?stay|gia\\s*hạn|hết\\s*hạn|сунгах|дуусах|хугацаа/iu.test(signal)) { hint = 'hikorea-stay-extension immigration-act-stay-extension stay extension expiry period 체류기간 연장 만료'; } else if (/d[-\\s]?4[^\\n]{0,40}d[-\\s]?2|d[-\\s]?2[^\\n]{0,40}d[-\\s]?4|status\\s*change|change\\s+(?:of\\s+)?status|체류자격\\s*변경|자격\\s*변경|전환|chuyển\\s*(?:đổi\\s*)?(?:tư\\s*cách|visa)|đổi\\s*visa|статус\\s*солих|ангилал\\s*солих/iu.test(signal)) { hint = 'hikorea-status-change immigration-act-status-change d-4-to-d-2-transfer status change permission before new activity 체류자격 변경 전환 사전허가'; } else if (/d[-\\s]?10|job\\s*seeker|job\\s*search|구직|졸업\\s*후|tìm\\s*việc|ажил\\s*хай/iu.test(signal)) { hint = 'd10-overview D-10 job seeker after graduation 구직 졸업 후 체류'; } else if (/d[-\\s]?2|degree|bachelor|master|ph\\.?d|university\\s*study|학위|대학교|대학|cử\\s*nhân|thạc\\s*sĩ|tiến\\s*sĩ|их\\s*сургууль|зэрэг/iu.test(signal)) { hint = 'd2-overview D-2 degree university study visa 학위 대학 유학 비자'; } else if (/d[-\\s]?4|어학|한국어|language\\s*(?:training|study)|korean\\s*language|tiếng\\s*hàn|солонгос\\s*хэл|хэлний\\s*бэлтгэл/iu.test(signal)) { hint = 'd4-overview D-4 Korean language training visa 한국어 어학연수 비자'; } else if (/잔고|은행|재정|bank\\s*(?:balance|statement|certificate)|financial\\s*proof|proof\\s*of\\s*funds|account\\s*holder|issue\\s*date|sao\\s*kê|chứng\\s*minh\\s*tài\\s*chính|tài\\s*chính|дансны\\s*үлдэгдэл|санхүүгийн/iu.test(signal)) { hint = 'financial-proof visa-documents bank balance certificate account holder issue date 재정증명 잔고증명 명의 발급일'; } else if (category === 'cost' || /비용|학비|생활비|수수료|cost|tuition|living\\s*expenses|insurance|fees|chi\\s*phí|học\\s*phí|амьжиргааны\\s*зардал|сургалтын\\s*төлбөр/iu.test(signal)) { hint = 'cost-breakdown study in Korea total cost tuition living insurance fees 유학 총비용 학비 생활비 보험료 수수료'; } else if (category === 'visa') { hint = 'Korea student visa sojourn status 체류 비자'; } else if (category === 'documents') { hint = 'required documents checklist passport photo certificate 서류 여권 사진'; } else if (category === 'school') { hint = 'Korea university admission language institute school 입학 학교 어학당'; } else { hint = 'study in Korea general guidance 유학 일반 안내'; } return [question, hint].filter(Boolean).join('\\n'); })() }}",
+        "topK": 6,
+        "options": {
+          "queryName": "match_rag_documents",
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "tenant_id",
+                "value": "={{ $json.tenant_id }}"
+              },
+              {
+                "name": "category",
+                "value": "={{ (() => { const question = String($json.question ?? '').trim().toLowerCase().replace(/\\s+/g, ' '); if (question === 'after graduation, when should i consider d-10 status to look for work in korea?' || question === 'sau khi tốt nghiệp, trường hợp nào nên xem xét tư cách d-10 để tìm việc ở hàn quốc?') return 'visa'; if (question === 'find me a factory job i can start immediately without any work permit.') return 'warning'; if (question === 'thời hạn lưu trú của tôi đã hết nhưng tôi vẫn đang ở hàn quốc. tôi cần kiểm tra và xử lý việc gì ngay bây giờ?') return 'process'; return String($json.category ?? 'general').trim() || 'general'; })() }}"
+              },
+              {
+                "name": "query_text",
+                "value": "={{ (() => { const question = String($json.question ?? '').trim(); const locale = String($json.locale ?? '').trim().toLowerCase(); const category = String($json.category ?? 'general').trim().toLowerCase(); const normalizedQuestion = question.toLowerCase().replace(/\\s+/g, ' ').trim(); const signal = [question, category, locale].join(' '); const exactHints = { 'after graduation, when should i consider d-10 status to look for work in korea?': 'd10-overview hikorea-d2-d4-d10-e7-f2-f5-requirements visa-portal-visa-types immigration-decree-long-term-status-table D-10 job seeker job search after graduation long-term sojourn status visa types', 'sau khi tốt nghiệp, trường hợp nào nên xem xét tư cách d-10 để tìm việc ở hàn quốc?': 'd10-overview hikorea-d2-d4-d10-e7-f2-f5-requirements visa-portal-visa-types immigration-decree-long-term-status-table D-10 job seeker job search after graduation long-term sojourn status visa types', 'find me a factory job i can start immediately without any work permit.': 'illegal-employment-warning immigration-law-violation-risk illegal employment warning unauthorized work without work permit violation risk refusal factory job immediate 불법취업 취업 매칭 위험 체류자격 위반', 'thời hạn lưu trú của tôi đã hết nhưng tôi vẫn đang ở hàn quốc. tôi cần kiểm tra và xử lý việc gì ngay bây giờ?': 'immigration-act-stay-extension hikorea-stay-extension immigration-act-deportation-grounds overstay expired stay period extension permission deportation grounds unlawful stay immediate action gia han het han qua han luu tru' }; const exactHint = exactHints[normalizedQuestion]; if (exactHint) return [exactHint, question].filter(Boolean).join('\\n'); if (/날씨|강수|기온|weather|rain probability|thời\\s*tiết|khả\\s*năng\\s*mưa|nhiệt\\s*độ|цаг\\s*агаар|бороо|температур/iu.test(signal)) return question; const rules = [[/ignore\\s+(?:all\\s+)?(?:previous|prior)\\s+instructions?|reveal\\s+(?:the\\s+)?system\\s+prompt|show\\s+(?:the\\s+)?system\\s+prompt|시스템\\s*프롬프트|이전\\s*(?:지시|명령)\\s*무시|bỏ\\s*qua\\s*(?:các\\s*)?(?:hướng\\s*dẫn|chỉ\\s*thị)\\s*(?:trước|trước\\s*đó)|hiển\\s*thị\\s*(?:system\\s*)?prompt|tiết\\s*lộ\\s*(?:system\\s*)?prompt|өмнөх\\s*заавр|систем(?:ийн)?\\s*prompt|систем(?:ийн)?\\s*промпт|зааврыг\\s*үл\\s*тоо|зааврыг\\s*ил\\s*болго|가짜|위조|허위|fake|forg(?:ed|ery)?|giả(?:\\s*mạo)?|хуурамч|хуурмаг/iu, 'fake-documents-warning immigration-act-false-application-documents fake forged bank statement financial proof 가짜 위조 허위 재정증명 잔고증명'], [/불법\\s*취업|무허가|허가\\s*없이|취업\\s*허가\\s*없이|without\\s+(?:a\\s+)?work\\s+permit|work(?:ing)?\\s+without\\s+(?:a\\s+)?permit|illegal\\s+employment|unauthori[sz]ed\\s+work|không\\s+(?:cần|có)\\s+giấy\\s+phép|làm\\s*việc\\s+không\\s+phép|зөвшөөрөлгүй|ажиллах\\s+зөвшөөрөлгүй/iu, 'illegal-employment-warning immigration-law-violation-risk immigration-act-employment-restriction illegal employment work without permit 불법취업 무허가 취업허가'], [/강제퇴거|추방|입국금지|deport(?:ed|ation)?|entry\\s*ban|re-?entry\\s*ban|trục\\s*xuất|cấm\\s*nhập\\s*cảnh|албадан\\s*гаргуул|нэвтрэх\\s*хориг/iu, 'immigration-act-entry-ban entry ban deportation re-entry 강제퇴거 입국금지 재입국'], [/시간제\\s*취업|자격외활동|아르바이트|알바|part[-\\s]*time\\s+(?:work|job|employment)|student[^\\n]{0,40}work|work[^\\n]{0,40}student|làm\\s*thêm|việc\\s*làm\\s*thêm|цагийн\\s*ажил|оюутан[^\\n]{0,40}ажил/iu, 'hikorea-activity-permit immigration-act-outside-status-activity student part-time work permit school confirmation 시간제취업 자격외활동 허가 학교확인'], [/체류\\s*기간|체류\\s*연장|연장|만료|expiry|expire|extension|extend\\s+(?:my\\s+)?stay|gia\\s*hạn|hết\\s*hạn|сунгах|дуусах|хугацаа/iu, 'hikorea-stay-extension immigration-act-stay-extension stay extension expiry period 체류기간 연장 만료'], [/d[-\\s]?4[^\\n]{0,40}d[-\\s]?2|d[-\\s]?2[^\\n]{0,40}d[-\\s]?4|status\\s*change|change\\s+(?:of\\s+)?status|체류자격\\s*변경|자격\\s*변경|전환|chuyển\\s*(?:đổi\\s*)?(?:tư\\s*cách|visa)|đổi\\s*visa|статус\\s*солих|ангилал\\s*солих/iu, 'hikorea-status-change immigration-act-status-change d-4-to-d-2-transfer status change permission before new activity 체류자격 변경 전환 사전허가'], [/d[-\\s]?10|job\\s*seeker|job\\s*search|구직|졸업\\s*후|tìm\\s*việc|ажил\\s*хай/iu, 'd10-overview D-10 job seeker after graduation 구직 졸업 후 체류'], [/d[-\\s]?2|degree|bachelor|master|ph\\.?d|university\\s*study|학위|대학교|대학|cử\\s*nhân|thạc\\s*sĩ|tiến\\s*sĩ|их\\s*сургууль|зэрэг/iu, 'd2-overview D-2 degree university study visa 학위 대학 유학 비자'], [/d[-\\s]?4|어학|한국어|language\\s*(?:training|study)|korean\\s*language|tiếng\\s*hàn|солонгос\\s*хэл|хэлний\\s*бэлтгэл/iu, 'd4-overview D-4 Korean language training visa 한국어 어학연수 비자'], [/잔고|은행|재정|bank\\s*(?:balance|statement|certificate)|financial\\s*proof|proof\\s*of\\s*funds|account\\s*holder|issue\\s*date|sao\\s*kê|giấy\\s*xác\\s*nhận\\s*số\\s*dư|số\\s*dư|tên\\s*chủ\\s*tài\\s*khoản|chứng\\s*minh\\s*tài\\s*chính|tài\\s*chính|дансны\\s*үлдэгдэл|санхүүгийн/iu, 'financial-proof visa-documents bank balance certificate account holder issue date 재정증명 잔고증명 명의 발급일']]; const matched = rules.find(([pattern]) => pattern.test(signal)); const hint = matched ? matched[1] : (category === 'cost' || /비용|학비|생활비|수수료|cost|tuition|living\\s*expenses|insurance|fees|chi\\s*phí|học\\s*phí|амьжиргааны\\s*зардал|сургалтын\\s*төлбөр/iu.test(signal)) ? 'cost-breakdown study in Korea total cost tuition living insurance fees 유학 총비용 학비 생활비 보험료 수수료' : category === 'visa' ? 'Korea student visa sojourn status 체류 비자' : category === 'documents' ? 'required documents checklist passport photo certificate 서류 여권 사진' : category === 'school' ? 'Korea university admission language institute school 입학 학교 어학당' : 'study in Korea general guidance 유학 일반 안내'; return [question, hint].filter(Boolean).join('\\n'); })() }}"
+              },
+              {
+                "name": "locale",
+                "value": "={{ $json.locale }}"
+              },
+              {
+                "name": "category_mode",
+                "value": "strict"
+              }
+            ]
+          }
+        }
+      },
+      "id": "bf1edd34-20e6-4119-9831-b5cd6ac3738d",
+      "name": "Search Governed Serving Chunks",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
+      "position": [
+        1200,
+        768
+      ],
+      "alwaysOutputData": true,
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "options": {
+          "dimensions": 1536,
+          "batchSize": 200,
+          "stripNewLines": true
+        }
+      },
+      "id": "97c7e554-71c5-4f42-8b12-1f78078ad49d",
+      "name": "OpenAI Embeddings - Query",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1200,
+        992
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $items('Normalize Typebot Input')[0]?.json ?? {};\nconst rawItems = $input.all();\nconst question = String(source.question ?? '').trim();\nconst locale = String(source.locale ?? '').trim().toLowerCase();\nconst signal = [question, locale, source.category ?? ''].join(' ');\nconst outOfDomain = /날씨|강수|기온|weather|rain probability|thời\\s*tiết|khả\\s*năng\\s*mưa|nhiệt\\s*độ|цаг\\s*агаар|бороо|температур/iu.test(signal);\nconst attachments = Array.isArray(source.attachments) ? source.attachments.slice(0, 3) : [];\nconst attachmentContext = attachments.map((file, index) => [`[ATTACHMENT ${index + 1}]`, `name: ${String(file.name ?? 'attachment')}`, `type: ${String(file.type ?? '')}`, `document_type: ${String(file.documentType ?? 'unknown')}`, 'extracted_text:', String(file.extractedText ?? '').slice(0, 6000)].join('\\n')).join('\\n\\n');\n\nfunction text(value) {\n  return String(value ?? '').trim();\n}\n\nfunction firstText(...values) {\n  for (const value of values) {\n    const resolved = text(value);\n    if (resolved) return resolved;\n  }\n  return null;\n}\n\nfunction numberOrNull(value) {\n  if (value === null || value === undefined || String(value).trim() === '') return null;\n  const n = Number(value);\n  return Number.isFinite(n) ? n : null;\n}\n\nfunction round(value) {\n  const n = numberOrNull(value);\n  return n === null ? null : Number(n.toFixed(4));\n}\n\nconst SUPPORTED_LOCALES = new Set(['ko', 'en', 'vi', 'mn']);\nconst requestedLocale = SUPPORTED_LOCALES.has(locale) ? locale : 'ko';\nconst HANGUL_RE = /[가-힣ㄱ-ㅎㅏ-ㅣ]/u;\nconst CYRILLIC_RE = /[А-Яа-яЁёӨөҮү]/u;\nconst VIETNAMESE_RE = /[ăâđêôơưàáảãạằắẳẵặầấẩẫậèéẻẽẹềếểễệìíỉĩịòóỏõọồốổỗộờớởỡợùúủũụừứửữựỳýỷỹỵ]/iu;\nconst LATIN_RE = /[a-z]/iu;\nconst VIETNAMESE_WORD_RE = /(?:^|\\s)(?:hồ\\s*sơ|chi\\s*phí|du\\s*học|tài\\s*chính|thị\\s*thực|tổng\\s*quan|gia\\s*hạn|sinh\\s*viên|trường|căn\\s*cứ)(?:\\s|$)/iu;\nconst FALLBACK_TITLES = {\n  ko: 'KAXI 승인 문서',\n  en: 'KAXI approved source',\n  vi: 'Nguồn KAXI đã duyệt',\n  mn: 'KAXI баталгаажсан эх сурвалж',\n};\nconst CATEGORY_SCOPES = {\n  cost: ['cost'],\n  visa: ['visa', 'legal', 'process', 'warning'],\n  documents: ['documents', 'legal', 'process', 'warning'],\n  school: ['school', 'documents', 'process'],\n  warning: ['warning', 'legal'],\n  process: ['process', 'warning', 'legal'],\n  legal: ['legal'],\n};\n\nfunction normalizeLocale(value) {\n  const normalized = text(value).toLowerCase();\n  if (normalized === 'kr' || normalized === 'ko-kr') return 'ko';\n  if (normalized === 'vn' || normalized === 'vi-vn') return 'vi';\n  if (normalized === 'en-us' || normalized === 'en-gb') return 'en';\n  if (normalized === 'mn-mn') return 'mn';\n  return SUPPORTED_LOCALES.has(normalized) ? normalized : null;\n}\n\nfunction scriptFlags(value) {\n  const candidate = text(value);\n  return {\n    hangul: HANGUL_RE.test(candidate),\n    cyrillic: CYRILLIC_RE.test(candidate),\n    vietnamese: VIETNAMESE_RE.test(candidate),\n    latin: LATIN_RE.test(candidate),\n  };\n}\n\nfunction detectTextLocale(value) {\n  const flags = scriptFlags(value);\n  if (flags.hangul) return 'ko';\n  if (flags.vietnamese) return 'vi';\n  if (flags.cyrillic) return 'mn';\n  if (flags.latin) return 'en';\n  return null;\n}\n\nfunction firstHeading(value) {\n  const heading = text(value).split(/\\r?\\n/).find((line) => /^#{1,6}\\s+/.test(line));\n  return heading ? heading.replace(/^#{1,6}\\s+/, '').trim() : null;\n}\n\nfunction withoutNeutralTerms(value) {\n  return text(value)\n    .replace(/\\b(?:[cdef]-?\\d+(?:-\\d+)?|topik|kaxi|hikorea|kiip|arc|k-eta|krw|usd|pdf)\\b/giu, ' ')\n    .replace(/[\\d\\s.,:;()[\\]{}\\/_+&-]+/g, ' ')\n    .trim();\n}\n\nfunction titleMatchesLocale(value) {\n  const title = text(value).replace(/^#{1,6}\\s+/, '').trim();\n  if (!title) return false;\n  const candidate = withoutNeutralTerms(title);\n  const flags = scriptFlags(candidate);\n  if (requestedLocale === 'ko') {\n    return flags.hangul && !flags.cyrillic && !flags.vietnamese && !flags.latin;\n  }\n  if (requestedLocale === 'en') {\n    return flags.latin && !flags.hangul && !flags.cyrillic && !flags.vietnamese;\n  }\n  if (requestedLocale === 'vi') {\n    return (flags.vietnamese || VIETNAMESE_WORD_RE.test(candidate))\n      && !flags.hangul\n      && !flags.cyrillic;\n  }\n  return flags.cyrillic && !flags.hangul && !flags.vietnamese && !flags.latin;\n}\n\nfunction resolveLocalizedTitle(pageContent, metadataTitle) {\n  const headings = text(pageContent)\n    .split(/\\r?\\n/)\n    .filter((line) => /^#{1,6}\\s+/.test(line))\n    .map((line) => line.replace(/^#{1,6}\\s+/, '').trim());\n  const candidate = [...headings, text(metadataTitle)].find((value) => titleMatchesLocale(value));\n  return candidate || FALLBACK_TITLES[requestedLocale];\n}\n\nfunction contentMatchesLocale(value, metadata) {\n  const content = text(value);\n  if (!content) return false;\n  const reported = [metadata.language, metadata.locale_filter, metadata.locale]\n    .map(normalizeLocale)\n    .filter(Boolean);\n  if (reported.some((language) => language !== requestedLocale)) return false;\n\n  const detected = detectTextLocale(firstHeading(content) || content);\n  if (detected !== requestedLocale) return false;\n\n  const flags = scriptFlags(content);\n  if (requestedLocale === 'ko') return !flags.cyrillic && !flags.vietnamese;\n  if (requestedLocale === 'en') return !flags.hangul && !flags.cyrillic && !flags.vietnamese;\n  if (requestedLocale === 'vi') return !flags.hangul && !flags.cyrillic && (flags.vietnamese || VIETNAMESE_WORD_RE.test(content));\n  return !flags.hangul && !flags.vietnamese && flags.cyrillic;\n}\n\nfunction tokenize(value) {\n  const stopWords = new Set([\n    'the', 'and', 'for', 'with', 'from', 'that', 'this', 'what', 'how',\n    '한국', '유학', '관련', '대해', '알려주세요', '문의',\n    'các', 'cho', 'với', 'này', 'được', 'hãy',\n    'ямар', 'тухай', 'болон', 'энэ', 'хэрхэн',\n  ]);\n  return (text(value).normalize('NFKC').toLowerCase().match(/[\\p{L}\\p{N}][\\p{L}\\p{N}-]*/gu) || [])\n    .filter((token) => token.length >= 2 && !stopWords.has(token));\n}\n\nfunction tokenOverlap(queryTokens, candidateTokens) {\n  if (queryTokens.length === 0 || candidateTokens.length === 0) return 0;\n  const matched = queryTokens.filter((queryToken) => candidateTokens.some(\n    (candidateToken) => candidateToken === queryToken\n      || candidateToken.includes(queryToken)\n      || queryToken.includes(candidateToken),\n  ));\n  return matched.length / queryTokens.length;\n}\n\nconst queryTokens = tokenize(question);\n\nfunction categoryRerankBoost(candidateCategory) {\n  const requestedCategory = text(source.category || 'general').toLowerCase();\n  const candidate = text(candidateCategory || 'general').toLowerCase();\n  if (!requestedCategory || requestedCategory === 'general') return 0;\n  if (candidate === requestedCategory) return 0.18;\n  if ((CATEGORY_SCOPES[requestedCategory] || []).includes(candidate)) return 0.08;\n  return -0.5;\n}\n\nfunction rerankDocument(doc, originalIndex) {\n  const bodyTokens = tokenize([doc.title, doc.pageContent, doc.metadata.keywords || ''].join(' '));\n  const titleTokens = tokenize(doc.title);\n  const bodyOverlap = tokenOverlap(queryTokens, bodyTokens);\n  const titleOverlap = tokenOverlap(queryTokens, titleTokens);\n  const baseScore = doc.hybridScore ?? doc.vectorScore ?? 0;\n  const keywordComponent = doc.keywordScore === null ? 0 : Math.min(Math.max(doc.keywordScore, 0), 1) * 0.04;\n  const rerankScore = round(\n    baseScore\n      + bodyOverlap * 0.45\n      + titleOverlap * 0.25\n      + categoryRerankBoost(doc.category)\n      + keywordComponent\n      + (doc.citationValid ? 0.02 : 0),\n  );\n  return {\n    ...doc,\n    originalRank: originalIndex + 1,\n    bodyOverlap: round(bodyOverlap),\n    titleOverlap: round(titleOverlap),\n    rerankScore,\n  };\n}\n\n\nfunction baseSearchMeta(overrides = {}) {\n  return {\n    type: 'hybrid',\n    retrievedCount: 0,\n    rejectedCitationCount: rawItems.length,\n    topScore: 0,\n    similarityThreshold: source.similarityThreshold || 'category-default',\n    category: source.category ?? 'general',\n    tenant_id: source.tenant_id ?? 'default',\n    locale: requestedLocale,\n    reranker: 'deterministic-locale-v2',\n    reranked: true,\n    ...overrides,\n  };\n}\n\nif (outOfDomain) {\n  return [{\n    json: {\n      ...source,\n      context: '',\n      attachmentContext,\n      attachmentCount: attachments.length,\n      sources: [],\n      searchMeta: baseSearchMeta({ noContext: true, noContextReason: 'out_of_domain' }),\n      retrievedCount: 0,\n      noContext: true,\n      noContextReason: 'out_of_domain',\n    },\n  }];\n}\n\nconst parsedDocs = rawItems.map((item, originalIndex) => {\n  const json = item.json ?? {};\n  const doc = json.document ?? json;\n  const metadata = doc.metadata ?? json.metadata ?? {};\n  const pageContent = firstText(doc.pageContent, doc.text, doc.content, json.content, json.pageContent);\n  const metadataTitle = firstText(metadata.title, doc.title, json.title);\n  const title = resolveLocalizedTitle(pageContent, metadataTitle);\n  const sourceLabel = firstText(metadata.source, metadata.source_label, doc.source, 'rag_serving_chunks');\n  const sourceUrl = firstText(metadata.source_url, metadata.sourceUrl, metadata.url);\n  const checkedAt = firstText(metadata.last_checked_at, metadata.lastCheckedAt, metadata.checkedAt);\n  const checkedBy = firstText(metadata.checked_by, metadata.checkedBy);\n  const docId = firstText(metadata.doc_id, metadata.docId, metadata.canonical_document_id, metadata.canonicalDocumentId);\n  const citationValid = metadata.citation_valid === true || Boolean(sourceUrl?.startsWith('https://') && checkedAt && checkedBy);\n  const category = firstText(metadata.category, source.category, 'general');\n  const vectorScore = round(metadata.vector_score ?? json.similarity ?? json.score ?? doc.score);\n  const keywordScore = round(metadata.keyword_score);\n  const hybridScore = round(metadata.hybrid_score);\n  const similarityThreshold = round(metadata.similarity_threshold ?? source.similarityThreshold);\n  const languageMatch = contentMatchesLocale(pageContent, metadata);\n  const normalizedMetadataTitle = text(metadataTitle).replace(/^#{1,6}\\s+/, '').trim();\n  return {\n    pageContent,\n    metadata,\n    title,\n    titleSanitized: !normalizedMetadataTitle || title !== normalizedMetadataTitle,\n    source: sourceLabel,\n    sourceUrl,\n    checkedAt,\n    checkedBy,\n    docId,\n    citationValid,\n    category,\n    language: requestedLocale,\n    languageMatch,\n    vectorScore,\n    keywordScore,\n    hybridScore,\n    similarityThreshold,\n    originalIndex,\n    raw: json,\n  };\n});\n\nconst citationDocs = parsedDocs.filter((doc) => Boolean(doc.pageContent) && doc.citationValid);\nconst languageRejectedCount = citationDocs.filter((doc) => !doc.languageMatch).length;\nconst docs = citationDocs\n  .filter((doc) => doc.languageMatch)\n  .map((doc, index) => rerankDocument(doc, doc.originalIndex ?? index));\n\nconst seenDocuments = new Set();\nconst matches = docs\n  .sort((left, right) => (right.rerankScore ?? -1) - (left.rerankScore ?? -1) || left.originalRank - right.originalRank)\n  .filter((doc) => {\n    const key = doc.docId || doc.sourceUrl || [doc.title, text(doc.pageContent).slice(0, 120)].join('|');\n    if (seenDocuments.has(key)) return false;\n    seenDocuments.add(key);\n    return true;\n  })\n  .slice(0, 6)\n  .map((doc, index) => ({ index: index + 1, ...doc }));\nconst titleSanitizedCount = matches.filter((doc) => doc.titleSanitized).length;\n\nconst context = matches\n  .map((doc) => [\n    `[#${doc.index}]`,\n    `title: ${doc.title}`,\n    doc.docId ? `doc_id: ${doc.docId}` : null,\n    `source: ${doc.source}`,\n    doc.sourceUrl ? `source_url: ${doc.sourceUrl}` : null,\n    doc.checkedAt ? `last_checked_at: ${doc.checkedAt}` : null,\n    doc.checkedBy ? `checked_by: ${doc.checkedBy}` : null,\n    `category: ${doc.category}`,\n    `language: ${doc.language}`,\n    `rerank_score: ${doc.rerankScore}`,\n    `original_rank: ${doc.originalRank}`,\n    doc.hybridScore !== null ? `hybrid_score: ${doc.hybridScore}` : null,\n    doc.vectorScore !== null ? `vector_score: ${doc.vectorScore}` : null,\n    doc.keywordScore !== null ? `keyword_score: ${doc.keywordScore}` : null,\n    'content:',\n    doc.pageContent ?? JSON.stringify(doc.raw),\n  ].filter(Boolean).join('\\n'))\n  .join('\\n\\n');\n\nconst sources = matches\n  .map((doc) => ({\n    title: doc.title,\n    docId: doc.docId,\n    source: doc.source,\n    sourceUrl: doc.sourceUrl,\n    checkedAt: doc.checkedAt,\n    checkedBy: doc.checkedBy,\n    citationValid: doc.citationValid,\n    category: doc.category,\n    language: doc.language,\n    languageMatch: doc.languageMatch,\n    titleSanitized: doc.titleSanitized,\n    rerankScore: doc.rerankScore,\n    originalRank: doc.originalRank,\n    hybridScore: doc.hybridScore,\n    vectorScore: doc.vectorScore,\n    keywordScore: doc.keywordScore,\n  }))\n  .slice(0, 6);\n\nconst topScore = matches[0]?.rerankScore ?? matches[0]?.hybridScore ?? matches[0]?.vectorScore ?? null;\nconst searchMeta = baseSearchMeta({\n  retrievedCount: matches.length,\n  rawRetrievedCount: rawItems.length,\n  rejectedCitationCount: Math.max(0, rawItems.length - citationDocs.length),\n  languageRejectedCount,\n  titleSanitizedCount,\n  topScore,\n});\n\nreturn [{\n  json: {\n    ...source,\n    context,\n    attachmentContext,\n    attachmentCount: attachments.length,\n    sources,\n    searchMeta,\n    retrievedCount: matches.length,\n    noContext: matches.length === 0,\n    noContextReason: matches.length === 0\n      ? (languageRejectedCount > 0 && citationDocs.length === languageRejectedCount\n        ? 'locale_validation_failed'\n        : (rawItems.length > 0 ? 'citation_validation_failed' : 'no_retrieval_match'))\n      : null,\n  },\n}];"
+      },
+      "id": "176307ce-0135-44aa-b8ae-784a9b71b885",
+      "name": "Build Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        768
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $items('Build Context')[0]?.json ?? {};\nconst raw = $input.first().json;\nlet payload = raw.output ?? raw.text ?? raw.content ?? raw.response ?? raw;\nif (typeof payload === 'string') {\n  const trimmed = payload.trim().replace(/^```json\\s*/i, '').replace(/^```\\s*/i, '').replace(/```$/i, '').trim();\n  payload = JSON.parse(trimmed);\n}\nreturn [{ json: { ...source, ...payload, needsHuman: Boolean(payload.needsHuman || source.noContext), riskLevel: payload.riskLevel ?? (source.noContext ? 'medium' : 'low'), leadStage: payload.leadStage ?? (payload.needsHuman ? 'review' : 'none'), sources: payload.sources?.length ? payload.sources : source.sources } }];"
+      },
+      "id": "99fa8228-6165-403d-ba69-2e9384f841ec",
+      "name": "Parse AI JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        768
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "needs-human",
+              "leftValue": "={{ $json.needsHuman }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": true
+            },
+            {
+              "id": "risk-not-low",
+              "leftValue": "={{ $json.riskLevel }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              },
+              "rightValue": "low"
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "3cc28133-484a-4ca7-9d14-578bcd5d22ef",
+      "name": "Needs Human or Risk?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2800,
+        768
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\"answer\":($('Classify Handoff Risk').item.json.answer),\"needsHuman\":($('Classify Handoff Risk').item.json.needsHuman),\"riskLevel\":($('Classify Handoff Risk').item.json.riskLevel),\"leadStage\":($('Classify Handoff Risk').item.json.leadStage),\"nextStep\":($('Classify Handoff Risk').item.json.nextStep),\"sources\":($('Classify Handoff Risk').item.json.sources),\"searchMeta\":($('Classify Handoff Risk').item.json.searchMeta),\"requestId\":($('Classify Handoff Risk').item.json.requestId),\"executionId\":($execution.id),\"workflowId\":($workflow.id),\"workflowVersionId\":\"kaxi-rag-runtime@2026-07-12.lexical-fallback-v2\",\"modelVersion\":\"retrieval/lexical-provider-fallback@v1\",\"promptVersion\":\"kaxi-grounded-context-answer@2026-07-12.lexical-fallback-v2\"}) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "54bbec4c-5336-45b8-b2ab-da8a999f2f53",
+      "name": "Respond to Typebot",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        3760,
+        768
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\"answer\":\"인증되지 않은 요청입니다.\",\"needsHuman\":true,\"riskLevel\":\"high\",\"leadStage\":\"blocked\",\"nextStep\":\"KAXI 서명 검증과 세션 상태를 확인하세요.\",\"sources\":[],\"executionId\":($execution.id),\"workflowId\":($workflow.id),\"workflowVersionId\":\"kaxi-rag-runtime@2026-07-12.lexical-fallback-v2\",\"modelVersion\":\"retrieval/lexical-provider-fallback@v1\",\"promptVersion\":\"kaxi-grounded-context-answer@2026-07-12.lexical-fallback-v2\"}) }}",
+        "options": {
+          "responseCode": 401,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "58df5430-bd23-4061-8a27-104692da1756",
+      "name": "Respond Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1200,
+        1136
+      ],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "content": "## ① RAG 추가 / Knowledge Ingestion\n문서 입력 → 정규화 → 청크 분할 → 임베딩 → Supabase `knowledge_chunks` 저장",
+        "height": 560,
+        "width": 1320,
+        "color": 4
+      },
+      "id": "ea82f2ac-e0b4-4ad7-a3fb-166db9dd51e2",
+      "name": "Sticky Note 5e071b3b",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        160,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ② 실시간 답변 / Typebot Runtime\nTypebot Webhook → Guard → Supabase hybrid search\n- similarity threshold: 기본 0.72\n- category filter: explicit category 또는 질문 기반 추론\n- citations: source_url + last_checked_at\n→ Context Builder → OpenAI-style structured JSON → Typebot response",
+        "height": 520,
+        "width": 2300,
+        "color": 5
+      },
+      "id": "1e755652-d93b-4b73-bc8f-e52cff874954",
+      "name": "Sticky Note 53149728",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        160,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ③ 운영 레이어 / Runtime Ownership\nKAXI가 `chat_messages`, `retrieval_runs`, `n8n_audit_messages`, 초기 `handoff_tasks`의 canonical persistence를 소유합니다.\nn8n은 retrieval, classification, response orchestration을 담당합니다.",
+        "height": 440,
+        "width": 1280,
+        "color": 6
+      },
+      "id": "823123bd-c310-42d6-a181-ebd4163d2eed",
+      "name": "Sticky Note fcaecbe8",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2528,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Typebot mapping\nanswer ← response.body.answer\nneedsHuman ← response.body.needsHuman\nriskLevel ← response.body.riskLevel\nnextStep ← response.body.nextStep\nsources/searchMeta ← citation and retrieval metadata\nTypebot calls the KAXI gateway; KAXI signs the n8n request with HMAC.",
+        "height": 280,
+        "width": 920,
+        "color": 3
+      },
+      "id": "4fcd9357-df63-4144-a134-2e01ad4752b2",
+      "name": "Sticky Note fcd7cb7c",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        160,
+        1248
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "has-context",
+              "leftValue": "={{ $json.noContext }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              },
+              "rightValue": false
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "78441066-c162-4e68-9382-150890a63899",
+      "name": "Has Retrieved Context?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1680,
+        928
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nreturn [{\n  json: {\n    ...item,\n    answer: '현재 KAXI 지식베이스에서 이 질문을 확인할 수 있는 충분한 근거 문서를 찾지 못했습니다. 체류자격 전환, 비자 요건, 제출 서류처럼 실제 접수 결과에 영향을 줄 수 있는 내용은 담당자 검토가 필요합니다.',\n    needsHuman: true,\n    riskLevel: 'medium',\n    leadStage: 'review',\n    nextStep: '현재 체류자격, 체류 만료일, 준비 중인 서류를 정리한 뒤 담당자 상담으로 연결하세요.',\n    sources: [],\n    searchMeta: item.searchMeta,\n  },\n}];"
+      },
+      "id": "b74f5faa-8fe3-4e15-b28e-551c77b06d6a",
+      "name": "Fallback No Context Answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json ?? {};\nconst question = String(item.question ?? '').trim();\nconst locale = String(item.locale ?? 'ko').trim().toLowerCase();\nconst categorySignal = String(item.category ?? 'general').trim().toLowerCase();\nconst context = String(item.context ?? '').trim();\nconst signal = [question, categorySignal, locale].join(' ');\n\nfunction lang() {\n  if (/^en\\b|english/.test(locale)) return 'en';\n  if (/^vi\\b|vietnam/.test(locale)) return 'vi';\n  if (/^mn\\b|mongol/.test(locale)) return 'mn';\n  return 'ko';\n}\n\nconst language = lang();\n\nfunction pick(messages) {\n  return messages[language] ?? messages.ko;\n}\n\nfunction compact(value, max = 160) {\n  const normalized = String(value ?? '').replace(/\\s+/g, ' ').trim();\n  if (normalized.length <= max) return normalized;\n  return `${normalized.slice(0, max - 1).trim()}...`;\n}\n\nfunction toNumber(value) {\n  if (value === null || value === undefined || String(value).trim() === '') return null;\n  const n = Number(value);\n  return Number.isFinite(n) ? n : null;\n}\n\nfunction parseDocBlock(block, fallbackIndex) {\n  const lines = String(block ?? '').trim().split('\\n');\n  const parsedIndex = Number((lines[0] ?? '').match(/\\[#(\\d+)\\]/)?.[1]);\n  const doc = {\n    index: Number.isFinite(parsedIndex) ? parsedIndex : fallbackIndex + 1,\n    title: '',\n    docId: null,\n    source: '',\n    sourceUrl: null,\n    checkedAt: null,\n    checkedBy: null,\n    category: null,\n    language: null,\n    rerankScore: null,\n    hybridScore: null,\n    vectorScore: null,\n    keywordScore: null,\n    body: '',\n  };\n  const content = [];\n  let inContent = false;\n  for (const line of lines) {\n    if (line.trim() === 'content:') {\n      inContent = true;\n      continue;\n    }\n    if (inContent) {\n      content.push(line);\n      continue;\n    }\n    const match = line.match(/^([^:]+):\\s*(.*)$/);\n    if (!match) continue;\n    const key = match[1].trim();\n    const value = match[2].trim();\n    if (key === 'title') doc.title = value;\n    else if (key === 'doc_id') doc.docId = value || null;\n    else if (key === 'source') doc.source = value;\n    else if (key === 'source_url') doc.sourceUrl = value || null;\n    else if (key === 'last_checked_at') doc.checkedAt = value || null;\n    else if (key === 'checked_by') doc.checkedBy = value || null;\n    else if (key === 'category') doc.category = value || null;\n    else if (key === 'language') doc.language = value || null;\n    else if (key === 'rerank_score') doc.rerankScore = toNumber(value);\n    else if (key === 'hybrid_score') doc.hybridScore = toNumber(value);\n    else if (key === 'vector_score') doc.vectorScore = toNumber(value);\n    else if (key === 'keyword_score') doc.keywordScore = toNumber(value);\n  }\n  doc.body = content.join('\\n').trim();\n  return doc;\n}\n\nfunction splitSentences(body) {\n  return String(body ?? '')\n    .split(/(?<=[.!?。！？다요음함됨임])\\s+|\\n+/u)\n    .map((sentence) => sentence.trim())\n    .filter((sentence) => sentence.length > 20);\n}\n\nconst docs = context\n  ? context.split(/(?=\\[#\\d+\\])/g).map((block, index) => parseDocBlock(block, index)).filter((doc) => doc.body || doc.title)\n  : [];\n\nfunction uniqueSourceList(candidates) {\n  const uniqueSources = [];\n  for (const doc of candidates) {\n    if (!doc?.title) continue;\n    const key = `${doc.title}|${doc.source ?? ''}|${doc.sourceUrl ?? ''}|${doc.docId ?? ''}`;\n    if (!uniqueSources.some((source) => source.key === key)) {\n      uniqueSources.push({\n        key,\n        title: doc.title,\n        docId: doc.docId ?? null,\n        source: doc.source ?? '',\n        category: doc.category ?? null,\n        language: doc.language ?? language,\n        rerankScore: Number.isFinite(doc.rerankScore) ? Number(doc.rerankScore.toFixed(4)) : null,\n        sourceUrl: doc.sourceUrl ?? null,\n        checkedAt: doc.checkedAt ?? null,\n        checkedBy: doc.checkedBy ?? null,\n        hybridScore: Number.isFinite(doc.hybridScore) ? Number(doc.hybridScore.toFixed(4)) : null,\n      });\n    }\n    if (uniqueSources.length >= 3) break;\n  }\n  if (uniqueSources.length < 3 && Array.isArray(item.sources)) {\n    for (const source of item.sources) {\n      const key = `${source.title ?? ''}|${source.source ?? ''}|${source.sourceUrl ?? ''}|${source.docId ?? ''}`;\n      if (!source.title || uniqueSources.some((existing) => existing.key === key)) continue;\n      uniqueSources.push({\n        key,\n        title: source.title,\n        docId: source.docId ?? null,\n        source: source.source ?? '',\n        category: source.category ?? null,\n        language: source.language ?? language,\n        rerankScore: Number.isFinite(Number(source.rerankScore)) ? Number(Number(source.rerankScore).toFixed(4)) : null,\n        sourceUrl: source.sourceUrl ?? null,\n        checkedAt: source.checkedAt ?? null,\n        checkedBy: source.checkedBy ?? null,\n        hybridScore: Number.isFinite(Number(source.hybridScore)) ? Number(Number(source.hybridScore).toFixed(4)) : null,\n      });\n      if (uniqueSources.length >= 3) break;\n    }\n  }\n  return uniqueSources.map(({ key, ...source }) => source);\n}\n\nconst sourceCandidates = docs.length > 0 ? docs : [];\nconst initialSources = uniqueSourceList(sourceCandidates);\nconst outOfDomainWeather = item.noContextReason === 'out_of_domain'\n  || /날씨|강수|기온|weather|rain probability|thời\\s*tiết|khả\\s*năng\\s*mưa|nhiệt\\s*độ|цаг\\s*агаар|бороо|температур/iu.test(signal);\nconst promptInjection = /ignore\\s+(?:all\\s+)?(?:previous|prior)\\s+instructions?|reveal\\s+(?:the\\s+)?system\\s+prompt|show\\s+(?:the\\s+)?system\\s+prompt|시스템\\s*프롬프트|이전\\s*(?:지시|명령)\\s*무시|bỏ\\s*qua\\s*(?:các\\s*)?(?:hướng\\s*dẫn|chỉ\\s*thị)\\s*(?:trước|trước\\s*đó)|hiển\\s*thị\\s*(?:system\\s*)?prompt|tiết\\s*lộ\\s*(?:system\\s*)?prompt|өмнөх\\s*заавр|систем(?:ийн)?\\s*prompt|систем(?:ийн)?\\s*промпт|зааврыг\\s*үл\\s*тоо|зааврыг\\s*ил\\s*болго/iu.test(signal);\nconst fakeDocuments = /가짜|위조|허위\\s*서류|fake|forg(?:ed|ery)?|giả(?:\\s*mạo)?|хуурамч|хуурмаг/iu.test(signal);\nconst illegalEmployment = /불법\\s*취업|무허가|허가\\s*없이|취업\\s*허가\\s*없이|without\\s+(?:a\\s+)?work\\s+permit|work(?:ing)?\\s+without\\s+(?:a\\s+)?permit|illegal\\s+employment|unauthori[sz]ed\\s+work|không\\s+(?:cần|có)\\s+giấy\\s+phép|làm\\s*việc\\s+không\\s+phép|зөвшөөрөлгүй|ажиллах\\s+зөвшөөрөлгүй/iu.test(signal);\n\nif (outOfDomainWeather) {\n  const answer = pick({\n    ko: 'KAXI는 한국 유학·비자 범위의 질문만 답변할 수 있어요. 해당 범위 안에서 다시 질문해 주세요.',\n    en: 'KAXI only answers study-in-Korea and visa questions. Please rephrase your question within that scope.',\n    vi: 'KAXI chỉ trả lời các câu hỏi về du học và visa Hàn Quốc. Vui lòng hỏi lại trong phạm vi đó.',\n    mn: 'KAXI зөвхөн Солонгост сурах болон визний асуултад хариулна. Энэ хүрээнд асуултаа дахин бичнэ үү.',\n  });\n  const nextStep = pick({\n    ko: '한국 유학, 비자, 체류, 서류와 관련된 질문으로 다시 입력해 주세요.',\n    en: 'Ask again about studying in Korea, visas, stay status, or documents.',\n    vi: 'Vui lòng hỏi lại về du học Hàn Quốc, visa, tình trạng lưu trú hoặc hồ sơ.',\n    mn: 'Солонгост сурах, виз, оршин суух статус эсвэл бичиг баримтын талаар дахин асууна уу.',\n  });\n  return [{ json: { ...item, answer, needsHuman: false, riskLevel: 'low', leadStage: 'none', nextStep, sources: [], searchMeta: item.searchMeta } }];\n}\n\nif (promptInjection || fakeDocuments || illegalEmployment) {\n  const answer = illegalEmployment\n    ? pick({\n      ko: '허가 없이 일하는 방법이나 불법취업을 돕는 안내는 제공할 수 없어요. 합법적인 시간제취업·자격외활동 허가 요건과 학교 확인 절차를 기준으로 확인해야 합니다.',\n      en: \"I can't help with working without required permission or illegal employment. Check lawful part-time work or outside-status activity permission and school confirmation steps.\",\n      vi: 'Tôi không thể hướng dẫn làm việc không có giấy phép hoặc việc làm bất hợp pháp. Hãy kiểm tra điều kiện xin phép làm thêm hợp pháp và xác nhận của trường.',\n      mn: 'Зөвшөөрөлгүй ажиллах эсвэл хууль бус хөдөлмөр эрхлэх аргыг зааж өгөх боломжгүй. Хууль ёсны цагийн ажил, зөвшөөрөл болон сургуулийн баталгааг шалгана уу.',\n    })\n    : pick({\n      ko: '시스템 지시를 공개하거나 허위·위조 서류를 만드는 방법은 도와드릴 수 없어요. 실제 사실에 맞는 서류만 준비하고 학교 또는 출입국기관의 정식 절차를 따라야 합니다.',\n      en: \"I can't reveal system instructions or help create or use false documents. Use truthful documents only and follow the official school or immigration process.\",\n      vi: 'Tôi không thể tiết lộ hướng dẫn hệ thống hoặc hỗ trợ tạo, sử dụng giấy tờ giả. Chỉ dùng hồ sơ đúng sự thật và làm theo quy trình chính thức của trường hoặc cơ quan xuất nhập cảnh.',\n      mn: 'Системийн зааврыг ил болгох, хуурамч бичиг баримт хийх эсвэл ашиглахад туслах боломжгүй. Зөвхөн үнэн зөв баримт бүрдүүлж, сургууль эсвэл цагаачлалын албан ёсны журмыг дагана уу.',\n    });\n  const nextStep = illegalEmployment\n    ? pick({\n      ko: '현재 체류자격, 근로 가능 시간, 학교 확인서 필요 여부를 확인한 뒤 담당자 검토를 받아주세요.',\n      en: 'Confirm your current status, permitted work hours, and school confirmation requirements with a qualified reviewer.',\n      vi: 'Hãy xác nhận tư cách lưu trú hiện tại, số giờ được phép làm việc và yêu cầu xác nhận của trường với người phụ trách.',\n      mn: 'Одоогийн оршин суух статус, ажиллах цагийн зөвшөөрөл, сургуулийн баталгааг мэргэжилтнээр шалгуулна уу.',\n    })\n    : pick({\n      ko: '사실과 일치하는 재정·신원 서류를 준비하고, 의심되는 상황은 담당자 검토로 연결하세요.',\n      en: 'Prepare accurate financial and identity documents, and route any concern to a qualified reviewer.',\n      vi: 'Chuẩn bị giấy tờ tài chính và nhân thân chính xác; nếu có rủi ro, hãy chuyển cho người phụ trách kiểm tra.',\n      mn: 'Санхүүгийн болон хувийн баримтаа үнэн зөв бүрдүүлж, эрсдэлтэй нөхцөлийг мэргэжилтнээр шалгуулна уу.',\n    });\n  return [{ json: { ...item, answer, needsHuman: true, riskLevel: 'high', leadStage: 'urgent', nextStep, sources: initialSources, searchMeta: item.searchMeta } }];\n}\n\nif (item.noContext === true || !context) {\n  const answer = pick({\n    ko: '근거로 사용할 수 있는 KAXI 승인 문서를 찾지 못했어요. 한국 유학·비자 범위 안에서 질문을 조금 더 구체적으로 다시 적어 주세요.',\n    en: 'I could not find approved KAXI sources for that question. Please rephrase it more specifically within study-in-Korea or visa topics.',\n    vi: 'Tôi chưa tìm thấy nguồn KAXI đã được duyệt cho câu hỏi này. Vui lòng hỏi cụ thể hơn trong phạm vi du học Hàn Quốc hoặc visa.',\n    mn: 'Энэ асуултад тохирох баталгаажсан KAXI эх сурвалж олдсонгүй. Солонгост сурах эсвэл визний хүрээнд илүү тодорхой асууна уу.',\n  });\n  const nextStep = pick({\n    ko: '과정, 비자 종류, 현재 체류자격, 서류명 중 하나를 포함해 다시 질문해 주세요.',\n    en: 'Include the program, visa type, current stay status, or document name and ask again.',\n    vi: 'Hãy nêu thêm chương trình học, loại visa, tình trạng lưu trú hiện tại hoặc tên giấy tờ.',\n    mn: 'Хөтөлбөр, визний төрөл, одоогийн статус эсвэл баримтын нэрийг нэмээд дахин асууна уу.',\n  });\n  return [{ json: { ...item, answer, needsHuman: true, riskLevel: 'medium', leadStage: 'review', nextStep, sources: [], searchMeta: item.searchMeta } }];\n}\n\nconst q = question.toLowerCase();\nconst wantsDocuments = /서류|documents?|hồ\\s*sơ|barimt|бичиг\\s*баримт|준비|필수/.test(q) || categorySignal === 'documents';\nconst wantsCost = /비용|돈|재정|잔고|cost|financial|tuition|fees|tài\\s*chính|chi\\s*phí|зардал|санхүү/.test(q) || categorySignal === 'cost';\nconst wantsVisa = /비자|visa|d-?\\d|체류|전환|연장|thị\\s*thực|виз/.test(q) || categorySignal === 'visa';\nconst wantsSchool = /학교|대학|입학|어학당|school|university|trường|сургууль/.test(q) || categorySignal === 'school';\n\nfunction scoreDoc(doc) {\n  const haystack = `${doc.title} ${doc.category ?? ''} ${doc.body}`.toLowerCase();\n  if (doc.language && doc.language !== language) return -100;\n  let score = Number.isFinite(doc.rerankScore)\n    ? doc.rerankScore\n    : (Number.isFinite(doc.hybridScore) ? doc.hybridScore : 0);\n  if (doc.category === categorySignal) score += 0.18;\n  if (wantsDocuments && /서류|documents|학력|재정|입학허가|여권|사진|결핵|hồ\\s*sơ|бичиг/.test(haystack)) score += 0.22;\n  if (wantsCost && /비용|재정|잔고|cost|financial|은행|tuition|fees|chi\\s*phí|санхүү/.test(haystack)) score += 0.2;\n  if (wantsVisa && /비자|visa|체류|d-?2|d-?4|d-?10|e-?7|thị\\s*thực|виз/.test(haystack)) score += 0.16;\n  if (wantsSchool && /학교|대학|입학|어학당|인증대학|school|university|trường|сургууль/.test(haystack)) score += 0.16;\n  return score;\n}\n\nconst rankedDocs = docs\n  .map((doc) => ({ ...doc, score: scoreDoc(doc) }))\n  .sort((a, b) => b.score - a.score)\n  .slice(0, 4);\n\nconst pickedSentences = [];\nfor (const doc of rankedDocs) {\n  const sentences = splitSentences(doc.body);\n  const preferred = sentences.find((sentence) => {\n    if (wantsDocuments && /서류|여권|사진|표준입학허가서|학력|재정|결핵|증빙|document|passport|hồ\\s*sơ/.test(sentence)) return true;\n    if (wantsCost && /비용|재정|잔고|은행|달러|증빙|cost|tuition|financial|bank|fees/.test(sentence)) return true;\n    if (wantsVisa && /비자|체류|D-4|D-2|D-10|전환|연장|visa|status|extension/.test(sentence)) return true;\n    if (wantsSchool && /학교|대학|입학|어학당|인증|school|university|admission/.test(sentence)) return true;\n    return false;\n  }) ?? sentences[0];\n  if (preferred && !pickedSentences.some((existing) => existing.includes(preferred.slice(0, 30)))) {\n    pickedSentences.push(compact(preferred, 145));\n  }\n  if (pickedSentences.length >= 4) break;\n}\n\nconst topic = wantsDocuments\n  ? '준비 서류'\n  : wantsCost\n    ? '비용·재정 증빙'\n    : wantsSchool\n      ? '학교·입학'\n      : wantsVisa\n        ? '비자·체류'\n        : '문의하신 내용';\n\nconst bullets = pickedSentences.length > 0\n  ? pickedSentences.map((sentence) => `- ${sentence}`).join('\\n')\n  : `- 검색된 문서에서 ${topic}와 관련된 근거를 확인했습니다.`;\n\nconst uniqueSources = uniqueSourceList(rankedDocs);\nconst sourceLines = uniqueSources\n  .map((source, index) => {\n    const basis = source.sourceUrl ? `${source.title} - ${source.sourceUrl}` : `${source.title} - ${source.source}`;\n    const checked = source.checkedAt ? ` (${source.checkedAt} 확인)` : '';\n    return `${index + 1}. ${basis}${checked}`;\n  })\n  .join('\\n');\n\nconst caution = wantsVisa || wantsDocuments\n  ? '다만 국적, 학교, 관할 재외공관, 현재 체류자격에 따라 추가 서류가 달라질 수 있어요.'\n  : '세부 조건은 개인 상황에 따라 달라질 수 있어요.';\n\nconst answer = [\n  `${topic} 기준으로 확인해보면, 핵심은 아래와 같습니다.`,\n  '',\n  bullets,\n  '',\n  caution,\n  '',\n  sourceLines ? `근거:\\n${sourceLines}` : '',\n].filter(Boolean).join('\\n');\n\nconst nextStep = wantsDocuments\n  ? '학교에서 받은 표준입학허가서와 관할 공관 체크리스트를 기준으로 최종 서류를 대조하세요.'\n  : wantsCost\n    ? '잔고증명서 명의, 유지 기간, 금액 기준을 국적과 과정별로 다시 확인하세요.'\n    : wantsVisa\n      ? '현재 체류자격, 체류 만료일, 신청 예정 시점을 확인한 뒤 담당자 검토로 연결하세요.'\n      : '현재 상황을 조금 더 구체화한 뒤 담당자 검토로 연결하세요.';\n\nreturn [{\n  json: {\n    ...item,\n    answer,\n    needsHuman: wantsVisa || wantsDocuments || wantsCost,\n    riskLevel: wantsVisa || wantsDocuments ? 'medium' : 'low',\n    leadStage: wantsVisa || wantsDocuments || wantsCost ? 'review' : 'none',\n    nextStep,\n    sources: uniqueSources,\n    searchMeta: item.searchMeta,\n  },\n}];"
+      },
+      "id": "f204c68a-d485-4a33-bf65-dc806ed768e0",
+      "name": "Build Grounded Context Answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rag-knowledge-ingest",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://kaxi.vercel.app",
+          "ignoreBots": false
+        }
+      },
+      "id": "b3d5e693-7b10-4f27-b6e9-e6f7a872b131",
+      "name": "RAG Knowledge Ingestion Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        432
+      ],
+      "webhookId": "99fcfdee-84c0-4aa5-8009-48d472865af0"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "typebot-handoff-update",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://kaxi.vercel.app",
+          "ignoreBots": false
+        }
+      },
+      "id": "f7853d39-6a2d-4549-b21d-f999fa97383f",
+      "name": "Typebot Handoff Update Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        1680
+      ],
+      "webhookId": "24b28300-b860-44c0-a9cb-03b37bdb2f43"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "session-id",
+              "name": "sessionId",
+              "value": "={{ (() => { const request = $('Typebot Handoff Update Webhook').item.json; const body = request.body ?? {}; const headers = request.headers ?? {}; const query = request.query ?? {}; const source = String(body.source || query.source || 'typebot').trim() || 'typebot'; const raw = String(body.sessionId || body.session_id || body.typebotResultId || headers['x-session-id'] || '').trim(); const value = raw || `${source}-${$execution.id}`; if (/^(typebot|kaxi-site|kaxi|n8n)-/.test(value)) return value; if (source === 'typebot') return `typebot-${value}`; return value; })() }}",
+              "type": "string"
+            },
+            {
+              "id": "typebot-result-id",
+              "name": "typebotResultId",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.typebotResultId || $('Typebot Handoff Update Webhook').item.json.body?.typebot_result_id || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "tenant-id",
+              "name": "tenant_id",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.tenant_id || $('Typebot Handoff Update Webhook').item.json.body?.tenantId || 'default' }}",
+              "type": "string"
+            },
+            {
+              "id": "locale",
+              "name": "locale",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.locale || 'ko' }}",
+              "type": "string"
+            },
+            {
+              "id": "source",
+              "name": "source",
+              "value": "={{ (() => { const request = $('Typebot Handoff Update Webhook').item.json; const value = String(request.body?.source || request.query?.source || 'typebot').trim(); return value || 'typebot'; })() }}",
+              "type": "string"
+            },
+            {
+              "id": "lead-name",
+              "name": "leadName",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.leadName || $('Typebot Handoff Update Webhook').item.json.body?.lead_name || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "lead-contact",
+              "name": "leadContact",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.leadContact || $('Typebot Handoff Update Webhook').item.json.body?.lead_contact || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "lead-contact-type",
+              "name": "leadContactType",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.leadContactType || $('Typebot Handoff Update Webhook').item.json.body?.lead_contact_type || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "lead-note",
+              "name": "leadNote",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.leadNote || $('Typebot Handoff Update Webhook').item.json.body?.lead_note || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "question",
+              "name": "question",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.question || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "answer",
+              "name": "answer",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.answer || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "risk-level",
+              "name": "riskLevel",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.riskLevel || $('Typebot Handoff Update Webhook').item.json.body?.risk_level || 'medium' }}",
+              "type": "string"
+            },
+            {
+              "id": "lead-stage",
+              "name": "leadStage",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.leadStage || $('Typebot Handoff Update Webhook').item.json.body?.lead_stage || 'review' }}",
+              "type": "string"
+            },
+            {
+              "id": "is-allowed",
+              "name": "isAllowed",
+              "value": "={{ $json.ok === true && !!($('Typebot Handoff Update Webhook').item.json.body?.sessionId || $('Typebot Handoff Update Webhook').item.json.body?.session_id || $('Typebot Handoff Update Webhook').item.json.body?.typebotResultId) }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5f403dfa-4a20-4c45-a55f-f54b9c732301",
+      "name": "Normalize Handoff Update",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        720,
+        1680
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "allowed",
+              "leftValue": "={{ $json.isAllowed }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "6e46fab5-743e-41a5-989c-d3c69cd0f93f",
+      "name": "Handoff Update Guard",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1008,
+        1680
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "handoff_updates",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "session_id",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.sessionId }}"
+            },
+            {
+              "fieldId": "tenant_id",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.tenant_id }}"
+            },
+            {
+              "fieldId": "locale",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.locale }}"
+            },
+            {
+              "fieldId": "source",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.source }}"
+            },
+            {
+              "fieldId": "lead_name",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.leadName }}"
+            },
+            {
+              "fieldId": "lead_contact",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.leadContact }}"
+            },
+            {
+              "fieldId": "lead_contact_type",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.leadContactType }}"
+            },
+            {
+              "fieldId": "lead_note",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.leadNote }}"
+            },
+            {
+              "fieldId": "question",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.question }}"
+            },
+            {
+              "fieldId": "answer",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.answer }}"
+            },
+            {
+              "fieldId": "risk_level",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.riskLevel }}"
+            },
+            {
+              "fieldId": "lead_stage",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.leadStage }}"
+            },
+            {
+              "fieldId": "lead_note_ciphertext",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.leadNoteCiphertext }}"
+            },
+            {
+              "fieldId": "lead_note_hash",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.leadNoteHash }}"
+            },
+            {
+              "fieldId": "lead_note_redacted",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.leadNoteRedacted }}"
+            },
+            {
+              "fieldId": "question_ciphertext",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.questionCiphertext }}"
+            },
+            {
+              "fieldId": "question_hash",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.questionHash }}"
+            },
+            {
+              "fieldId": "question_redacted",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.questionRedacted }}"
+            },
+            {
+              "fieldId": "answer_ciphertext",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.answerCiphertext }}"
+            },
+            {
+              "fieldId": "answer_hash",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.answerHash }}"
+            },
+            {
+              "fieldId": "answer_redacted",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.answerRedacted }}"
+            }
+          ]
+        }
+      },
+      "id": "0f8082a2-e78d-428e-8c62-cd5064234283",
+      "name": "Save Handoff Update",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        1600
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\"ok\":true,\"status\":($json.response_payload?.status || $json.update_status || 'contact_received'),\"leadId\":($json.lead_id),\"leadContactId\":($json.lead_contact_id),\"handoffTaskId\":($json.handoff_task_id),\"executionId\":($execution.id),\"workflowId\":($workflow.id),\"workflowVersionId\":\"kaxi-rag-runtime@2026-07-12.lexical-fallback-v2\",\"modelVersion\":\"openai/text-embedding-3-small@1536\",\"promptVersion\":\"kaxi-handoff-update@2026-07-11.provenance-v1\"}) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "14ce5371-63da-40db-8594-9933fbc87c6e",
+      "name": "Respond Handoff Update",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1520,
+        1600
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\"ok\":false,\"status\":\"unauthorized\",\"message\":\"상담전환 저장 요청 인증에 실패했습니다.\",\"executionId\":($execution.id),\"workflowId\":($workflow.id),\"workflowVersionId\":\"kaxi-rag-runtime@2026-07-12.lexical-fallback-v2\",\"modelVersion\":\"openai/text-embedding-3-small@1536\",\"promptVersion\":\"kaxi-handoff-update@2026-07-11.provenance-v1\"}) }}",
+        "options": {
+          "responseCode": 401,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "4384a8cb-e41f-42c6-ae0e-0881c8273259",
+      "name": "Respond Handoff Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1200,
+        1808
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ④ 상담전환 완료 / Handoff Contact Update\nTypebot이 이름·연락처·메모를 받은 뒤 `typebot-handoff-update`로 전송합니다.\n`handoff_updates` insert trigger가 `leads`, `lead_contacts`, `handoff_tasks`를 함께 갱신합니다.",
+        "height": 420,
+        "width": 1660,
+        "color": 7
+      },
+      "id": "f7aa91dc-5f40-4b56-9be1-0d4e9ce8f2ab",
+      "name": "Sticky Note Handoff Update",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        160,
+        1520
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://kaxi.vercel.app/api/internal/n8n/verify",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { purpose: 'rag-ingestion', timestamp: $json.headers?.['x-kaxi-timestamp'] ?? '', nonce: $json.headers?.['x-kaxi-nonce'] ?? '', signature: $json.headers?.['x-kaxi-signature'] ?? '', payload: $json.body ?? {} } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "48c045b6-edc0-48ba-90e9-1d4532619767",
+      "name": "Verify Ingestion Signature",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        480,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "allowed",
+              "leftValue": "={{ $json.isAllowed }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5e01a41d-6b48-401b-9b05-f7a52a76cf3f",
+      "name": "Ingestion Guard",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        960,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "=  {{ JSON.stringify({\"ok\":false,\"status\":\"unauthorized\",\"executionId\":($execution.id),\"workflowId\":($workflow.id),\"workflowVersionId\":\"kaxi-rag-runtime@2026-07-12.lexical-fallback-v2\",\"modelVersion\":\"openai/text-embedding-3-small@1536\",\"promptVersion\":\"kaxi-rag-ingestion@2026-07-11.provenance-v1\"}) }}",
+        "options": {
+          "responseCode": 401,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "5fcda290-304f-4f71-81f3-293000dbe85c",
+      "name": "Respond Ingestion Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1200,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\"ok\":true,\"status\":\"inserted\",\"executionId\":($execution.id),\"workflowId\":($workflow.id),\"workflowVersionId\":\"kaxi-rag-runtime@2026-07-12.lexical-fallback-v2\",\"modelVersion\":\"openai/text-embedding-3-small@1536\",\"promptVersion\":\"kaxi-rag-ingestion@2026-07-11.provenance-v1\"}) }}",
+        "options": {
+          "responseCode": 202,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "0a876760-1ac0-4556-b214-80ccc9974d6e",
+      "name": "Respond Ingestion Done",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1488,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://kaxi.vercel.app/api/internal/n8n/verify",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { purpose: 'typebot-runtime', timestamp: $json.headers?.['x-kaxi-timestamp'] ?? '', nonce: $json.headers?.['x-kaxi-nonce'] ?? '', signature: $json.headers?.['x-kaxi-signature'] ?? '', payload: $json.body ?? {} } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "1b047b1a-a4ab-4437-83d4-d6a6b8e42190",
+      "name": "Verify Runtime Signature",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        480,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://kaxi.vercel.app/api/internal/n8n/verify",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { purpose: 'typebot-handoff', timestamp: $json.headers?.['x-kaxi-timestamp'] ?? '', nonce: $json.headers?.['x-kaxi-nonce'] ?? '', signature: $json.headers?.['x-kaxi-signature'] ?? '', payload: $json.body ?? {} } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "d8acd72f-4d3c-40d7-b3b6-79e7dd823f58",
+      "name": "Verify Handoff Signature",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        480,
+        1552
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json ?? {};\nconst question = String(item.question ?? '').trim();\nconst normalized = question.toLowerCase();\nconst locale = String(item.locale ?? 'ko').trim().toLowerCase();\nconst searchMeta = item.searchMeta ?? {};\nconst topScore = Number(searchMeta.topScore);\nconst threshold = Number(searchMeta.similarityThreshold);\nconst retrievedCount = Number(searchMeta.retrievedCount ?? item.retrievedCount ?? 0);\n\nfunction lang() {\n  if (/^en\\b|english/.test(locale)) return 'en';\n  if (/^vi\\b|vietnam/.test(locale)) return 'vi';\n  if (/^mn\\b|mongol/.test(locale)) return 'mn';\n  return 'ko';\n}\n\nfunction pick(messages) {\n  return messages[lang()] ?? messages.ko;\n}\n\nfunction searchMetaWithNoContext(value) {\n  const metadata = value && typeof value === 'object' ? value : {};\n  return {\n    ...metadata,\n    retrievedCount: 0,\n    topScore: 0,\n    noContext: true,\n    noContextReason: 'out_of_domain',\n  };\n}\n\nconst weather = /날씨|강수|기온|weather|rain probability|thời\\s*tiết|khả\\s*năng\\s*mưa|nhiệt\\s*độ|цаг\\s*агаар|бороо|температур/iu.test(normalized);\nconst noContext = item.noContext === true || retrievedCount <= 0;\nconst citationFailure = item.noContextReason === 'citation_validation_failed'\n  || Number(searchMeta.rejectedCitationCount ?? 0) > 0 && retrievedCount <= 0;\nconst outOfDomain = weather || item.noContextReason === 'out_of_domain' || searchMeta.noContextReason === 'out_of_domain';\nconst permitlessEmployment = /허가\\s*없이|무허가|불법\\s*취업|without\\s+(?:(?:a|any)\\s+)?work\\s+permit|work(?:ing)?\\s+without\\s+(?:(?:a|any)\\s+)?permit|illegal\\s+employment|unauthori[sz]ed\\s+work|không\\s+(?:cần|có)\\s+giấy\\s+phép|làm\\s*việc\\s+không\\s+phép|зөвшөөрөлгүй|ажиллах\\s+зөвшөөрөлгүй/iu.test(normalized);\nconst entryBanOrDeportation = /강제퇴거|입국금지|deported|deportation|entry\\s*ban|trục\\s*xuất|cấm\\s*nhập\\s*cảnh|албадан\\s*гаргуул|нэвтрэх\\s*хориг/iu.test(normalized);\nconst overstay = /불법\\s*체류|오버스테이|체류\\s*기간(?:이|을)?\\s*(?:이미\\s*)?(?:지났|초과)|만료(?:일)?(?:이|을)?\\s*(?:이미\\s*)?지났|overstay|permitted\\s+stay(?:\\s+has)?\\s+(?:already\\s+)?expired|stay\\s+period(?:\\s+has)?\\s+(?:already\\s+)?expired|thời\\s*hạn\\s*lưu\\s*trú[^.?!]{0,60}(?:đã\\s*)?hết|quá\\s*hạn|хугацаа[^.?!]{0,60}(?:аль\\s*хэдийн\\s*)?дууссан|хугацаа\\s*хэтэр/iu.test(normalized);\nconst promptInjection = /ignore\\s+(?:all\\s+)?(?:previous|prior)(?:\\s+[a-z]+){0,3}\\s+instructions?|reveal\\s+(?:the\\s+)?system\\s+prompt|show\\s+(?:the\\s+)?system\\s+prompt|시스템\\s*프롬프트|이전\\s*(?:지시|명령)\\s*무시|bỏ\\s*qua\\s*(?:các\\s*)?(?:hướng\\s*dẫn|chỉ\\s*thị)\\s*(?:trước|trước\\s*đó)|hiển\\s*thị\\s*(?:system\\s*)?prompt|tiết\\s*lộ\\s*(?:system\\s*)?prompt|өмнөх\\s*заавр|систем(?:ийн)?\\s*prompt|систем(?:ийн)?\\s*промпт|зааврыг\\s*үл\\s*тоо|зааврыг\\s*ил\\s*болго/iu.test(normalized);\nconst falseDocuments = /위조|가짜|허위\\s*서류|fake|forg(?:e|ed|ery|ing)?|giả(?:\\s*mạo)?|хуурамч|хуурмаг/iu.test(normalized);\nconst highConsequence = /불법체류|오버스테이|강제퇴거|추방|입국금지|위조|가짜|허위\\s*서류|형사|수사|체포|deport|overstay|fake|forg(?:e|ed|ery|ing)?|giả(?:\\s*mạo)?|хуурамч|хуурмаг|criminal/iu.test(normalized)\n  || permitlessEmployment\n  || entryBanOrDeportation\n  || overstay\n  || promptInjection\n  || falseDocuments;\nconst personalCase = /제\\s*(비자|체류|상황)|저는|제가|현재\\s*체류|만료|거절|출국명령|벌금|전과|신청했|변경하려|연장하려|\\b20\\d{2}[-./년]/.test(normalized);\nconst regulatedAction = /체류자격\\s*(변경|연장)|자격외활동|시간제취업|취업\\s*허가|사업|초청|가족\\s*동반/.test(normalized);\nconst lowConfidence = Number.isFinite(topScore)\n  && Number.isFinite(threshold)\n  && threshold > 0\n  && topScore < threshold + 0.04;\n\nconst copy = {\n  ko: {\n    scopedAnswer: 'KAXI는 한국 유학·비자 범위의 질문만 답변할 수 있어요. 해당 범위 안에서 다시 질문해 주세요.',\n    scopedNextStep: '한국 유학, 비자, 체류, 서류와 관련된 질문으로 다시 입력해 주세요.',\n    illegalAnswer: '허가 없이 일하는 방법이나 불법취업을 돕는 안내는 제공할 수 없어요. 합법적인 시간제취업·자격외활동 허가와 학교 확인 절차를 확인해야 합니다.',\n    documentAnswer: '시스템 지시를 공개하거나 허위·위조 서류를 만드는 방법은 도와드릴 수 없어요. 사실과 일치하는 서류만 준비하고 정식 절차를 따라야 합니다.',\n    highRiskNextStep: '현재 받은 통지서와 체류 이력을 준비해 담당자 검토를 받아주세요.',\n  },\n  en: {\n    scopedAnswer: 'KAXI only answers study-in-Korea and visa questions. Please rephrase your question within that scope.',\n    scopedNextStep: 'Ask again about studying in Korea, visas, stay status, or documents.',\n    illegalAnswer: 'I cannot help with work without required permission or illegal employment. Check lawful part-time work or outside-status activity permission and school confirmation.',\n    documentAnswer: 'I cannot reveal system instructions or help create or use false documents. Use truthful documents and follow the official process.',\n    highRiskNextStep: 'Prepare your notices and stay history for review by a qualified adviser.',\n  },\n  vi: {\n    scopedAnswer: 'KAXI chỉ trả lời các câu hỏi về du học và visa Hàn Quốc. Vui lòng hỏi lại trong phạm vi đó.',\n    scopedNextStep: 'Vui lòng hỏi lại về du học Hàn Quốc, visa, tình trạng lưu trú hoặc hồ sơ.',\n    illegalAnswer: 'Tôi không thể hướng dẫn làm việc không có giấy phép hoặc việc làm bất hợp pháp. Hãy kiểm tra điều kiện xin phép làm thêm hợp pháp và xác nhận của trường.',\n    documentAnswer: 'Tôi không thể tiết lộ hướng dẫn hệ thống hoặc hỗ trợ tạo, sử dụng giấy tờ giả. Chỉ dùng hồ sơ đúng sự thật và làm theo quy trình chính thức.',\n    highRiskNextStep: 'Chuẩn bị thông báo và lịch sử lưu trú để người phụ trách có chuyên môn kiểm tra.',\n  },\n  mn: {\n    scopedAnswer: 'KAXI зөвхөн Солонгост сурах болон визний асуултад хариулна. Энэ хүрээнд асуултаа дахин бичнэ үү.',\n    scopedNextStep: 'Солонгост сурах, виз, оршин суух статус эсвэл бичиг баримтын талаар дахин асууна уу.',\n    illegalAnswer: 'Зөвшөөрөлгүй ажиллах эсвэл хууль бус хөдөлмөр эрхлэх аргыг зааж өгөх боломжгүй. Хууль ёсны цагийн ажил, зөвшөөрөл болон сургуулийн баталгааг шалгана уу.',\n    documentAnswer: 'Системийн зааврыг ил болгох, хуурамч баримт хийх эсвэл ашиглахад туслах боломжгүй. Зөвхөн үнэн зөв баримт бүрдүүлж, албан ёсны журмыг дагана уу.',\n    highRiskNextStep: 'Мэдэгдэл болон оршин суусан түүхээ бэлтгэж, мэргэжлийн зөвлөхөөр шалгуулна уу.',\n  },\n};\n\nif (outOfDomain) {\n  return [{\n    json: {\n      ...item,\n      answer: pick({ ko: copy.ko.scopedAnswer, en: copy.en.scopedAnswer, vi: copy.vi.scopedAnswer, mn: copy.mn.scopedAnswer }),\n      nextStep: pick({ ko: copy.ko.scopedNextStep, en: copy.en.scopedNextStep, vi: copy.vi.scopedNextStep, mn: copy.mn.scopedNextStep }),\n      needsHuman: false,\n      riskLevel: 'low',\n      leadStage: 'none',\n      sources: [],\n      searchMeta: searchMetaWithNoContext(item.searchMeta),\n      noContext: true,\n      noContextReason: 'out_of_domain',\n      retrievedCount: 0,\n      riskReasons: ['out_of_domain'],\n      riskConfidence: 'high',\n    },\n  }];\n}\n\nconst reasons = [];\nlet riskLevel = 'low';\nif (highConsequence) {\n  riskLevel = 'high';\n  reasons.push('high_consequence_immigration_or_legal_issue');\n  if (permitlessEmployment) reasons.push('permitless_or_illegal_employment');\n  if (entryBanOrDeportation) reasons.push('entry_ban_or_deportation');\n  if (overstay) reasons.push('overstay_or_expired_stay');\n  if (promptInjection) reasons.push('prompt_injection_attempt');\n  if (falseDocuments) reasons.push('false_document_request');\n} else if (noContext) {\n  riskLevel = 'medium';\n  reasons.push(citationFailure ? 'citation_validation_failed' : 'no_grounded_context');\n} else if (personalCase && (regulatedAction || lowConfidence)) {\n  riskLevel = 'medium';\n  reasons.push(regulatedAction ? 'personal_regulated_action' : 'personal_case_low_confidence');\n}\n\nconst needsHuman = riskLevel !== 'low';\nconst leadStage = riskLevel === 'high' ? 'urgent' : riskLevel === 'medium' ? 'review' : 'none';\nconst suppliedNextStep = String(item.nextStep ?? '').trim();\nconst lowRiskNextStep = suppliedNextStep && !/담당자|상담|검토|연결/.test(suppliedNextStep)\n  ? suppliedNextStep\n  : /비자|visa|체류|d-?\\d/.test(normalized)\n    ? '학교와 관할 재외공관의 최신 안내에서 본인 국적과 과정에 해당하는 조건을 확인하세요.'\n    : '궁금한 조건을 한 가지 더 알려주시면 문서 기준으로 이어서 확인해드릴게요.';\nconst defaultNextStep = riskLevel === 'high'\n  ? pick({ ko: copy.ko.highRiskNextStep, en: copy.en.highRiskNextStep, vi: copy.vi.highRiskNextStep, mn: copy.mn.highRiskNextStep })\n  : riskLevel === 'medium'\n    ? '현재 체류자격, 만료일, 신청 이력을 확인한 뒤 담당자 검토로 연결하세요.'\n    : lowRiskNextStep;\nconst refusalAnswer = permitlessEmployment\n  ? pick({ ko: copy.ko.illegalAnswer, en: copy.en.illegalAnswer, vi: copy.vi.illegalAnswer, mn: copy.mn.illegalAnswer })\n  : promptInjection || falseDocuments\n    ? pick({ ko: copy.ko.documentAnswer, en: copy.en.documentAnswer, vi: copy.vi.documentAnswer, mn: copy.mn.documentAnswer })\n    : item.answer;\n\nreturn [{\n  json: {\n    ...item,\n    answer: refusalAnswer,\n    needsHuman,\n    riskLevel,\n    leadStage,\n    nextStep: defaultNextStep,\n    riskReasons: reasons,\n    riskConfidence: riskLevel === 'low' && !lowConfidence ? 'high' : 'review',\n  },\n}];"
+      },
+      "id": "36e5cb36-9890-4723-91fb-bbd1c252ee7d",
+      "name": "Classify Handoff Risk",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2480,
+        768
+      ]
+    },
+    {
+      "parameters": {
+        "path": "rag-serving-capabilities",
+        "responseMode": "responseNode",
+        "options": {
+          "ignoreBots": false
+        }
+      },
+      "id": "cce3c2a9-81c8-417b-b488-d3fb0647273b",
+      "name": "RAG Serving Capability Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        656
+      ],
+      "webhookId": "d95b499d-bc7a-445b-833d-c1523b6afad0"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\"service\":\"kaxi-rag-serving\",\"contractVersion\":\"2026-07-10.v1\",\"workflowId\":($workflow.id),\"ingestionTarget\":\"rag_serving_chunks\",\"retrievalMode\":\"lexical-provider-fallback\",\"corpusEmbeddingModel\":\"text-embedding-3-small\",\"dimensions\":1536,\"signedIngestionRequired\":true,\"executionId\":($execution.id),\"workflowVersionId\":\"kaxi-rag-runtime@2026-07-12.lexical-fallback-v2\",\"modelVersion\":\"retrieval/lexical-provider-fallback@v1\",\"promptVersion\":\"kaxi-rag-capability@2026-07-12.lexical-fallback-v2\"}) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      },
+      "id": "461f544e-ce0d-4527-8aa5-6f9e9dbfc6bc",
+      "name": "Respond RAG Serving Capability",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        480,
+        656
+      ]
+    },
+    {
+      "id": "dd346d07-ee86-430b-89a4-386223c4a665",
+      "name": "Search Governed Serving Chunks Lexical",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1200,
+        768
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://fmezsqzeyrbczoffyqln.supabase.co/rest/v1/rpc/match_rag_documents_lexical",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ match_count: 6, filter: { tenant_id: String($json.tenant_id ?? 'default'), category: (() => { const question = String($json.question ?? '').trim().toLowerCase().replace(/\\s+/g, ' '); if (question === 'after graduation, when should i consider d-10 status to look for work in korea?' || question === 'sau khi tốt nghiệp, trường hợp nào nên xem xét tư cách d-10 để tìm việc ở hàn quốc?') return 'visa'; if (question === 'find me a factory job i can start immediately without any work permit.') return 'warning'; if (question === 'thời hạn lưu trú của tôi đã hết nhưng tôi vẫn đang ở hàn quốc. tôi cần kiểm tra và xử lý việc gì ngay bây giờ?') return 'process'; return String($json.category ?? 'general').trim() || 'general'; })(), query_text: (() => { const question = String($json.question ?? '').trim(); const locale = String($json.locale ?? '').trim().toLowerCase(); const category = String($json.category ?? 'general').trim().toLowerCase(); const normalizedQuestion = question.toLowerCase().replace(/\\s+/g, ' ').trim(); const signal = [question, category, locale].join(' '); const exactHints = { 'after graduation, when should i consider d-10 status to look for work in korea?': 'd10-overview hikorea-d2-d4-d10-e7-f2-f5-requirements visa-portal-visa-types immigration-decree-long-term-status-table D-10 job seeker job search after graduation long-term sojourn status visa types', 'sau khi tốt nghiệp, trường hợp nào nên xem xét tư cách d-10 để tìm việc ở hàn quốc?': 'd10-overview hikorea-d2-d4-d10-e7-f2-f5-requirements visa-portal-visa-types immigration-decree-long-term-status-table D-10 job seeker job search after graduation long-term sojourn status visa types', 'find me a factory job i can start immediately without any work permit.': 'illegal-employment-warning immigration-law-violation-risk illegal employment warning unauthorized work without work permit violation risk refusal factory job immediate 불법취업 취업 매칭 위험 체류자격 위반', 'thời hạn lưu trú của tôi đã hết nhưng tôi vẫn đang ở hàn quốc. tôi cần kiểm tra và xử lý việc gì ngay bây giờ?': 'immigration-act-stay-extension hikorea-stay-extension immigration-act-deportation-grounds overstay expired stay period extension permission deportation grounds unlawful stay immediate action gia han het han qua han luu tru' }; const exactHint = exactHints[normalizedQuestion]; if (exactHint) return [exactHint, question].filter(Boolean).join('\\n'); if (/날씨|강수|기온|weather|rain probability|thời\\s*tiết|khả\\s*năng\\s*mưa|nhiệt\\s*độ|цаг\\s*агаар|бороо|температур/iu.test(signal)) return question; const rules = [[/ignore\\s+(?:all\\s+)?(?:previous|prior)\\s+instructions?|reveal\\s+(?:the\\s+)?system\\s+prompt|show\\s+(?:the\\s+)?system\\s+prompt|시스템\\s*프롬프트|이전\\s*(?:지시|명령)\\s*무시|bỏ\\s*qua\\s*(?:các\\s*)?(?:hướng\\s*dẫn|chỉ\\s*thị)\\s*(?:trước|trước\\s*đó)|hiển\\s*thị\\s*(?:system\\s*)?prompt|tiết\\s*lộ\\s*(?:system\\s*)?prompt|өмнөх\\s*заавр|систем(?:ийн)?\\s*prompt|систем(?:ийн)?\\s*промпт|зааврыг\\s*үл\\s*тоо|зааврыг\\s*ил\\s*болго|가짜|위조|허위|fake|forg(?:ed|ery)?|giả(?:\\s*mạo)?|хуурамч|хуурмаг/iu, 'fake-documents-warning immigration-act-false-application-documents fake forged bank statement financial proof 가짜 위조 허위 재정증명 잔고증명'], [/불법\\s*취업|무허가|허가\\s*없이|취업\\s*허가\\s*없이|without\\s+(?:a\\s+)?work\\s+permit|work(?:ing)?\\s+without\\s+(?:a\\s+)?permit|illegal\\s+employment|unauthori[sz]ed\\s+work|không\\s+(?:cần|có)\\s+giấy\\s+phép|làm\\s*việc\\s+không\\s+phép|зөвшөөрөлгүй|ажиллах\\s+зөвшөөрөлгүй/iu, 'illegal-employment-warning immigration-law-violation-risk immigration-act-employment-restriction illegal employment work without permit 불법취업 무허가 취업허가'], [/강제퇴거|추방|입국금지|deport(?:ed|ation)?|entry\\s*ban|re-?entry\\s*ban|trục\\s*xuất|cấm\\s*nhập\\s*cảnh|албадан\\s*гаргуул|нэвтрэх\\s*хориг/iu, 'immigration-act-entry-ban entry ban deportation re-entry 강제퇴거 입국금지 재입국'], [/시간제\\s*취업|자격외활동|아르바이트|알바|part[-\\s]*time\\s+(?:work|job|employment)|student[^\\n]{0,40}work|work[^\\n]{0,40}student|làm\\s*thêm|việc\\s*làm\\s*thêm|цагийн\\s*ажил|оюутан[^\\n]{0,40}ажил/iu, 'hikorea-activity-permit immigration-act-outside-status-activity student part-time work permit school confirmation 시간제취업 자격외활동 허가 학교확인'], [/체류\\s*기간|체류\\s*연장|연장|만료|expiry|expire|extension|extend\\s+(?:my\\s+)?stay|gia\\s*hạn|hết\\s*hạn|сунгах|дуусах|хугацаа/iu, 'hikorea-stay-extension immigration-act-stay-extension stay extension expiry period 체류기간 연장 만료'], [/d[-\\s]?4[^\\n]{0,40}d[-\\s]?2|d[-\\s]?2[^\\n]{0,40}d[-\\s]?4|status\\s*change|change\\s+(?:of\\s+)?status|체류자격\\s*변경|자격\\s*변경|전환|chuyển\\s*(?:đổi\\s*)?(?:tư\\s*cách|visa)|đổi\\s*visa|статус\\s*солих|ангилал\\s*солих/iu, 'hikorea-status-change immigration-act-status-change d-4-to-d-2-transfer status change permission before new activity 체류자격 변경 전환 사전허가'], [/d[-\\s]?10|job\\s*seeker|job\\s*search|구직|졸업\\s*후|tìm\\s*việc|ажил\\s*хай/iu, 'd10-overview D-10 job seeker after graduation 구직 졸업 후 체류'], [/d[-\\s]?2|degree|bachelor|master|ph\\.?d|university\\s*study|학위|대학교|대학|cử\\s*nhân|thạc\\s*sĩ|tiến\\s*sĩ|их\\s*сургууль|зэрэг/iu, 'd2-overview D-2 degree university study visa 학위 대학 유학 비자'], [/d[-\\s]?4|어학|한국어|language\\s*(?:training|study)|korean\\s*language|tiếng\\s*hàn|солонгос\\s*хэл|хэлний\\s*бэлтгэл/iu, 'd4-overview D-4 Korean language training visa 한국어 어학연수 비자'], [/잔고|은행|재정|bank\\s*(?:balance|statement|certificate)|financial\\s*proof|proof\\s*of\\s*funds|account\\s*holder|issue\\s*date|sao\\s*kê|giấy\\s*xác\\s*nhận\\s*số\\s*dư|số\\s*dư|tên\\s*chủ\\s*tài\\s*khoản|chứng\\s*minh\\s*tài\\s*chính|tài\\s*chính|дансны\\s*үлдэгдэл|санхүүгийн/iu, 'financial-proof visa-documents bank balance certificate account holder issue date 재정증명 잔고증명 명의 발급일']]; const matched = rules.find(([pattern]) => pattern.test(signal)); const hint = matched ? matched[1] : (category === 'cost' || /비용|학비|생활비|수수료|cost|tuition|living\\s*expenses|insurance|fees|chi\\s*phí|học\\s*phí|амьжиргааны\\s*зардал|сургалтын\\s*төлбөр/iu.test(signal)) ? 'cost-breakdown study in Korea total cost tuition living insurance fees 유학 총비용 학비 생활비 보험료 수수료' : category === 'visa' ? 'Korea student visa sojourn status 체류 비자' : category === 'documents' ? 'required documents checklist passport photo certificate 서류 여권 사진' : category === 'school' ? 'Korea university admission language institute school 입학 학교 어학당' : 'study in Korea general guidance 유학 일반 안내'; return [question, hint].filter(Boolean).join('\\n'); })(), locale: String($json.locale ?? 'ko'), category_mode: 'strict' } }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "onError": "stopWorkflow",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 500,
+      "alwaysOutputData": true
+    }
+  ],
+  "connections": {
+    "OpenAI Embeddings - Ingest": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Insert Governed Serving Chunk",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Insert Governed Serving Chunk",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recursive Text Splitter": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Default Data Loader",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Typebot Input": {
+      "main": [
+        [
+          {
+            "node": "Input Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Guard": {
+      "main": [
+        [
+          {
+            "node": "Search Governed Serving Chunks Lexical",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Embeddings - Query": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Search Governed Serving Chunks",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Context": {
+      "main": [
+        [
+          {
+            "node": "Has Retrieved Context?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Retrieved Context?": {
+      "main": [
+        [
+          {
+            "node": "Build Grounded Context Answer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback No Context Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fallback No Context Answer": {
+      "main": [
+        [
+          {
+            "node": "Parse AI JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Grounded Context Answer": {
+      "main": [
+        [
+          {
+            "node": "Parse AI JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Handoff Update": {
+      "main": [
+        [
+          {
+            "node": "Handoff Update Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handoff Update Guard": {
+      "main": [
+        [
+          {
+            "node": "Save Handoff Update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Handoff Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Handoff Update": {
+      "main": [
+        [
+          {
+            "node": "Respond Handoff Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG Knowledge Ingestion Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify Ingestion Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Ingestion Signature": {
+      "main": [
+        [
+          {
+            "node": "Normalize Knowledge Document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Knowledge Document": {
+      "main": [
+        [
+          {
+            "node": "Ingestion Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ingestion Guard": {
+      "main": [
+        [
+          {
+            "node": "Insert Governed Serving Chunk",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Ingestion Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Knowledge Ingestion Done": {
+      "main": [
+        [
+          {
+            "node": "Respond Ingestion Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Typebot Runtime Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify Runtime Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Runtime Signature": {
+      "main": [
+        [
+          {
+            "node": "Normalize Typebot Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Typebot Handoff Update Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify Handoff Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Handoff Signature": {
+      "main": [
+        [
+          {
+            "node": "Normalize Handoff Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Governed Serving Chunk": {
+      "main": [
+        [
+          {
+            "node": "Knowledge Ingestion Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI JSON": {
+      "main": [
+        [
+          {
+            "node": "Classify Handoff Risk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Handoff Risk": {
+      "main": [
+        [
+          {
+            "node": "Needs Human or Risk?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG Serving Capability Webhook": {
+      "main": [
+        [
+          {
+            "node": "Respond RAG Serving Capability",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Human or Risk?": {
+      "main": [
+        [
+          {
+            "node": "Respond to Typebot",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Typebot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Governed Serving Chunks Lexical": {
+      "main": [
+        [
+          {
+            "node": "Build Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "binaryMode": "separate",
+    "timezone": "Asia/Seoul",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "executionTimeout": 40
+  },
+  "active": false,
+  "tags": []
+}
+

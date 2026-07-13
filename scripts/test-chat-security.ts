@@ -171,6 +171,7 @@ assert.equal(inferChatCategory("D-4 비자 연장 방법"), "visa");
 assert.equal(inferChatCategory("입학허가서와 재정 증빙 서류"), "documents");
 assert.equal(inferChatCategory("어학당과 대학교를 비교해 주세요"), "school");
 assert.equal(inferChatCategory("학비와 수수료가 얼마예요?"), "cost");
+assert.equal(inferChatCategory("D-2 유학비자 준비 서류를 알려주세요."), "documents");
 assert.equal(inferChatCategory("D-2 서류", "school"), "school");
 assert.equal(inferChatCategory("D-2 서류", "{{category}}"), "documents");
 assert.equal(inferChatCategory("D-2 visa tuition and living costs"), "cost");
