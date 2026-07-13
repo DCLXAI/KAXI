@@ -224,7 +224,7 @@ Do not change this order:
 8. Publish the Typebot draft.
 9. Test Typebot -> KAXI -> n8n -> Supabase, including no-context and handoff branches.
 
-Current status: the Supabase migrations, direct fallback, thin n8n graph, and staged evaluation code are complete locally. The forced-n8n-outage full gateway suite passed 64/64 with canonical persistence after the digest search-path fix. The Promete workflow still must be published with contract `2026-07-13.v2`, followed by production Typebot -> KAXI -> n8n -> Supabase normal, no-context, and handoff probes. Vector/hybrid shadow comparison additionally requires the optional query-embedding credential.
+Current status: KAXI commit `c1ba068` is live and Promete workflow `rB3nfjvCyTODP803` is published at active version `dfef765e-7d94-4956-a470-00c0c0a64419` with capability contract `2026-07-13.v2`. Production gateway evaluations passed 8/8 smoke, 16/16 locale, and 64/64 full cases through `n8n-kaxi-orchestrated`, while the forced-n8n-outage suite also passed 64/64 through the direct fallback. The published Typebot passed all four locale starts and the high-risk consent branch. Retrieval currently records `kaxi-direct-lexical`; vector/hybrid shadow comparison and activation require the dedicated query-embedding credential.
 
 The sync command refuses to write unless the active n8n capability contract matches. The cutover command refuses to remove legacy rows until every eligible chunk has a ready 1536-dimensional embedding and citation metadata.
 
