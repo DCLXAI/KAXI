@@ -3,7 +3,7 @@ import {
   syncRagServingProjection,
 } from "../src/lib/knowledge/serving-projection";
 
-const ACTIVE_CONTRACT = "2026-07-13.v2";
+const ACTIVE_CONTRACT = "2026-07-14.v3";
 
 function argValue(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -50,11 +50,12 @@ async function assertActiveN8nContract() {
     payload.ingestionTarget !== "rag_serving_chunks" ||
     payload.embeddingModel !== "text-embedding-3-small" ||
     payload.dimensions !== 1536 ||
-    payload.retrievalMode !== "hybrid-rrf-v2-with-lexical-fallback" ||
+    payload.retrievalMode !== "hybrid-rrf-v3-with-seeded-vector-and-lexical-fallback" ||
     payload.lexicalCandidateCount !== 20 ||
     payload.vectorCandidateCount !== 20 ||
     payload.finalMatchCount !== 6 ||
     payload.queryEmbeddingOptional !== true ||
+    payload.storedVectorFallback !== "lexical-centroid" ||
     payload.signedIngestionRequired !== true
   ) {
     throw new Error("The active n8n workflow does not expose the governed RAG serving contract");

@@ -76,6 +76,7 @@ type EvaluationStage = "smoke" | "locale" | "full";
 type ShadowComparison = {
   embeddingStatus: string;
   embeddingFailureReason: string | null;
+  vectorStrategy: "provider-query" | "lexical-centroid" | "none";
   lexicalDocIds: string[];
   vectorDocIds: string[];
   hybridDocIds: string[];
@@ -291,29 +292,51 @@ async function runShadowComparison(testCase: EvaluationCase): Promise<ShadowComp
     const base: ShadowComparison = {
       embeddingStatus: embedding.status,
       embeddingFailureReason: embedding.failureReason,
+      vectorStrategy: embedding.vector ? "provider-query" : "none",
       lexicalDocIds: shadowDocIds(lexical.data),
       vectorDocIds: [],
       hybridDocIds: [],
     };
-    if (!embedding.vector) return base;
+    const allowSeededVector = !embedding.vector
+      && embedding.status === "not_configured"
+      && process.env.KAXI_STORED_VECTOR_EXPANSION_ENABLED !== "false";
+    if (!embedding.vector && !allowSeededVector) return base;
 
-    const queryEmbedding = `[${embedding.vector.map((value) => Number(value).toFixed(8)).join(",")}]`;
+    const queryEmbedding = embedding.vector
+      ? `[${embedding.vector.map((value) => Number(value).toFixed(8)).join(",")}]`
+      : null;
+    const vectorStrategy = embedding.vector ? "provider-query" : "lexical-centroid";
     const [vectorOnly, hybrid] = await Promise.all([
-      supabase.rpc("match_rag_documents_hybrid_v2", {
+      supabase.rpc("match_rag_documents_hybrid_v3", {
         query_embedding: queryEmbedding,
         match_count: 6,
-        filter: { ...commonFilter, query_text: "", shadow_mode: true },
+        filter: {
+          ...commonFilter,
+          query_text: queryText,
+          shadow_mode: true,
+          output_mode: "vector-only",
+          allow_seeded_vector: allowSeededVector,
+          vector_seed_count: 3,
+        },
       }),
-      supabase.rpc("match_rag_documents_hybrid_v2", {
+      supabase.rpc("match_rag_documents_hybrid_v3", {
         query_embedding: queryEmbedding,
         match_count: 6,
-        filter: { ...commonFilter, query_text: queryText, shadow_mode: true },
+        filter: {
+          ...commonFilter,
+          query_text: queryText,
+          shadow_mode: true,
+          output_mode: "hybrid",
+          allow_seeded_vector: allowSeededVector,
+          vector_seed_count: 3,
+        },
       }),
     ]);
     if (vectorOnly.error) throw vectorOnly.error;
     if (hybrid.error) throw hybrid.error;
     return {
       ...base,
+      vectorStrategy,
       vectorDocIds: shadowDocIds(vectorOnly.data),
       hybridDocIds: shadowDocIds(hybrid.data),
     };
@@ -321,6 +344,7 @@ async function runShadowComparison(testCase: EvaluationCase): Promise<ShadowComp
     return {
       embeddingStatus: "shadow_failed",
       embeddingFailureReason: error instanceof Error ? error.message.slice(0, 160) : "shadow_comparison_failed",
+      vectorStrategy: "none",
       lexicalDocIds: [],
       vectorDocIds: [],
       hybridDocIds: [],
@@ -668,7 +692,7 @@ const shadowRecall = (field: "lexicalDocIds" | "vectorDocIds" | "hybridDocIds") 
   if (!shadowMode) return null;
   const eligible = field === "lexicalDocIds"
     ? shadowPairs
-    : shadowPairs.filter(({ comparison }) => comparison.embeddingStatus === "ready");
+    : shadowPairs.filter(({ comparison }) => comparison.vectorStrategy !== "none");
   if (eligible.length === 0) return null;
   const hits = eligible.filter(({ testCase, comparison }) => {
     const ids = comparison[field];
@@ -682,12 +706,19 @@ const shadowEmbeddingStatus = Object.fromEntries(
     shadowPairs.filter(({ comparison }) => comparison.embeddingStatus === status).length,
   ]),
 );
+const shadowVectorStrategy = Object.fromEntries(
+  [...new Set(shadowPairs.map(({ comparison }) => comparison.vectorStrategy))].map((strategy) => [
+    strategy,
+    shadowPairs.filter(({ comparison }) => comparison.vectorStrategy === strategy).length,
+  ]),
+);
 const shadowMetrics = shadowMode ? {
   enabled: true,
   lexicalExpectedDocumentRecall: shadowRecall("lexicalDocIds"),
   vectorExpectedDocumentRecall: shadowRecall("vectorDocIds"),
   hybridExpectedDocumentRecall: shadowRecall("hybridDocIds"),
   embeddingStatus: shadowEmbeddingStatus,
+  vectorStrategy: shadowVectorStrategy,
 } : { enabled: false };
 const minimumGroupPassRate = Math.min(
   ...Object.values(byLocale).map((group) => group.passRate),

@@ -74,6 +74,7 @@ export async function POST(req: NextRequest) {
       requestId,
       fallbackReason: "n8n_orchestrated_runtime",
       attachmentCount: Array.isArray(payload.attachments) ? Math.min(payload.attachments.length, 3) : 0,
+      allowStoredVectorExpansion: true,
     });
     const guarded = applyChatResponseGuardrail(direct, question, resolvedLocale);
     const currentSearchMeta = record(guarded.searchMeta) || {};

@@ -21,8 +21,8 @@ export const DIRECT_LEXICAL_PROVENANCE = {
 
 export const DIRECT_HYBRID_PROVENANCE = {
   workflowId: DIRECT_HYBRID_RUNTIME_PATH,
-  workflowVersionId: "kaxi-direct-hybrid@2026-07-13.p2-v1",
-  modelVersion: "retrieval/hybrid-rrf-v2@2026-07-13",
+  workflowVersionId: "kaxi-direct-hybrid@2026-07-14.p2-v2",
+  modelVersion: "retrieval/hybrid-rrf-v3@2026-07-14",
   promptVersion: "kaxi-grounded-extractive@2026-07-13.p0-v1",
 } satisfies RagProvenance;
 
@@ -56,6 +56,7 @@ export type DirectLexicalFallbackInput = {
   requestId: string;
   fallbackReason: string;
   attachmentCount?: number;
+  allowStoredVectorExpansion?: boolean;
   runtimePath?: DirectRagRuntimePath;
   embedding?: QueryEmbeddingResult;
 };
@@ -324,6 +325,11 @@ function round(value: number) {
   return Number(value.toFixed(4));
 }
 
+function booleanValue(value: unknown) {
+  if (typeof value === "boolean") return value;
+  return typeof value === "string" && value.toLowerCase() === "true";
+}
+
 function normalizeLocale(value: unknown): GuardrailLocale | null {
   const normalized = text(value).toLowerCase();
   const aliases: Record<string, GuardrailLocale> = {
@@ -448,7 +454,7 @@ async function defaultHybridRpc(input: {
   filter: Record<string, unknown>;
 }) {
   const result = await createSupabaseChatClient()
-    .rpc("match_rag_documents_hybrid_v2", {
+    .rpc("match_rag_documents_hybrid_v3", {
       query_embedding: input.queryEmbedding,
       match_count: input.matchCount,
       filter: input.filter,
@@ -678,10 +684,16 @@ export function buildDirectLexicalResponseFromRows(
   const topScore = parsed.documents[0]?.rerankScore ?? 0;
   const secondScore = parsed.documents[1]?.rerankScore ?? 0;
   const reason = parsed.documents.length === 0 ? noContextReason(parsed) : null;
+  const retrievalMode = firstText(firstMetadata.retrieval_mode)
+    || (hybrid ? "hybrid-provider" : "lexical-only");
+  const retrievalType = firstText(firstMetadata.retrieval_type)
+    || (hybrid ? "hybrid-rrf-v3" : "lexical-v2");
+  const scoreVersion = firstText(firstMetadata.score_version)
+    || (hybrid ? "rrf-k60-provider-v3" : "absolute-weighted-v2");
   const searchMeta = {
-    type: hybrid ? "hybrid-rrf-v2" : "lexical-v2",
-    retrievalMode: hybrid ? "hybrid" : "lexical-only",
-    scoreVersion: hybrid ? "rrf-k60-v2" : "absolute-weighted-v2",
+    type: retrievalType,
+    retrievalMode,
+    scoreVersion,
     confidencePolicy: RETRIEVAL_CONFIDENCE_POLICY_VERSION,
     runtimePath,
     retrievalRuntimePath: runtimePath,
@@ -691,6 +703,10 @@ export function buildDirectLexicalResponseFromRows(
     embeddingModel: input.embedding?.model || null,
     embeddingFailureReason: input.embedding?.failureReason || null,
     embeddingLatencyMs: input.embedding?.latencyMs ?? null,
+    vectorStrategy: firstText(firstMetadata.embedding_source) || "none",
+    vectorSearchAvailable: booleanValue(firstMetadata.vector_search_available),
+    storedVectorSearch: booleanValue(firstMetadata.stored_vector_search),
+    vectorSeedCount: numberOrNull(firstMetadata.vector_seed_count) ?? 0,
     category: input.category,
     categoryMode: "strict",
     tenant_id: input.tenantId,
@@ -791,7 +807,10 @@ export async function runDirectRagFallback(
   const queryEmbedding = embedding.vector
     ? `[${embedding.vector.map((value) => Number(value).toFixed(8)).join(",")}]`
     : null;
-  const runtimePath = queryEmbedding ? DIRECT_HYBRID_RUNTIME_PATH : DIRECT_LEXICAL_RUNTIME_PATH;
+  const allowSeededVector = !queryEmbedding
+    && embedding.status === "not_configured"
+    && input.allowStoredVectorExpansion === true
+    && process.env.KAXI_STORED_VECTOR_EXPANSION_ENABLED !== "false";
   const rpc = dependencies.rpc || defaultHybridRpc;
   const result = await rpc({
     queryEmbedding,
@@ -803,11 +822,22 @@ export async function runDirectRagFallback(
       locale: input.locale,
       query_text: buildDirectLexicalQuery(input),
       embedding_failure_reason: embedding.failureReason || undefined,
+      allow_seeded_vector: allowSeededVector,
+      vector_seed_count: 3,
     },
   });
   if (result.error) {
     throw new Error(`DIRECT_RAG_RPC_FAILED: ${rpcErrorMessage(result.error)}`);
   }
+  const firstRow = Array.isArray(result.data) ? metadataRecord(result.data[0]) : {};
+  const firstMetadata = metadataRecord(firstRow.metadata);
+  const retrievalMode = firstText(firstMetadata.retrieval_mode);
+  const runtimePath = queryEmbedding
+    || retrievalMode === "hybrid-provider"
+    || retrievalMode === "hybrid-seeded"
+    || retrievalMode === "vector-only"
+    ? DIRECT_HYBRID_RUNTIME_PATH
+    : DIRECT_LEXICAL_RUNTIME_PATH;
   return buildDirectLexicalResponseFromRows(result.data, {
     ...input,
     runtimePath,

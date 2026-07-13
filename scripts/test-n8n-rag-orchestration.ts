@@ -74,19 +74,22 @@ assert(
 );
 assert(
   String(respond?.parameters?.responseBody || "").includes("n8n-kaxi-orchestrated")
-    && String(respond?.parameters?.responseBody || "").includes("hybrid-orchestrator-v1"),
+    && String(respond?.parameters?.responseBody || "").includes("provider-independent-hybrid-v2"),
   "Typebot response must expose orchestrated runtime provenance",
 );
 assert(capability?.type === "n8n-nodes-base.respondToWebhook", "capability responder missing");
 const capabilityBody = String(capability.parameters?.responseBody || "");
 for (const requiredContractValue of [
-  "2026-07-13.v2",
-  "hybrid-rrf-v2-with-lexical-fallback",
+  "2026-07-14.v3",
+  "hybrid-rrf-v3-with-seeded-vector-and-lexical-fallback",
   "embeddingModel: 'text-embedding-3-small'",
   "lexicalCandidateCount: 20",
   "vectorCandidateCount: 20",
   "finalMatchCount: 6",
   "queryEmbeddingOptional: true",
+  "storedVectorFallback: 'lexical-centroid'",
+  "vectorSeedCount: 3",
+  "providerFailureMode: 'lexical-only'",
 ]) {
   assert(
     capabilityBody.includes(requiredContractValue),

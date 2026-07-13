@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 
-export const REQUIRED_PRODUCTION_MIGRATION = "20260713120000_rag_quality_gate";
+export const REQUIRED_PRODUCTION_MIGRATION = "20260714090000_rag_provider_independent_hybrid";
 
 const REQUIRED_SCHEMA_OBJECTS = [
   "migration_ledger",
@@ -27,6 +27,7 @@ const REQUIRED_SCHEMA_OBJECTS = [
   "retrieval_review_trigger",
   "product_analytics_events",
   "rag_confidence_policy",
+  "rag_provider_independent_hybrid",
 ] as const;
 
 type RequiredSchemaObject = (typeof REQUIRED_SCHEMA_OBJECTS)[number];
@@ -133,7 +134,13 @@ export async function checkProductionSchemaParity(): Promise<SchemaParityResult>
           'below_calibrated_threshold' IN pg_get_functiondef(
             to_regprocedure('public.kaxi_queue_retrieval_review()')
           )
-        ) > 0 AS rag_confidence_policy
+        ) > 0 AS rag_confidence_policy,
+        to_regprocedure('public.match_rag_documents_hybrid_v3(vector,integer,jsonb)') IS NOT NULL
+          AND position(
+            'lexical-centroid' IN pg_get_functiondef(
+              to_regprocedure('public.match_rag_documents_hybrid_v3(vector,integer,jsonb)')
+            )
+          ) > 0 AS rag_provider_independent_hybrid
     `;
     const row = rows[0];
     const missing = REQUIRED_SCHEMA_OBJECTS.filter((key) => row?.[key] !== true);

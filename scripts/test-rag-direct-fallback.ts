@@ -37,6 +37,16 @@ assert.match(hybridV2Migration, /LIMIT 20/i);
 assert.match(hybridV2Migration, /v_rrf_k double precision := 60/i);
 assert.match(hybridV2Migration, /query_embedding IS NOT NULL/i);
 assert.match(hybridV2Migration, /'lexical-only'/i);
+const hybridV3Migration = await Bun.file(new URL(
+  "../prisma/postgres/migrations/20260714090000_rag_provider_independent_hybrid/migration.sql",
+  import.meta.url,
+)).text();
+assert.match(hybridV3Migration, /match_rag_documents_hybrid_v3/i);
+assert.match(hybridV3Migration, /avg\(seed_rows\.embedding\)/i);
+assert.match(hybridV3Migration, /'lexical-centroid'/i);
+assert.match(hybridV3Migration, /'hybrid-seeded'/i);
+assert.match(hybridV3Migration, /v_output_mode = 'vector-only'/i);
+assert.match(hybridV3Migration, /LIMIT 20/i);
 
 const input: DirectLexicalFallbackInput = {
   question: "D-4 비자 연장 조건과 준비 시기를 알려주세요.",
@@ -176,7 +186,13 @@ const hybridResponse = await runDirectRagFallback(input, {
         ...validRow,
         metadata: {
           ...validRow.metadata,
-          retrieval_type: "hybrid-rrf-v2",
+          retrieval_type: "hybrid-rrf-v3",
+          retrieval_mode: "hybrid-provider",
+          score_version: "rrf-k60-provider-v3",
+          embedding_source: "provider-query",
+          vector_search_available: true,
+          stored_vector_search: false,
+          vector_seed_count: 0,
           lexical_score: 1.85,
           vector_score: 0.91,
           rrf_score: 0.032,
@@ -191,14 +207,77 @@ const hybridResponse = await runDirectRagFallback(input, {
 });
 assert.equal(hybridVectorSupplied, true);
 assert.equal(hybridResponse.runtimePath, DIRECT_HYBRID_RUNTIME_PATH);
-assert.equal((hybridResponse.searchMeta as Record<string, unknown>).retrievalMode, "hybrid");
+assert.equal((hybridResponse.searchMeta as Record<string, unknown>).retrievalMode, "hybrid-provider");
+assert.equal((hybridResponse.searchMeta as Record<string, unknown>).vectorStrategy, "provider-query");
 assert.equal((hybridResponse.searchMeta as Record<string, unknown>).vectorCandidateCount, 20);
+
+let seededVectorAllowed = false;
+const seededHybridResponse = await runDirectRagFallback({
+  ...input,
+  allowStoredVectorExpansion: true,
+}, {
+  createEmbedding: async () => missingEmbeddingProvider,
+  rpc: async ({ queryEmbedding, filter }) => {
+    assert.equal(queryEmbedding, null);
+    seededVectorAllowed = filter.allow_seeded_vector === true;
+    return {
+      data: [{
+        ...validRow,
+        metadata: {
+          ...validRow.metadata,
+          retrieval_type: "hybrid-rrf-v3",
+          retrieval_mode: "hybrid-seeded",
+          score_version: "rrf-k60-seeded-v3",
+          embedding_source: "lexical-centroid",
+          vector_search_available: true,
+          stored_vector_search: true,
+          vector_seed_count: 3,
+          lexical_score: 1.85,
+          vector_score: 0.86,
+          rrf_score: 0.032,
+          lexical_rank: 1,
+          vector_rank: 1,
+          lexical_candidate_count: 20,
+          vector_candidate_count: 20,
+        },
+      }],
+    };
+  },
+});
+assert.equal(seededVectorAllowed, true);
+assert.equal(seededHybridResponse.runtimePath, DIRECT_HYBRID_RUNTIME_PATH);
+assert.equal((seededHybridResponse.searchMeta as Record<string, unknown>).retrievalMode, "hybrid-seeded");
+assert.equal((seededHybridResponse.searchMeta as Record<string, unknown>).storedVectorSearch, true);
+assert.equal((seededHybridResponse.searchMeta as Record<string, unknown>).vectorSeedCount, 3);
+
+const failedEmbeddingProvider = {
+  ...missingEmbeddingProvider,
+  status: "failed" as const,
+  provider: "openai-compatible" as const,
+  failureReason: "embedding_provider_http_503",
+};
+const providerFailureResponse = await runDirectRagFallback({
+  ...input,
+  allowStoredVectorExpansion: true,
+}, {
+  createEmbedding: async () => failedEmbeddingProvider,
+  rpc: async ({ filter }) => {
+    assert.equal(filter.allow_seeded_vector, false);
+    return { data: [validRow] };
+  },
+});
+assert.equal(providerFailureResponse.runtimePath, DIRECT_LEXICAL_RUNTIME_PATH);
+assert.equal(
+  (providerFailureResponse.searchMeta as Record<string, unknown>).embeddingFailureReason,
+  "embedding_provider_http_503",
+);
 
 let lexicalOnlyVector: string | null | undefined;
 const lexicalOnlyResponse = await runDirectRagFallback(input, {
   createEmbedding: async () => missingEmbeddingProvider,
-  rpc: async ({ queryEmbedding }) => {
+  rpc: async ({ queryEmbedding, filter }) => {
     lexicalOnlyVector = queryEmbedding;
+    assert.equal(filter.allow_seeded_vector, false);
     return { data: [validRow] };
   },
 });
