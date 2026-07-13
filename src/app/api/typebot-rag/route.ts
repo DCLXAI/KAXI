@@ -181,9 +181,9 @@ export function shouldRetryN8nNoContext(payload: { searchMeta?: unknown }) {
     || normalizeText(searchMeta.no_context_reason, 120).length > 0;
 }
 
-function n8nRuntimeTimeoutMs() {
+export function n8nRuntimeTimeoutMs() {
   const configured = Number(process.env.N8N_RAG_TIMEOUT_MS);
-  if (!Number.isFinite(configured)) return 15_000;
+  if (!Number.isFinite(configured)) return 35_000;
   return Math.min(Math.max(Math.trunc(configured), 1_000), 45_000);
 }
 

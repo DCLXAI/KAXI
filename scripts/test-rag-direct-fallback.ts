@@ -12,6 +12,7 @@ import {
 import { applyChatResponseGuardrail } from "../src/lib/chat/response-guardrail";
 import {
   n8nQuestionPlan,
+  n8nRuntimeTimeoutMs,
   requestN8nRuntime,
   shouldRetryN8nNoContext,
 } from "../src/app/api/typebot-rag/route";
@@ -200,6 +201,19 @@ assert.equal(
   false,
   "grounded n8n responses should not incur a redundant canonical retry",
 );
+
+const originalN8nRuntimeTimeout = process.env.N8N_RAG_TIMEOUT_MS;
+try {
+  delete process.env.N8N_RAG_TIMEOUT_MS;
+  assert.equal(n8nRuntimeTimeoutMs(), 35_000, "n8n must have enough time for one cold-start retry");
+  process.env.N8N_RAG_TIMEOUT_MS = "500";
+  assert.equal(n8nRuntimeTimeoutMs(), 1_000);
+  process.env.N8N_RAG_TIMEOUT_MS = "90000";
+  assert.equal(n8nRuntimeTimeoutMs(), 45_000);
+} finally {
+  if (originalN8nRuntimeTimeout === undefined) delete process.env.N8N_RAG_TIMEOUT_MS;
+  else process.env.N8N_RAG_TIMEOUT_MS = originalN8nRuntimeTimeout;
+}
 
 const parsedMediation = parseQuestionMediationOutput(`The routing result is:
 \`\`\`json
