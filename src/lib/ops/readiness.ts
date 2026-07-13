@@ -12,6 +12,7 @@ import { checkProductionSchemaParity } from "@/lib/ops/schema-parity";
 import { getChatAttachmentSecurityDiagnostics } from "@/lib/chat/attachment-security";
 import { getOpsAlertDiagnostics } from "@/lib/ops/alerts";
 import { getCredentialRotationDiagnostics } from "@/lib/security/rotating-secret";
+import { parseLimit } from "@/lib/api/security";
 
 export type ReadinessStatus = "ready" | "degraded";
 
@@ -126,6 +127,13 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
   const attachmentSecurity = getChatAttachmentSecurityDiagnostics(env);
   const opsAlerts = getOpsAlertDiagnostics(env);
   const credentialRotation = getCredentialRotationDiagnostics(env);
+  const aiAbuseControls = {
+    agentRateLimit: parseLimit(env.AI_AGENT_RATE_LIMIT, 6),
+    agentDailyQuota: parseLimit(env.AI_AGENT_DAILY_QUOTA, 30),
+    consultRateLimit: parseLimit(env.AI_CONSULT_RATE_LIMIT, 6),
+    consultDailyQuota: parseLimit(env.AI_CONSULT_DAILY_QUOTA, 30),
+  };
+  const aiAbuseControlsReady = Object.values(aiAbuseControls).every((value) => value > 0);
 
   const managedDatabase = databaseInfo.sharedWritable && databaseConnectivity.ok;
   const linkedAdminCount = databaseConnectivity.ok
@@ -424,6 +432,16 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
       production && (aiBackendDiagnostics.agent.requireLlm || aiBackendDiagnostics.consult.requireLlm)
         ? "required"
         : "warning"
+    ),
+    check(
+      "ai.abuse_controls",
+      "AI abuse and cost controls",
+      production ? aiAbuseControlsReady : true,
+      aiAbuseControlsReady
+        ? "AI agent and consultation endpoints have per-minute and daily request limits."
+        : "Production AI endpoints must have positive per-minute and daily request limits.",
+      aiAbuseControls,
+      production ? "required" : "warning"
     ),
     check(
       "rate_limit.shared",

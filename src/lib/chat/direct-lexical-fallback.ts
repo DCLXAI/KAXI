@@ -3,10 +3,25 @@ import { createSupabaseChatClient } from "@/lib/chat/persistence";
 import type { GuardedChatResponse, GuardrailLocale } from "@/lib/chat/response-guardrail";
 import { RETRIEVAL_CONFIDENCE_POLICY_VERSION } from "@/lib/chat/retrieval-confidence";
 import {
-  createRagQueryEmbedding,
+  CANONICAL_QUERY_EMBEDDING_DIMENSIONS,
+  createRagQueryEmbeddingWithLocalFallback,
   type QueryEmbeddingResult,
 } from "@/lib/chat/query-embedding";
+import {
+  generateGroundedRagAnswer,
+  GROUNDED_RAG_PROMPT_VERSION,
+  type GroundedAnswerGenerator,
+} from "@/lib/chat/grounded-rag-answer";
+import {
+  questionMediationMetadata,
+  type QuestionMediation,
+} from "@/lib/chat/question-mediator";
 import type { RagProvenance } from "@/lib/n8n/provenance";
+import { pickLangText } from "@/lib/data/knowledge";
+import {
+  searchPgvectorKnowledgeWithEmbedding,
+  type PgvectorSearchResult,
+} from "@/lib/embeddings/pgvector-rag";
 
 export const DIRECT_LEXICAL_RUNTIME_PATH = "kaxi-direct-lexical";
 export const DIRECT_HYBRID_RUNTIME_PATH = "kaxi-direct-hybrid";
@@ -14,16 +29,16 @@ export type DirectRagRuntimePath = typeof DIRECT_LEXICAL_RUNTIME_PATH | typeof D
 
 export const DIRECT_LEXICAL_PROVENANCE = {
   workflowId: DIRECT_LEXICAL_RUNTIME_PATH,
-  workflowVersionId: "kaxi-direct-lexical@2026-07-13.p1-v2",
+  workflowVersionId: "kaxi-direct-lexical@2026-07-14.p1-v3",
   modelVersion: "retrieval/lexical-v2@2026-07-13",
-  promptVersion: "kaxi-grounded-extractive@2026-07-13.p0-v1",
+  promptVersion: GROUNDED_RAG_PROMPT_VERSION,
 } satisfies RagProvenance;
 
 export const DIRECT_HYBRID_PROVENANCE = {
   workflowId: DIRECT_HYBRID_RUNTIME_PATH,
-  workflowVersionId: "kaxi-direct-hybrid@2026-07-14.p2-v2",
+  workflowVersionId: "kaxi-direct-hybrid@2026-07-14.p3-v3",
   modelVersion: "retrieval/hybrid-rrf-v3@2026-07-14",
-  promptVersion: "kaxi-grounded-extractive@2026-07-13.p0-v1",
+  promptVersion: GROUNDED_RAG_PROMPT_VERSION,
 } satisfies RagProvenance;
 
 export function directRagProvenance(runtimePath: DirectRagRuntimePath) {
@@ -48,8 +63,16 @@ export type DirectHybridRpc = (input: {
   filter: Record<string, unknown>;
 }) => Promise<DirectLexicalRpcResult>;
 
+export type DirectCanonicalHybridSearch = (input: {
+  query: string;
+  queryEmbedding: number[];
+  matchCount: number;
+  locale: GuardrailLocale;
+}) => Promise<DirectLexicalRpcResult>;
+
 export type DirectLexicalFallbackInput = {
   question: string;
+  retrievalQuery?: string;
   category: ChatCategory;
   locale: GuardrailLocale;
   tenantId: string;
@@ -59,6 +82,7 @@ export type DirectLexicalFallbackInput = {
   allowStoredVectorExpansion?: boolean;
   runtimePath?: DirectRagRuntimePath;
   embedding?: QueryEmbeddingResult;
+  mediation?: QuestionMediation;
 };
 
 export type DirectLexicalResponse = GuardedChatResponse & RagProvenance & {
@@ -221,6 +245,50 @@ const OPERATIONAL_QUERY_RULES: Array<{ pattern: RegExp; hint: string }> = [
   },
 ];
 
+type QuestionIntent = {
+  id: string;
+  questionPattern: RegExp;
+  evidencePattern: RegExp;
+};
+
+const QUESTION_INTENTS: QuestionIntent[] = [
+  {
+    id: "required_documents",
+    questionPattern: /서류|준비물|제출.{0,8}(?:자료|항목)|documents?|paperwork|requirements?\s+documents?|hồ\s*sơ|giấy\s*tờ|бичиг\s*баримт|материал/iu,
+    evidencePattern: /서류|제출|준비|증명서|여권|신청서|documents?|submit|certificate|passport|hồ\s*sơ|giấy\s*tờ|nộp|бичиг\s*баримт|материал|бүрдүүл/iu,
+  },
+  {
+    id: "cost",
+    questionPattern: /비용|학비(?!자)|등록금|수수료|예산|생활비|costs?|tuition|fees?|budget|chi\s*phí|học\s*phí|lệ\s*phí|зардал|сургалтын\s*төлбөр|хураамж/iu,
+    evidencePattern: /비용|금액|원\b|학비|등록금|수수료|costs?|amount|krw|tuition|fees?|chi\s*phí|học\s*phí|won|зардал|дүн|төлбөр|вон/iu,
+  },
+  {
+    id: "deadline_or_timing",
+    questionPattern: /언제|시기|기한|며칠|몇\s*(?:일|개월|주)|기간|before|after|when|deadline|how\s+long|bao\s*lâu|khi\s*nào|thời\s*hạn|хэзээ|хугацаа/iu,
+    evidencePattern: /전에|이내|이후|부터|까지|일\b|주\b|개월|기간|만료|before|after|within|days?|weeks?|months?|deadline|trước|sau|ngày|tuần|tháng|thời\s*hạn|өмнө|дараа|хоног|долоо\s*хоног|сар|хугацаа/iu,
+  },
+  {
+    id: "eligibility",
+    questionPattern: /자격\s*요건|신청\s*요건|조건|대상|가능한가|eligible|eligibility|qualif(?:y|ication)|requirements?|điều\s*kiện|đối\s*tượng|có\s*thể|шаардлага|нөхцөл|боломжтой/iu,
+    evidencePattern: /요건|조건|대상|해당|가능|자격|신청해야|필요(?:하|한)|eligible|eligibility|qualif|requirements?|must|điều\s*kiện|đối\s*tượng|có\s*thể|шаардлага|нөхцөл|эрхтэй|боломжтой/iu,
+  },
+  {
+    id: "refusal_or_reapplication",
+    questionPattern: /거절|불허|반려|재신청|재심|이의\s*신청|deni(?:al|ed)|refus(?:al|ed)|reapply|appeal|từ\s*chối|bị\s*từ\s*chối|nộp\s*lại|kháng\s*nghị|татгалз|дахин\s*өргөдөл|гомдол/iu,
+    evidencePattern: /거절|불허|반려|재신청|재심|이의\s*신청|deni(?:al|ed)|refus(?:al|ed)|reapply|appeal|từ\s*chối|nộp\s*lại|kháng\s*nghị|татгалз|дахин\s*өргөдөл|гомдол/iu,
+  },
+  {
+    id: "work_permission_or_hours",
+    questionPattern: /아르바이트|시간제\s*취업|취업\s*허가|근무\s*시간|몇\s*시간|part[- ]?time|work\s*permit|working\s*hours?|làm\s*thêm|giấy\s*phép\s*làm\s*việc|giờ\s*làm|цагийн\s*ажил|ажиллах\s*зөвшөөрөл|ажлын\s*цаг/iu,
+    evidencePattern: /시간제\s*취업|자격외활동|취업\s*허가|주당|시간|part[- ]?time|work\s*permit|hours?\s+per\s+week|làm\s*thêm|giấy\s*phép|giờ|цагийн\s*ажил|ажиллах\s*зөвшөөрөл|цаг/iu,
+  },
+  {
+    id: "status_change",
+    questionPattern: /체류자격.{0,12}(?:변경|전환)|비자.{0,12}(?:변경|전환)|바꾸|change\s+(?:of\s+)?status|switch\s+(?:a\s+)?visa|chuyển\s*đổi|đổi\s*visa|ангилал\s*солих|виз.{0,12}солих/iu,
+    evidencePattern: /체류자격.{0,12}(?:변경|전환)|변경\s*허가|change\s+(?:of\s+)?status|switch\s+(?:a\s+)?visa|chuyển\s*đổi|đổi\s*visa|ангилал\s*солих|виз.{0,12}солих/iu,
+  },
+];
+
 const COPY = {
   ko: {
     topics: { visa: "비자·체류", documents: "준비 서류", school: "학교·입학", cost: "비용·재정", general: "문의하신 내용" },
@@ -364,6 +432,77 @@ function tokenCoverage(queryTokens: string[], value: string) {
   return matched.length / queryTokens.length;
 }
 
+function normalizedVisaCodes(value: string) {
+  return Array.from(new Set(
+    (value.match(/\b[cdef]-?\d+(?:-\d+)?\b/giu) || [])
+      .map((code) => code.toLowerCase().replace(/-/g, "")),
+  ));
+}
+
+function questionIntents(input: DirectLexicalFallbackInput) {
+  const plannedIntentIds = new Set<string>(input.mediation?.intents || []);
+  const intents = QUESTION_INTENTS.filter((intent) =>
+    intent.questionPattern.test(input.question) || plannedIntentIds.has(intent.id)
+  );
+  const requiredByCategory = input.category === "documents"
+    ? "required_documents"
+    : input.category === "cost" ? "cost" : null;
+  if (requiredByCategory && !intents.some((intent) => intent.id === requiredByCategory)) {
+    const fallbackIntent = QUESTION_INTENTS.find((intent) => intent.id === requiredByCategory);
+    if (fallbackIntent) intents.push(fallbackIntent);
+  }
+  return intents;
+}
+
+function candidateSearchText(document: CandidateDocument) {
+  return `${document.docId || ""}\n${document.title}\n${document.content}`;
+}
+
+function selectAnswerableDocuments(
+  documents: CandidateDocument[],
+  input: DirectLexicalFallbackInput,
+) {
+  const requestedVisaCodes = normalizedVisaCodes([
+    input.question,
+    ...(input.mediation?.visaCodes || []),
+  ].join(" "));
+  const intents = questionIntents(input);
+  let scoped = documents;
+
+  if (requestedVisaCodes.length > 0) {
+    const statusChange = intents.some((intent) => intent.id === "status_change");
+    scoped = documents.filter((document) => {
+      const candidateCodes = normalizedVisaCodes(candidateSearchText(document));
+      return statusChange && requestedVisaCodes.length > 1
+        ? requestedVisaCodes.every((code) => candidateCodes.includes(code))
+        : requestedVisaCodes.some((code) => candidateCodes.includes(code));
+    });
+    if (scoped.length === 0) {
+      return { documents: [], reason: "visa_code_mismatch", requestedVisaCodes, intents };
+    }
+  }
+
+  if (intents.length > 0) {
+    const matching = scoped.filter((document) => intents.some(
+      (intent) => intent.evidencePattern.test(candidateSearchText(document)),
+    ));
+    const allIntentsCovered = intents.every((intent) => matching.some(
+      (document) => intent.evidencePattern.test(candidateSearchText(document)),
+    ));
+    if (!allIntentsCovered) {
+      return { documents: [], reason: "question_intent_mismatch", requestedVisaCodes, intents };
+    }
+    scoped = matching;
+  }
+
+  return {
+    documents: scoped.slice(0, 4),
+    reason: null,
+    requestedVisaCodes,
+    intents,
+  };
+}
+
 function contentMatchesLocale(content: string, metadata: Record<string, unknown>, locale: GuardrailLocale) {
   const reported = [metadata.language, metadata.locale_filter, metadata.locale]
     .map(normalizeLocale)
@@ -407,7 +546,10 @@ function localizedTitle(content: string, metadataTitle: string, locale: Guardrai
 }
 
 export function buildDirectLexicalQuery(input: DirectLexicalFallbackInput) {
-  const visaCodes = input.question.match(/\b[cdef]-?\d+(?:-\d+)?\b/giu) || [];
+  const visaCodes = [
+    ...(input.question.match(/\b[cdef]-?\d+(?:-\d+)?\b/giu) || []),
+    ...(input.mediation?.visaCodes || []),
+  ];
   const codeAliases = visaCodes.flatMap((code) => {
     const compact = code.toUpperCase().replace(/-/g, "");
     return [compact, compact.replace(/^([CDEF])(\d)/, "$1-$2")];
@@ -420,6 +562,7 @@ export function buildDirectLexicalQuery(input: DirectLexicalFallbackInput) {
     .filter((rule) => rule.pattern.test(input.question))
     .map((rule) => rule.hint);
   return [
+    input.retrievalQuery,
     input.question,
     QUERY_HINTS[input.locale][input.category],
     riskHint,
@@ -463,6 +606,61 @@ async function defaultHybridRpc(input: {
   return { data: result.data, error: result.error };
 }
 
+function canonicalSearchRows(results: PgvectorSearchResult[], locale: GuardrailLocale) {
+  return results.map((result) => {
+    const metadata = result.doc.ragMeta;
+    return {
+      id: result.chunkId,
+      content: pickLangText(result.doc.content, locale),
+      metadata: {
+        doc_id: metadata?.doc_id || result.doc.id,
+        title: pickLangText(result.doc.title, locale),
+        source: metadata?.source_label || result.doc.source,
+        source_label: metadata?.source_label || result.doc.source,
+        source_url: metadata?.source_url || result.doc.source,
+        source_type: metadata?.source_type || "internal_analysis",
+        last_checked_at: metadata?.last_checked_at,
+        checked_by: metadata?.checked_by,
+        category: result.doc.category,
+        language: metadata?.language || locale,
+        retrieval_type: "hybrid-canonical-e5",
+        retrieval_mode: "hybrid-canonical",
+        score_version: "canonical-score-fusion-v1",
+        embedding_source: "canonical-query",
+        vector_search_available: true,
+        stored_vector_search: true,
+        vector_seed_count: 0,
+        hybrid_score: result.score,
+        vector_score: result.vectorScore,
+        keyword_score: result.keywordScore,
+        rrf_score: result.rrf,
+        lexical_rank: result.keywordRank,
+        vector_rank: result.vectorRank,
+        lexical_candidate_count: results.length,
+        vector_candidate_count: results.length,
+      },
+    };
+  });
+}
+
+async function defaultCanonicalHybridSearch(input: {
+  query: string;
+  queryEmbedding: number[];
+  matchCount: number;
+  locale: GuardrailLocale;
+}) {
+  try {
+    const results = await searchPgvectorKnowledgeWithEmbedding(
+      input.query,
+      input.queryEmbedding,
+      { topK: input.matchCount, languages: [input.locale] },
+    );
+    return { data: canonicalSearchRows(results, input.locale) };
+  } catch (error) {
+    return { data: null, error };
+  }
+}
+
 function rpcErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
   if (error && typeof error === "object" && "message" in error) return String(error.message);
@@ -471,7 +669,7 @@ function rpcErrorMessage(error: unknown) {
 
 function parseCandidates(rows: unknown, input: DirectLexicalFallbackInput) {
   const rawRows = Array.isArray(rows) ? rows : [];
-  const queryTokens = tokenize(input.question);
+  const queryTokens = tokenize(input.retrievalQuery || input.question);
   let citationRejectedCount = 0;
   let languageRejectedCount = 0;
   let categoryRejectedCount = 0;
@@ -517,8 +715,10 @@ function parseCandidates(rows: unknown, input: DirectLexicalFallbackInput) {
       && /fake|false|forg|violation|warning|위조|허위|가짜|giả|хуурамч|хуурмаг/iu.test(`${docId || ""} ${title}`)
       ? 0.58
       : 0;
-    const questionVisaCodes = (input.question.match(/\b[cdef]-?\d+(?:-\d+)?\b/giu) || [])
-      .map((value) => value.toLowerCase().replace(/-/g, ""));
+    const questionVisaCodes = normalizedVisaCodes([
+      input.question,
+      ...(input.mediation?.visaCodes || []),
+    ].join(" "));
     const candidateCodeText = `${docId || ""} ${title} ${content.slice(0, 1200)}`
       .toLowerCase()
       .replace(/-/g, "");
@@ -588,6 +788,7 @@ function cleanSentence(value: string) {
 function sentences(value: string) {
   return value
     .split(/(?<=[.!?。！？\uB2E4\uC694\uC74C\uD568\uB428\uC784])\s+|\n+/u)
+    .filter((sentence) => !/^\s*#{1,6}\s+/.test(sentence))
     .map(cleanSentence)
     .filter((sentence) => sentence.length >= 22 && sentence.length <= 420 && !/^https?:\/\//i.test(sentence));
 }
@@ -597,28 +798,8 @@ function compact(value: string, maxLength = 170) {
   return `${value.slice(0, maxLength - 3).trim()}...`;
 }
 
-function answerFromDocuments(documents: CandidateDocument[], input: DirectLexicalFallbackInput) {
-  const copy = COPY[input.locale];
-  const queryTokens = tokenize(input.question);
-  const picked: string[] = [];
-  for (const document of documents.slice(0, 4)) {
-    const ranked = sentences(document.content)
-      .map((sentence, index) => ({
-        sentence,
-        index,
-        score: tokenCoverage(queryTokens, sentence),
-      }))
-      .sort((left, right) => right.score - left.score || left.index - right.index);
-    const candidate = ranked[0]?.sentence;
-    if (!candidate) continue;
-    const fingerprint = candidate.slice(0, 40).toLowerCase();
-    if (!picked.some((existing) => existing.toLowerCase().includes(fingerprint))) {
-      picked.push(compact(candidate));
-    }
-    if (picked.length >= 3) break;
-  }
-
-  const sources: DirectSource[] = documents.slice(0, 3).map((document) => ({
+function sourcesFromDocuments(documents: CandidateDocument[]): DirectSource[] {
+  return documents.slice(0, 3).map((document) => ({
     title: document.title,
     docId: document.docId,
     source: document.source,
@@ -639,25 +820,74 @@ function answerFromDocuments(documents: CandidateDocument[], input: DirectLexica
     vectorRank: document.vectorRank,
     keywordScore: document.keywordScore,
   }));
+}
+
+function answerWithSources(
+  answer: string,
+  sources: DirectSource[],
+  locale: GuardrailLocale,
+) {
+  const copy = COPY[locale];
   const sourceLines = sources.map((source, index) => {
     const checkedDate = source.checkedAt.slice(0, 10);
     return `${index + 1}. ${source.title} - ${source.sourceUrl} (${checkedDate} ${copy.checked})`;
   });
+  return [answer.trim(), "", `${copy.evidence}:`, ...sourceLines].join("\n");
+}
+
+function remapCitations(answer: string, sourceIndexes: number[]) {
+  const citationMap = new Map(sourceIndexes.map((sourceIndex, index) => [sourceIndex, index + 1]));
+  return answer.replace(/\[(\d+)]/g, (citation, rawIndex: string) => {
+    const mapped = citationMap.get(Number(rawIndex));
+    return mapped ? `[${mapped}]` : citation;
+  });
+}
+
+function answerFromDocuments(documents: CandidateDocument[], input: DirectLexicalFallbackInput) {
+  const copy = COPY[input.locale];
+  const queryTokens = tokenize(input.question);
+  const intents = questionIntents(input);
+  const picked: Array<{ sentence: string; document: CandidateDocument }> = [];
+  for (const document of documents.slice(0, 4)) {
+    const ranked = sentences(document.content)
+      .map((sentence, index) => {
+        const coverage = tokenCoverage(queryTokens, sentence);
+        const intentMatches = intents.filter((intent) => intent.evidencePattern.test(sentence)).length;
+        return {
+          sentence,
+          index,
+          coverage,
+          intentMatches,
+          score: coverage + intentMatches * 0.2,
+        };
+      })
+      .filter((candidate) => candidate.coverage >= 0.08 || candidate.intentMatches > 0)
+      .sort((left, right) => right.score - left.score || left.index - right.index);
+    const candidate = ranked[0]?.sentence;
+    if (!candidate) continue;
+    const fingerprint = candidate.slice(0, 40).toLowerCase();
+    if (!picked.some((existing) => existing.sentence.toLowerCase().includes(fingerprint))) {
+      picked.push({ sentence: compact(candidate), document });
+    }
+    if (picked.length >= 3) break;
+  }
+
+  if (picked.length === 0) return null;
+  const usedDocuments = picked.map((item) => item.document).filter(
+    (document, index, all) => all.findIndex((candidate) => candidate.docId === document.docId
+      && candidate.sourceUrl === document.sourceUrl) === index,
+  );
+  const sources = sourcesFromDocuments(usedDocuments);
   const topic = copy.topics[input.category];
-  const bullets = picked.length > 0
-    ? picked.map((sentence) => `- ${sentence}`)
-    : [`- ${documents[0]?.title || FALLBACK_TITLES[input.locale]}`];
+  const bullets = picked.map((item) => `- ${item.sentence}`);
   return {
-    answer: [
+    answer: answerWithSources([
       copy.intro(topic),
       "",
       ...bullets,
       "",
       copy.caution,
-      "",
-      `${copy.evidence}:`,
-      ...sourceLines,
-    ].join("\n"),
+    ].join("\n"), sources, input.locale),
     nextStep: copy.next[input.category],
     sources,
   };
@@ -676,14 +906,21 @@ export function buildDirectLexicalResponseFromRows(
   input: DirectLexicalFallbackInput,
 ): DirectLexicalResponse {
   const parsed = parseCandidates(rows, input);
+  const selection = selectAnswerableDocuments(parsed.documents, input);
+  const extractive = selection.documents.length > 0
+    ? answerFromDocuments(selection.documents, input)
+    : null;
+  const hasContext = Boolean(extractive);
   const runtimePath = input.runtimePath || DIRECT_LEXICAL_RUNTIME_PATH;
   const provenance = directRagProvenance(runtimePath);
   const hybrid = runtimePath === DIRECT_HYBRID_RUNTIME_PATH;
   const firstRow = Array.isArray(rows) ? metadataRecord(rows[0]) : {};
   const firstMetadata = metadataRecord(firstRow.metadata);
-  const topScore = parsed.documents[0]?.rerankScore ?? 0;
-  const secondScore = parsed.documents[1]?.rerankScore ?? 0;
-  const reason = parsed.documents.length === 0 ? noContextReason(parsed) : null;
+  const topScore = selection.documents[0]?.rerankScore ?? 0;
+  const secondScore = selection.documents[1]?.rerankScore ?? 0;
+  const reason = parsed.documents.length === 0
+    ? noContextReason(parsed)
+    : selection.reason || (!extractive ? "insufficient_sentence_overlap" : null);
   const retrievalMode = firstText(firstMetadata.retrieval_mode)
     || (hybrid ? "hybrid-provider" : "lexical-only");
   const retrievalType = firstText(firstMetadata.retrieval_type)
@@ -701,6 +938,7 @@ export function buildDirectLexicalResponseFromRows(
     embeddingStatus: input.embedding?.status || "not_attempted",
     embeddingProvider: input.embedding?.provider || "none",
     embeddingModel: input.embedding?.model || null,
+    embeddingDimensions: input.embedding?.dimensions ?? null,
     embeddingFailureReason: input.embedding?.failureReason || null,
     embeddingLatencyMs: input.embedding?.latencyMs ?? null,
     vectorStrategy: firstText(firstMetadata.embedding_source) || "none",
@@ -712,9 +950,10 @@ export function buildDirectLexicalResponseFromRows(
     tenant_id: input.tenantId,
     locale: input.locale,
     similarityThreshold: "category-default",
-    reranker: "deterministic-locale-v2",
+    reranker: "deterministic-locale-intent-v3",
     reranked: true,
-    retrievedCount: parsed.documents.length,
+    retrievedCount: hasContext ? selection.documents.length : 0,
+    validatedCandidateCount: parsed.documents.length,
     rawRetrievedCount: parsed.rawCount,
     lexicalCandidateCount: numberOrNull(firstMetadata.lexical_candidate_count),
     vectorCandidateCount: numberOrNull(firstMetadata.vector_candidate_count),
@@ -725,15 +964,19 @@ export function buildDirectLexicalResponseFromRows(
     topScore,
     secondScore,
     top1Top2Margin: round(Math.max(0, topScore - secondScore)),
-    tokenCoverage: parsed.documents[0]?.tokenCoverage ?? 0,
-    titleCoverage: parsed.documents[0]?.titleCoverage ?? 0,
-    noContext: parsed.documents.length === 0,
+    tokenCoverage: selection.documents[0]?.tokenCoverage ?? 0,
+    titleCoverage: selection.documents[0]?.titleCoverage ?? 0,
+    requestedVisaCodes: selection.requestedVisaCodes,
+    questionIntents: selection.intents.map((intent) => intent.id),
+    answerMode: hasContext ? "extractive-fallback" : "no-context",
+    noContext: !hasContext,
     noContextReason: reason,
     attachmentCount: input.attachmentCount || 0,
+    ...(input.mediation ? questionMediationMetadata(input.mediation) : {}),
   };
   const executionId = `direct-${input.requestId}`;
 
-  if (parsed.documents.length === 0) {
+  if (!extractive) {
     const copy = COPY[input.locale];
     return {
       answer: copy.noContext,
@@ -749,10 +992,9 @@ export function buildDirectLexicalResponseFromRows(
     };
   }
 
-  const grounded = answerFromDocuments(parsed.documents, input);
   const requiresReview = input.category === "visa" || input.category === "documents";
   return {
-    ...grounded,
+    ...extractive,
     needsHuman: requiresReview,
     riskLevel: input.category === "visa" || input.category === "documents" ? "medium" : "low",
     leadStage: requiresReview ? "review" : "none",
@@ -789,60 +1031,177 @@ export async function runDirectRagFallback(
   dependencies: {
     rpc?: DirectHybridRpc;
     createEmbedding?: (question: string) => Promise<QueryEmbeddingResult>;
+    canonicalSearch?: DirectCanonicalHybridSearch;
+    generateAnswer?: GroundedAnswerGenerator;
   } = {},
 ) {
   let embedding: QueryEmbeddingResult;
   try {
-    embedding = await (dependencies.createEmbedding || createRagQueryEmbedding)(input.question);
+    embedding = await (dependencies.createEmbedding || createRagQueryEmbeddingWithLocalFallback)(input.question);
   } catch {
     embedding = {
       vector: null,
       status: "failed",
       provider: "none",
       model: "text-embedding-3-small",
+      dimensions: null,
       failureReason: "embedding_provider_unavailable",
       latencyMs: 0,
     };
   }
-  const queryEmbedding = embedding.vector
+  const canonicalEmbedding = embedding.provider === "local-transformer"
+    && embedding.dimensions === CANONICAL_QUERY_EMBEDDING_DIMENSIONS
+    && embedding.vector?.length === CANONICAL_QUERY_EMBEDDING_DIMENSIONS;
+  const queryEmbedding = embedding.vector && !canonicalEmbedding
     ? `[${embedding.vector.map((value) => Number(value).toFixed(8)).join(",")}]`
     : null;
+  const exactVisaScope = normalizedVisaCodes([
+    input.question,
+    ...(input.mediation?.visaCodes || []),
+  ].join(" ")).length > 0;
   const allowSeededVector = !queryEmbedding
     && embedding.status === "not_configured"
     && input.allowStoredVectorExpansion === true
+    && !exactVisaScope
     && process.env.KAXI_STORED_VECTOR_EXPANSION_ENABLED !== "false";
-  const rpc = dependencies.rpc || defaultHybridRpc;
-  const result = await rpc({
-    queryEmbedding,
-    matchCount: 6,
-    filter: {
-      tenant_id: input.tenantId,
-      category: input.category,
-      category_mode: "strict",
-      locale: input.locale,
-      query_text: buildDirectLexicalQuery(input),
-      embedding_failure_reason: embedding.failureReason || undefined,
-      allow_seeded_vector: allowSeededVector,
-      vector_seed_count: 3,
-    },
-  });
+  const queryText = buildDirectLexicalQuery(input);
+  const result = canonicalEmbedding
+    ? await (dependencies.canonicalSearch || defaultCanonicalHybridSearch)({
+        query: queryText,
+        queryEmbedding: embedding.vector as number[],
+        matchCount: 24,
+        locale: input.locale,
+      })
+    : await (dependencies.rpc || defaultHybridRpc)({
+        queryEmbedding,
+        matchCount: 6,
+        filter: {
+          tenant_id: input.tenantId,
+          category: input.category,
+          category_mode: "strict",
+          locale: input.locale,
+          query_text: queryText,
+          embedding_failure_reason: embedding.failureReason || undefined,
+          allow_seeded_vector: allowSeededVector,
+          vector_seed_count: 3,
+        },
+      });
   if (result.error) {
     throw new Error(`DIRECT_RAG_RPC_FAILED: ${rpcErrorMessage(result.error)}`);
   }
   const firstRow = Array.isArray(result.data) ? metadataRecord(result.data[0]) : {};
   const firstMetadata = metadataRecord(firstRow.metadata);
   const retrievalMode = firstText(firstMetadata.retrieval_mode);
-  const runtimePath = queryEmbedding
+  const runtimePath: DirectRagRuntimePath = canonicalEmbedding
+    || queryEmbedding
     || retrievalMode === "hybrid-provider"
     || retrievalMode === "hybrid-seeded"
     || retrievalMode === "vector-only"
     ? DIRECT_HYBRID_RUNTIME_PATH
     : DIRECT_LEXICAL_RUNTIME_PATH;
-  return buildDirectLexicalResponseFromRows(result.data, {
+  const resolvedInput = {
     ...input,
     runtimePath,
     embedding,
+  };
+  const fallbackResponse = buildDirectLexicalResponseFromRows(result.data, resolvedInput);
+  const parsed = parseCandidates(result.data, resolvedInput);
+  const selection = selectAnswerableDocuments(parsed.documents, resolvedInput);
+  if (selection.documents.length === 0) return fallbackResponse;
+
+  const generation = await (dependencies.generateAnswer || generateGroundedRagAnswer)({
+    question: input.question,
+    category: input.category,
+    locale: input.locale,
+    answerFocus: input.mediation?.answerFocus,
+    responseMode: input.mediation?.responseMode,
+    documents: selection.documents.map((document) => ({
+      title: document.title,
+      content: document.content,
+      source: document.source,
+      sourceUrl: document.sourceUrl,
+      checkedAt: document.checkedAt,
+      checkedBy: document.checkedBy,
+    })),
   });
+  const currentSearchMeta = metadataRecord(fallbackResponse.searchMeta);
+
+  if (generation.status === "unavailable") {
+    return {
+      ...fallbackResponse,
+      searchMeta: {
+        ...currentSearchMeta,
+        answerGenerationStatus: "unavailable",
+        answerGenerationFailureReason: generation.reason,
+        answerPromptVersion: GROUNDED_RAG_PROMPT_VERSION,
+      },
+    };
+  }
+
+  const generatedMetadata = {
+    answerGenerationStatus: generation.status,
+    answerBackend: generation.backend,
+    answerModel: generation.model,
+    answerLatencyMs: generation.durationMs,
+    answerPromptVersion: GROUNDED_RAG_PROMPT_VERSION,
+  };
+  if (generation.status === "no_context") {
+    const copy = COPY[input.locale];
+    return {
+      ...fallbackResponse,
+      answer: copy.noContext,
+      nextStep: generation.nextStep || copy.noContextNext,
+      needsHuman: true,
+      riskLevel: "medium",
+      leadStage: "review",
+      sources: [],
+      searchMeta: {
+        ...currentSearchMeta,
+        ...generatedMetadata,
+        answerMode: "no-context",
+        retrievedCount: 0,
+        noContext: true,
+        noContextReason: "grounded_generation_no_context",
+      },
+      modelVersion: generation.model,
+      promptVersion: GROUNDED_RAG_PROMPT_VERSION,
+    };
+  }
+
+  const usedSourceIndexes = Array.from(new Set(generation.usedSourceIndexes)).sort((left, right) => left - right);
+  const usedDocuments = usedSourceIndexes.flatMap((sourceIndex) => {
+    const document = selection.documents[sourceIndex - 1];
+    return document ? [document] : [];
+  });
+  if (usedDocuments.length === 0) {
+    return {
+      ...fallbackResponse,
+      searchMeta: {
+        ...currentSearchMeta,
+        answerGenerationStatus: "unavailable",
+        answerGenerationFailureReason: "invalid_generation",
+        answerPromptVersion: GROUNDED_RAG_PROMPT_VERSION,
+      },
+    };
+  }
+  const sources = sourcesFromDocuments(usedDocuments);
+  const answer = remapCitations(generation.answer, usedSourceIndexes);
+  return {
+    ...fallbackResponse,
+    answer: answerWithSources(answer, sources, input.locale),
+    nextStep: generation.nextStep,
+    sources,
+    searchMeta: {
+      ...currentSearchMeta,
+      ...generatedMetadata,
+      answerMode: "grounded-llm",
+      retrievedCount: selection.documents.length,
+      noContext: false,
+      noContextReason: null,
+    },
+    modelVersion: generation.model,
+    promptVersion: GROUNDED_RAG_PROMPT_VERSION,
+  };
 }
 
 export function shouldUseDirectLexicalFallback(input: {

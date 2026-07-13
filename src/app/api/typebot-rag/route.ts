@@ -6,16 +6,24 @@ import { CHAT_SESSION_COOKIE, verifyChatSessionToken } from "@/lib/chat/session-
 import { getReadyChatAttachmentsForRuntime } from "@/lib/chat/attachment-processing";
 import { inferChatCategory } from "@/lib/chat/category";
 import {
+  clarificationNextStep,
+  mediateRagQuestion,
+  questionMediationMetadata,
+  questionMediationProvenance,
+  questionMediationRuntimePayload,
+  type QuestionMediation,
+} from "@/lib/chat/question-mediator";
+import {
   DIRECT_LEXICAL_PROVENANCE,
   DIRECT_LEXICAL_RUNTIME_PATH,
   DIRECT_HYBRID_RUNTIME_PATH,
   runDirectRagFallback,
   shouldUseDirectLexicalFallback,
-  type DirectLexicalResponse,
 } from "@/lib/chat/direct-lexical-fallback";
 import { createChatRequestIdentity } from "@/lib/chat/request-identity";
 import {
   applyChatResponseGuardrail,
+  type GuardedChatResponse,
   type GuardrailLocale,
 } from "@/lib/chat/response-guardrail";
 import {
@@ -132,6 +140,45 @@ function normalizeBoolean(value: unknown) {
   if (typeof value === "boolean") return value;
   if (typeof value === "string") return value.toLowerCase() === "true";
   return false;
+}
+
+function withQuestionMediation(
+  payload: GuardedChatResponse,
+  mediation: QuestionMediation,
+): GuardedChatResponse {
+  const searchMeta = payload.searchMeta && typeof payload.searchMeta === "object" && !Array.isArray(payload.searchMeta)
+    ? payload.searchMeta as Record<string, unknown>
+    : {};
+  return {
+    ...payload,
+    searchMeta: {
+      ...searchMeta,
+      ...questionMediationMetadata(mediation),
+    },
+  };
+}
+
+export function n8nQuestionPlan(question: string, mediation: QuestionMediation) {
+  return {
+    question,
+    retrievalQuery: mediation.searchQuery || question,
+    answerFocus: mediation.answerFocus,
+    responseMode: mediation.responseMode,
+    plannedIntents: mediation.intents,
+    plannedVisaCodes: mediation.visaCodes,
+    mediationPromptVersion: mediation.promptVersion,
+    mediation: questionMediationRuntimePayload(mediation),
+  };
+}
+
+export function shouldRetryN8nNoContext(payload: { searchMeta?: unknown }) {
+  const searchMeta = payload.searchMeta && typeof payload.searchMeta === "object"
+    ? payload.searchMeta as Record<string, unknown>
+    : {};
+  return normalizeBoolean(searchMeta.noContext)
+    || normalizeBoolean(searchMeta.no_context)
+    || normalizeText(searchMeta.noContextReason, 120).length > 0
+    || normalizeText(searchMeta.no_context_reason, 120).length > 0;
 }
 
 function n8nRuntimeTimeoutMs() {
@@ -269,7 +316,7 @@ export async function POST(req: NextRequest) {
     const locale = normalizeLocale(body?.locale);
     const source = normalizeSource(body?.source);
     const typebotResultId = normalizeText(body?.typebotResultId, 120);
-    const category = inferChatCategory(question, body?.category);
+    const deterministicCategory = inferChatCategory(question, body?.category);
     const attachments = normalizeAttachments(body?.attachments);
 
     if (!question || !sessionId) {
@@ -297,11 +344,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const identity = createChatRequestIdentity({ requestId: body?.requestId, source, sessionId, question });
-
     const startedAt = Date.now();
-    const n8nRequest = {
+    const identity = createChatRequestIdentity({ requestId: body?.requestId, source, sessionId, question });
+    const mediation = await mediateRagQuestion({
       question,
+      locale,
+      deterministicCategory,
+    });
+    const category = mediation.category;
+
+    const n8nRequest = {
+      ...n8nQuestionPlan(question, mediation),
       sessionId,
       tenant_id: "default",
       category,
@@ -374,65 +427,125 @@ export async function POST(req: NextRequest) {
       });
     };
 
-    const n8nAttempt = await requestN8nRuntime(n8nRequest);
-    let upstreamPayload: ReturnType<typeof normalizeN8nPayload> | DirectLexicalResponse;
+    let upstreamPayload: GuardedChatResponse;
     let provenance: RagProvenance;
-
-    if (n8nAttempt.ok) {
-      upstreamPayload = n8nAttempt.payload;
-      provenance = n8nAttempt.provenance;
-    } else {
-      console.warn("[POST /api/typebot-rag] using direct lexical fallback", {
-        reason: n8nAttempt.fallbackReason,
-        httpStatus: n8nAttempt.httpStatus,
-      });
-      try {
-        upstreamPayload = await runDirectRagFallback({
-          question,
+    if (mediation.action === "clarify") {
+      provenance = questionMediationProvenance(mediation);
+      upstreamPayload = {
+        answer: mediation.clarificationQuestion,
+        nextStep: clarificationNextStep(locale),
+        needsHuman: false,
+        riskLevel: "low",
+        leadStage: "none",
+        sources: [],
+        searchMeta: {
+          type: "question-mediation",
+          retrievalMode: "not-run",
+          scoreVersion: "not-applicable",
+          runtimePath: "kaxi-question-mediator",
+          answerMode: "clarification",
+          retrievedCount: 0,
+          noContext: false,
+          noContextReason: null,
           category,
           locale,
-          tenantId: "default",
-          requestId: identity.requestId,
-          fallbackReason: n8nAttempt.fallbackReason,
-          attachmentCount: verifiedAttachments.length,
+        },
+        executionId: `mediator-${identity.requestId}`,
+        runtimePath: "kaxi-question-mediator",
+        ...provenance,
+      };
+    } else {
+      const n8nAttempt = await requestN8nRuntime(n8nRequest);
+      const n8nNeedsCanonicalRetry = n8nAttempt.ok && shouldRetryN8nNoContext(n8nAttempt.payload);
+      const fallbackReason = n8nAttempt.ok ? "n8n_no_context" : n8nAttempt.fallbackReason;
+      const fallbackHttpStatus = n8nAttempt.ok ? 200 : n8nAttempt.httpStatus;
+      const fallbackExecutionId = n8nAttempt.ok ? n8nAttempt.payload.executionId : n8nAttempt.executionId;
+
+      if (n8nAttempt.ok && !n8nNeedsCanonicalRetry) {
+        upstreamPayload = n8nAttempt.payload;
+        provenance = n8nAttempt.provenance;
+      } else {
+        console.warn("[POST /api/typebot-rag] using canonical Supabase fallback", {
+          reason: fallbackReason,
+          httpStatus: fallbackHttpStatus,
         });
-        provenance = resolveRagProvenance(upstreamPayload);
-        reportOpsEventAsync(
-          "n8n_runtime_fallback_succeeded",
-          "KAXI served the request through its direct Supabase RAG fallback.",
-          provenance,
-          upstreamPayload.executionId,
-          {
-            runtimePath: upstreamPayload.runtimePath,
-            fallbackReason: n8nAttempt.fallbackReason,
-            n8nHttpStatus: n8nAttempt.httpStatus,
-            n8nWorkflowId: n8nAttempt.provenance.workflowId,
-          },
-          "warning",
-        );
-      } catch (fallbackError) {
-        console.error("[POST /api/typebot-rag] direct lexical fallback failed", fallbackError);
-        const directExecutionId = `direct-${identity.requestId}`;
-        await persistFailure("rag_runtime_unavailable", DIRECT_LEXICAL_PROVENANCE, directExecutionId);
-        reportOpsEventAsync(
-          "rag_runtime_unavailable",
-          "Both the n8n runtime and KAXI direct Supabase fallback failed.",
-          DIRECT_LEXICAL_PROVENANCE,
-          directExecutionId,
-          {
-            runtimePath: "unavailable",
-            attemptedRuntimePaths: ["n8n-workflow", DIRECT_HYBRID_RUNTIME_PATH, DIRECT_LEXICAL_RUNTIME_PATH],
-            fallbackReason: n8nAttempt.fallbackReason,
-            n8nHttpStatus: n8nAttempt.httpStatus,
-            directError: fallbackError instanceof Error ? fallbackError.message.slice(0, 240) : "unknown",
-          },
-        );
-        return ragJson({
-          error: "RAG runtime unavailable",
-          runtimePath: "unavailable",
-          attemptedRuntimePaths: ["n8n-workflow", DIRECT_HYBRID_RUNTIME_PATH, DIRECT_LEXICAL_RUNTIME_PATH],
-        }, { status: 502 }, DIRECT_LEXICAL_PROVENANCE);
+        try {
+          upstreamPayload = await runDirectRagFallback({
+            question,
+            retrievalQuery: mediation.searchQuery,
+            category,
+            locale,
+            tenantId: "default",
+            requestId: identity.requestId,
+            fallbackReason,
+            attachmentCount: verifiedAttachments.length,
+            mediation,
+          });
+          provenance = resolveRagProvenance(upstreamPayload);
+          reportOpsEventAsync(
+            "n8n_runtime_fallback_succeeded",
+            "KAXI served the mediated request through its direct Supabase RAG fallback.",
+            provenance,
+            upstreamPayload.executionId,
+            {
+              runtimePath: upstreamPayload.runtimePath,
+              fallbackReason,
+              n8nHttpStatus: fallbackHttpStatus,
+              n8nWorkflowId: n8nAttempt.provenance.workflowId,
+            },
+            "warning",
+          );
+        } catch (fallbackError) {
+          console.error("[POST /api/typebot-rag] direct lexical fallback failed", fallbackError);
+          if (n8nAttempt.ok) {
+            upstreamPayload = n8nAttempt.payload;
+            provenance = n8nAttempt.provenance;
+            reportOpsEventAsync(
+              "n8n_no_context_canonical_retry_failed",
+              "The mediated canonical Supabase retry failed, so KAXI retained the n8n no-context response.",
+              provenance,
+              fallbackExecutionId,
+              {
+                runtimePath: "n8n-workflow",
+                fallbackReason,
+                directError: fallbackError instanceof Error ? fallbackError.message.slice(0, 240) : "unknown",
+              },
+              "warning",
+            );
+          } else {
+            const directExecutionId = `direct-${identity.requestId}`;
+            await persistFailure("rag_runtime_unavailable", DIRECT_LEXICAL_PROVENANCE, directExecutionId);
+            reportOpsEventAsync(
+              "rag_runtime_unavailable",
+              "Both the n8n runtime and KAXI direct Supabase fallback failed.",
+              DIRECT_LEXICAL_PROVENANCE,
+              directExecutionId,
+              {
+                runtimePath: "unavailable",
+                attemptedRuntimePaths: ["n8n-workflow", DIRECT_HYBRID_RUNTIME_PATH, DIRECT_LEXICAL_RUNTIME_PATH],
+                fallbackReason,
+                n8nHttpStatus: fallbackHttpStatus,
+                directError: fallbackError instanceof Error ? fallbackError.message.slice(0, 240) : "unknown",
+              },
+            );
+            return ragJson({
+              error: "RAG runtime unavailable",
+              runtimePath: "unavailable",
+              attemptedRuntimePaths: ["n8n-workflow", DIRECT_HYBRID_RUNTIME_PATH, DIRECT_LEXICAL_RUNTIME_PATH],
+            }, { status: 502 }, DIRECT_LEXICAL_PROVENANCE);
+          }
+        }
       }
+    }
+
+    upstreamPayload = withQuestionMediation(upstreamPayload, mediation);
+    if (mediation.needsHumanReview && mediation.action === "retrieve") {
+      upstreamPayload = {
+        ...upstreamPayload,
+        needsHuman: true,
+        riskLevel: upstreamPayload.riskLevel === "high" ? "high" : "medium",
+        leadStage: upstreamPayload.riskLevel === "high" ? "urgent" : "review",
+      };
     }
 
     const guardedPayload = applyChatResponseGuardrail(upstreamPayload, question, locale);

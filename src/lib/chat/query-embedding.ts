@@ -1,11 +1,16 @@
+import { embedText } from "@/lib/embeddings/transformer-embedder";
+
 export const RAG_QUERY_EMBEDDING_MODEL = "text-embedding-3-small";
 export const RAG_QUERY_EMBEDDING_DIMENSIONS = 1536;
+export const CANONICAL_QUERY_EMBEDDING_MODEL = "Xenova/multilingual-e5-small";
+export const CANONICAL_QUERY_EMBEDDING_DIMENSIONS = 384;
 
 export type QueryEmbeddingResult = {
   vector: number[] | null;
   status: "ready" | "not_configured" | "disabled" | "failed";
-  provider: "openai-compatible" | "none";
+  provider: "openai-compatible" | "local-transformer" | "none";
   model: string;
+  dimensions: number | null;
   failureReason: string | null;
   latencyMs: number;
 };
@@ -41,9 +46,11 @@ function endpoint(env: NodeJS.ProcessEnv) {
 
 function result(
   startedAt: number,
-  input: Omit<QueryEmbeddingResult, "latencyMs">,
+  input: Omit<QueryEmbeddingResult, "latencyMs" | "dimensions"> & { dimensions?: number | null },
 ): QueryEmbeddingResult {
-  return { ...input, latencyMs: Date.now() - startedAt };
+  const dimensions = input.dimensions
+    ?? (input.model === RAG_QUERY_EMBEDDING_MODEL ? RAG_QUERY_EMBEDDING_DIMENSIONS : null);
+  return { ...input, dimensions, latencyMs: Date.now() - startedAt };
 }
 
 export async function createRagQueryEmbedding(
@@ -62,7 +69,8 @@ export async function createRagQueryEmbedding(
       failureReason: "embedding_disabled",
     });
   }
-  const apiKey = configured(env.OPENAI_EMBEDDING_API_KEY);
+  const apiKey = configured(env.OPENAI_EMBEDDING_API_KEY)
+    || (env.KAXI_QUERY_EMBEDDINGS_USE_OPENAI_KEY === "true" ? configured(env.OPENAI_API_KEY) : "");
   if (!apiKey) {
     return result(startedAt, {
       vector: null,
@@ -150,4 +158,70 @@ export async function createRagQueryEmbedding(
       failureReason: timeout ? "embedding_provider_timeout" : "embedding_provider_unavailable",
     });
   }
+}
+
+export async function createCanonicalRagQueryEmbedding(
+  question: string,
+  options: Pick<QueryEmbeddingOptions, "env"> = {},
+): Promise<QueryEmbeddingResult> {
+  const startedAt = Date.now();
+  const env = options.env || process.env;
+  if (
+    env.KAXI_QUERY_EMBEDDINGS_ENABLED === "false"
+    || env.KAXI_CANONICAL_QUERY_EMBEDDINGS_ENABLED === "false"
+  ) {
+    return result(startedAt, {
+      vector: null,
+      status: "disabled",
+      provider: "none",
+      model: CANONICAL_QUERY_EMBEDDING_MODEL,
+      dimensions: CANONICAL_QUERY_EMBEDDING_DIMENSIONS,
+      failureReason: "embedding_disabled",
+    });
+  }
+
+  try {
+    const embedded = await embedText(`query: ${question.slice(0, 4_000)}`);
+    const vector = Array.from(embedded.vector);
+    if (
+      embedded.method !== "transformer"
+      || vector.length !== CANONICAL_QUERY_EMBEDDING_DIMENSIONS
+      || vector.some((value) => !Number.isFinite(value))
+    ) {
+      return result(startedAt, {
+        vector: null,
+        status: "failed",
+        provider: "local-transformer",
+        model: CANONICAL_QUERY_EMBEDDING_MODEL,
+        dimensions: CANONICAL_QUERY_EMBEDDING_DIMENSIONS,
+        failureReason: "canonical_embedding_invalid_vector",
+      });
+    }
+    return result(startedAt, {
+      vector,
+      status: "ready",
+      provider: "local-transformer",
+      model: CANONICAL_QUERY_EMBEDDING_MODEL,
+      dimensions: CANONICAL_QUERY_EMBEDDING_DIMENSIONS,
+      failureReason: null,
+    });
+  } catch {
+    return result(startedAt, {
+      vector: null,
+      status: "failed",
+      provider: "local-transformer",
+      model: CANONICAL_QUERY_EMBEDDING_MODEL,
+      dimensions: CANONICAL_QUERY_EMBEDDING_DIMENSIONS,
+      failureReason: "canonical_embedding_unavailable",
+    });
+  }
+}
+
+export async function createRagQueryEmbeddingWithLocalFallback(
+  question: string,
+  options: QueryEmbeddingOptions = {},
+): Promise<QueryEmbeddingResult> {
+  const providerResult = await createRagQueryEmbedding(question, options);
+  if (providerResult.status === "ready" || providerResult.status === "disabled") return providerResult;
+  return createCanonicalRagQueryEmbedding(question, { env: options.env });
 }

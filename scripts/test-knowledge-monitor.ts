@@ -14,6 +14,21 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) fail(message);
 }
 
+async function assertRejects(
+  action: () => Promise<unknown>,
+  expected: RegExp,
+  message: string,
+): Promise<void> {
+  try {
+    await action();
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    assert(expected.test(detail), `${message}: unexpected error ${detail}`);
+    return;
+  }
+  fail(`${message}: expected rejection`);
+}
+
 function contentHash(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -120,6 +135,7 @@ try {
     "moj-office-jurisdiction-daegu-gyeongbuk-gangwon",
     "moj-office-jurisdiction-daejeon-chungcheong",
     "moj-mobile-immigration-office",
+    "study-in-korea-d10-change-documents",
     "accredited-university",
     "visa-portal-visa-types",
   ];
@@ -131,6 +147,30 @@ try {
   }
 
   const watchlistIds = new Set(OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST.map((item) => item.docId));
+  const verifiedSources = OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST.filter((item) => item.evidenceKind);
+  assert(verifiedSources.length === 32, "verified official source expansion should contain 32 sources");
+  assert(
+    verifiedSources.every((item) => (item.minimumExtractedChars || 0) >= 400),
+    "verified official sources must reject implausibly short bodies",
+  );
+  assert(
+    verifiedSources.every((item) => (item.requiredContentSignals || []).length >= 3),
+    "verified official sources must define content identity signals",
+  );
+  const verifiedEvidenceKinds = new Set(verifiedSources.map((item) => item.evidenceKind));
+  for (const evidenceKind of [
+    "government_guidance",
+    "official_qna",
+    "court_decision",
+    "enforcement_case",
+    "consular_guidance",
+  ] as const) {
+    assert(verifiedEvidenceKinds.has(evidenceKind), `verified source coverage missing ${evidenceKind}`);
+  }
+  const verifiedLanguages = new Set(verifiedSources.map((item) => item.language || "ko"));
+  for (const language of ["ko", "en", "vi", "mn"]) {
+    assert(verifiedLanguages.has(language), `verified source coverage missing locale ${language}`);
+  }
   const officialDocIds = getKnowledgeDocsWithMetadata()
     .filter((doc) =>
       doc.id.startsWith("immigration-") ||
@@ -234,6 +274,82 @@ try {
   assert(stableHashA.bodyHash === stableHashB.bodyHash, "body hash should ignore volatile HTML attributes");
   assert(stableHashA.contentHash === stableHashA.bodyHash, "monitor content hash should use the stable body hash");
   assert(stableHashA.content !== stableHashB.content, "raw byte metadata should remain available for audit evidence");
+
+  const validatedSource: OfficialKnowledgeSource = {
+    docId: "monitor-validated-source",
+    title: "검증된 공식 본문",
+    sourceUrl: "https://www.law.go.kr/validated-monitor-test",
+    sourceType: "official_law",
+    topic: "legal",
+    evidenceKind: "court_decision",
+    applicantRegion: "KR",
+    requiredContentSignals: ["출입국", "체류자격", "판결"],
+    minimumExtractedChars: 10,
+  };
+  const validatedFetch = await fetchOfficialKnowledgeSource(validatedSource, {
+    fetchImpl: async () =>
+      new Response("<html><body>출입국 체류자격에 관한 검증된 공식 판결 본문입니다.</body></html>", {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      }),
+  });
+  assert(validatedFetch.content.includes("evidence_kind: court_decision"), "candidate metadata should retain evidence kind");
+  assert(validatedFetch.content.includes("applicant_region: KR"), "candidate metadata should retain applicant region");
+  const eucKrFetch = await fetchOfficialKnowledgeSource(validatedSource, {
+    fetchImpl: async () =>
+      new Response(
+        Buffer.from(
+          "PGh0bWw+PGJvZHk+w+LA1LG5IMO8t/nA2rDdIMbHsOEguru5rjwvYm9keT48L2h0bWw+",
+          "base64",
+        ),
+        { headers: { "content-type": "text/html; charset=euc-kr" } },
+      ),
+  });
+  assert(eucKrFetch.content.includes("출입국 체류자격 판결 본문"), "EUC-KR official pages should decode without mojibake");
+  assert(eucKrFetch.content.includes("content_encoding: euc-kr"), "candidate metadata should retain detected encoding");
+  await assertRejects(
+    () => fetchOfficialKnowledgeSource({
+      ...validatedSource,
+      requiredContentSignals: ["짧은"],
+      minimumExtractedChars: 50,
+    }, {
+      fetchImpl: async () =>
+        new Response("<html><body>짧은 공식 본문</body></html>", {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+    }),
+    /body too short/,
+    "official source minimum body length should reject an incomplete page",
+  );
+  await assertRejects(
+    () => fetchOfficialKnowledgeSource(validatedSource, {
+      fetchImpl: async () =>
+        new Response("<html><body>충분히 길지만 완전히 다른 페이지의 본문입니다.</body></html>", {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+    }),
+    /missing required signals/,
+    "official source identity signals should reject a wrong page",
+  );
+  await assertRejects(
+    () => fetchOfficialKnowledgeSource({
+      ...validatedSource,
+      sourceUrl: "https://example.com/not-official",
+    }),
+    /Non-official source URL rejected/,
+    "untrusted source hosts must be rejected before fetch",
+  );
+  const redirectedResponse = new Response(
+    "<html><body>출입국 체류자격에 관한 검증된 공식 판결 본문입니다.</body></html>",
+    { headers: { "content-type": "text/html; charset=utf-8" } },
+  );
+  Object.defineProperty(redirectedResponse, "url", { value: "https://example.com/redirected" });
+  await assertRejects(
+    () => fetchOfficialKnowledgeSource(validatedSource, {
+      fetchImpl: async () => redirectedResponse,
+    }),
+    /redirected to non-official URL/,
+    "official sources must not escape to an untrusted host after redirects",
+  );
 
   const oldContent = "old immigration rule content";
   await db.knowledgeDocument.create({

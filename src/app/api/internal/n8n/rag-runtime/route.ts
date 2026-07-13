@@ -3,6 +3,7 @@ import { JsonBodyError, readJsonBody } from "@/lib/api/json-body";
 import { parseLimit, rateLimit } from "@/lib/api/security";
 import { inferChatCategory } from "@/lib/chat/category";
 import { runDirectRagFallback } from "@/lib/chat/direct-lexical-fallback";
+import { parseRuntimeQuestionMediation } from "@/lib/chat/question-mediator";
 import {
   applyChatResponseGuardrail,
   type GuardrailLocale,
@@ -66,8 +67,17 @@ export async function POST(req: NextRequest) {
     }
 
     const category = inferChatCategory(question, payload.category);
+    const mediation = parseRuntimeQuestionMediation(payload.mediation, {
+      question,
+      locale: resolvedLocale,
+      category,
+    });
+    const retrievalQuery = text(payload.retrievalQuery, 800)
+      || mediation?.searchQuery
+      || question;
     const direct = await runDirectRagFallback({
       question,
+      retrievalQuery,
       category,
       locale: resolvedLocale,
       tenantId,
@@ -75,6 +85,7 @@ export async function POST(req: NextRequest) {
       fallbackReason: "n8n_orchestrated_runtime",
       attachmentCount: Array.isArray(payload.attachments) ? Math.min(payload.attachments.length, 3) : 0,
       allowStoredVectorExpansion: true,
+      mediation,
     });
     const guarded = applyChatResponseGuardrail(direct, question, resolvedLocale);
     const currentSearchMeta = record(guarded.searchMeta) || {};

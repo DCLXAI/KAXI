@@ -483,18 +483,12 @@ function docFromRow(row: SearchRow): KnowledgeDoc {
   };
 }
 
-export async function searchPgvectorKnowledge(query: string, options: { topK?: number; languages?: string[] } = {}): Promise<PgvectorSearchResult[]> {
-  if (!query.trim()) return [];
-  if (getEmbedDim() !== PGVECTOR_EMBEDDING_DIM) {
-    throw new Error(`Embedder dim ${getEmbedDim()} does not match pgvector dim ${PGVECTOR_EMBEDDING_DIM}`);
-  }
-
+async function searchPgvectorKnowledgeByVector(
+  query: string,
+  queryVector: EmbeddingVector | number[],
+  options: { topK?: number; languages?: string[] } = {},
+): Promise<PgvectorSearchResult[]> {
   const expandedQuery = await expandQueryWithSynonyms(query);
-  const embedded = await embedText(`query: ${query}`);
-  if (embedded.method !== "transformer") {
-    throw new Error("pgvector search requires transformer query embedding");
-  }
-
   const topK = options.topK ?? 5;
   const rows = await db.$queryRawUnsafe<SearchRow[]>(
     `SELECT *
@@ -509,7 +503,7 @@ export async function searchPgvectorKnowledge(query: string, options: { topK?: n
        $6::int,
        $7::int
      )`,
-    vectorLiteral(embedded.vector),
+    vectorLiteral(queryVector),
     buildKeywordTsquery(expandedQuery),
     options.languages || ["ko"],
     topK * 4,
@@ -539,6 +533,31 @@ export async function searchPgvectorKnowledge(query: string, options: { topK?: n
     vectorRank: row.vector_rank,
     keywordRank: row.keyword_rank,
   }));
+}
+
+export async function searchPgvectorKnowledgeWithEmbedding(
+  query: string,
+  queryVector: number[],
+  options: { topK?: number; languages?: string[] } = {},
+): Promise<PgvectorSearchResult[]> {
+  if (!query.trim()) return [];
+  return searchPgvectorKnowledgeByVector(query, queryVector, options);
+}
+
+export async function searchPgvectorKnowledge(
+  query: string,
+  options: { topK?: number; languages?: string[] } = {},
+): Promise<PgvectorSearchResult[]> {
+  if (!query.trim()) return [];
+  if (getEmbedDim() !== PGVECTOR_EMBEDDING_DIM) {
+    throw new Error(`Embedder dim ${getEmbedDim()} does not match pgvector dim ${PGVECTOR_EMBEDDING_DIM}`);
+  }
+
+  const embedded = await embedText(`query: ${query}`);
+  if (embedded.method !== "transformer") {
+    throw new Error("pgvector search requires transformer query embedding");
+  }
+  return searchPgvectorKnowledgeByVector(query, embedded.vector, options);
 }
 
 export async function getPgvectorStats() {

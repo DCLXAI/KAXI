@@ -41,6 +41,7 @@ export interface OfficialSourceHarvestSummary {
   minCandidateChunks: number;
   meetsChunkTarget: boolean;
   failedDocIds: string[];
+  failedSourceErrors: Array<{ docId: string; sourceUrl: string; error: string }>;
 }
 
 export function selectOfficialKnowledgeSources(options: {
@@ -119,5 +120,12 @@ export async function harvestOfficialKnowledgeCorpus(
     failedDocIds: monitor.results
       .filter((result) => result.status === "failed")
       .map((result) => result.docId),
+    failedSourceErrors: monitor.results
+      .filter((result) => result.status === "failed")
+      .map((result) => ({
+        docId: result.docId,
+        sourceUrl: result.sourceUrl,
+        error: result.error || "unknown_error",
+      })),
   };
 }

@@ -126,6 +126,7 @@ export function applyChatResponseGuardrail(
   const searchMeta = response.searchMeta && typeof response.searchMeta === "object" && !Array.isArray(response.searchMeta)
     ? response.searchMeta as Record<string, unknown>
     : {};
+  if (searchMeta.answerMode === "clarification") return response;
   const sources = Array.isArray(response.sources) ? response.sources : [];
   if (!isLowConfidenceRetrieval(searchMeta, sources.length)) return response;
   return {

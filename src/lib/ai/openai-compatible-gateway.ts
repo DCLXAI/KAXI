@@ -172,14 +172,38 @@ async function normalizeMessages(
   );
 }
 
+function completionText(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (!Array.isArray(value)) return "";
+  return value
+    .map((part) => {
+      const block = asRecord(part);
+      if (!block) return "";
+      if (typeof block.text === "string") return block.text;
+      if (typeof block.content === "string") return block.content;
+      return "";
+    })
+    .join("")
+    .trim();
+}
+
 function textFromResponse(value: unknown): { text: string; model: string } {
   const payload = asRecord(value);
   const choices = Array.isArray(payload?.choices) ? payload.choices : [];
   const first = asRecord(choices[0]);
   const message = asRecord(first?.message);
-  const text = typeof message?.content === "string" ? message.content.trim() : "";
+  const text = completionText(message?.content);
   const model = typeof payload?.model === "string" ? payload.model : getOpenAICompatibleModel();
-  if (!text) throw new Error("Kimi API returned an empty completion");
+  if (!text) {
+    const finishReason = typeof first?.finish_reason === "string" ? first.finish_reason : "unknown";
+    const reasoningLength = typeof message?.reasoning_content === "string"
+      ? message.reasoning_content.length
+      : 0;
+    if (finishReason === "length" && reasoningLength > 0) {
+      throw new Error("Kimi API exhausted the output budget before returning a final answer");
+    }
+    throw new Error(`Kimi API returned an empty completion (finish_reason=${finishReason})`);
+  }
   return { text, model };
 }
 
@@ -197,8 +221,13 @@ export async function generateOpenAICompatibleText(options: LlmGatewayOptions): 
     max_completion_tokens: options.maxTokens ?? 1600,
   };
 
-  const thinking = configured(process.env.KIMI_THINKING).toLowerCase();
-  if ((thinking === "enabled" || thinking === "disabled") && !model.startsWith("kimi-k2.7-code")) {
+  const configuredThinking = configured(process.env.KIMI_THINKING).toLowerCase();
+  const thinking = configuredThinking === "enabled" || configuredThinking === "disabled"
+    ? configuredThinking
+    : options.feature === "structured"
+      ? "disabled"
+      : "";
+  if (thinking && !model.startsWith("kimi-k2.7-code")) {
     body.thinking = { type: thinking };
   }
   if (options.jsonSchema) {

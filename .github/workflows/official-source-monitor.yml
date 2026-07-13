@@ -61,7 +61,21 @@ jobs:
           - batch: moj-office-jurisdiction
             source_ids: moj-office-jurisdiction-seoul-incheon-gyeonggi,moj-office-jurisdiction-busan-gyeongnam,moj-office-jurisdiction-gwangju-jeolla-jeju,moj-office-jurisdiction-daegu-gyeongbuk-gangwon,moj-office-jurisdiction-daejeon-chungcheong,moj-mobile-immigration-office
           - batch: study-visa-portal
-            source_ids: accredited-university,visa-portal-visa-types
+            source_ids: study-in-korea-d10-change-documents,accredited-university,visa-portal-visa-types
+          - batch: verified-easylaw-student-worker
+            source_ids: easylaw-foreign-student-guide,easylaw-foreign-student-part-time-work,easylaw-foreign-worker-employment-guide,easylaw-foreign-worker-status-methods,easylaw-foreign-worker-workplace-change
+          - batch: verified-easylaw-family-overseas-korean
+            source_ids: easylaw-marriage-immigrant-status,easylaw-marriage-immigrant-reentry,easylaw-marriage-immigrant-official-qna,easylaw-overseas-korean-f4-status,easylaw-overseas-korean-employment
+          - batch: verified-court-decisions
+            source_ids: scourt-f4-visa-refusal-2017du38874,scourt-f4-second-refusal-2020guhap80547,scourt-stay-extension-departure-order-2017guhap21137,scourt-f6-visa-refusal-2014du42506,scourt-permanent-residence-cancellation-procedure,scourt-f4-refusal-recent-judgment
+          - batch: verified-moj-guidance-cases
+            source_ids: moj-1345-multilingual-consultation,moj-foreign-resident-legal-support,moj-illegal-delivery-rider-enforcement-2026,moj-overseas-korean-f4-integration-2026,moj-new-immigration-policy-cases-2024
+          - batch: verified-consular-ko
+            source_ids: mofa-vietnam-student-visa-2026-ko,mofa-hochiminh-student-visa-2026-ko,mofa-japan-student-visa-2026-ko
+          - batch: verified-consular-vi-mn
+            source_ids: mofa-vietnam-student-visa-vi,mofa-hochiminh-student-visa-vi,mofa-mongolia-visa-process-mn
+          - batch: verified-consular-en
+            source_ids: mofa-malaysia-d2-visa-2026-en,mofa-finland-d2-visa-2026-en,mofa-singapore-d2-visa-2025-en,mofa-seattle-d2-d4-visa-2026-en,mofa-hong-kong-d2-visa-2026-en
     env:
       KAXI_MONITOR_URL: https://kaxi.vercel.app/api/knowledge/monitor
       KAXI_ADMIN_API_KEY: ${{ secrets.KAXI_ADMIN_API_KEY }}

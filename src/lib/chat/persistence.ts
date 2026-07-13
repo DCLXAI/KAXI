@@ -314,6 +314,11 @@ function finiteNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+export function retrievalRunHasNoContext(searchMeta: Record<string, unknown>, retrievedCount: number) {
+  if (searchMeta.answerMode === "clarification" || searchMeta.retrievalMode === "not-run") return false;
+  return searchMeta.noContext === true || retrievedCount === 0;
+}
+
 async function persistRetrievalRun(input: PersistChatExchangeInput, messageId: number | string) {
   const supabase = createSupabaseChatClient();
   const searchMeta = record(input.searchMeta);
@@ -338,7 +343,7 @@ async function persistRetrievalRun(input: PersistChatExchangeInput, messageId: n
     top_score: finiteNumber(searchMeta.topScore),
     retrieved_count: retrievedCount,
     rejected_citation_count: Math.max(0, Math.trunc(finiteNumber(searchMeta.rejectedCitationCount) || 0)),
-    no_context: searchMeta.noContext === true || retrievedCount === 0,
+    no_context: retrievalRunHasNoContext(searchMeta, retrievedCount),
     no_context_reason: typeof searchMeta.noContextReason === "string" ? searchMeta.noContextReason : null,
     sources: safeJson(input.sources ?? []),
     search_meta: safeJson(searchMeta),

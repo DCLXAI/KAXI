@@ -6,22 +6,15 @@ import {
   type KnowledgeDiffSummary,
 } from "./repository";
 import type { OfficialSourceExtractionMethod } from "./harvest-metadata";
-import type { KnowledgeDoc, SourceType } from "../data/knowledge";
+import { hasOfficialKnowledgeSourceType, hasOfficialKnowledgeSourceUrl } from "./official-source";
+import {
+  VERIFIED_OFFICIAL_KNOWLEDGE_SOURCES,
+  type VerifiedOfficialKnowledgeSource,
+} from "./verified-official-sources";
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
-export interface OfficialKnowledgeSource {
-  docId: string;
-  title: string;
-  sourceUrl: string;
-  sourceType: SourceType;
-  topic: KnowledgeDoc["category"];
-  language?: string;
-  jurisdiction?: "KR" | "KAXI";
-  legalPriority?: 1 | 2 | 3 | 4;
-  monitorCadence?: "daily" | "weekly" | "monthly";
-  changeSignals?: string[];
-}
+export type OfficialKnowledgeSource = VerifiedOfficialKnowledgeSource;
 
 export interface OfficialKnowledgeMonitorResult {
   docId: string;
@@ -165,6 +158,8 @@ const MOJ_MOBILE_IMMIGRATION_OFFICE_URL =
   "https://www.immigration.go.kr/immigration/2344/subview.do";
 const STUDY_IN_KOREA_CERTIFIED_UNIVERSITY_URL =
   "https://studyinkorea.go.kr/ko/plan/certifiedUniversity.do";
+const STUDY_IN_KOREA_D10_DOCUMENTS_URL =
+  "https://studyinkorea.go.kr/ko/life/residenceAndStayInfo.do?tab=job-seeker-visa";
 const VISA_PORTAL_VISA_TYPES_URL = "https://www.visa.go.kr/openPage.do?LANG_TYPE=EN&MENU_ID=10102";
 
 export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
@@ -946,6 +941,16 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     changeSignals: ["mobile_office", "operation_notice", "download", "competent_office", "schedule", "service_location"],
   },
   {
+    docId: "study-in-korea-d10-change-documents",
+    title: "Study in Korea D-10-1 구직 체류자격 변경 제출서류",
+    sourceUrl: STUDY_IN_KOREA_D10_DOCUMENTS_URL,
+    sourceType: "official_government",
+    topic: "documents",
+    legalPriority: 3,
+    monitorCadence: "daily",
+    changeSignals: ["d10", "job_seeking", "required_documents", "financial_proof", "proof_of_residence"],
+  },
+  {
     docId: "accredited-university",
     title: "Study in Korea 교육국제화역량 인증대학",
     sourceUrl: STUDY_IN_KOREA_CERTIFIED_UNIVERSITY_URL,
@@ -965,6 +970,7 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: OfficialKnowledgeSource[] = [
     monitorCadence: "daily",
     changeSignals: ["visa_type_list", "d2_subtypes", "d4_subtypes", "d10_subtypes", "e7_subtypes", "f5_subtypes"],
   },
+  ...VERIFIED_OFFICIAL_KNOWLEDGE_SOURCES,
 ];
 
 export const DEFAULT_CRON_KNOWLEDGE_SOURCE_IDS = [
@@ -1019,6 +1025,33 @@ function normalizeText(value: string): string {
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function detectOfficialSourceCharset(buffer: Buffer, contentType: string): string {
+  const headerCharset = contentType.match(/charset\s*=\s*["']?\s*([a-z0-9._-]+)/i)?.[1];
+  const htmlPrefix = buffer.toString("latin1", 0, Math.min(buffer.length, 8192));
+  const metaCharset = htmlPrefix.match(/charset\s*=\s*["']?\s*([a-z0-9._-]+)/i)?.[1];
+  const charset = (headerCharset || metaCharset || "utf-8").toLowerCase();
+  if (/^(euc-kr|ks_c_5601|ks-c-5601|cp949|windows-949)/.test(charset)) return "euc-kr";
+  return charset;
+}
+
+function decodeOfficialSourceText(buffer: Buffer, contentType: string): {
+  text: string;
+  charset: string;
+} {
+  const charset = detectOfficialSourceCharset(buffer, contentType);
+  try {
+    return {
+      text: new TextDecoder(charset, { fatal: false }).decode(buffer),
+      charset,
+    };
+  } catch {
+    return {
+      text: buffer.toString("utf8"),
+      charset: "utf-8-fallback",
+    };
+  }
 }
 
 type PdfParseParser = {
@@ -1096,6 +1129,13 @@ export async function fetchOfficialKnowledgeSource(
   extractedCharCount: number;
   extractionError?: string;
 }> {
+  if (!hasOfficialKnowledgeSourceType(source.sourceType)) {
+    throw new Error(`Non-official source type rejected: ${source.sourceType}`);
+  }
+  if (!hasOfficialKnowledgeSourceUrl(source.sourceUrl)) {
+    throw new Error(`Non-official source URL rejected: ${source.sourceUrl}`);
+  }
+
   const fetchImpl = options.fetchImpl || fetch;
   const timeoutMs = options.timeoutMs || 15_000;
   const maxChars = options.maxChars || 80_000;
@@ -1103,11 +1143,15 @@ export async function fetchOfficialKnowledgeSource(
   if (!response.ok) {
     throw new Error(`HTTP ${response.status} ${response.statusText}`.trim());
   }
+  if (response.url && !hasOfficialKnowledgeSourceUrl(response.url)) {
+    throw new Error(`Official source redirected to non-official URL: ${response.url}`);
+  }
 
   const contentType = response.headers.get("content-type") || "";
   const buffer = Buffer.from(await response.arrayBuffer());
   const byteHash = sha256(buffer);
-  const rawText = buffer.toString("utf8");
+  const decoded = decodeOfficialSourceText(buffer, contentType);
+  const rawText = decoded.text;
   const isPdf = isPdfOfficialSource(contentType, source.sourceUrl);
   const looksBinary = isBinaryOfficialSource(contentType, source.sourceUrl);
   let extractionMethod: OfficialSourceExtractionMethod = "plain_text";
@@ -1158,6 +1202,27 @@ export async function fetchOfficialKnowledgeSource(
     stableBody = normalized;
   }
 
+  const validationBody = extractionMethod === "binary_metadata" ? "" : stableBody;
+  const minimumExtractedChars = source.minimumExtractedChars || 0;
+  if (minimumExtractedChars > 0 && validationBody.length < minimumExtractedChars) {
+    throw new Error(
+      `Official source body too short: ${validationBody.length} < ${minimumExtractedChars}`,
+    );
+  }
+  const requiredContentSignals = (source.requiredContentSignals || [])
+    .map((signal) => signal.trim())
+    .filter(Boolean);
+  if (
+    requiredContentSignals.length > 0 &&
+    !requiredContentSignals.some((signal) =>
+      validationBody.toLocaleLowerCase().includes(signal.toLocaleLowerCase())
+    )
+  ) {
+    throw new Error(
+      `Official source body missing required signals: ${requiredContentSignals.join(", ")}`,
+    );
+  }
+
   const clipped = normalized.slice(0, maxChars);
   const bodyHash = sha256(stableBody.slice(0, maxChars));
   const content = [
@@ -1168,9 +1233,13 @@ export async function fetchOfficialKnowledgeSource(
     `legal_priority: ${source.legalPriority || "unclassified"}`,
     `monitor_cadence: ${source.monitorCadence || "daily"}`,
     `change_signals: ${(source.changeSignals || []).join(", ") || "content_hash"}`,
+    `evidence_kind: ${source.evidenceKind || "government_guidance"}`,
+    `applicant_region: ${source.applicantRegion || "global"}`,
+    `required_content_signals: ${requiredContentSignals.join(", ") || "none"}`,
     `extraction_method: ${extractionMethod}`,
     `body_sha256: ${bodyHash}`,
     `content_type: ${contentType || "unknown"}`,
+    `content_encoding: ${decoded.charset}`,
     `byte_sha256: ${byteHash}`,
     `byte_length: ${buffer.length}`,
     `extracted_chars: ${normalized.length}`,

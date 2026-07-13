@@ -35,6 +35,10 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
       RATE_LIMIT_BACKEND: "auto",
       AI_PROVIDER: "kimi",
       OPENAI_API_KEY: "",
+      AI_AGENT_RATE_LIMIT: "0",
+      AI_AGENT_DAILY_QUOTA: "0",
+      AI_CONSULT_RATE_LIMIT: "0",
+      AI_CONSULT_DAILY_QUOTA: "0",
     });
     delete process.env.DATA_ENCRYPTION_KEY;
     delete process.env.PII_HASH_SECRET;
@@ -70,6 +74,7 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
       "documents.upload_workspace",
       "embeddings.cache",
       "ai.backend_policy",
+      "ai.abuse_controls",
       "rate_limit.shared",
       "admin.supabase_auth",
       "admin.role_link",
@@ -102,6 +107,9 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
     }
     if (!byKey.get("ai.backend_policy")?.metadata) {
       fail(`AI backend readiness should expose safe backend metadata: ${JSON.stringify(byKey.get("ai.backend_policy"))}`);
+    }
+    if (byKey.get("ai.abuse_controls")?.ok || byKey.get("ai.abuse_controls")?.severity !== "required") {
+      fail(`disabled production AI limits should fail readiness: ${JSON.stringify(byKey.get("ai.abuse_controls"))}`);
     }
     const embeddingSerialized = JSON.stringify(byKey.get("embeddings.cache"));
     if (embeddingSerialized.includes(process.cwd()) || (process.env.HOME && embeddingSerialized.includes(process.env.HOME))) {

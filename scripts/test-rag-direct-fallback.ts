@@ -10,11 +10,25 @@ import {
   type DirectLexicalFallbackInput,
 } from "../src/lib/chat/direct-lexical-fallback";
 import { applyChatResponseGuardrail } from "../src/lib/chat/response-guardrail";
-import { requestN8nRuntime } from "../src/app/api/typebot-rag/route";
 import {
+  n8nQuestionPlan,
+  requestN8nRuntime,
+  shouldRetryN8nNoContext,
+} from "../src/app/api/typebot-rag/route";
+import {
+  CANONICAL_QUERY_EMBEDDING_DIMENSIONS,
+  CANONICAL_QUERY_EMBEDDING_MODEL,
   createRagQueryEmbedding,
   RAG_QUERY_EMBEDDING_DIMENSIONS,
 } from "../src/lib/chat/query-embedding";
+import {
+  mediateRagQuestion,
+  parseRuntimeQuestionMediation,
+  parseQuestionMediationOutput,
+  questionMediationMetadata,
+  questionMediationRuntimePayload,
+} from "../src/lib/chat/question-mediator";
+import { retrievalRunHasNoContext } from "../src/lib/chat/persistence";
 
 const lexicalV2Migration = await Bun.file(new URL(
   "../prisma/postgres/migrations/20260713153000_rag_lexical_search_v2/migration.sql",
@@ -158,6 +172,293 @@ const missingEmbeddingProvider = await createRagQueryEmbedding("D-4 visa", {
 assert.equal(missingEmbeddingProvider.status, "not_configured");
 assert.equal(missingEmbeddingProvider.vector, null);
 
+const sharedOpenAiKeyEmbedding = await createRagQueryEmbedding("D-10 documents", {
+  env: {
+    OPENAI_API_KEY: "test-openai-key",
+    KAXI_QUERY_EMBEDDINGS_USE_OPENAI_KEY: "true",
+  } as NodeJS.ProcessEnv,
+  fetchImpl: (async (_url, init) => {
+    assert.equal(
+      new Headers(init?.headers).get("authorization"),
+      "Bearer test-openai-key",
+      "the shared OpenAI key should be accepted for embeddings",
+    );
+    return new Response(JSON.stringify({
+      data: [{ embedding: Array.from({ length: RAG_QUERY_EMBEDDING_DIMENSIONS }, () => 0.001) }],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch,
+});
+assert.equal(sharedOpenAiKeyEmbedding.status, "ready");
+
+assert.equal(
+  shouldRetryN8nNoContext({ searchMeta: { noContext: true, runtimePath: "n8n-workflow" } }),
+  true,
+  "n8n no-context responses should be checked against the canonical Supabase corpus",
+);
+assert.equal(
+  shouldRetryN8nNoContext({ searchMeta: { noContext: false, runtimePath: "n8n-workflow" } }),
+  false,
+  "grounded n8n responses should not incur a redundant canonical retry",
+);
+
+const parsedMediation = parseQuestionMediationOutput(`The routing result is:
+\`\`\`json
+{
+  "action": "retrieve",
+  "category": "documents",
+  "searchQuery": "D-10 구직 체류자격 변경 신청 기본 서류",
+  "answerFocus": "D-10 변경 신청에 필요한 기본 서류",
+  "responseMode": "checklist",
+  "clarificationQuestion": "",
+  "intents": ["required_documents", "status_change"],
+  "visaCodes": ["d10", "D-10"],
+  "needsHumanReview": true,
+  "confidence": 0.94
+}
+\`\`\``, "ko");
+assert.equal(parsedMediation?.action, "retrieve");
+assert.equal(parsedMediation?.category, "documents");
+assert.equal(parsedMediation?.responseMode, "checklist");
+assert.deepEqual(parsedMediation?.visaCodes, ["D-10"]);
+
+const tolerantMediation = parseQuestionMediationOutput(JSON.stringify({
+  result: {
+    action: "search",
+    category: "unknown-category",
+    searchQuery: "D-10 체류자격 변경 제출 서류",
+    responseMode: "list",
+    intents: ["required_documents", "unknown_intent"],
+    visaCodes: ["D10"],
+    needsHumanReview: "true",
+    confidence: "0.91",
+  },
+}), "ko", "documents");
+assert.equal(tolerantMediation?.action, "retrieve");
+assert.equal(tolerantMediation?.category, "documents");
+assert.equal(tolerantMediation?.answerFocus, "D-10 체류자격 변경 제출 서류");
+assert.equal(tolerantMediation?.responseMode, "checklist");
+assert.equal(tolerantMediation?.needsHumanReview, true);
+assert.equal(tolerantMediation?.confidence, 0.91);
+
+const mediatedD10 = await mediateRagQuestion({
+  question: "D-10으로 변경할 때 기본 서류가 뭐예요?",
+  locale: "ko",
+  deterministicCategory: "documents",
+}, {
+  generate: async (options) => {
+    assert.equal(options.feature, "structured");
+    assert.equal(options.temperature, 0);
+    assert.equal(options.jsonSchema?.name, "kaxi_question_mediation");
+    return {
+      text: JSON.stringify({
+        action: "retrieve",
+        category: "documents",
+        searchQuery: "D-10 구직 체류자격 변경 신청 기본 서류",
+        answerFocus: "D-10 변경 신청의 기본 제출 서류",
+        responseMode: "checklist",
+        clarificationQuestion: "",
+        intents: ["required_documents", "status_change"],
+        visaCodes: ["D-10"],
+        needsHumanReview: false,
+        confidence: 0.96,
+      }),
+      backend: "kimi",
+      model: "kimi-question-router-test",
+      durationMs: 7,
+      inputChars: 100,
+      outputChars: 200,
+    };
+  },
+});
+assert.equal(mediatedD10.status, "llm");
+assert.equal(mediatedD10.action, "retrieve");
+assert.equal(mediatedD10.category, "documents");
+assert.equal(mediatedD10.searchQuery, "D-10 구직 체류자격 변경 신청 기본 서류");
+assert.equal(mediatedD10.model, "kimi-question-router-test");
+assert.equal(mediatedD10.attempts, 1);
+assert.deepEqual(mediatedD10.visaCodes, ["D-10"]);
+assert.equal(questionMediationMetadata(mediatedD10).mediationResponseMode, "checklist");
+const runtimePlan = n8nQuestionPlan(
+  "D-10 구직 비자로 변경할 때 기본 제출 서류가 무엇인가요?",
+  mediatedD10,
+);
+assert.equal(runtimePlan.question, "D-10 구직 비자로 변경할 때 기본 제출 서류가 무엇인가요?");
+assert.equal(runtimePlan.retrievalQuery, mediatedD10.searchQuery);
+assert.notEqual(runtimePlan.question, runtimePlan.retrievalQuery);
+const restoredRuntimePlan = parseRuntimeQuestionMediation(
+  questionMediationRuntimePayload(mediatedD10),
+  {
+    question: runtimePlan.question,
+    locale: "ko",
+    category: "documents",
+  },
+);
+assert.equal(restoredRuntimePlan?.answerFocus, mediatedD10.answerFocus);
+assert.deepEqual(restoredRuntimePlan?.intents, mediatedD10.intents);
+assert.deepEqual(restoredRuntimePlan?.visaCodes, ["D-10"]);
+const sanitizedRuntimePlan = parseRuntimeQuestionMediation(
+  {
+    ...questionMediationRuntimePayload(mediatedD10),
+    category: "cost",
+    visaCodes: ["D-2"],
+  },
+  {
+    question: "한국 대학 유학 비자 신청 비용이 얼마예요?",
+    locale: "ko",
+    category: "cost",
+  },
+);
+assert.deepEqual(sanitizedRuntimePlan?.visaCodes, []);
+
+const mediatedCost = await mediateRagQuestion({
+  question: "한국 대학 유학 비자 신청 비용이 얼마예요?",
+  locale: "ko",
+  deterministicCategory: "cost",
+}, {
+  generate: async () => ({
+    text: JSON.stringify({
+      action: "retrieve",
+      category: "cost",
+      searchQuery: "한국 대학 유학 비자 신청 비용",
+      answerFocus: "유학 비자 신청 수수료",
+      responseMode: "estimate",
+      clarificationQuestion: "",
+      intents: ["cost"],
+      visaCodes: ["D-2"],
+      needsHumanReview: false,
+      confidence: 0.9,
+    }),
+    backend: "kimi",
+    model: "kimi-question-router-test",
+    durationMs: 5,
+    inputChars: 80,
+    outputChars: 160,
+  }),
+});
+assert.deepEqual(mediatedCost.visaCodes, [], "the mediator must not invent visa-code retrieval constraints");
+
+const clarifiedQuestion = await mediateRagQuestion({
+  question: "어떤 질문",
+  locale: "ko",
+  deterministicCategory: "general",
+}, {
+  generate: async () => ({
+    text: JSON.stringify({
+      action: "clarify",
+      category: "general",
+      searchQuery: "",
+      answerFocus: "",
+      responseMode: "clarification",
+      clarificationQuestion: "현재 비자와 자격, 서류, 비용 중 어떤 내용을 확인할까요?",
+      intents: ["general_information"],
+      visaCodes: [],
+      needsHumanReview: false,
+      confidence: 0.88,
+    }),
+    backend: "kimi",
+    model: "kimi-question-router-test",
+    durationMs: 5,
+    inputChars: 50,
+    outputChars: 120,
+  }),
+});
+assert.equal(clarifiedQuestion.action, "clarify");
+const guardedClarification = applyChatResponseGuardrail({
+  answer: clarifiedQuestion.clarificationQuestion,
+  nextStep: "D-10 전환 서류처럼 입력해 주세요.",
+  sources: [],
+  searchMeta: {
+    answerMode: "clarification",
+    noContext: false,
+    retrievedCount: 0,
+  },
+}, "어떤 질문", "ko");
+assert.equal(guardedClarification.answer, clarifiedQuestion.clarificationQuestion);
+assert.equal((guardedClarification.searchMeta as Record<string, unknown>).noContext, false);
+assert.equal(retrievalRunHasNoContext({ answerMode: "clarification", noContext: false }, 0), false);
+assert.equal(retrievalRunHasNoContext({ retrievalMode: "not-run" }, 0), false);
+assert.equal(retrievalRunHasNoContext({ answerMode: "no-context", noContext: true }, 0), true);
+
+const invalidMediationFallback = await mediateRagQuestion({
+  question: "어떤 질문",
+  locale: "ko",
+  deterministicCategory: "general",
+}, {
+  generate: async () => ({
+    text: "not-json",
+    backend: "kimi",
+    model: "kimi-question-router-test",
+    durationMs: 4,
+    inputChars: 50,
+    outputChars: 8,
+  }),
+});
+assert.equal(invalidMediationFallback.status, "fallback");
+assert.equal(invalidMediationFallback.action, "clarify");
+assert.equal(invalidMediationFallback.failureReason, "invalid_generation");
+assert.equal(invalidMediationFallback.attempts, 2);
+
+let mediationAttempts = 0;
+const retriedMediation = await mediateRagQuestion({
+  question: "D-4 연장은 언제 신청해야 하나요?",
+  locale: "ko",
+  deterministicCategory: "visa",
+}, {
+  generate: async () => {
+    mediationAttempts += 1;
+    return {
+      text: mediationAttempts === 1 ? "지금부터 답변하겠습니다." : JSON.stringify({
+        action: "retrieve",
+        category: "visa",
+        searchQuery: "D-4 체류기간 연장 신청 시기",
+        answerFocus: "D-4 연장 신청 가능 시기",
+        responseMode: "concise_answer",
+        clarificationQuestion: "",
+        intents: ["deadline_or_timing"],
+        visaCodes: ["D-4"],
+        needsHumanReview: false,
+        confidence: 0.9,
+      }),
+      backend: "kimi",
+      model: "kimi-question-router-test",
+      durationMs: 6,
+      inputChars: 80,
+      outputChars: 160,
+    };
+  },
+});
+assert.equal(retriedMediation.status, "llm");
+assert.equal(retriedMediation.attempts, 2);
+assert.equal(retriedMediation.durationMs, 12);
+assert.equal(retriedMediation.searchQuery, "D-4 체류기간 연장 신청 시기");
+
+let mediatedFilter: Record<string, unknown> | undefined;
+const mediatedRetrieval = await runDirectLexicalFallback({
+  ...input,
+  question: "그거 바꿀 때 뭐 내요?",
+  retrievalQuery: mediatedD10.searchQuery,
+  category: mediatedD10.category,
+  mediation: mediatedD10,
+}, {
+  rpc: async ({ filter }) => {
+    mediatedFilter = filter;
+    return { data: [{
+      ...validRow,
+      metadata: {
+        ...validRow.metadata,
+        category: "documents",
+        doc_id: "VISA-D10-CHANGE-DOCUMENTS",
+        title: "D-10 구직 체류자격 변경 서류",
+      },
+      content: "D-10 구직 체류자격 변경 신청에는 통합신청서, 여권, 외국인등록증과 구직활동계획서가 필요합니다.",
+    }] };
+  },
+});
+assert.match(String(mediatedFilter?.query_text), /D-10 구직 체류자격 변경 신청 기본 서류/);
+assert.equal((mediatedRetrieval.searchMeta as Record<string, unknown>).mediationStatus, "llm");
+assert.equal((mediatedRetrieval.searchMeta as Record<string, unknown>).mediationModel, "kimi-question-router-test");
+assert.deepEqual((mediatedRetrieval.searchMeta as Record<string, unknown>).mediationVisaCodes, ["D-10"]);
+
 const embeddingVector = Array.from({ length: RAG_QUERY_EMBEDDING_DIMENSIONS }, (_, index) => index === 0 ? 1 : 0);
 const readyEmbedding = await createRagQueryEmbedding("D-4 visa", {
   env: {
@@ -211,9 +512,56 @@ assert.equal((hybridResponse.searchMeta as Record<string, unknown>).retrievalMod
 assert.equal((hybridResponse.searchMeta as Record<string, unknown>).vectorStrategy, "provider-query");
 assert.equal((hybridResponse.searchMeta as Record<string, unknown>).vectorCandidateCount, 20);
 
+const canonicalEmbedding = {
+  vector: Array.from({ length: CANONICAL_QUERY_EMBEDDING_DIMENSIONS }, (_, index) => index === 0 ? 1 : 0),
+  status: "ready" as const,
+  provider: "local-transformer" as const,
+  model: CANONICAL_QUERY_EMBEDDING_MODEL,
+  dimensions: CANONICAL_QUERY_EMBEDDING_DIMENSIONS,
+  failureReason: null,
+  latencyMs: 12,
+};
+let canonicalSearchCalled = false;
+const canonicalHybridResponse = await runDirectRagFallback(input, {
+  createEmbedding: async () => canonicalEmbedding,
+  canonicalSearch: async ({ queryEmbedding, matchCount, locale }) => {
+    canonicalSearchCalled = true;
+    assert.equal(queryEmbedding.length, CANONICAL_QUERY_EMBEDDING_DIMENSIONS);
+    assert.equal(matchCount, 24);
+    assert.equal(locale, "ko");
+    return {
+      data: [{
+        ...validRow,
+        metadata: {
+          ...validRow.metadata,
+          retrieval_type: "hybrid-canonical-e5",
+          retrieval_mode: "hybrid-canonical",
+          score_version: "canonical-score-fusion-v1",
+          embedding_source: "canonical-query",
+          vector_search_available: true,
+          stored_vector_search: true,
+          vector_score: 0.88,
+          keyword_score: 0.4,
+          vector_candidate_count: 24,
+        },
+      }],
+    };
+  },
+  rpc: async () => {
+    throw new Error("1536d serving RPC must not receive a 384d canonical embedding");
+  },
+});
+assert.equal(canonicalSearchCalled, true);
+assert.equal(canonicalHybridResponse.runtimePath, DIRECT_HYBRID_RUNTIME_PATH);
+assert.equal((canonicalHybridResponse.searchMeta as Record<string, unknown>).retrievalMode, "hybrid-canonical");
+assert.equal((canonicalHybridResponse.searchMeta as Record<string, unknown>).embeddingProvider, "local-transformer");
+assert.equal((canonicalHybridResponse.searchMeta as Record<string, unknown>).embeddingDimensions, 384);
+assert.equal((canonicalHybridResponse.searchMeta as Record<string, unknown>).vectorStrategy, "canonical-query");
+
 let seededVectorAllowed = false;
 const seededHybridResponse = await runDirectRagFallback({
   ...input,
+  question: "한국 유학 체류기간 연장 준비 시기를 알려주세요.",
   allowStoredVectorExpansion: true,
 }, {
   createEmbedding: async () => missingEmbeddingProvider,
@@ -249,6 +597,21 @@ assert.equal(seededHybridResponse.runtimePath, DIRECT_HYBRID_RUNTIME_PATH);
 assert.equal((seededHybridResponse.searchMeta as Record<string, unknown>).retrievalMode, "hybrid-seeded");
 assert.equal((seededHybridResponse.searchMeta as Record<string, unknown>).storedVectorSearch, true);
 assert.equal((seededHybridResponse.searchMeta as Record<string, unknown>).vectorSeedCount, 3);
+
+let exactVisaSeededVectorAllowed = true;
+const exactVisaLexicalResponse = await runDirectRagFallback({
+  ...input,
+  allowStoredVectorExpansion: true,
+}, {
+  createEmbedding: async () => missingEmbeddingProvider,
+  rpc: async ({ queryEmbedding, filter }) => {
+    assert.equal(queryEmbedding, null);
+    exactVisaSeededVectorAllowed = filter.allow_seeded_vector === true;
+    return { data: [validRow] };
+  },
+});
+assert.equal(exactVisaSeededVectorAllowed, false);
+assert.equal(exactVisaLexicalResponse.runtimePath, DIRECT_LEXICAL_RUNTIME_PATH);
 
 const failedEmbeddingProvider = {
   ...missingEmbeddingProvider,
@@ -288,6 +651,116 @@ assert.equal(
   (lexicalOnlyResponse.searchMeta as Record<string, unknown>).embeddingFailureReason,
   "embedding_provider_not_configured",
 );
+
+const wrongD10DocumentInput: DirectLexicalFallbackInput = {
+  ...input,
+  question: "D-10 구직 비자로 전환할 때 기본적으로 어떤 서류가 필요한가요?",
+  category: "documents",
+};
+const genericD2D4DocumentRow = {
+  ...validRow,
+  id: 21,
+  content: [
+    "## D-2·D-4 유학 비자 서류 안내",
+    "D-2와 D-4 신청자는 여권, 입학허가서, 재정증빙과 학교가 요구하는 서류를 준비합니다.",
+  ].join("\n"),
+  metadata: {
+    ...validRow.metadata,
+    doc_id: "VISA-D2-D4-DOCUMENTS",
+    title: "D-2·D-4 유학 비자 서류 안내",
+    category: "documents",
+  },
+};
+const d10Mismatch = buildDirectLexicalResponseFromRows([genericD2D4DocumentRow], wrongD10DocumentInput);
+assert.equal((d10Mismatch.searchMeta as Record<string, unknown>).noContext, true);
+assert.equal((d10Mismatch.searchMeta as Record<string, unknown>).noContextReason, "visa_code_mismatch");
+assert.doesNotMatch(d10Mismatch.answer, /D-2와 D-4 신청자는/);
+
+const refusalInput: DirectLexicalFallbackInput = {
+  ...input,
+  question: "비자 거절 후 언제 다시 신청할 수 있나요?",
+};
+const unrelatedUniversityRow = {
+  ...validRow,
+  id: 22,
+  content: [
+    "## 교육국제화역량 인증대학 안내",
+    "인증대학은 국제학생 선발과 관리 역량을 평가받은 대학입니다.",
+  ].join("\n"),
+  metadata: {
+    ...validRow.metadata,
+    doc_id: "CERTIFIED-UNIVERSITY-LIST",
+    title: "교육국제화역량 인증대학 안내",
+  },
+};
+const refusalMismatch = buildDirectLexicalResponseFromRows([unrelatedUniversityRow], refusalInput);
+assert.equal((refusalMismatch.searchMeta as Record<string, unknown>).noContext, true);
+assert.equal((refusalMismatch.searchMeta as Record<string, unknown>).noContextReason, "question_intent_mismatch");
+assert.doesNotMatch(refusalMismatch.answer, /인증대학은/);
+
+const d10DocumentRow = {
+  ...validRow,
+  id: 23,
+  content: [
+    "## D-10 구직 체류자격 변경 서류",
+    "D-10 구직 체류자격으로 변경을 신청할 때에는 통합신청서, 여권, 외국인등록증과 구직활동계획서를 제출합니다.",
+    "개별 상황에 따라 체류지 증빙과 추가 자료를 요청받을 수 있습니다.",
+  ].join("\n"),
+  metadata: {
+    ...validRow.metadata,
+    doc_id: "VISA-D10-CHANGE-DOCUMENTS",
+    title: "D-10 구직 체류자격 변경 서류",
+    category: "documents",
+  },
+};
+const extractiveD10 = buildDirectLexicalResponseFromRows(
+  [d10DocumentRow],
+  wrongD10DocumentInput,
+);
+assert.match(extractiveD10.answer, /통합신청서, 여권, 외국인등록증과 구직활동계획서/);
+assert.doesNotMatch(extractiveD10.answer, /- D-10 구직 체류자격 변경 서류\s*(?:\n|$)/);
+let groundedRequestDocumentTitle = "";
+const groundedD10 = await runDirectRagFallback(wrongD10DocumentInput, {
+  createEmbedding: async () => missingEmbeddingProvider,
+  rpc: async () => ({ data: [d10DocumentRow] }),
+  generateAnswer: async (request) => {
+    groundedRequestDocumentTitle = request.documents[0]?.title || "";
+    return {
+      status: "answered",
+      answer: "D-10 변경 신청의 기본 서류는 통합신청서, 여권, 외국인등록증, 구직활동계획서입니다. [1]",
+      nextStep: "관할 출입국기관의 최신 체크리스트에서 추가 서류를 확인해 주세요.",
+      usedSourceIndexes: [1],
+      backend: "kimi",
+      model: "grounded-test-model",
+      durationMs: 12,
+    };
+  },
+});
+assert.match(groundedRequestDocumentTitle, /D-10/);
+assert.match(groundedD10.answer, /^D-10 변경 신청의 기본 서류/);
+assert.match(groundedD10.answer, /https:\/\/www\.hikorea\.go\.kr/);
+assert.equal((groundedD10.searchMeta as Record<string, unknown>).answerMode, "grounded-llm");
+assert.equal((groundedD10.searchMeta as Record<string, unknown>).noContext, false);
+assert.equal(groundedD10.modelVersion, "grounded-test-model");
+
+const generatedNoContext = await runDirectRagFallback(wrongD10DocumentInput, {
+  createEmbedding: async () => missingEmbeddingProvider,
+  rpc: async () => ({ data: [d10DocumentRow] }),
+  generateAnswer: async () => ({
+    status: "no_context",
+    nextStep: "현재 학력과 변경하려는 시점을 알려주세요.",
+    backend: "kimi",
+    model: "grounded-test-model",
+    durationMs: 9,
+  }),
+});
+assert.equal((generatedNoContext.searchMeta as Record<string, unknown>).answerMode, "no-context");
+assert.equal((generatedNoContext.searchMeta as Record<string, unknown>).noContext, true);
+assert.equal(
+  (generatedNoContext.searchMeta as Record<string, unknown>).noContextReason,
+  "grounded_generation_no_context",
+);
+assert.deepEqual(generatedNoContext.sources, []);
 
 for (const status of [400, 401, 402, 404, 429, 500, 503]) {
   assert.equal(shouldUseDirectLexicalFallback({ status }), true, `HTTP ${status} should use direct fallback`);

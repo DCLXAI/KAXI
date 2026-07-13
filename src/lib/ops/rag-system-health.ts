@@ -316,8 +316,16 @@ export async function runRagSystemHealth(triggerSource = "manual") {
     }),
     timed("rag.serving_projection", true, async () => {
       const status = await getRagServingProjectionStatus();
-      const ok = status.eligibleChunks > 0 && status.readyChunks === status.eligibleChunks && status.citationReadyChunks === status.eligibleChunks;
-      return { ok, detail: ok ? "All eligible chunks are embedded and citation-ready." : "Serving projection is incomplete.", metadata: status as unknown as Record<string, unknown> };
+      const fullyServing = status.eligibleChunks > 0
+        && status.readyChunks === status.eligibleChunks
+        && status.citationReadyChunks === status.eligibleChunks;
+      const ok = fullyServing && status.vectorReadyChunks === status.eligibleChunks;
+      const detail = ok
+        ? "All eligible chunks are embedded and citation-ready."
+        : fullyServing
+          ? `${status.lexicalOnlyReadyChunks} serving chunk(s) are citation-ready but still require vector embeddings.`
+          : "Serving projection is incomplete.";
+      return { ok, detail, metadata: status as unknown as Record<string, unknown> };
     }),
     timed("rag.quality_evaluation", true, async () => {
       const result = await supabase
