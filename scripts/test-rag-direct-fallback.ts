@@ -763,7 +763,59 @@ assert.equal(mixedD10SearchMeta.noContext, false);
 assert.equal(mixedD10SearchMeta.categoryMode, "strict");
 assert.equal(mixedD10SearchMeta.categoryScopeMode, "intent-aware-strict");
 assert.deepEqual(mixedD10SearchMeta.allowedCategories, ["visa", "legal", "process", "warning", "documents"]);
+assert.deepEqual(mixedD10SearchMeta.retrievalCategoryScopes, ["visa", "documents"]);
 assert.match(mixedD10Response.answer, /D-10/);
+
+const lexicalCategoryCalls: string[] = [];
+const scopedLexicalD10 = await runDirectLexicalFallback(mixedD10Input, {
+  rpc: async ({ filter }) => {
+    const category = String(filter.category);
+    lexicalCategoryCalls.push(category);
+    return { data: category === "documents" ? [d10DocumentRow] : [d10EligibilityRow] };
+  },
+});
+assert.deepEqual(lexicalCategoryCalls, ["visa", "documents"]);
+assert.equal((scopedLexicalD10.searchMeta as Record<string, unknown>).noContext, false);
+
+const failedCanonicalEmbedding = {
+  vector: null,
+  status: "failed" as const,
+  provider: "local-transformer" as const,
+  model: CANONICAL_QUERY_EMBEDDING_MODEL,
+  dimensions: null,
+  failureReason: "canonical_embedding_unavailable",
+  latencyMs: 8_000,
+};
+const hybridCategoryCalls: string[] = [];
+let scopedGenerationTitles: string[] = [];
+const scopedHybridD10 = await runDirectRagFallback(mixedD10Input, {
+  createEmbedding: async () => failedCanonicalEmbedding,
+  rpc: async ({ filter }) => {
+    const category = String(filter.category);
+    hybridCategoryCalls.push(category);
+    return { data: category === "documents" ? [d10DocumentRow] : [d10EligibilityRow] };
+  },
+  generateAnswer: async (request) => {
+    scopedGenerationTitles = request.documents.map((document) => document.title);
+    return {
+      status: "answered",
+      answer: "D-10 변경 요건과 제출 서류를 공식 문서에서 확인했습니다. [1]",
+      nextStep: "현재 체류자격과 졸업 여부를 확인해 주세요.",
+      usedSourceIndexes: [1],
+      backend: "kimi",
+      model: "grounded-test-model",
+      durationMs: 12,
+    };
+  },
+});
+assert.deepEqual(hybridCategoryCalls, ["visa", "documents"]);
+assert.equal(scopedGenerationTitles.some((title) => /요건/.test(title)), true);
+assert.equal(scopedGenerationTitles.some((title) => /서류/.test(title)), true);
+assert.equal((scopedHybridD10.searchMeta as Record<string, unknown>).noContext, false);
+assert.equal(
+  (scopedHybridD10.searchMeta as Record<string, unknown>).embeddingFailureReason,
+  "canonical_embedding_unavailable",
+);
 
 const extractiveD10 = buildDirectLexicalResponseFromRows(
   [d10DocumentRow],

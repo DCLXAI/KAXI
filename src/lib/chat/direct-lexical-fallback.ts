@@ -29,14 +29,14 @@ export type DirectRagRuntimePath = typeof DIRECT_LEXICAL_RUNTIME_PATH | typeof D
 
 export const DIRECT_LEXICAL_PROVENANCE = {
   workflowId: DIRECT_LEXICAL_RUNTIME_PATH,
-  workflowVersionId: "kaxi-direct-lexical@2026-07-14.p2-v4",
+  workflowVersionId: "kaxi-direct-lexical@2026-07-14.p2-v5",
   modelVersion: "retrieval/lexical-v2@2026-07-13",
   promptVersion: GROUNDED_RAG_PROMPT_VERSION,
 } satisfies RagProvenance;
 
 export const DIRECT_HYBRID_PROVENANCE = {
   workflowId: DIRECT_HYBRID_RUNTIME_PATH,
-  workflowVersionId: "kaxi-direct-hybrid@2026-07-14.p4-v4",
+  workflowVersionId: "kaxi-direct-hybrid@2026-07-14.p4-v5",
   modelVersion: "retrieval/hybrid-rrf-v3@2026-07-14",
   promptVersion: GROUNDED_RAG_PROMPT_VERSION,
 } satisfies RagProvenance;
@@ -472,6 +472,18 @@ function answerableCategoryScopes(input: DirectLexicalFallbackInput) {
   return [...scopes];
 }
 
+function retrievalCategoryScopes(input: DirectLexicalFallbackInput): ChatCategory[] {
+  if (input.category === "general") return ["general"];
+
+  const primaryScope = new Set(CATEGORY_SCOPES[input.category]);
+  const categories: ChatCategory[] = [input.category];
+  for (const scope of answerableCategoryScopes(input)) {
+    if (primaryScope.has(scope) || !Object.hasOwn(CATEGORY_SCOPES, scope)) continue;
+    categories.push(scope as ChatCategory);
+  }
+  return Array.from(new Set(categories));
+}
+
 function candidateSearchText(document: CandidateDocument) {
   return `${document.docId || ""}\n${document.title}\n${document.content}`;
 }
@@ -683,6 +695,18 @@ function rpcErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
   if (error && typeof error === "object" && "message" in error) return String(error.message);
   return String(error || "unknown Supabase RPC error");
+}
+
+async function runIntentScopedRpc(
+  input: DirectLexicalFallbackInput,
+  invoke: (category: ChatCategory) => Promise<DirectLexicalRpcResult>,
+) {
+  const results = await Promise.all(retrievalCategoryScopes(input).map(invoke));
+  const failed = results.find((result) => result.error);
+  if (failed) return { data: null, error: failed.error };
+  return {
+    data: results.flatMap((result) => Array.isArray(result.data) ? result.data : []),
+  };
 }
 
 function parseCandidates(rows: unknown, input: DirectLexicalFallbackInput) {
@@ -971,8 +995,9 @@ export function buildDirectLexicalResponseFromRows(
     tenant_id: input.tenantId,
     locale: input.locale,
     similarityThreshold: "category-default",
-    reranker: "deterministic-locale-intent-v4",
+    reranker: "deterministic-locale-intent-v5",
     reranked: true,
+    retrievalCategoryScopes: retrievalCategoryScopes(input),
     retrievedCount: hasContext ? selection.documents.length : 0,
     validatedCandidateCount: parsed.documents.length,
     rawRetrievedCount: parsed.rawCount,
@@ -1031,16 +1056,17 @@ export async function runDirectLexicalFallback(
   dependencies: { rpc?: DirectLexicalRpc } = {},
 ) {
   const rpc = dependencies.rpc || defaultRpc;
-  const result = await rpc({
+  const queryText = buildDirectLexicalQuery(input);
+  const result = await runIntentScopedRpc(input, (category) => rpc({
     matchCount: 12,
     filter: {
       tenant_id: input.tenantId,
-      category: input.category,
+      category,
       category_mode: "strict",
       locale: input.locale,
-      query_text: buildDirectLexicalQuery(input),
+      query_text: queryText,
     },
-  });
+  }));
   if (result.error) {
     throw new Error(`DIRECT_LEXICAL_RPC_FAILED: ${rpcErrorMessage(result.error)}`);
   }
@@ -1093,20 +1119,20 @@ export async function runDirectRagFallback(
         matchCount: 24,
         locale: input.locale,
       })
-    : await (dependencies.rpc || defaultHybridRpc)({
-        queryEmbedding,
-        matchCount: 6,
-        filter: {
-          tenant_id: input.tenantId,
-          category: input.category,
-          category_mode: "strict",
-          locale: input.locale,
-          query_text: queryText,
-          embedding_failure_reason: embedding.failureReason || undefined,
-          allow_seeded_vector: allowSeededVector,
-          vector_seed_count: 3,
-        },
-      });
+    : await runIntentScopedRpc(input, (category) => (dependencies.rpc || defaultHybridRpc)({
+      queryEmbedding,
+      matchCount: 6,
+      filter: {
+        tenant_id: input.tenantId,
+        category,
+        category_mode: "strict",
+        locale: input.locale,
+        query_text: queryText,
+        embedding_failure_reason: embedding.failureReason || undefined,
+        allow_seeded_vector: allowSeededVector,
+        vector_seed_count: 3,
+      },
+    }));
   if (result.error) {
     throw new Error(`DIRECT_RAG_RPC_FAILED: ${rpcErrorMessage(result.error)}`);
   }
