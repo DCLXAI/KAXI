@@ -4,11 +4,11 @@ Checked: 2026-07-14 (Asia/Seoul)
 
 ## 1. Executive Status
 
-KAXI remains the public security, retrieval-policy, answer, and persistence boundary. n8n is reduced to signed verification, orchestration, and response return; Supabase owns canonical state and governed lexical/vector serving data, and Typebot remains an alternate conversation channel. Commit `d353086` is live, Promete release `kaxi-rag-runtime@2026-07-14.provider-independent-hybrid-v2` is published, and the post-deploy 8/16/64 Typebot-gateway evaluation passed with canonical persistence. Stored pgvector retrieval is active without an external query-embedding credential through a strict lexical-seed centroid, while automatic n8n-outage fallback remains lexical and policy-equivalent.
+KAXI remains the public security, retrieval-policy, answer, and persistence boundary. n8n is reduced to signed verification, orchestration, and response return; Supabase owns canonical state and governed lexical/vector serving data, and Typebot remains an alternate conversation channel. The production alias is `Ready`, Promete release `kaxi-rag-runtime@2026-07-14.provider-independent-hybrid-v2` is published, and the post-deploy 8/16/64 Typebot-gateway evaluation passed with canonical persistence. Stored pgvector retrieval is active without an external query-embedding credential through a strict lexical-seed centroid, while automatic n8n-outage fallback remains lexical and policy-equivalent.
 
 | Area | Local/draft state | Live state | Release status |
 | --- | --- | --- | --- |
-| KAXI app | Full TypeScript, cutover, readiness, lint, and production builds pass | `https://kaxi.vercel.app` is `Ready` at commit `d353086` | released |
+| KAXI app | Full TypeScript, cutover, readiness, lint, and production builds pass | `https://kaxi.vercel.app` is `Ready`; `/api/health` exposes the exact deployed source commit | released |
 | n8n main workflow | thin signed orchestrator targeting workflow `rB3nfjvCyTODP803`; capability contract `2026-07-14.v3` | active version `43253aa9-3290-408b-9920-9dd214f6a818`; 34 nodes; newest 120 sampled executions all succeeded | released |
 | Typebot | `data.*` response mappings, stable Result ID session, and matching server-side gateway headers | published as `kaxi-rag-typebot`; normal, high-risk, consent, and handoff E2E pass | released; continue synthetic observation |
 | Supabase canonical corpus | 94 eligible documents, 201 eligible chunks, 201 citation-ready | migration ledger is current through `20260714100000_localized_knowledge_titles` | released |
@@ -47,7 +47,7 @@ KAXI remains the public security, retrieval-policy, answer, and persistence boun
 - A local drift rehearsal reproduced the live ledger/object split, then applied all 23 pending or unrecorded migrations with `prisma migrate deploy` without conflict; the resulting database passed the canonical schema-parity gate.
 - The website widget now restores up to 20 canonical exchanges from the signed HttpOnly session, decrypts recoverable text only on the server, restores verified HTTPS citations, preserves failed request identities for idempotent retry, and resumes or exposes pending/failed attachments after refresh.
 - Production-corpus readiness now supports independent total and official-source floors while preserving strict equal floors by default. The local reviewed 199-chunk corpus passes with 199/199 total embeddings and 195/195 official-source embeddings; the remaining four approved internal guidance chunks retain mapped public citations in the serving projection.
-- Vercel production at commit `d353086` is `Ready`, includes the provider-independent hybrid runtime, payload-bound verifier, readiness, and session-history routes.
+- Vercel production is `Ready` and includes the provider-independent hybrid runtime, payload-bound verifier, readiness, and session-history routes; the immutable source commit is exposed by `/api/health`.
 - Production session endpoints use the managed PostgreSQL-backed shared rate limiter and keep session responses `private, no-store` with `Vary: Cookie`.
 - Production readiness confirms the managed database, latest migration, gateway signing, Typebot gateway authentication, private attachment storage, privacy controls, school metadata, and shared rate limiting. Managed provider availability and OCR failover remain independently monitored operational dependencies.
 - Active n8n release `kaxi-rag-runtime@2026-07-14.provider-independent-hybrid-v2` preserves verifier-first runtime, ingestion, and handoff paths while moving retrieval and policy decisions into KAXI/SQL. Active version `43253aa9-3290-408b-9920-9dd214f6a818` returns explicit fields rather than an expression-local initializer, preventing the previously observed empty HTTP 200 body.
@@ -69,7 +69,7 @@ KAXI remains the public security, retrieval-policy, answer, and persistence boun
 
 | Boundary | Result | Evidence |
 | --- | --- | --- |
-| deployment | pass | Vercel production alias is `Ready` at commit `d353086` |
+| deployment | pass | Vercel production alias is `Ready`, and `/api/health` reports the immutable deployed commit |
 | health | pass with warning | run `c6b7e510-053f-4c8e-8f03-cef69c416200` has zero required failures; only the optional managed malware scanner is unconfigured |
 | readiness safety | pass | database, gateway, Typebot, privacy, storage, serving projection, attachment queue, and operations-event checks pass |
 | signed verifier route | pass | malformed or unsigned requests are rejected before retrieval, and correctly signed payload-bound probes return HTTP 200 |
