@@ -31,14 +31,14 @@ export type DirectRagRuntimePath = typeof DIRECT_LEXICAL_RUNTIME_PATH | typeof D
 
 export const DIRECT_LEXICAL_PROVENANCE = {
   workflowId: DIRECT_LEXICAL_RUNTIME_PATH,
-  workflowVersionId: "kaxi-direct-lexical@2026-07-14.p2-v8",
+  workflowVersionId: "kaxi-direct-lexical@2026-07-14.p3-v9",
   modelVersion: "retrieval/lexical-v2+rerank-v8@2026-07-14",
   promptVersion: GROUNDED_RAG_PROMPT_VERSION,
 } satisfies RagProvenance;
 
 export const DIRECT_HYBRID_PROVENANCE = {
   workflowId: DIRECT_HYBRID_RUNTIME_PATH,
-  workflowVersionId: "kaxi-direct-hybrid@2026-07-14.p4-v8",
+  workflowVersionId: "kaxi-direct-hybrid@2026-07-14.p5-v9",
   modelVersion: "retrieval/hybrid-rrf-v3+rerank-v8@2026-07-14",
   promptVersion: GROUNDED_RAG_PROMPT_VERSION,
 } satisfies RagProvenance;
@@ -494,6 +494,18 @@ function candidateSearchText(document: CandidateDocument) {
   return `${document.docId || ""}\n${document.title}\n${document.content}`;
 }
 
+function hasExactOperationalIdentity(
+  input: DirectLexicalFallbackInput,
+  document: Pick<CandidateDocument, "docId" | "title">,
+) {
+  const identity = `${document.docId || ""} ${document.title}`.toLowerCase();
+  return OPERATIONAL_QUERY_RULES
+    .filter((rule) => rule.pattern.test(input.question))
+    .some((rule) => tokenize(rule.hint).some(
+      (token) => token.includes("-") && identity.includes(token),
+    ));
+}
+
 function selectAnswerableDocuments(
   documents: CandidateDocument[],
   input: DirectLexicalFallbackInput,
@@ -765,10 +777,7 @@ function parseCandidates(rows: unknown, input: DirectLexicalFallbackInput) {
     const keywordScore = numberOrNull(metadata.keyword_score);
     const vectorScore = numberOrNull(metadata.vector_score);
     const operationalRules = OPERATIONAL_QUERY_RULES.filter((rule) => rule.pattern.test(input.question));
-    const operationalIdentity = `${docId || ""} ${title}`.toLowerCase();
-    const exactOperationalHint = operationalRules.some((rule) =>
-      tokenize(rule.hint).some((token) => token.includes("-") && operationalIdentity.includes(token))
-    );
+    const exactOperationalHint = hasExactOperationalIdentity(input, { docId, title });
     const operationalHintTokens = tokenize(operationalRules.map((rule) => rule.hint).join(" "));
     const operationalCoverage = operationalHintTokens.length > 0
       ? tokenCoverage(operationalHintTokens, `${docId || ""} ${title} ${firstText(metadata.keywords)}`)
@@ -1222,6 +1231,29 @@ export async function runDirectRagFallback(
     answerPromptVersion: GROUNDED_RAG_PROMPT_VERSION,
   };
   if (generation.status === "no_context") {
+    const exactOperationalEvidence = selection.documents.some((document) =>
+      hasExactOperationalIdentity(resolvedInput, document)
+    );
+    const fallbackSourcesAvailable = Array.isArray(fallbackResponse.sources)
+      && fallbackResponse.sources.length > 0;
+    if (
+      exactOperationalEvidence
+      && currentSearchMeta.noContext !== true
+      && fallbackSourcesAvailable
+    ) {
+      return {
+        ...fallbackResponse,
+        searchMeta: {
+          ...currentSearchMeta,
+          ...generatedMetadata,
+          answerMode: "extractive-model-no-context-fallback",
+          noContext: false,
+          noContextReason: null,
+          modelNoContextOverridden: true,
+          modelNoContextOverrideReason: "exact_operational_evidence",
+        },
+      };
+    }
     const copy = COPY[input.locale];
     return {
       ...fallbackResponse,

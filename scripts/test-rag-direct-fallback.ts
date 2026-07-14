@@ -898,13 +898,92 @@ const generatedNoContext = await runDirectRagFallback(wrongD10DocumentInput, {
     durationMs: 9,
   }),
 });
-assert.equal((generatedNoContext.searchMeta as Record<string, unknown>).answerMode, "no-context");
-assert.equal((generatedNoContext.searchMeta as Record<string, unknown>).noContext, true);
 assert.equal(
-  (generatedNoContext.searchMeta as Record<string, unknown>).noContextReason,
+  (generatedNoContext.searchMeta as Record<string, unknown>).answerMode,
+  "extractive-model-no-context-fallback",
+);
+assert.equal((generatedNoContext.searchMeta as Record<string, unknown>).noContext, false);
+assert.equal(
+  (generatedNoContext.searchMeta as Record<string, unknown>).modelNoContextOverrideReason,
+  "exact_operational_evidence",
+);
+assert.equal(
+  (generatedNoContext.sources as Array<{ docId?: string }>)[0]?.docId,
+  "VISA-D10-CHANGE-DOCUMENTS",
+);
+
+const genericDocumentInput: DirectLexicalFallbackInput = {
+  ...input,
+  question: "학교 추천서 제출 형식을 알려주세요.",
+  category: "documents",
+};
+const genericDocumentRow = {
+  ...validRow,
+  content: "# 학교 추천서 제출 형식\n학교 추천서는 학교가 지정한 양식에 맞춰 제출합니다.",
+  metadata: {
+    ...validRow.metadata,
+    doc_id: "school-recommendation-format",
+    title: "학교 추천서 제출 형식",
+    category: "documents",
+  },
+};
+const genericGeneratedNoContext = await runDirectRagFallback(genericDocumentInput, {
+  createEmbedding: async () => missingEmbeddingProvider,
+  rpc: async () => ({ data: [genericDocumentRow] }),
+  generateAnswer: async () => ({
+    status: "no_context",
+    nextStep: "학교 양식을 확인해 주세요.",
+    backend: "kimi",
+    model: "grounded-test-model",
+    durationMs: 9,
+  }),
+});
+assert.equal((genericGeneratedNoContext.searchMeta as Record<string, unknown>).answerMode, "no-context");
+assert.equal((genericGeneratedNoContext.searchMeta as Record<string, unknown>).noContext, true);
+assert.equal(
+  (genericGeneratedNoContext.searchMeta as Record<string, unknown>).noContextReason,
   "grounded_generation_no_context",
 );
-assert.deepEqual(generatedNoContext.sources, []);
+assert.deepEqual(genericGeneratedNoContext.sources, []);
+
+const d4LanguageInput: DirectLexicalFallbackInput = {
+  ...input,
+  question: "I want to study Korean language. What visa do I need?",
+  locale: "en",
+  category: "visa",
+};
+const d4LanguageRow = {
+  ...validRow,
+  content: "# D-4 Visa Overview\nD-4 is for non-degree programs, including Korean language institutes.",
+  metadata: {
+    ...validRow.metadata,
+    doc_id: "d4-overview",
+    title: "D-4 Visa Overview",
+    language: "en",
+  },
+};
+const groundedD4NoContext = await runDirectRagFallback(d4LanguageInput, {
+  createEmbedding: async () => missingEmbeddingProvider,
+  rpc: async () => ({ data: [d4LanguageRow] }),
+  generateAnswer: async () => ({
+    status: "no_context",
+    nextStep: "Share the intended school.",
+    backend: "kimi",
+    model: "grounded-test-model",
+    durationMs: 9,
+  }),
+});
+assert.equal(
+  (groundedD4NoContext.searchMeta as Record<string, unknown>).answerMode,
+  "extractive-model-no-context-fallback",
+);
+assert.equal((groundedD4NoContext.searchMeta as Record<string, unknown>).noContext, false);
+assert.equal((groundedD4NoContext.searchMeta as Record<string, unknown>).modelNoContextOverridden, true);
+assert.equal(
+  (groundedD4NoContext.sources as Array<{ docId?: string }>)[0]?.docId,
+  "d4-overview",
+);
+assert.match(groundedD4NoContext.answer, /D-4/);
 
 for (const status of [400, 401, 402, 404, 429, 500, 503]) {
   assert.equal(shouldUseDirectLexicalFallback({ status }), true, `HTTP ${status} should use direct fallback`);
