@@ -33,8 +33,10 @@ export function AgentExperience({ embedded = false }: { embedded?: boolean }) {
         loading={chat.loading}
         locale={chat.locale}
         messages={chat.messages}
+        progress={chat.progress}
         compact={embedded}
         onDraftChange={chat.updateClarifyDraft}
+        onRetry={chat.retry}
         onSend={chat.send}
         onSendDraft={chat.sendClarifyDraft}
       />

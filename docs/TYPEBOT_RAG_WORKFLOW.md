@@ -10,6 +10,12 @@ KAXI owns request validation, UUID/idempotency normalization, canonical chat/ret
 
 The default `KAXI_RAG_RUNTIME_PRIMARY=direct` keeps retrieval and answer generation in one Vercel invocation. Railway n8n remains the signed runtime backup and continues to own governed ingestion and handoff orchestration; setting the primary to `n8n` restores the previous routing without a code change. The Railway MCP workflow ID is `bHHyeC1DCUSvi7Px`. Its active semantic release is `kaxi-rag-runtime@2026-07-14.railway-mcp-v2`, using capability contract `2026-07-14.v3`. n8n holds no OpenAI or Supabase credential. KAXI retrieves 20 lexical and 20 vector candidates, then Reciprocal Rank Fusion selects the final six. A missing query-embedding provider uses the top three strict lexical hits to build a centroid from stored 1536-dimensional vectors; a configured provider that fails degrades to lexical-only retrieval. Only a simultaneous direct-runtime and n8n-backup failure returns the user-facing service failure.
 
+## Native KAXI Streaming UX
+
+The native `/{locale}/agent` screen uses `POST /api/ai/unified/stream` with newline-delimited JSON. It emits `routing`, `searching`, `generating`, and `finalizing` progress events before answer deltas and a final normalized payload. The original `/api/ai/unified` JSON route remains the compatibility boundary for non-streaming callers. `UNIFIED_AI_STREAM_TIMEOUT_MS` defaults to 20 seconds and is clamped to 8-30 seconds; a timeout or transient upstream error emits a structured retryable event, while the browser also aborts a stalled connection after 25 seconds.
+
+Completed low-risk, standalone questions may be reused for five minutes from a 12-entry in-memory cache scoped to the current browser tab. Email, phone, account identifiers, high-risk terms, and context-dependent follow-ups are excluded. The cache is never persisted or shared between users and is cleared with `New chat`. Typebot's HTTP block remains a single JSON response path: its localized pre-request loading bubble and retry branch provide the equivalent progress and recovery UX without exposing the native stream protocol.
+
 ## Typebot Runtime Request
 
 Use a Typebot HTTP Request/Webhook block with server-side execution.

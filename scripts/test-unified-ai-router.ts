@@ -87,7 +87,8 @@ assert.doesNotMatch(sitemap, /"\/consult"/, "legacy consult path must not be ind
 assert.match(widget, /"\/agent"/, "the compact widget must be hidden on the full KAXI AI screen");
 assert.doesNotMatch(widget, /publicPath === "\/"/, "Typebot must remain available on home");
 assert.match(widget, /kaxi-typebot-launcher/, "home must use the Typebot launcher");
-assert.match(widget, /<KaxiRunningCat size=\{42\} \/>/, "the Typebot header must use a stationary running cat");
+assert.match(widget, /<Bubble/, "home must use the published Typebot bubble runtime");
+assert.match(widget, /typebot="kaxi-rag-typebot"/, "the Typebot launcher must target the published KAXI bot");
 assert.doesNotMatch(widget, /KaxiFlowerMark/, "the legacy flower mark must be removed from Typebot");
 assert.doesNotMatch(landing, /KaxiRunningCat/, "home must not show a decorative running cat");
 assert.match(runningCat, /state="running"/, "both surfaces must use the running animation");

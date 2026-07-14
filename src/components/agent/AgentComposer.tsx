@@ -46,7 +46,13 @@ export function AgentComposer({
             disabled={loading}
           />
           <div className="flex items-center justify-end mt-1.5 pt-1.5 border-t">
-            <Button size="sm" onClick={onSend} disabled={!input.trim() || loading} className="gap-1.5 h-7">
+            <Button
+              size="sm"
+              onClick={onSend}
+              disabled={!input.trim() || loading}
+              className="gap-1.5 h-7"
+              aria-label={locale === "ko" ? "질문 보내기" : locale === "vi" ? "Gửi câu hỏi" : locale === "mn" ? "Асуулт илгээх" : "Send question"}
+            >
               {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowUp className="h-3 w-3" />}
             </Button>
           </div>

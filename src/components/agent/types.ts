@@ -1,5 +1,6 @@
 import type { Locale } from "@/i18n/routing";
 import type { SourceAnnotation } from "@/components/kbridge/SourceAnnotations";
+import type { UnifiedAiProgressStage } from "@/lib/ai/unified-stream";
 import type { UnifiedAiRouteDecision, UnifiedExpertMode } from "@/lib/ai/unified-router";
 
 export interface ToolResult {
@@ -21,6 +22,13 @@ export interface AgentStep {
 export interface AgentMessage {
   role: "user" | "agent";
   text: string;
+  requestId?: string;
+  state?: "complete" | "streaming" | "error";
+  cached?: boolean;
+  retry?: {
+    question: string;
+    code: string;
+  };
   steps?: AgentStep[];
   toolResults?: ToolResult[];
   iterations?: number;
@@ -35,6 +43,11 @@ export interface AgentMessage {
     disclaimer?: string;
     consultationQuestion: string;
   };
+}
+
+export interface AgentProgress {
+  stage: UnifiedAiProgressStage;
+  capability?: "action" | "expert";
 }
 
 export interface AgentStatus {

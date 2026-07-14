@@ -19,10 +19,12 @@ export function TypebotBubble() {
   if (shouldHideChatbot(pathname)) return null;
 
   return (
-    <Bubble
-      typebot="kaxi-rag-typebot"
-      apiHost="https://typebot.io"
-      theme={{ button: { backgroundColor: "#111827" } }}
-    />
+    <div id="kaxi-typebot-launcher" data-chat-surface="typebot" className="contents">
+      <Bubble
+        typebot="kaxi-rag-typebot"
+        apiHost="https://typebot.io"
+        theme={{ button: { backgroundColor: "#111827" } }}
+      />
+    </div>
   );
 }

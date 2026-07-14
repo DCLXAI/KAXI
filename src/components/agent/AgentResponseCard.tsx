@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, BookOpen, Brain, Database, ShieldCheck, Wrench } from "lucide-react";
+import { AlertCircle, ArrowRight, BookOpen, Brain, Database, RotateCcw, ShieldCheck, Wrench, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { KaxiPawMark } from "@/components/brand/KaxiPawMark";
@@ -25,6 +25,7 @@ interface AgentResponseCardProps {
   messageIndex: number;
   originalRequest: string;
   onDraftChange: (messageIndex: number, patch: Partial<ClarifyDraft>) => void;
+  onRetry: (messageIndex: number) => void;
   onSend: (text: string) => void;
   onSendDraft: (messageIndex: number, originalRequest: string) => void;
 }
@@ -37,11 +38,38 @@ export function AgentResponseCard({
   messageIndex,
   originalRequest,
   onDraftChange,
+  onRetry,
   onSend,
   onSendDraft,
 }: AgentResponseCardProps) {
+  if (message.state === "error") {
+    return (
+      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4" role="alert">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm leading-relaxed">{message.text}</p>
+            {message.retry && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3 gap-1.5"
+                disabled={loading}
+                onClick={() => onRetry(messageIndex)}
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                {locale === "ko" ? "다시 시도" : locale === "vi" ? "Thử lại" : locale === "mn" ? "Дахин оролдох" : "Retry"}
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-card border rounded-2xl rounded-bl-md p-4">
+    <div className="rounded-lg border bg-card p-4">
       <div className="flex items-center gap-2 mb-2">
         <div className="flex h-6 w-6 items-center justify-center rounded bg-icon-accent/15">
           <KaxiPawMark className="h-3 w-3" />
@@ -78,6 +106,12 @@ export function AgentResponseCard({
             Grounded
           </Badge>
         )}
+        {message.cached && (
+          <Badge variant="outline" className="text-[10px] gap-0.5">
+            <Zap className="h-2.5 w-2.5" />
+            {locale === "ko" ? "빠른 재사용" : locale === "vi" ? "Đã lưu tạm" : locale === "mn" ? "Түр хадгалсан" : "Cached"}
+          </Badge>
+        )}
         {message.meta?.quality.intentConfidence && (
           <Badge variant="outline" className="text-[10px] gap-0.5">
             <Brain className="h-2.5 w-2.5" />
@@ -106,6 +140,9 @@ export function AgentResponseCard({
         <MessageResponse>
           {linkCitationMarkers(message.text, agentSourceAnnotations(message), `agent-message-${messageIndex}`, 8)}
         </MessageResponse>
+        {message.state === "streaming" && (
+          <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-foreground align-text-bottom" aria-hidden="true" />
+        )}
       </div>
 
       {message.meta?.safetyFlags && message.meta.safetyFlags.length > 0 && (
