@@ -23,6 +23,8 @@ const { getTransformerRuntimeInfo, resolveModelCacheDir } = await import(
   "../src/lib/embeddings/transformer-embedder"
 );
 const { TOOL_MAP } = await import("../src/lib/agent/tools");
+const { getRagDocumentMetadata, pickLangText } = await import("../src/lib/data/knowledge");
+const { KNOWLEDGE_DOCS } = await import("../src/lib/data/knowledge-corpus");
 
 function deterministicQueryEmbedding(seedText: string): number[] {
   let seed = 0;
@@ -35,12 +37,40 @@ function deterministicQueryEmbedding(seedText: string): number[] {
   });
 }
 
-// CI runs without an OpenAI embedding credential, and the shared OpenAI RAG
-// core fail-closes in that case. Serve deterministic stub embeddings so
-// retrieval-behavior tests stay hermetic in every environment. Outage tests
-// blank OPENAI_EMBEDDING_API_KEY explicitly to exercise the fail-close path,
-// which short-circuits before any fetch happens.
+type StubLang = "ko" | "en" | "vi" | "mn";
+
+function stubServingRows(filter: Record<string, unknown>, matchCount: number) {
+  const locale = (typeof filter.locale === "string" ? filter.locale : "ko") as StubLang;
+  const category = typeof filter.category === "string" ? filter.category : "general";
+  return KNOWLEDGE_DOCS
+    .filter((doc) => category === "general" || doc.category === category)
+    .slice(0, matchCount)
+    .map((doc) => ({
+      id: `${doc.id}-chunk-0`,
+      content: pickLangText(doc.content, locale),
+      metadata: {
+        ...getRagDocumentMetadata(doc, locale),
+        doc_id: doc.id,
+        title: pickLangText(doc.title, locale),
+        category: doc.category,
+        language: locale,
+        keywords: (doc.keywords || []).join(" "),
+        lexical_score: 0.4,
+        keyword_score: 0.4,
+        retrieval_mode: "hybrid-provider",
+      },
+    }));
+}
+
+// CI runs without OpenAI or Supabase credentials, and the shared OpenAI RAG
+// core fail-closes without them. Serve deterministic stub embeddings and
+// fixture-backed serving rows so retrieval-behavior tests stay hermetic in
+// every environment (this also keeps local runs off the production Supabase).
+// Outage tests blank OPENAI_EMBEDDING_API_KEY explicitly to exercise the
+// fail-close path, which short-circuits before any fetch happens.
 process.env.OPENAI_EMBEDDING_API_KEY ||= "agent-guard-embedding-key";
+process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://agent-guard-stub.supabase.co";
+process.env.SUPABASE_SERVICE_ROLE_KEY ||= "agent-guard-service-role";
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
@@ -51,6 +81,16 @@ globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters
       JSON.stringify({ data: [{ embedding: deterministicQueryEmbedding(seedText) }] }),
       { status: 200, headers: { "content-type": "application/json" } },
     );
+  }
+  if (/\/rest\/v1\/rpc\/match_rag_documents_(hybrid_v3|lexical)\b/.test(url)) {
+    const body = typeof init?.body === "string"
+      ? JSON.parse(init.body) as { filter?: Record<string, unknown>; match_count?: number }
+      : {};
+    const rows = stubServingRows(body.filter || {}, body.match_count || 12);
+    return new Response(JSON.stringify(rows), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
   }
   return realFetch(input, init);
 }) as typeof fetch;
