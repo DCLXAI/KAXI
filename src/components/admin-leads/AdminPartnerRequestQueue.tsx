@@ -97,6 +97,25 @@ export function AdminPartnerRequestQueue() {
     }
   };
 
+  const transition = async (requestId: string, status: "contacted" | "closed") => {
+    if (!canManageOps) return;
+    setSavingId(requestId);
+    setError(null);
+    try {
+      const response = await adminFetch(`/api/partner-requests/${requestId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "상태 변경에 실패했습니다.");
+      await load();
+    } catch (transitionError) {
+      setError(transitionError instanceof Error ? transitionError.message : "상태 변경에 실패했습니다.");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -136,6 +155,28 @@ export function AdminPartnerRequestQueue() {
                     <p className="mt-1 text-xs text-muted-foreground">{request.lead.nationality.toUpperCase()} · {new Date(request.createdAt).toLocaleString("ko-KR")}</p>
                     {request.question && <p className="mt-2 whitespace-pre-wrap text-sm">{request.question}</p>}
                     {request.lead.contact && <p className="mt-2 text-xs text-muted-foreground">연락처: {request.lead.contact}</p>}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {request.status === "pending" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void transition(request.id, "contacted")}
+                          disabled={savingId === request.id || !canManageOps}
+                        >
+                          {savingId === request.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                          연락함
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void transition(request.id, "closed")}
+                        disabled={savingId === request.id || !canManageOps}
+                      >
+                        {savingId === request.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                        종결
+                      </Button>
+                    </div>
                   </div>
                   {request.organization ? (
                     <div className="rounded-md bg-muted/40 p-3 text-sm">

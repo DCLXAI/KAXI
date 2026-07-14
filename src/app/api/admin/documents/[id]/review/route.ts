@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminContext, getClientIp, requireAdmin } from "@/lib/api/security";
 import { isSupportedDocumentStatus, isSupportedReviewStatus } from "@/lib/documents/config";
 import { reviewDocumentItem } from "@/lib/documents/repository";
+import { buildDocumentReviewEmail } from "@/lib/notifications/domain";
+import { sendNotificationEmail } from "@/lib/notifications/email";
 
 export const runtime = "nodejs";
 
@@ -40,6 +42,14 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         userAgent: req.headers.get("user-agent"),
       }
     );
+
+    try {
+      const mail = await buildDocumentReviewEmail(id, body.status, body.reviewStatus);
+      if (mail) await sendNotificationEmail(mail);
+    } catch (err) {
+      console.error("[review email] skipped", err instanceof Error ? err.message : err);
+    }
+
     return NextResponse.json({ ok: true, document });
   } catch (err) {
     console.error("[PATCH /api/admin/documents/:id/review]", err);

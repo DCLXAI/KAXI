@@ -97,8 +97,8 @@ export function ReadinessScoreCard({
           </div>
           <div className="relative h-3 w-full overflow-hidden rounded-full bg-secondary">
             <div
-              className={`h-full transition-all ${getProgressColor(score)}`}
-              style={{ width: `${score}%` }}
+              className={`h-full w-full origin-left transition-transform duration-300 ease-snappy motion-reduce:transition-none ${getProgressColor(score)}`}
+              style={{ transform: `scaleX(${score / 100})` }}
             />
           </div>
         </div>

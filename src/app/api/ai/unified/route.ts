@@ -143,6 +143,8 @@ function normalizeExpertResponse(
       disclaimer,
       consultationQuestion: question,
     },
+    needsHumanExpert,
+    escalationCaseCreated: boolean(raw.escalationCaseCreated),
     meta: {
       summary: `${unifiedRouteLabel(lang, "expert")} · ${sources.length}`,
       plan: expertPlan(lang),

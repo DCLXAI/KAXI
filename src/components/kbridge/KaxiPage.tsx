@@ -44,7 +44,7 @@ export function KaxiPage({ view, locale }: { view: ViewKey; locale?: Lang }) {
     <div className="min-h-screen flex flex-col bg-background">
       <Header currentView={view} locale={locale} />
 
-      <main className="flex-1">
+      <main className={view === "agent" ? "flex-1 chat-surface dark bg-background text-foreground" : "flex-1"}>
         {view === "home" && <Landing onNavigate={navigate} />}
         {view === "agent" && <Agent />}
         {view === "diagnose" && <Diagnosis onNavigate={navigate} />}

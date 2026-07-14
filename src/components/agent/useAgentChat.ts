@@ -48,6 +48,8 @@ function agentMessageFromResponse(data: Record<string, unknown>, requestId: stri
     meta: data.meta && typeof data.meta === "object" ? data.meta as AgentMessage["meta"] : undefined,
     routing: data.routing && typeof data.routing === "object" ? data.routing as AgentMessage["routing"] : undefined,
     expert: data.expert && typeof data.expert === "object" ? data.expert as AgentMessage["expert"] : undefined,
+    needsHumanExpert: data.needsHumanExpert === true,
+    escalationCaseCreated: data.escalationCaseCreated === true,
   };
 }
 

@@ -127,6 +127,7 @@ model User {
   acceptedPartnerInvites        PartnerAgentInvite[]           @relation("AcceptedPartnerInvites")
   notifications                 UserNotification[]
   auditEvents                   AuditEvent[]                   @relation("AuditActor")
+  diagnosisLeads                DiagnosisLead[]
 
   @@index([organizationId])
   @@index([role])
@@ -382,12 +383,17 @@ model DiagnosisLead {
   // 상담 요청
   partnerRequests PartnerRequest[]
 
+  // 계정 연결 (로그인 상태로 저장 시)
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
   @@index([createdAt])
   @@index([nationality])
   @@index([pathKey])
   @@index([contactHash])
   @@index([deleteRequestedAt])
   @@index([retentionUntil])
+  @@index([userId])
   @@map("diagnosis_leads")
 }
 
@@ -413,7 +419,7 @@ model PartnerRequest {
   deleteRequestedAt  DateTime?
   deletedAt          DateTime?
   retentionUntil     DateTime?
-  status             String    @default("pending") // pending, matched, accepted, closed
+  status             String    @default("pending") // pending, contacted, matched, accepted, closed
   matchedAt          DateTime?
   acceptedAt         DateTime?
   closedAt           DateTime?

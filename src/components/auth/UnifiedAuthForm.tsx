@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { isLocale } from "@/i18n/routing";
 import type { Lang } from "@/lib/i18n/translations";
+import { KaxiCat } from "@/components/brand/KaxiCat";
 
 type AuthMode = "sign_in" | "sign_up";
 
@@ -181,16 +182,20 @@ export function UnifiedAuthForm() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-10">
-      <Card className="w-full max-w-md rounded-lg">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-2 flex h-11 w-11 items-center justify-center rounded-md bg-primary text-lg font-black text-primary-foreground">
-            K
+    <main className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
+      <Card className="w-full max-w-md border-border bg-card">
+        <CardHeader className="flex flex-col items-center gap-3 border-b border-border pb-6 text-center">
+          <KaxiCat state="happy" size={56} label={copy.title} />
+          <div className="space-y-1.5">
+            <CardTitle className="font-serif text-2xl font-semibold tracking-tight text-foreground sm:text-[26px]">
+              {copy.title}
+            </CardTitle>
+            <CardDescription className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              {copy.subtitle}
+            </CardDescription>
           </div>
-          <CardTitle className="text-2xl">{copy.title}</CardTitle>
-          <CardDescription>{copy.subtitle}</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           {error && (
             <Alert variant="destructive" className="mb-4">
               <AlertDescription>{error}</AlertDescription>
@@ -209,13 +214,13 @@ export function UnifiedAuthForm() {
           )}
 
           <Tabs value={mode} onValueChange={(value) => setMode(value as AuthMode)}>
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="sign_in">{copy.signIn}</TabsTrigger>
-              <TabsTrigger value="sign_up">{copy.signUp}</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-2 rounded-full bg-muted p-1">
+              <TabsTrigger value="sign_in" className="rounded-full">{copy.signIn}</TabsTrigger>
+              <TabsTrigger value="sign_up" className="rounded-full">{copy.signUp}</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="sign_in" className="pt-4">
-              <form onSubmit={submitSignIn} className="space-y-3">
+            <TabsContent value="sign_in" className="pt-5">
+              <form onSubmit={submitSignIn} className="space-y-4">
                 <AuthFields
                   email={email}
                   password={password}
@@ -224,25 +229,35 @@ export function UnifiedAuthForm() {
                   onPasswordChange={setPassword}
                   copy={copy}
                 />
-                <Button type="submit" className="w-full" disabled={Boolean(loading) || !email || !password}>
-                  {loading === "password" && <Loader2 className="h-4 w-4 animate-spin" />}
+                <Button type="submit" size="lg" className="w-full" disabled={Boolean(loading) || !email || !password}>
+                  {loading === "password" && (
+                    <Loader2 className="h-4 w-4 animate-spin animate-in fade-in zoom-in-75 duration-150 ease-snappy motion-reduce:animate-none" />
+                  )}
                   {copy.signIn}
                 </Button>
                 <div className="grid grid-cols-2 gap-2">
                   <Button type="button" variant="outline" onClick={sendEmailLink} disabled={Boolean(loading) || !email}>
-                    {loading === "otp" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                    {loading === "otp" ? (
+                      <Loader2 className="h-4 w-4 animate-spin animate-in fade-in zoom-in-75 duration-150 ease-snappy motion-reduce:animate-none" />
+                    ) : (
+                      <Mail className="h-4 w-4 animate-in fade-in zoom-in-75 duration-150 ease-snappy motion-reduce:animate-none" />
+                    )}
                     {copy.loginLink}
                   </Button>
                   <Button type="button" variant="outline" onClick={sendPasswordReset} disabled={Boolean(loading) || !email}>
-                    {loading === "reset" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                    {loading === "reset" ? (
+                      <Loader2 className="h-4 w-4 animate-spin animate-in fade-in zoom-in-75 duration-150 ease-snappy motion-reduce:animate-none" />
+                    ) : (
+                      <RotateCcw className="h-4 w-4 animate-in fade-in zoom-in-75 duration-150 ease-snappy motion-reduce:animate-none" />
+                    )}
                     {copy.reset}
                   </Button>
                 </div>
               </form>
             </TabsContent>
 
-            <TabsContent value="sign_up" className="pt-4">
-              <form onSubmit={submitSignUp} className="space-y-3">
+            <TabsContent value="sign_up" className="pt-5">
+              <form onSubmit={submitSignUp} className="space-y-4">
                 <AuthFields
                   email={email}
                   password={password}
@@ -252,8 +267,12 @@ export function UnifiedAuthForm() {
                   newPassword
                   copy={copy}
                 />
-                <Button type="submit" className="w-full" disabled={Boolean(loading) || !email || !password}>
-                  {loading === "password" ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                <Button type="submit" size="lg" className="w-full" disabled={Boolean(loading) || !email || !password}>
+                  {loading === "password" ? (
+                    <Loader2 className="h-4 w-4 animate-spin animate-in fade-in zoom-in-75 duration-150 ease-snappy motion-reduce:animate-none" />
+                  ) : (
+                    <UserPlus className="h-4 w-4 animate-in fade-in zoom-in-75 duration-150 ease-snappy motion-reduce:animate-none" />
+                  )}
                   {copy.signUp}
                 </Button>
               </form>
@@ -285,7 +304,12 @@ function AuthFields({
   return (
     <>
       <div className="space-y-1.5">
-        <Label htmlFor={`${newPassword ? "signup" : "login"}-email`}>{copy.email}</Label>
+        <Label
+          htmlFor={`${newPassword ? "signup" : "login"}-email`}
+          className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground"
+        >
+          {copy.email}
+        </Label>
         <Input
           id={`${newPassword ? "signup" : "login"}-email`}
           type="email"
@@ -294,10 +318,16 @@ function AuthFields({
           onChange={(event) => onEmailChange(event.target.value)}
           disabled={loading}
           required
+          className="h-11 bg-background"
         />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor={`${newPassword ? "signup" : "login"}-password`}>{copy.password}</Label>
+        <Label
+          htmlFor={`${newPassword ? "signup" : "login"}-password`}
+          className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground"
+        >
+          {copy.password}
+        </Label>
         <Input
           id={`${newPassword ? "signup" : "login"}-password`}
           type="password"
@@ -307,6 +337,7 @@ function AuthFields({
           disabled={loading}
           minLength={newPassword ? 8 : undefined}
           required
+          className="h-11 bg-background"
         />
       </div>
     </>

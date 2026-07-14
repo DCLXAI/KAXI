@@ -50,17 +50,19 @@ export function DiagnosisExperience({ onNavigate }: DiagnosisExperienceProps) {
       )}
 
       {showResult && flow.result && (
-        <DiagnosisResult
-          locale={flow.locale}
-          nickname={flow.nickname}
-          onNavigate={onNavigate}
-          onNicknameChange={flow.setNickname}
-          onSave={flow.save}
-          result={flow.result}
-          saveError={flow.saveError}
-          savingDiagnosis={flow.savingDiagnosis}
-          showSave={flow.showSave}
-        />
+        <div className="animate-in fade-in slide-in-from-bottom-3 duration-300 ease-snappy motion-reduce:animate-none">
+          <DiagnosisResult
+            locale={flow.locale}
+            nickname={flow.nickname}
+            onNavigate={onNavigate}
+            onNicknameChange={flow.setNickname}
+            onSave={flow.save}
+            result={flow.result}
+            saveError={flow.saveError}
+            savingDiagnosis={flow.savingDiagnosis}
+            showSave={flow.showSave}
+          />
+        </div>
       )}
     </div>
   );

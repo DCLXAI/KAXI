@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { AlertTriangle, ArrowRight, CheckCircle2, Clock, FileText, Loader2, Save } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, Clock, FileText, Loader2, LogIn, Save } from "lucide-react";
 import { pickLang, recommendPath } from "@/lib/data/diagnosis";
 import type { Locale } from "@/i18n/routing";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ReadinessScoreCard } from "@/components/kbridge/ReadinessScoreCard";
+import { KaxiCat } from "@/components/brand/KaxiCat";
 
 interface DiagnosisResultProps {
   locale: Locale;
@@ -39,10 +41,13 @@ export function DiagnosisResult({
 
   return (
     <div id="result-section" className="space-y-4">
-      <Card>
+      <Card
+        className="animate-in fade-in slide-in-from-bottom-2 duration-300 ease-snappy motion-reduce:animate-none"
+        style={{ animationDelay: "0ms", animationFillMode: "backwards" }}
+      >
         <CardHeader>
           <Badge className="w-fit">{t("result_recommended")}</Badge>
-          <CardTitle className="text-2xl mt-2">{pathLabel}</CardTitle>
+          <CardTitle className="font-serif text-2xl md:text-3xl mt-2">{pathLabel}</CardTitle>
         </CardHeader>
         <CardContent className="grid md:grid-cols-2 gap-4">
           <div className="flex items-start gap-3 rounded-lg bg-muted/30 p-4">
@@ -62,11 +67,21 @@ export function DiagnosisResult({
         </CardContent>
       </Card>
 
-      {result.readiness && <ReadinessScoreCard readiness={result.readiness} lang={locale} />}
+      {result.readiness && (
+        <div
+          className="animate-in fade-in slide-in-from-bottom-2 duration-300 ease-snappy motion-reduce:animate-none"
+          style={{ animationDelay: "60ms", animationFillMode: "backwards" }}
+        >
+          <ReadinessScoreCard readiness={result.readiness} lang={locale} />
+        </div>
+      )}
 
-      <Card>
+      <Card
+        className="animate-in fade-in slide-in-from-bottom-2 duration-300 ease-snappy motion-reduce:animate-none"
+        style={{ animationDelay: "120ms", animationFillMode: "backwards" }}
+      >
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
+          <CardTitle className="font-serif flex items-center gap-2 text-lg">
             <FileText className="h-5 w-5" />
             {t("result_required_docs")}
           </CardTitle>
@@ -81,7 +96,11 @@ export function DiagnosisResult({
       </Card>
 
       {result.warnings.length > 0 && (
-        <Alert variant="destructive">
+        <Alert
+          variant="destructive"
+          className="animate-in fade-in slide-in-from-bottom-2 duration-300 ease-snappy motion-reduce:animate-none"
+          style={{ animationDelay: "180ms", animationFillMode: "backwards" }}
+        >
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>{t("result_warnings")}</AlertTitle>
           <AlertDescription>
@@ -94,9 +113,12 @@ export function DiagnosisResult({
         </Alert>
       )}
 
-      <Card>
+      <Card
+        className="animate-in fade-in slide-in-from-bottom-2 duration-300 ease-snappy motion-reduce:animate-none"
+        style={{ animationDelay: "240ms", animationFillMode: "backwards" }}
+      >
         <CardHeader>
-          <CardTitle className="text-lg">{t("result_next_actions")}</CardTitle>
+          <CardTitle className="font-serif text-lg">{t("result_next_actions")}</CardTitle>
         </CardHeader>
         <CardContent>
           <ol className="space-y-2">
@@ -110,23 +132,31 @@ export function DiagnosisResult({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card
+        className="animate-in fade-in slide-in-from-bottom-2 duration-300 ease-snappy motion-reduce:animate-none"
+        style={{ animationDelay: "300ms", animationFillMode: "backwards" }}
+      >
         <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
+          <CardTitle className="font-serif text-lg flex items-center gap-2">
             <Save className="h-4 w-4" />
             {t("diagnose_save_lead")}
           </CardTitle>
-          <CardDescription>
-            {locale === "ko" && "진단 결과를 저장합니다. 전문가 상담은 저장 후 별도 동의를 거쳐 요청할 수 있습니다."}
-            {locale === "vi" && "Lưu kết quả đánh giá. Sau đó, bạn có thể đồng ý và gửi yêu cầu tư vấn riêng."}
-            {locale === "mn" && "Үнэлгээний үр дүнг хадгална. Дараа нь зөвшөөрөл өгч тусдаа зөвлөгөө хүсэж болно."}
-            {locale === "en" && "Save your diagnosis result. You can then consent and submit a separate consultation request."}
-          </CardDescription>
+          <CardDescription>{t("diagnose_save_description")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            <LogIn className="h-3.5 w-3.5 shrink-0 text-primary" />
+            <span>{t("diagnose_login_nudge")}</span>
+            <Link
+              href={`/login?lang=${locale}`}
+              className="font-medium text-primary underline-offset-2 hover:underline"
+            >
+              {t("nav_login")} →
+            </Link>
+          </div>
           <div className="flex flex-col sm:flex-row gap-2">
             <Input
-              placeholder={locale === "ko" ? "닉네임" : locale === "vi" ? "Biệt danh" : locale === "mn" ? "Хоч нэр" : "Nickname"}
+              placeholder={t("diagnose_nickname_placeholder")}
               value={nickname}
               onChange={(event) => onNicknameChange(event.target.value)}
               className="sm:max-w-xs"
@@ -138,15 +168,20 @@ export function DiagnosisResult({
             </Button>
           </div>
           {showSave && (
-            <Alert>
-              <CheckCircle2 className="h-4 w-4" />
-              <AlertDescription>
-                {locale === "ko" && "결과가 저장되었습니다. 전문가 연결이 필요하면 상담 요청으로 진행하세요."}
-                {locale === "vi" && "Đã lưu kết quả. Hãy gửi yêu cầu nếu bạn cần được kết nối với chuyên gia."}
-                {locale === "mn" && "Үр дүн хадгалагдлаа. Мэргэжилтэн хэрэгтэй бол зөвлөгөөний хүсэлт илгээнэ үү."}
-                {locale === "en" && "Your result is saved. Submit a consultation request if you need an expert connection."}
-              </AlertDescription>
-            </Alert>
+            <div
+              role="status"
+              className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4 sm:flex-row sm:items-center"
+            >
+              <KaxiCat state="happy" size={40} className="shrink-0" />
+              <p className="flex-1 flex items-center gap-1.5 text-sm font-medium text-foreground">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
+                {t("diagnose_save_success")}
+              </p>
+              <Button onClick={() => onNavigate("consult")} className="shrink-0 gap-2">
+                {t("diagnose_cta_consult")}
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
           )}
           {saveError && (
             <Alert variant="destructive">
@@ -156,7 +191,7 @@ export function DiagnosisResult({
           )}
           <div className="flex flex-wrap gap-2 pt-2">
             {showSave && (
-              <Button onClick={() => onNavigate("partners")}>{t("partner_request")} →</Button>
+              <Button variant="outline" onClick={() => onNavigate("partners")}>{t("partner_request")} →</Button>
             )}
             <Button variant="outline" onClick={() => onNavigate("schools")}>{t("nav_schools")} →</Button>
             <Button variant="outline" onClick={() => onNavigate("cost")}>{t("nav_cost")} →</Button>

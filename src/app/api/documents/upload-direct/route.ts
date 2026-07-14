@@ -4,6 +4,7 @@ import { getDocumentUploadSigningSecret, verifyDocumentUploadToken } from "@/lib
 import { commitDocumentUpload } from "@/lib/documents/repository";
 import { processDocumentOcr } from "@/lib/documents/ocr";
 import { getDocumentWorkspaceIssue } from "@/lib/documents/workspace-availability";
+import { sendOpsAlert } from "@/lib/ops/alerts";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -67,6 +68,17 @@ export async function PUT(req: NextRequest) {
       ip: context.ip,
       userAgent: context.userAgent,
     });
+
+    sendOpsAlert({
+      kind: "kaxi_ops_alert",
+      source: "kaxi-documents",
+      severity: "warning",
+      eventType: "document_uploaded",
+      message: "새 서류가 업로드되었습니다.",
+      occurredAt: new Date().toISOString(),
+      details: { documentItemId: processed.id, documentType: processed.documentType },
+      adminUrl: `${process.env.NEXT_PUBLIC_APP_URL || "https://kaxi.vercel.app"}/admin/documents`,
+    }).catch((err) => console.warn("[ops alert] document upload", err instanceof Error ? err.message : err));
 
     return NextResponse.json({
       ok: true,

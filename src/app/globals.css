@@ -2,10 +2,19 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant hover {
+  @media (hover: hover) {
+    &:hover {
+      @slot;
+    }
+  }
+}
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --ease-snappy: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-fluid: cubic-bezier(0.77, 0, 0.175, 1);
   --font-sans: var(--font-pretendard), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-serif-brand), var(--font-serif-ko), ui-serif, Georgia, serif;
   --font-mono: ui-monospace, monospace;
@@ -153,5 +162,14 @@
   .kaxi-cited-answer a[href^="#"][title]:focus-visible {
     outline: 2px solid color-mix(in oklch, var(--primary) 60%, transparent);
     outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

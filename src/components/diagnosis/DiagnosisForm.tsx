@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
   ArrowRight,
@@ -12,7 +13,6 @@ import {
   CircleHelp,
   GraduationCap,
   Languages,
-  Loader2,
   RefreshCcw,
   X,
   type LucideIcon,
@@ -26,7 +26,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { KaxiCat } from "@/components/brand/KaxiCat";
 import { EDUCATION_VALUES, isOneOf } from "./diagnosis-options";
+
+const FIELD_LABEL_CLASS = "text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground";
 
 interface DiagnosisFormProps {
   initialStep?: number;
@@ -54,18 +57,20 @@ function ChoiceButton({ icon: Icon, label, onSelect, selected }: ChoiceButtonPro
       aria-pressed={selected}
       onClick={onSelect}
       className={cn(
-        "relative flex min-h-14 w-full items-center gap-3 rounded-lg border bg-background px-4 py-3 text-left text-sm font-medium transition-colors sm:min-h-16",
-        "hover:border-foreground/30 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-        selected && "border-primary bg-primary/5 ring-1 ring-primary",
+        "relative flex min-h-14 w-full items-center gap-3 rounded-lg border border-border bg-background px-4 py-3.5 text-left text-sm font-medium text-foreground transition-[border-color,background-color,box-shadow,transform] duration-150 ease-snappy active:scale-[0.98] sm:min-h-16 sm:px-5",
+        "hover:border-foreground/25 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        selected && "border-primary bg-primary/[0.06] shadow-sm ring-1 ring-primary",
       )}
     >
       {Icon && (
-        <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted", selected && "bg-primary text-primary-foreground")}>
+        <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors", selected && "bg-primary text-primary-foreground")}>
           <Icon className="h-4 w-4" />
         </span>
       )}
       <span className="min-w-0 flex-1 leading-snug">{label}</span>
-      {selected && <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />}
+      {selected && (
+        <CheckCircle2 className="h-4 w-4 shrink-0 animate-in zoom-in-75 text-primary duration-150 ease-snappy motion-reduce:animate-none" />
+      )}
     </button>
   );
 }
@@ -73,6 +78,8 @@ function ChoiceButton({ icon: Icon, label, onSelect, selected }: ChoiceButtonPro
 export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpdate, submitting }: DiagnosisFormProps) {
   const t = useTranslations();
   const [step, setStep] = useState(initialStep);
+  const [direction, setDirection] = useState<1 | -1>(1);
+  const reducedMotion = useReducedMotion();
   const [goalConfirmed, setGoalConfirmed] = useState(initialStep > 0);
   const [koreanConfirmed, setKoreanConfirmed] = useState(initialStep > 2);
   const [brokerConfirmed, setBrokerConfirmed] = useState(initialStep > 4);
@@ -110,7 +117,7 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
     { value: "mn", label: "🇲🇳 Mongolia" },
     { value: "cn", label: "🇨🇳 China" },
     { value: "uz", label: "🇺🇿 Uzbekistan" },
-    { value: "other", label: locale === "ko" ? "기타" : "Other" },
+    { value: "other", label: t("nationality_other") },
   ];
   const regionOptions = [
     { value: "any", label: t("region_any") },
@@ -167,26 +174,69 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
     { label: t("diagnose_q_history"), value: input.hasHistory ? t("yes") : t("no") },
   ];
 
-  const next = () => setStep((current) => Math.min(TOTAL_STEPS - 1, current + 1));
-  const previous = () => setStep((current) => Math.max(0, current - 1));
+  const next = () => {
+    setDirection(1);
+    setStep((current) => Math.min(TOTAL_STEPS - 1, current + 1));
+  };
+  const previous = () => {
+    setDirection(-1);
+    setStep((current) => Math.max(0, current - 1));
+  };
+
+  const stepVariants = {
+    enter: (dir: 1 | -1) => ({
+      opacity: 0,
+      transform: reducedMotion ? "translateX(0px)" : `translateX(${dir * 24}px)`,
+    }),
+    center: { opacity: 1, transform: "translateX(0px)" },
+    exit: (dir: 1 | -1) => ({
+      opacity: 0,
+      transform: reducedMotion ? "translateX(0px)" : `translateX(${dir * -24}px)`,
+    }),
+  };
 
   return (
-    <Card className="py-0">
-      <CardHeader className="border-b px-5 py-5 sm:px-7 sm:py-6">
-        <div className="mb-2 flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground" aria-live="polite">
-          <span>{step + 1} / {TOTAL_STEPS}</span>
-          <span>{Math.round(((step + 1) / TOTAL_STEPS) * 100)}%</span>
+    <Card className="overflow-hidden bg-card py-0">
+      <CardHeader className="border-b border-border bg-card px-5 py-5 sm:px-7 sm:py-6">
+        <div className="mb-3 flex items-center justify-between gap-3" aria-live="polite">
+          <span className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            {step + 1} / {TOTAL_STEPS}
+          </span>
+          <div className="flex items-center gap-2.5">
+            <span className="text-xs font-medium tabular-nums text-muted-foreground">
+              {Math.round(((step + 1) / TOTAL_STEPS) * 100)}%
+            </span>
+            <KaxiCat state="running" size={22} className="hidden opacity-90 sm:block" />
+          </div>
         </div>
-        <Progress value={((step + 1) / TOTAL_STEPS) * 100} aria-label={`${step + 1} / ${TOTAL_STEPS}`} />
-        <div className="pt-4">
-          <h2 ref={headingRef} tabIndex={-1} className="text-xl font-semibold leading-tight outline-none sm:text-2xl">
+        <Progress
+          value={((step + 1) / TOTAL_STEPS) * 100}
+          aria-label={`${step + 1} / ${TOTAL_STEPS}`}
+          className="h-1.5 bg-muted"
+        />
+        <div className="pt-5 sm:pt-6">
+          <h2
+            ref={headingRef}
+            tabIndex={-1}
+            className="font-serif text-2xl font-semibold leading-tight tracking-tight text-foreground outline-none sm:text-3xl"
+          >
             {stepCopy[step].title}
           </h2>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{stepCopy[step].hint}</p>
+          <p className="mt-2.5 max-w-md text-sm leading-relaxed text-muted-foreground sm:text-[15px]">{stepCopy[step].hint}</p>
         </div>
       </CardHeader>
 
       <CardContent className="min-h-[20rem] px-5 py-6 sm:min-h-[21rem] sm:px-7 sm:py-8">
+      <AnimatePresence mode="wait" initial={false} custom={direction}>
+      <motion.div
+        key={step}
+        custom={direction}
+        variants={stepVariants}
+        initial="enter"
+        animate="center"
+        exit="exit"
+        transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+      >
         {step === 0 && (
           <div role="group" aria-label={t("diagnose_q_goal")} className="grid gap-2 sm:grid-cols-2 sm:gap-3">
             {goalOptions.map((option) => (
@@ -205,18 +255,18 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
         )}
 
         {step === 1 && (
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>{t("diagnose_q_nationality")}</Label>
+          <div className="grid gap-6 sm:grid-cols-2">
+            <div className="space-y-2.5">
+              <Label className={FIELD_LABEL_CLASS}>{t("diagnose_q_nationality")}</Label>
               <Select value={input.nationality} onValueChange={(value) => onUpdate({ nationality: value })}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-11 w-full bg-background"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {nationalityOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="diagnosis-age">{t("diagnose_q_age")}</Label>
+            <div className="space-y-2.5">
+              <Label htmlFor="diagnosis-age" className={FIELD_LABEL_CLASS}>{t("diagnose_q_age")}</Label>
               <Input
                 id="diagnosis-age"
                 type="number"
@@ -225,18 +275,19 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
                 value={input.age}
                 aria-invalid={!ageValid}
                 onChange={(event) => onUpdate({ age: event.target.value })}
+                className="h-11 bg-background text-base font-medium tabular-nums"
               />
               {!ageValid && <p className="text-xs text-destructive">{t("diagnose_age_error")}</p>}
             </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label>{t("diagnose_q_education")}</Label>
+            <div className="space-y-2.5 sm:col-span-2">
+              <Label className={FIELD_LABEL_CLASS}>{t("diagnose_q_education")}</Label>
               <Select
                 value={input.education}
                 onValueChange={(value) => {
                   if (isOneOf(value, EDUCATION_VALUES)) onUpdate({ education: value });
                 }}
               >
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-11 w-full bg-background"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {educationOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
                 </SelectContent>
@@ -262,9 +313,9 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
         )}
 
         {step === 3 && (
-          <div className="space-y-7">
+          <div className="space-y-8">
             <div className="space-y-3">
-              <Label htmlFor="diagnosis-budget">{t("diagnose_q_budget")}</Label>
+              <Label htmlFor="diagnosis-budget" className={FIELD_LABEL_CLASS}>{t("diagnose_q_budget")}</Label>
               <div className="relative">
                 <Input
                   id="diagnosis-budget"
@@ -273,13 +324,13 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
                   step="500000"
                   value={input.budget}
                   onChange={(event) => onUpdate({ budget: Number(event.target.value) })}
-                  className="h-12 pr-16 text-lg font-semibold"
+                  className="h-12 bg-background pr-16 text-lg font-semibold tabular-nums"
                 />
                 <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">KRW</span>
               </div>
-              <p className="text-sm font-medium">{money.format(input.budget)} KRW</p>
-              <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">{t("diagnose_budget_quick")}</p>
+              <p className="font-serif text-base font-semibold text-foreground">{money.format(input.budget)} <span className="text-sm font-sans font-normal text-muted-foreground">KRW</span></p>
+              <div className="space-y-2 pt-1">
+                <p className={FIELD_LABEL_CLASS}>{t("diagnose_budget_quick")}</p>
                 <div className="flex flex-wrap gap-2">
                   {BUDGET_PRESETS.map((amount) => (
                     <Button
@@ -287,6 +338,7 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
                       type="button"
                       size="sm"
                       variant={input.budget === amount ? "secondary" : "outline"}
+                      className="rounded-full"
                       onClick={() => onUpdate({ budget: amount })}
                     >
                       {compactMoney.format(amount)}
@@ -295,10 +347,10 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
                 </div>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>{t("diagnose_q_region")}</Label>
+            <div className="space-y-2.5">
+              <Label className={FIELD_LABEL_CLASS}>{t("diagnose_q_region")}</Label>
               <Select value={input.region} onValueChange={(value) => onUpdate({ region: value })}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-11 w-full bg-background"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {regionOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
                 </SelectContent>
@@ -330,8 +382,8 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
               />
             </div>
             {input.usingBroker && (
-              <div className="space-y-2 border-t pt-5">
-                <Label htmlFor="diagnosis-broker-cost">{t("diagnose_q_broker_cost")}</Label>
+              <div className="space-y-2.5 border-t border-border pt-6">
+                <Label htmlFor="diagnosis-broker-cost" className={FIELD_LABEL_CLASS}>{t("diagnose_q_broker_cost")}</Label>
                 <div className="relative">
                   <Input
                     id="diagnosis-broker-cost"
@@ -340,11 +392,11 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
                     step="100000"
                     value={input.brokerCost}
                     onChange={(event) => onUpdate({ brokerCost: Number(event.target.value) })}
-                    className="h-11 pr-16"
+                    className="h-11 bg-background pr-16 tabular-nums"
                   />
                   <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">KRW</span>
                 </div>
-                <p className="text-sm font-medium">{money.format(input.brokerCost)} KRW</p>
+                <p className="text-sm font-medium text-foreground">{money.format(input.brokerCost)} KRW</p>
               </div>
             )}
           </div>
@@ -373,21 +425,23 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
               />
             </div>
             <div>
-              <h3 className="text-sm font-semibold">{t("diagnose_review")}</h3>
-              <dl className="mt-3 grid border-t sm:grid-cols-2 sm:gap-x-6">
+              <h3 className="font-serif text-base font-semibold text-foreground">{t("diagnose_review")}</h3>
+              <dl className="mt-3 grid border-t border-border sm:grid-cols-2 sm:gap-x-6">
                 {reviewRows.map((row) => (
-                  <div key={row.label} className="flex min-w-0 items-start justify-between gap-4 border-b py-3 text-sm">
+                  <div key={row.label} className="flex min-w-0 items-start justify-between gap-4 border-b border-border py-3 text-sm">
                     <dt className="shrink-0 text-muted-foreground">{row.label}</dt>
-                    <dd className="min-w-0 text-right font-medium leading-snug">{row.value}</dd>
+                    <dd className="min-w-0 text-right font-medium leading-snug text-foreground">{row.value}</dd>
                   </div>
                 ))}
               </dl>
             </div>
           </div>
         )}
+      </motion.div>
+      </AnimatePresence>
       </CardContent>
 
-      <CardFooter className="sticky bottom-0 z-10 justify-between gap-3 border-t bg-card/95 px-5 py-4 backdrop-blur sm:px-7">
+      <CardFooter className="sticky bottom-0 z-10 justify-between gap-3 border-t border-border bg-card/95 px-5 py-4 backdrop-blur sm:px-7">
         {step > 0 ? (
           <Button type="button" variant="ghost" onClick={previous} disabled={submitting}>
             <ArrowLeft className="h-4 w-4" />
@@ -401,7 +455,16 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
           </Button>
         ) : (
           <Button type="button" size="lg" onClick={() => void onSubmit()} disabled={submitting || !currentStepValid}>
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+            {submitting ? (
+              <KaxiCat
+                state="running"
+                size={18}
+                inverted
+                className="animate-in fade-in zoom-in-75 duration-150 ease-snappy motion-reduce:animate-none"
+              />
+            ) : (
+              <ArrowRight className="h-4 w-4 animate-in fade-in zoom-in-75 duration-150 ease-snappy motion-reduce:animate-none" />
+            )}
             {submitting ? t("diagnose_submitting") : t("diagnose_submit")}
           </Button>
         )}

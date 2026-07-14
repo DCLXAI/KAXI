@@ -43,6 +43,8 @@ export interface AgentMessage {
     disclaimer?: string;
     consultationQuestion: string;
   };
+  needsHumanExpert?: boolean;
+  escalationCaseCreated?: boolean;
 }
 
 export interface AgentProgress {

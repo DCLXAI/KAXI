@@ -217,25 +217,29 @@ export async function POST(req: NextRequest) {
       console.error("[ChatLog save error]", logErr);
     }
 
+    let escalationCaseCreated = false;
     if (result.needsHumanExpert) {
-      const studentProfileId = await currentAuthenticatedStudentProfileId();
-      maybeCreateHighRiskEscalationCase({
-        studentProfileId,
-        category: `consult:${mode}`,
-        summary: "전문 상담 고위험/행정사 검토 필요 판정",
-        conversationSummary: question,
-        ruleSnapshot: {
-          mode,
-          backend: result.backend,
-          docIds: docs.map((doc) => doc.id),
-          sourceNotice,
-          retrieval,
-        },
-        aiDraft: answer,
-        source: "consult",
-      }).catch((err) => {
+      try {
+        const studentProfileId = await currentAuthenticatedStudentProfileId();
+        const created = await maybeCreateHighRiskEscalationCase({
+          studentProfileId,
+          category: `consult:${mode}`,
+          summary: "전문 상담 고위험/행정사 검토 필요 판정",
+          conversationSummary: question,
+          ruleSnapshot: {
+            mode,
+            backend: result.backend,
+            docIds: docs.map((doc) => doc.id),
+            sourceNotice,
+            retrieval,
+          },
+          aiDraft: answer,
+          source: "consult",
+        });
+        escalationCaseCreated = Boolean(created);
+      } catch (err) {
         console.warn("[consult high-risk escalation skipped]", err instanceof Error ? err.message : err);
-      });
+      }
     }
 
     return NextResponse.json({
@@ -253,6 +257,7 @@ export async function POST(req: NextRequest) {
       })),
       suggestedFollowups: result.suggestedFollowups,
       needsHumanExpert: result.needsHumanExpert,
+      escalationCaseCreated,
       backend: result.backend,
       model: result.backend === "kimi" || result.backend === "claude" ? getLlmModel() : null,
       sourceNotice,

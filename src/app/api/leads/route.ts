@@ -5,6 +5,8 @@ import { getAdminContext, parsePositiveInt, rateLimit, requireAdmin } from "@/li
 import { parseJsonBody } from "@/lib/api/validation";
 import { canPersistPiiValue, preparePiiField, retentionUntil } from "@/lib/privacy/pii";
 import { serializeLeadForResponse } from "@/lib/privacy/serializers";
+import { getCurrentKaxiUser } from "@/lib/supabase/auth";
+import { sendOpsAlert } from "@/lib/ops/alerts";
 
 // Prisma's DiagnosisLead.age/budget/brokerCost/estimatedCost are all Int
 // columns, so every numeric field here is coerced and validated as an
@@ -99,8 +101,17 @@ export async function POST(req: NextRequest) {
       kind: "contact",
       maxPlainLength: 160,
     });
+    // 로그인 상태로 저장하면 계정에 연결(익명 저장은 그대로 null). 동일 오리진 fetch라 세션 쿠키 자동 전송.
+    // best-effort: 세션 조회가 일시적으로 실패해도 익명 저장은 깨지지 않게 null로 강등.
+    let linkedUserId: string | null = null;
+    try {
+      linkedUserId = (await getCurrentKaxiUser())?.id ?? null;
+    } catch (err) {
+      console.error("[POST /api/leads] session lookup failed, saving anonymously", err instanceof Error ? err.message : err);
+    }
     const lead = await db.diagnosisLead.create({
       data: {
+        userId: linkedUserId,
         nickname: data.nickname,
         nationality: data.nationality,
         age: data.age,
@@ -126,6 +137,17 @@ export async function POST(req: NextRequest) {
         retentionUntil: retentionUntil(parsePositiveInt(process.env.PRIVACY_LEAD_RETENTION_DAYS, 365)),
       },
     });
+
+    sendOpsAlert({
+      kind: "kaxi_ops_alert",
+      source: "kaxi-leads",
+      severity: "warning",
+      eventType: "lead_created",
+      message: "새 진단 리드가 생성되었습니다.",
+      occurredAt: new Date().toISOString(),
+      details: { leadId: lead.id, pathKey: lead.pathKey, nationality: lead.nationality, linked: Boolean(lead.userId) },
+      adminUrl: `${process.env.NEXT_PUBLIC_APP_URL || "https://kaxi.vercel.app"}/admin/leads`,
+    }).catch((err) => console.warn("[ops alert] lead", err instanceof Error ? err.message : err));
 
     return NextResponse.json({ lead: serializeLeadForResponse(lead) }, { status: 201 });
   } catch (e) {
