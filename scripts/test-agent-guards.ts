@@ -24,6 +24,37 @@ const { getTransformerRuntimeInfo, resolveModelCacheDir } = await import(
 );
 const { TOOL_MAP } = await import("../src/lib/agent/tools");
 
+function deterministicQueryEmbedding(seedText: string): number[] {
+  let seed = 0;
+  for (let i = 0; i < seedText.length; i += 1) {
+    seed = (seed * 31 + seedText.charCodeAt(i)) >>> 0;
+  }
+  return Array.from({ length: 1536 }, () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return (seed / 0xffffffff) * 2 - 1;
+  });
+}
+
+// CI runs without an OpenAI embedding credential, and the shared OpenAI RAG
+// core fail-closes in that case. Serve deterministic stub embeddings so
+// retrieval-behavior tests stay hermetic in every environment. Outage tests
+// blank OPENAI_EMBEDDING_API_KEY explicitly to exercise the fail-close path,
+// which short-circuits before any fetch happens.
+process.env.OPENAI_EMBEDDING_API_KEY ||= "agent-guard-embedding-key";
+const realFetch = globalThis.fetch;
+globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  if (url.includes("api.openai.com") && url.includes("/embeddings")) {
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) as { input?: unknown } : {};
+    const seedText = typeof body.input === "string" ? body.input : "";
+    return new Response(
+      JSON.stringify({ data: [{ embedding: deterministicQueryEmbedding(seedText) }] }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  }
+  return realFetch(input, init);
+}) as typeof fetch;
+
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
   process.exit(1);
