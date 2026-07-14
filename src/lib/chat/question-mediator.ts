@@ -309,20 +309,20 @@ function enforceEvidenceRequiredRetrieval(
   question: string,
   deterministicCategory: ChatCategory,
 ): ModelOutput {
-  if (
-    parsed.action !== "clarify"
-    || !EVIDENCE_REQUIRED_RISK_PATTERNS.some((pattern) => pattern.test(question))
-  ) return parsed;
+  if (!EVIDENCE_REQUIRED_RISK_PATTERNS.some((pattern) => pattern.test(question))) return parsed;
 
   const deterministic = deterministicIntents(question, deterministicCategory);
   const intents = Array.from(new Set([...parsed.intents, ...deterministic])).slice(0, 5);
+  const forcedFromClarification = parsed.action === "clarify";
   return {
     ...parsed,
     action: "retrieve",
     category: deterministicCategory,
-    searchQuery: question.trim().slice(0, 800),
-    answerFocus: question.trim().slice(0, 500),
-    responseMode: deterministicMode(deterministicCategory, intents),
+    searchQuery: forcedFromClarification ? question.trim().slice(0, 800) : parsed.searchQuery,
+    answerFocus: forcedFromClarification ? question.trim().slice(0, 500) : parsed.answerFocus,
+    responseMode: forcedFromClarification
+      ? deterministicMode(deterministicCategory, intents)
+      : parsed.responseMode,
     clarificationQuestion: "",
     intents,
     needsHumanReview: true,
