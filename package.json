@@ -12,6 +12,7 @@
     "test:e2e:types": "tsc --noEmit -p tsconfig.e2e.json",
     "test:vector": "bun run scripts/test-vector-search.ts",
     "test:embedding-cache-key": "bun run scripts/test-embedding-cache-key.ts",
+    "rag:openai:preflight": "bun run scripts/check-openai-rag-cutover.ts",
     "test:rules": "bun run scripts/test-visa-rules.ts",
     "test:schema": "bun run scripts/test-db-schema-policy.ts",
     "test:i18n-parity": "bun run scripts/test-i18n-parity.ts",

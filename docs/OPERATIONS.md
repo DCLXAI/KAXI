@@ -56,13 +56,15 @@
 - `N8N_WEBHOOK_SIGNING_SECRET`, `N8N_WEBHOOK_MAX_AGE_SECONDS`: Shared HMAC/replay-window contract between KAXI and the n8n verification nodes. The secret must match in every KAXI environment that calls n8n.
 - `N8N_VERIFICATION_RECEIPT_TTL_SECONDS`, `N8N_RAG_CORE_RATE_LIMIT`: Bound the short-lived, payload-bound receipt issued after nonce consumption and the internal KAXI RAG-core endpoint that accepts it. n8n never receives the signing secret.
 - `N8N_RAG_TIMEOUT_MS`, `KAXI_DIRECT_RAG_TIMEOUT_MS`: Bound the n8n attempt and direct Supabase fallback. HTTP errors, timeout, empty or invalid responses move to the direct path; the user sees a runtime failure only when both paths fail.
-- `OPENAI_EMBEDDING_API_KEY`, `OPENAI_EMBEDDING_BASE_URL`, `OPENAI_EMBEDDING_MODEL`, `OPENAI_EMBEDDING_TIMEOUT_MS`, `KAXI_QUERY_EMBEDDINGS_ENABLED`: Optional, dedicated query-embedding contract. Only `text-embedding-3-small` at 1536 dimensions is accepted. Missing or failed credentials automatically select lexical-only retrieval; generic chat-provider keys are never reused.
+- `KAXI_RAG_EMBEDDING_STRATEGY`: Controls the dual-index read path. `openai-primary` queries the 1536-dimensional OpenAI serving projection first and automatically falls back to the retained 384-dimensional E5 canonical index. `e5-primary` is the instant rollback switch. `openai-only` is reserved for a later E5 retirement after the observation window.
+- `OPENAI_EMBEDDING_API_KEY`, `OPENAI_EMBEDDING_BASE_URL`, `OPENAI_EMBEDDING_MODEL`, `OPENAI_EMBEDDING_TIMEOUT_MS`, `KAXI_QUERY_EMBEDDINGS_ENABLED`: Dedicated OpenAI query and serving-projection contract. Only `text-embedding-3-small` at 1536 dimensions is accepted. Generic chat-provider keys are never reused unless `KAXI_QUERY_EMBEDDINGS_USE_OPENAI_KEY=true` is explicitly set.
+- `KAXI_QUERY_EMBEDDING_REQUIRED`: Marks system health degraded when the direct OpenAI probe fails. It does not interrupt user traffic in `openai-primary`; that traffic continues through the E5 fallback index.
 - `TYPEBOT_PUBLIC_ID`, `TYPEBOT_PUBLIC_URL`: Published Typebot identity and public health target. Keep Typebot unpublished during backend cutover.
 - `TYPEBOT_GATEWAY_SECRET`: Separate 32-byte secret sent by both server-side Typebot webhook blocks as `x-kaxi-typebot-token`. It prevents callers from forging `source=typebot`; do not reuse the n8n signing secret.
 - `TYPEBOT_API_BASE_URL`, `TYPEBOT_BOT_ID`, `TYPEBOT_API_TOKEN`, `TYPEBOT_RESULT_RETENTION_DAYS`: Dedicated provider API contract for daily Typebot Result deletion. Production uses a separate `kaxi-retention` token and a seven-day window; never reuse or expose the gateway secret.
 - `KNOWLEDGE_MONITOR_CRON_SOURCE_IDS`, `KNOWLEDGE_MONITOR_FETCH_TIMEOUT_MS`, `KNOWLEDGE_MONITOR_CONCURRENCY`: Bound the Vercel daily critical-source monitor. The GitHub matrix remains responsible for the complete watchlist.
 
-Daily RAG health records `degraded` for required dependency failures and `warning` for operational issues such as stale attachment jobs, a missing external scanner, or unacknowledged events. The check starts the published Typebot through its `startChat` runtime API, verifies the provider-side Result retention API, and sends a signed grounded-answer probe through the active n8n RAG webhook; health-only n8n audit rows are removed after the probe. A healthy run does not emit an alert.
+Daily RAG health records `degraded` for required dependency failures and `warning` for operational issues such as stale attachment jobs, a missing external scanner, or unacknowledged events. The check validates a real 1536-dimensional `text-embedding-3-small` query, verifies that both pgvector indexes remain complete, starts the published Typebot through its `startChat` runtime API, checks provider-side Result retention, and sends a signed grounded-answer probe through the active n8n RAG webhook; health-only n8n audit rows are removed after the probe. A healthy run does not emit an alert.
 - `OPS_ALERT_SLACK_WEBHOOK_URL`: Slack incoming webhook used for immediate runtime alerts.
 - `RESEND_API_KEY`, `OPS_ALERT_EMAIL_FROM`, `OPS_ALERT_EMAIL_TO`: Resend delivery contract. `OPS_ALERT_EMAIL_TO` accepts up to five comma-separated recipients.
 - `OPS_ALERT_WEBHOOK_URL`, `OPS_ALERT_FORMAT`, `OPS_ALERT_SIGNING_SECRET`: Optional signed JSON destination. The legacy URL can still be a Slack incoming webhook.
@@ -176,12 +178,13 @@ After KAXI production is deployed and the validated n8n draft is published:
 
 ```bash
 bun run rag:serving:sync
-bun run rag:serving:sync --execute --confirm-contract 2026-07-13.v2 --batch-size 10
+bun run rag:serving:sync --execute --confirm-contract 2026-07-14.v3 --batch-size 10
+bun run rag:openai:preflight
 ```
 
-The first command is a read-only status check. The execute command first calls the active n8n capability endpoint and refuses to ingest when the workflow contract, target table, model, dimensions, or signed-ingestion flag differs. It stops on a failed batch or when ready count makes no progress, and can be rerun to continue.
+The first command is a read-only status check. The execute command first calls the active n8n capability endpoint and refuses to ingest when the workflow contract, target table, model, dimensions, or signed-ingestion flag differs. It targets rows missing a real OpenAI vector even when their lexical projection is already marked ready, stops on a failed batch or when vector coverage makes no progress, and can be rerun to continue. The preflight sends a real OpenAI query and requires `hybrid-provider` retrieval before cutover.
 
-Only after `readyChunks == eligibleChunks`, `citationReadyChunks == eligibleChunks`, and the full evaluation meets the production gate (at least 95% overall, 90% in every locale/category, 95% expected-document recall and no-context accuracy, and 100% citation/category/locale/high-risk checks):
+Keep `KAXI_RAG_EMBEDDING_STRATEGY=e5-primary` while backfilling. Only after `vectorReadyChunks == eligibleChunks`, `canonicalVectorReadyChunks == eligibleChunks`, `citationReadyChunks == eligibleChunks`, the OpenAI preflight passes, and the full shadow evaluation meets the production gate (at least 95% overall, 90% in every locale/category, 95% expected-document recall and no-context accuracy, and 100% citation/category/locale/high-risk checks), deploy `openai-primary`. A provider outage then falls back to E5 without interrupting the user. Rollback is the environment-only change back to `e5-primary`; do not delete either index during the observation window.
 
 ```bash
 bun run rag:evaluation:run

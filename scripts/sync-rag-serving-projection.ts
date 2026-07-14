@@ -79,11 +79,11 @@ async function main() {
 
   const batchSize = positiveInt(argValue("--batch-size"), 10, 50);
   const maxBatches = positiveInt(argValue("--max-batches"), 30, 100);
-  let previousReady = initial.readyChunks;
+  let previousVectorReady = initial.vectorReadyChunks;
 
   for (let batch = 1; batch <= maxBatches; batch += 1) {
     const current = await getRagServingProjectionStatus();
-    if (current.readyChunks >= current.eligibleChunks) break;
+    if (current.vectorReadyChunks >= current.eligibleChunks) break;
 
     const result = await syncRagServingProjection({ limit: batchSize });
     console.log(JSON.stringify({ phase: "sync", batch, result }, null, 2));
@@ -91,17 +91,17 @@ async function main() {
     if (result.failed.length > 0) {
       throw new Error(`RAG serving sync failed for ${result.failed.length} chunk(s)`);
     }
-    if (result.status.readyChunks <= previousReady) {
-      throw new Error("RAG serving sync made no progress; stopping before retrying the same chunks");
+    if (result.status.vectorReadyChunks <= previousVectorReady) {
+      throw new Error("RAG serving vector sync made no progress; stopping before retrying the same chunks");
     }
-    previousReady = result.status.readyChunks;
+    previousVectorReady = result.status.vectorReadyChunks;
   }
 
   const final = await getRagServingProjectionStatus();
   console.log(JSON.stringify({ phase: "complete", status: final }, null, 2));
-  if (final.readyChunks < final.eligibleChunks) {
+  if (final.vectorReadyChunks < final.eligibleChunks) {
     throw new Error(
-      `RAG serving projection remains incomplete (${final.readyChunks}/${final.eligibleChunks}); rerun to continue`,
+      `RAG serving vector projection remains incomplete (${final.vectorReadyChunks}/${final.eligibleChunks}); rerun to continue`,
     );
   }
 }

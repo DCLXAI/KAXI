@@ -20,6 +20,9 @@ import {
   CANONICAL_QUERY_EMBEDDING_DIMENSIONS,
   CANONICAL_QUERY_EMBEDDING_MODEL,
   createRagQueryEmbedding,
+  createRagQueryEmbeddingWithLocalFallback,
+  getRagEmbeddingStrategy,
+  isOpenAiQueryEmbedding,
   RAG_QUERY_EMBEDDING_DIMENSIONS,
 } from "../src/lib/chat/query-embedding";
 import {
@@ -190,6 +193,26 @@ const sharedOpenAiKeyEmbedding = await createRagQueryEmbedding("D-10 documents",
   }) as typeof fetch,
 });
 assert.equal(sharedOpenAiKeyEmbedding.status, "ready");
+assert.equal(isOpenAiQueryEmbedding(sharedOpenAiKeyEmbedding), true);
+const insufficientQuotaEmbedding = await createRagQueryEmbedding("D-10 documents", {
+  env: { OPENAI_EMBEDDING_API_KEY: "embedding-test-key" } as NodeJS.ProcessEnv,
+  fetchImpl: (async () => new Response(JSON.stringify({
+    error: { type: "insufficient_quota", code: "insufficient_quota" },
+  }), { status: 429, headers: { "content-type": "application/json" } })) as unknown as typeof fetch,
+});
+assert.equal(insufficientQuotaEmbedding.status, "failed");
+assert.equal(insufficientQuotaEmbedding.failureReason, "embedding_provider_insufficient_quota");
+assert.equal(getRagEmbeddingStrategy({} as NodeJS.ProcessEnv), "openai-primary");
+assert.equal(
+  getRagEmbeddingStrategy({ KAXI_RAG_EMBEDDING_STRATEGY: "e5-primary" } as NodeJS.ProcessEnv),
+  "e5-primary",
+);
+const openAiOnlyMissing = await createRagQueryEmbeddingWithLocalFallback("D-10 documents", {
+  env: { KAXI_RAG_EMBEDDING_STRATEGY: "openai-only" } as NodeJS.ProcessEnv,
+});
+assert.equal(openAiOnlyMissing.status, "not_configured");
+assert.equal(openAiOnlyMissing.strategy, "openai-only");
+assert.equal(openAiOnlyMissing.provider, "none");
 
 assert.equal(
   shouldRetryN8nNoContext({ searchMeta: { noContext: true, runtimePath: "n8n-workflow" } }),
@@ -494,7 +517,7 @@ const hybridResponse = await runDirectRagFallback(input, {
   createEmbedding: async () => readyEmbedding,
   rpc: async ({ queryEmbedding, matchCount, filter }) => {
     hybridVectorSupplied = Boolean(queryEmbedding?.startsWith("[1.00000000,"));
-    assert.equal(matchCount, 6);
+    assert.equal(matchCount, 12);
     assert.equal(filter.category_mode, "strict");
     return {
       data: [{
@@ -648,6 +671,23 @@ assert.equal(
   (providerFailureResponse.searchMeta as Record<string, unknown>).embeddingFailureReason,
   "embedding_provider_http_503",
 );
+
+const originalEmbeddingStrategy = process.env.KAXI_RAG_EMBEDDING_STRATEGY;
+try {
+  process.env.KAXI_RAG_EMBEDDING_STRATEGY = "openai-only";
+  await assert.rejects(
+    () => runDirectRagFallback(input, {
+      createEmbedding: async () => failedEmbeddingProvider,
+      rpc: async () => {
+        throw new Error("openai-only mode must not invoke lexical retrieval");
+      },
+    }),
+    /OPENAI_QUERY_EMBEDDING_REQUIRED/,
+  );
+} finally {
+  if (originalEmbeddingStrategy === undefined) delete process.env.KAXI_RAG_EMBEDDING_STRATEGY;
+  else process.env.KAXI_RAG_EMBEDDING_STRATEGY = originalEmbeddingStrategy;
+}
 
 let lexicalOnlyVector: string | null | undefined;
 const lexicalOnlyResponse = await runDirectRagFallback(input, {

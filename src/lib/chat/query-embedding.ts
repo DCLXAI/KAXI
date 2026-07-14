@@ -5,6 +5,8 @@ export const RAG_QUERY_EMBEDDING_DIMENSIONS = 1536;
 export const CANONICAL_QUERY_EMBEDDING_MODEL = "Xenova/multilingual-e5-small";
 export const CANONICAL_QUERY_EMBEDDING_DIMENSIONS = 384;
 
+export type RagEmbeddingStrategy = "openai-primary" | "e5-primary" | "openai-only";
+
 export type QueryEmbeddingResult = {
   vector: number[] | null;
   status: "ready" | "not_configured" | "disabled" | "failed";
@@ -13,6 +15,9 @@ export type QueryEmbeddingResult = {
   dimensions: number | null;
   failureReason: string | null;
   latencyMs: number;
+  strategy?: RagEmbeddingStrategy;
+  fallbackFrom?: "openai" | "e5" | null;
+  primaryFailureReason?: string | null;
 };
 
 type QueryEmbeddingOptions = {
@@ -26,6 +31,12 @@ function configured(value: string | undefined) {
   return normalized;
 }
 
+export function getRagEmbeddingStrategy(env: NodeJS.ProcessEnv = process.env): RagEmbeddingStrategy {
+  const value = configured(env.KAXI_RAG_EMBEDDING_STRATEGY).toLowerCase();
+  if (value === "e5-primary" || value === "openai-only") return value;
+  return "openai-primary";
+}
+
 function timeoutMs(env: NodeJS.ProcessEnv) {
   const parsed = Number(env.OPENAI_EMBEDDING_TIMEOUT_MS);
   if (!Number.isFinite(parsed)) return 4_000;
@@ -36,12 +47,28 @@ function endpoint(env: NodeJS.ProcessEnv) {
   const baseUrl = configured(env.OPENAI_EMBEDDING_BASE_URL) || "https://api.openai.com/v1";
   try {
     const parsed = new URL(baseUrl);
-    if (parsed.protocol !== "https:") return null;
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password) return null;
     parsed.pathname = `${parsed.pathname.replace(/\/$/, "")}/embeddings`;
     return parsed.toString();
   } catch {
     return null;
   }
+}
+
+async function providerHttpFailureReason(response: Response) {
+  const payload = await response.json().catch(() => null) as {
+    error?: { code?: unknown; type?: unknown };
+  } | null;
+  const code = typeof payload?.error?.code === "string" ? payload.error.code : "";
+  const type = typeof payload?.error?.type === "string" ? payload.error.type : "";
+  if (code === "insufficient_quota" || type === "insufficient_quota") {
+    return "embedding_provider_insufficient_quota";
+  }
+  if (response.status === 429) return "embedding_provider_rate_limited";
+  if (code === "invalid_api_key" || type === "invalid_request_error" && response.status === 401) {
+    return "embedding_provider_invalid_api_key";
+  }
+  return `embedding_provider_http_${response.status}`;
 }
 
 function result(
@@ -51,6 +78,36 @@ function result(
   const dimensions = input.dimensions
     ?? (input.model === RAG_QUERY_EMBEDDING_MODEL ? RAG_QUERY_EMBEDDING_DIMENSIONS : null);
   return { ...input, dimensions, latencyMs: Date.now() - startedAt };
+}
+
+function withStrategy(
+  embedding: QueryEmbeddingResult,
+  strategy: RagEmbeddingStrategy,
+  fallbackFrom?: "openai" | "e5",
+  primaryFailureReason?: string | null,
+): QueryEmbeddingResult {
+  return {
+    ...embedding,
+    strategy,
+    fallbackFrom: fallbackFrom || null,
+    primaryFailureReason: primaryFailureReason || null,
+  };
+}
+
+export function isOpenAiQueryEmbedding(embedding: QueryEmbeddingResult) {
+  return embedding.status === "ready"
+    && embedding.provider === "openai-compatible"
+    && embedding.model === RAG_QUERY_EMBEDDING_MODEL
+    && embedding.dimensions === RAG_QUERY_EMBEDDING_DIMENSIONS
+    && embedding.vector?.length === RAG_QUERY_EMBEDDING_DIMENSIONS;
+}
+
+export function isCanonicalQueryEmbedding(embedding: QueryEmbeddingResult) {
+  return embedding.status === "ready"
+    && embedding.provider === "local-transformer"
+    && embedding.model === CANONICAL_QUERY_EMBEDDING_MODEL
+    && embedding.dimensions === CANONICAL_QUERY_EMBEDDING_DIMENSIONS
+    && embedding.vector?.length === CANONICAL_QUERY_EMBEDDING_DIMENSIONS;
 }
 
 export async function createRagQueryEmbedding(
@@ -121,7 +178,7 @@ export async function createRagQueryEmbedding(
         status: "failed",
         provider: "openai-compatible",
         model,
-        failureReason: `embedding_provider_http_${response.status}`,
+        failureReason: await providerHttpFailureReason(response),
       });
     }
     const payload = await response.json().catch(() => null) as {
@@ -221,7 +278,32 @@ export async function createRagQueryEmbeddingWithLocalFallback(
   question: string,
   options: QueryEmbeddingOptions = {},
 ): Promise<QueryEmbeddingResult> {
-  const providerResult = await createRagQueryEmbedding(question, options);
-  if (providerResult.status === "ready" || providerResult.status === "disabled") return providerResult;
-  return createCanonicalRagQueryEmbedding(question, { env: options.env });
+  const env = options.env || process.env;
+  const strategy = getRagEmbeddingStrategy(env);
+
+  if (strategy === "openai-only") {
+    return withStrategy(await createRagQueryEmbedding(question, options), strategy);
+  }
+
+  const openAiPrimary = strategy === "openai-primary";
+  const primary = openAiPrimary
+    ? await createRagQueryEmbedding(question, options)
+    : await createCanonicalRagQueryEmbedding(question, { env });
+  if (primary.status === "ready" || primary.status === "disabled") {
+    return withStrategy(primary, strategy);
+  }
+
+  const fallback = openAiPrimary
+    ? await createCanonicalRagQueryEmbedding(question, { env })
+    : await createRagQueryEmbedding(question, options);
+  if (fallback.status === "ready") {
+    return withStrategy(
+      fallback,
+      strategy,
+      openAiPrimary ? "openai" : "e5",
+      primary.failureReason || primary.status,
+    );
+  }
+
+  return withStrategy(primary, strategy);
 }

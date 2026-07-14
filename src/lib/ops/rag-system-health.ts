@@ -15,6 +15,11 @@ import {
   checkManagedAttachmentScanner,
   getChatAttachmentSecurityDiagnostics,
 } from "@/lib/chat/attachment-security";
+import {
+  createRagQueryEmbedding,
+  getRagEmbeddingStrategy,
+  isOpenAiQueryEmbedding,
+} from "@/lib/chat/query-embedding";
 
 export type SystemHealthCheck = {
   key: string;
@@ -261,6 +266,9 @@ export async function runRagSystemHealth(triggerSource = "manual") {
   const n8nWebhook = configured(process.env.N8N_TYPEBOT_RAG_WEBHOOK_URL);
   const typebotUrl = configured(process.env.TYPEBOT_PUBLIC_URL);
   const attachmentSecurity = getChatAttachmentSecurityDiagnostics();
+  const embeddingStrategy = getRagEmbeddingStrategy();
+  const openAiEmbeddingRequired = process.env.KAXI_QUERY_EMBEDDING_REQUIRED === "true"
+    || embeddingStrategy === "openai-only";
 
   const checks = await Promise.all([
     timed("supabase.database", true, async () => {
@@ -316,16 +324,42 @@ export async function runRagSystemHealth(triggerSource = "manual") {
     }),
     timed("rag.serving_projection", true, async () => {
       const status = await getRagServingProjectionStatus();
-      const fullyServing = status.eligibleChunks > 0
-        && status.readyChunks === status.eligibleChunks
-        && status.citationReadyChunks === status.eligibleChunks;
-      const ok = fullyServing && status.vectorReadyChunks === status.eligibleChunks;
+      const ok = status.dualIndexReady;
       const detail = ok
-        ? "All eligible chunks are embedded and citation-ready."
-        : fullyServing
-          ? `${status.lexicalOnlyReadyChunks} serving chunk(s) are citation-ready but still require vector embeddings.`
-          : "Serving projection is incomplete.";
+        ? "OpenAI and E5 indexes cover every eligible, citation-ready chunk."
+        : status.cutoverReady
+          ? `${status.eligibleChunks - status.canonicalVectorReadyChunks} chunk(s) are missing from the E5 rollback index.`
+          : status.readyChunks === status.eligibleChunks
+            ? `${status.lexicalOnlyReadyChunks} serving chunk(s) are citation-ready but still require vector embeddings.`
+            : "Serving projection is incomplete.";
       return { ok, detail, metadata: status as unknown as Record<string, unknown> };
+    }),
+    timed("rag.openai_query_embedding", openAiEmbeddingRequired, async () => {
+      const embedding = await createRagQueryEmbedding(
+        "한국 유학 D-10 구직 비자 체류자격 변경",
+      );
+      const endpointConfigured = embedding.status !== "not_configured";
+      const ready = isOpenAiQueryEmbedding(embedding);
+      const ok = ready || (!openAiEmbeddingRequired && !endpointConfigured);
+      return {
+        ok,
+        detail: ready
+          ? "OpenAI returned a valid text-embedding-3-small 1536d query embedding."
+          : !endpointConfigured
+            ? "The dedicated OpenAI embedding credential is not configured; E5 remains available for rollback."
+            : `The OpenAI query embedding probe failed: ${embedding.failureReason || embedding.status}.`,
+        metadata: {
+          configured: endpointConfigured,
+          required: openAiEmbeddingRequired,
+          strategy: embeddingStrategy,
+          status: embedding.status,
+          provider: embedding.provider,
+          model: embedding.model,
+          dimensions: embedding.dimensions,
+          failureReason: embedding.failureReason,
+          latencyMs: embedding.latencyMs,
+        },
+      };
     }),
     timed("rag.quality_evaluation", true, async () => {
       const result = await supabase

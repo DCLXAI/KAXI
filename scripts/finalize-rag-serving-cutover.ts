@@ -25,9 +25,9 @@ async function main() {
   if (!Number.isFinite(expected) || expected <= 0 || expected !== before.eligibleChunks) {
     throw new Error(`--expected-ready must equal the current eligible chunk count (${before.eligibleChunks})`);
   }
-  if (before.readyChunks < expected || before.citationReadyChunks < expected) {
+  if (before.vectorReadyChunks < expected || before.citationReadyChunks < expected) {
     throw new Error(
-      `Cutover blocked: ready=${before.readyChunks}, citationReady=${before.citationReadyChunks}, expected=${expected}`,
+      `Cutover blocked: vectorReady=${before.vectorReadyChunks}, citationReady=${before.citationReadyChunks}, expected=${expected}`,
     );
   }
 

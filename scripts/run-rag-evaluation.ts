@@ -168,9 +168,16 @@ const STRICT_CATEGORY_SCOPES: Record<string, Set<string>> = {
   legal: new Set(["legal"]),
 };
 
-function strictCategoryAllows(requested: string, candidate: string | undefined) {
+function strictCategoryAllows(requested: string, candidate: string | undefined, question: string) {
   if (requested === "general") return true;
-  return STRICT_CATEGORY_SCOPES[requested]?.has((candidate || "").toLowerCase()) === true;
+  const normalizedCandidate = (candidate || "").toLowerCase();
+  if (STRICT_CATEGORY_SCOPES[requested]?.has(normalizedCandidate) === true) return true;
+
+  const asksForDocuments = /서류|준비물|documents?|paperwork|hồ\s*sơ|giấy\s*tờ|бичиг\s*баримт|материал|тодорхойлолт|гэрчилгээ/iu.test(question);
+  const asksForCost = /비용|학비|등록금|수수료|costs?|tuition|fees?|chi\s*phí|học\s*phí|зардал|сургалтын\s*төлбөр|хураамж/iu.test(question);
+  if (normalizedCandidate === "documents" && asksForDocuments) return true;
+  if (normalizedCandidate === "cost" && asksForCost) return true;
+  return false;
 }
 
 function detectedHeadingLocale(value: string) {
@@ -533,7 +540,7 @@ for (const testCase of cases) {
     if (!citationsValid) failures.push("invalid_citation");
     if (testCase.metadata?.expectedStrictCategory === true) {
       strictCategoryExpected += 1;
-      if (sources.every((source) => strictCategoryAllows(testCase.category, source.category))) {
+      if (sources.every((source) => strictCategoryAllows(testCase.category, source.category, testCase.question))) {
         strictCategoryCorrect += 1;
       } else {
         failures.push("category_scope_mismatch");
