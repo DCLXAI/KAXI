@@ -135,23 +135,23 @@ test("landing -> diagnosis save -> admin lookup -> Agent question -> RAG consult
   expect(Array.isArray(consultData.retrievedDocs)).toBe(true);
 });
 
-test("KAXI widget receives a server-owned session and rejects a forged session", async ({ page, request }) => {
+test("KAXI Typebot bubble loads the published flow and rejects a forged session", async ({ page, request }) => {
   await page.goto("/ko");
-  await page.getByRole("button", { name: "KAXI 상담 열기" }).click();
-  const panel = page.getByRole("region", { name: "KAXI 상담 채팅" });
-  await expect(panel).toBeVisible();
-  await expect(panel.getByTestId("kaxi-chat-mascot")).toBeVisible();
-  const animatedMascot = panel.locator('[data-kaxi-running-cat="stationary"] img');
-  await expect(animatedMascot).toBeVisible();
-  await expect(animatedMascot).toHaveAttribute("src", /\/mascot\/cat_running_/);
-  await expect(page.getByPlaceholder("KAXI에게 질문해 주세요.")).toBeEnabled();
+  const launcher = page.getByRole("button", { name: "Open chatbot" });
+  await expect(launcher).toBeVisible();
 
-  const box = await panel.boundingBox();
-  expect(box).not.toBeNull();
-  expect((box?.y || 0) + (box?.height || 0)).toBeLessThanOrEqual(720);
+  const configuration = await page.locator("typebot-bubble").evaluate((element) => {
+    const bubble = element as HTMLElement & { typebot?: string; apiHost?: string };
+    return { typebot: bubble.typebot, apiHost: bubble.apiHost };
+  });
+  expect(configuration).toEqual({
+    typebot: "kaxi-rag-typebot",
+    apiHost: "https://typebot.io",
+  });
 
-  const cookies = await page.context().cookies();
-  expect(cookies.some((cookie) => cookie.name === "kaxi_chat_session" && cookie.httpOnly)).toBe(true);
+  await launcher.click();
+  await expect(page.getByRole("button", { name: "Close chatbot" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "예: D-4 비자 연장에는 어떤 서류가 필요한가요?" })).toBeEnabled();
 
   const forged = await request.post("/api/typebot-rag", {
     data: {
@@ -164,33 +164,16 @@ test("KAXI widget receives a server-owned session and rejects a forged session",
   expect(forged.status()).toBe(401);
 });
 
-test("KAXI widget localizes its controls and stays usable on a small mobile viewport", async ({ page }) => {
+test("KAXI Typebot bubble stays usable on mobile and is hidden on account routes", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await page.goto("/en");
-  await page.getByRole("button", { name: "Open KAXI chat" }).click();
+  const launcher = page.getByRole("button", { name: "Open chatbot" });
+  await expect(launcher).toBeVisible();
+  const launcherBox = await launcher.boundingBox();
+  expect(launcherBox).not.toBeNull();
+  expect((launcherBox?.x || 0) + (launcherBox?.width || 0)).toBeLessThanOrEqual(320);
+  expect((launcherBox?.y || 0) + (launcherBox?.height || 0)).toBeLessThanOrEqual(568);
 
-  const panel = page.getByRole("region", { name: "KAXI consultation chat" });
-  await expect(panel).toBeVisible();
-  await expect(page.getByText("Hello! Nice to meet you 👋")).toBeVisible();
-  const textbox = page.getByRole("textbox", { name: "Question for KAXI" });
-  await expect(textbox).toHaveAttribute("placeholder", "Ask KAXI a question.");
-  await expect(textbox).toBeEnabled();
-
-  const panelBox = await panel.boundingBox();
-  const textboxBox = await textbox.boundingBox();
-  const attachmentBox = await page.getByRole("button", { name: "Attach file" }).boundingBox();
-  const disclaimer = page.getByText("KAXI provides guidance grounded in official sources.");
-  await expect(disclaimer).toBeVisible();
-  const disclaimerBox = await disclaimer.boundingBox();
-  expect(panelBox).not.toBeNull();
-  expect((panelBox?.x || 0) + (panelBox?.width || 0)).toBeLessThanOrEqual(320);
-  expect((panelBox?.y || 0) + (panelBox?.height || 0)).toBeLessThanOrEqual(568);
-  expect(textboxBox).not.toBeNull();
-  expect(attachmentBox).not.toBeNull();
-  expect(disclaimerBox).not.toBeNull();
-  expect((textboxBox?.y || 0) + (textboxBox?.height || 0)).toBeLessThanOrEqual(attachmentBox?.y || 0);
-  expect((disclaimerBox?.y || 0) + (disclaimerBox?.height || 0)).toBeLessThanOrEqual(568);
-  expect((disclaimerBox?.y || 0) + (disclaimerBox?.height || 0)).toBeLessThanOrEqual(
-    (panelBox?.y || 0) + (panelBox?.height || 0),
-  );
+  await page.goto("/login");
+  await expect(page.locator("typebot-bubble")).toHaveCount(0);
 });

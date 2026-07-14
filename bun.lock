@@ -48,6 +48,7 @@
         "@supabase/supabase-js": "^2.110.2",
         "@tanstack/react-query": "^5.101.2",
         "@tanstack/react-table": "^8.21.3",
+        "@typebot.io/react": "^0.10.6",
         "@vercel/blob": "^2.6.1",
         "ai": "^7.0.22",
         "class-variance-authority": "^0.7.1",
@@ -813,6 +814,10 @@
     "@tanstack/table-core": ["@tanstack/table-core@8.21.3", "https://registry.npmjs.com/@tanstack/table-core/-/table-core-8.21.3.tgz", {}, "sha512-ldZXEhOBb8Is7xLs01fR3YEc3DERiz5silj8tnGkFZytt1abEvl/GhUmCE0PMLaMPTa3Jk4HbKmRlHmu+gCftg=="],
 
     "@tybys/wasm-util": ["@tybys/wasm-util@0.10.1", "https://registry.npmjs.com/@tybys/wasm-util/-/wasm-util-0.10.1.tgz", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg=="],
+
+    "@typebot.io/js": ["@typebot.io/js@0.10.6", "", {}, "sha512-OkrViNXz+EFANjQ/rNm0LsBgYi1twE9AMiEOG61SsiKcESqIQMmQc9FqSUYUWUyuSh9zDCJq7KePt3cZvVtO/Q=="],
+
+    "@typebot.io/react": ["@typebot.io/react@0.10.6", "", { "dependencies": { "@typebot.io/js": "0.10.6", "react": "^19.2.4" } }, "sha512-8h7r4WtqOU/iHTdWTNgnVu3mI+iBqqM0WResEhOz1yum+f6g6FSF+Hs7mLRHL2CLdgIvmS8/q0Q36XnF8o294g=="],
 
     "@types/cors": ["@types/cors@2.8.19", "", { "dependencies": { "@types/node": "*" } }, "sha512-mFNylyeyqN93lfe/9CSxOGREz8cpzAhH+E93xJ4xWQf62V8sQ/24reV2nyzUWM6H6Xji+GGHpkbLe7pVoUEskg=="],
 
