@@ -5,6 +5,7 @@ import { persistCanonicalHandoffTask, persistChatExchange } from "@/lib/chat/per
 import { CHAT_SESSION_COOKIE, verifyChatSessionToken } from "@/lib/chat/session-token";
 import { getReadyChatAttachmentsForRuntime } from "@/lib/chat/attachment-processing";
 import { inferChatCategory } from "@/lib/chat/category";
+import { loadChatSessionSnapshot } from "@/lib/chat/history";
 import {
   clarificationNextStep,
   mediateRagQuestion,
@@ -34,6 +35,7 @@ import {
 import { createTypebotHandoffToken, signN8nPayload } from "@/lib/n8n/signature";
 import { recordOpsEvent } from "@/lib/ops/events";
 import { verifyTypebotGatewayHeaders } from "@/lib/typebot/gateway-auth";
+import { recordServerProductEvent } from "@/lib/analytics/server";
 
 const SUPPORTED_LOCALES = new Set<GuardrailLocale>(["ko", "en", "vi", "mn"]);
 
@@ -105,6 +107,9 @@ function normalizeN8nPayload(payload: unknown) {
     workflowVersionId: typeof nested.workflowVersionId === "string" ? nested.workflowVersionId : undefined,
     modelVersion: typeof nested.modelVersion === "string" ? nested.modelVersion : undefined,
     promptVersion: typeof nested.promptVersion === "string" ? nested.promptVersion : undefined,
+    n8nExecutionId: typeof nested.n8nExecutionId === "string" ? nested.n8nExecutionId : undefined,
+    n8nWorkflowId: typeof nested.n8nWorkflowId === "string" ? nested.n8nWorkflowId : undefined,
+    n8nWorkflowVersionId: typeof nested.n8nWorkflowVersionId === "string" ? nested.n8nWorkflowVersionId : undefined,
     runtimePath,
   };
 }
@@ -350,10 +355,41 @@ export async function POST(req: NextRequest) {
 
     const startedAt = Date.now();
     const identity = createChatRequestIdentity({ requestId: body?.requestId, source, sessionId, question });
+    const trackTypebotProductEvent = (
+      eventName: "chatbot_question_sent" | "chatbot_answer_succeeded" | "chatbot_no_context",
+      properties: Record<string, string | number | boolean | null> = {},
+    ) => {
+      if (source !== "typebot") return;
+      after(() => recordServerProductEvent({
+        eventName,
+        sessionId,
+        locale,
+        surface: "typebot_bubble",
+        properties,
+      }).catch((analyticsError) => {
+        console.warn("[POST /api/typebot-rag] product analytics failed", analyticsError);
+      }));
+    };
+    trackTypebotProductEvent("chatbot_question_sent", { category: deterministicCategory });
+    let conversationHistory: Array<{ question: string; answer: string }> = [];
+    try {
+      const snapshot = await loadChatSessionSnapshot(sessionId, {
+        source,
+        messageLimit: 4,
+        attachmentLimit: 1,
+      });
+      conversationHistory = (snapshot?.messages || [])
+        .filter((message) => message.status === "completed" && message.question && message.answer)
+        .slice(-3)
+        .map((message) => ({ question: message.question, answer: message.answer }));
+    } catch (historyError) {
+      console.warn("[POST /api/typebot-rag] conversation history unavailable", historyError);
+    }
     const mediation = await mediateRagQuestion({
       question,
       locale,
       deterministicCategory,
+      conversationHistory,
     });
     const category = mediation.category;
 
@@ -369,6 +405,7 @@ export async function POST(req: NextRequest) {
       idempotencyKey: identity.idempotencyKey,
       externalRequestId: identity.externalRequestId,
       attachments: verifiedAttachments,
+      conversationContext: conversationHistory,
     };
 
     const persistFailure = async (
@@ -471,8 +508,10 @@ export async function POST(req: NextRequest) {
           requestId: identity.requestId,
           fallbackReason: "kaxi_direct_primary",
           attachmentCount: verifiedAttachments.length,
-          allowStoredVectorExpansion: true,
+          allowStoredVectorExpansion: false,
+          requireOpenAiEmbedding: true,
           mediation,
+          conversationHistory,
         });
         provenance = resolveRagProvenance(upstreamPayload);
       } catch (directError) {
@@ -540,7 +579,9 @@ export async function POST(req: NextRequest) {
             requestId: identity.requestId,
             fallbackReason,
             attachmentCount: verifiedAttachments.length,
+            requireOpenAiEmbedding: true,
             mediation,
+            conversationHistory,
           });
           provenance = resolveRagProvenance(upstreamPayload);
           reportOpsEventAsync(
@@ -689,13 +730,19 @@ export async function POST(req: NextRequest) {
       }
     };
 
-    if (source === "typebot") {
-      persistenceAccepted = true;
-      persistenceMode = "deferred";
-      after(() => persistSuccessfulExchange());
-    } else {
-      persistenceAccepted = await persistSuccessfulExchange();
-    }
+    // Typebot branches on this value, so acknowledge persistence only after the
+    // canonical message (and required handoff task) has actually been written.
+    persistenceAccepted = await persistSuccessfulExchange();
+    const responseSearchMeta = normalizedPayload.searchMeta && typeof normalizedPayload.searchMeta === "object"
+      ? normalizedPayload.searchMeta as Record<string, unknown>
+      : {};
+    const noContext = responseSearchMeta.noContext === true;
+    trackTypebotProductEvent(noContext ? "chatbot_no_context" : "chatbot_answer_succeeded", {
+      category,
+      persisted: persistenceAccepted,
+      needsHuman: normalizeBoolean(normalizedPayload.needsHuman),
+      sourceCount: Array.isArray(normalizedPayload.sources) ? normalizedPayload.sources.length : 0,
+    });
 
     const handoffToken = source === "typebot" ? createTypebotHandoffToken(sessionId) : undefined;
     return ragJson({

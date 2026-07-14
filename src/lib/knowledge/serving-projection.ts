@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   CANONICAL_QUERY_EMBEDDING_DIMENSIONS,
@@ -41,7 +42,12 @@ type ServingRow = {
   content_hash: string | null;
   embedding_model: string | null;
   status: string;
+  metadata?: Record<string, unknown> | null;
 };
+
+type RagEmbeddingLocale = "ko" | "en" | "vi" | "mn";
+
+export const RAG_SERVING_EMBEDDING_CONTENT_STRATEGY = "single-locale-v1";
 
 type ProjectionWriteResult = {
   chunkId: string;
@@ -70,6 +76,8 @@ export interface RagServingProjectionStatus {
   vectorCoverage: number;
   cutoverReady: boolean;
   dualIndexReady: boolean;
+  embeddingContentStrategy: string;
+  outdatedEmbeddingChunks: number;
 }
 
 function configured(value: string | undefined) {
@@ -88,13 +96,94 @@ function delay(milliseconds: number) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+function normalizeEmbeddingLocale(value: string): RagEmbeddingLocale | null {
+  const aliases: Record<string, RagEmbeddingLocale> = {
+    ko: "ko", kr: "ko", "ko-kr": "ko",
+    en: "en", "en-us": "en", "en-gb": "en",
+    vi: "vi", vn: "vi", "vi-vn": "vi",
+    mn: "mn", "mn-mn": "mn",
+  };
+  return aliases[value.trim().toLowerCase()] || null;
+}
+
+function detectEmbeddingLocale(value: string): RagEmbeddingLocale | null {
+  if (/[가-힣ㄱ-ㅎㅏ-ㅣ]/u.test(value)) return "ko";
+  if (/[ăâđêôơưàáảãạằắẳẵặầấẩẫậèéẻẽẹềếểễệìíỉĩịòóỏõọồốổỗộờớởỡợùúủũụừứửữựỳýỷỹỵ]/iu.test(value)) return "vi";
+  if (/[А-Яа-яЁёӨөҮү]/u.test(value)) return "mn";
+  if (/[a-z]/iu.test(value)) return "en";
+  return null;
+}
+
+export function extractRagEmbeddingLocaleSection(value: string, requestedLocale: string) {
+  const locale = normalizeEmbeddingLocale(requestedLocale);
+  if (!locale) return null;
+  const sections: Array<{ heading: string; content: string }> = [];
+  let heading = "";
+  let lines: string[] = [];
+  const flush = () => {
+    const content = lines.join("\n").trim();
+    if (content) sections.push({ heading, content });
+  };
+  for (const line of value.split(/\r?\n/u)) {
+    const match = line.match(/^#{1,6}\s+(.+)$/u);
+    if (match) {
+      flush();
+      heading = match[1].trim();
+      lines = [line];
+    } else {
+      lines.push(line);
+    }
+  }
+  flush();
+
+  const matching = sections
+    .filter((section) => (detectEmbeddingLocale(section.heading) || detectEmbeddingLocale(section.content)) === locale)
+    .map((section) => section.content);
+  return matching.length > 0 ? matching.join("\n\n").trim() : null;
+}
+
+export function buildRagServingEmbeddingProjection(input: {
+  content: string;
+  documentLanguage: string;
+}) {
+  const preferredLocale = normalizeEmbeddingLocale(input.documentLanguage) || "ko";
+  const localeOrder: RagEmbeddingLocale[] = [
+    preferredLocale,
+    ...(["ko", "en", "vi", "mn"] as RagEmbeddingLocale[]).filter((locale) => locale !== preferredLocale),
+  ];
+  for (const locale of localeOrder) {
+    const content = extractRagEmbeddingLocaleSection(input.content, locale);
+    if (!content) continue;
+    return {
+      content,
+      locale,
+      contentHash: createHash("sha256").update(content).digest("hex"),
+      strategy: RAG_SERVING_EMBEDDING_CONTENT_STRATEGY,
+    };
+  }
+  throw new Error("RAG_EMBEDDING_LOCALE_SECTION_MISSING");
+}
+
+function servingRowProjectionMetadataMatches(row: ServingRow | null, projection: ReturnType<typeof buildRagServingEmbeddingProjection>) {
+  if (!row) return false;
+  return row.metadata?.embedding_content_strategy === projection.strategy
+    && row.metadata?.embedding_content_locale === projection.locale
+    && row.metadata?.embedding_content_hash === projection.contentHash;
+}
+
+function servingRowMatchesProjection(row: ServingRow | null, projection: ReturnType<typeof buildRagServingEmbeddingProjection>) {
+  return row?.status === "ready"
+    && Boolean(row.embedding)
+    && servingRowProjectionMetadataMatches(row, projection);
+}
+
 async function findServingRow(
   supabase: SupabaseClient,
   chunk: Pick<CanonicalChunk, "id" | "contentHash">,
 ) {
   const result = await supabase
     .from("rag_serving_chunks")
-    .select("id,status,canonical_chunk_id,content_hash,embedding_model,embedding")
+    .select("id,status,canonical_chunk_id,content_hash,embedding_model,embedding,metadata")
     .eq("canonical_chunk_id", chunk.id)
     .eq("content_hash", chunk.contentHash)
     .eq("embedding_model", RAG_QUERY_EMBEDDING_MODEL)
@@ -106,11 +195,12 @@ async function findServingRow(
 async function waitForServingRow(
   supabase: SupabaseClient,
   chunk: Pick<CanonicalChunk, "id" | "contentHash">,
+  projection: ReturnType<typeof buildRagServingEmbeddingProjection>,
 ) {
   for (const waitMs of [0, 500, 1_000]) {
     if (waitMs) await delay(waitMs);
     const row = await findServingRow(supabase, chunk);
-    if (row?.status === "ready" && row.embedding) return row;
+    if (servingRowMatchesProjection(row, projection)) return row;
   }
   return null;
 }
@@ -122,7 +212,11 @@ async function writeDirectRecoveryProjection(input: {
   payload: Record<string, unknown>;
   writer?: "kaxi-direct-recovery" | "kaxi-n8n-orchestrated";
 }) {
-  const embedding = await createRagQueryEmbedding(input.chunk.content);
+  const projection = buildRagServingEmbeddingProjection({
+    content: input.chunk.content,
+    documentLanguage: input.document.language,
+  });
+  const embedding = await createRagQueryEmbedding(projection.content);
   const vectorReady = isOpenAiQueryEmbedding(embedding);
   if (!vectorReady) {
     throw new Error(`OPENAI_SERVING_EMBEDDING_UNAVAILABLE: ${embedding.failureReason || embedding.status}`);
@@ -136,6 +230,9 @@ async function writeDirectRecoveryProjection(input: {
     embedding_provider: embedding.provider,
     embedding_status: "ready",
     embedding_failure_reason: null,
+    embedding_content_strategy: projection.strategy,
+    embedding_content_locale: projection.locale,
+    embedding_content_hash: projection.contentHash,
   };
   const vector = `[${(embedding.vector as number[]).join(",")}]`;
   const existing = await findServingRow(input.supabase, input.chunk);
@@ -250,6 +347,7 @@ export async function ingestRagServingPayload(payload: Record<string, unknown>) 
     canonicalDocumentId: document.id,
     embeddingModel: RAG_QUERY_EMBEDDING_MODEL,
     dimensions: RAG_QUERY_EMBEDDING_DIMENSIONS,
+    embeddingContentStrategy: RAG_SERVING_EMBEDDING_CONTENT_STRATEGY,
   };
 }
 
@@ -295,7 +393,7 @@ async function loadProjectionData() {
     loadAllRows<ServingRow>(
       supabase,
       "rag_serving_chunks",
-      "canonical_chunk_id,content_hash,embedding_model,embedding,status",
+      "canonical_chunk_id,content_hash,embedding_model,embedding,status,metadata",
     ),
     supabase.from("knowledge_chunks").select("id", { count: "exact", head: true }),
   ]);
@@ -318,19 +416,40 @@ async function loadProjectionData() {
 
 export async function getRagServingProjectionStatus(): Promise<RagServingProjectionStatus> {
   const data = await loadProjectionData();
-  const readyKeys = new Set(
-    data.servingRows
-      .filter((row) => row.status === "ready" && row.embedding_model === RAG_QUERY_EMBEDDING_MODEL)
-      .map((row) => `${row.canonical_chunk_id}:${row.content_hash}`),
-  );
   const eligibleDocumentById = new Map(data.eligibleDocuments.map((document) => [document.id, document]));
-  const readyChunks = data.chunks.filter((chunk) => readyKeys.has(`${chunk.id}:${chunk.contentHash}`)).length;
-  const vectorReadyKeys = new Set(
-    data.servingRows
-      .filter((row) => row.status === "ready" && row.embedding_model === RAG_QUERY_EMBEDDING_MODEL && row.embedding)
-      .map((row) => `${row.canonical_chunk_id}:${row.content_hash}`),
+  const servingRowByChunk = new Map(
+    data.servingRows.map((row) => [`${row.canonical_chunk_id}:${row.content_hash}`, row]),
   );
-  const vectorReadyChunks = data.chunks.filter((chunk) => vectorReadyKeys.has(`${chunk.id}:${chunk.contentHash}`)).length;
+  const projectionState = data.chunks.map((chunk) => {
+    const document = eligibleDocumentById.get(chunk.documentId);
+    const row = servingRowByChunk.get(`${chunk.id}:${chunk.contentHash}`) || null;
+    if (!document) return { row, projection: null };
+    try {
+      return {
+        row,
+        projection: buildRagServingEmbeddingProjection({
+          content: chunk.content,
+          documentLanguage: document.language,
+        }),
+      };
+    } catch {
+      return { row, projection: null };
+    }
+  });
+  const readyChunks = projectionState.filter(({ row, projection }) =>
+    projection
+    && row?.status === "ready"
+    && row.embedding_model === RAG_QUERY_EMBEDDING_MODEL
+    && servingRowProjectionMetadataMatches(row, projection)
+  ).length;
+  const vectorReadyChunks = projectionState.filter(({ row, projection }) =>
+    projection
+    && row?.embedding_model === RAG_QUERY_EMBEDDING_MODEL
+    && servingRowMatchesProjection(row, projection)
+  ).length;
+  const outdatedEmbeddingChunks = projectionState.filter(({ row, projection }) =>
+    Boolean(row) && (!projection || !servingRowProjectionMetadataMatches(row, projection))
+  ).length;
   const canonicalVectorReadyChunks = data.chunks.filter((chunk) => Boolean(chunk.embedding)).length;
   const citationReadyChunks = data.chunks.filter((chunk) => {
     const document = eligibleDocumentById.get(chunk.documentId);
@@ -361,6 +480,8 @@ export async function getRagServingProjectionStatus(): Promise<RagServingProject
     vectorCoverage: data.chunks.length > 0 ? vectorReadyChunks / data.chunks.length : 0,
     cutoverReady,
     dualIndexReady,
+    embeddingContentStrategy: RAG_SERVING_EMBEDDING_CONTENT_STRATEGY,
+    outdatedEmbeddingChunks,
   };
 }
 
@@ -368,52 +489,71 @@ export async function syncRagServingProjection(options: { limit?: number; force?
   const data = await loadProjectionData();
   const limit = Math.min(Math.max(options.limit || 10, 1), 50);
   const documentById = new Map(data.eligibleDocuments.map((document) => [document.id, document]));
-  const vectorReadyKeys = new Set(
-    data.servingRows
-      .filter((row) => row.status === "ready" && row.embedding_model === RAG_QUERY_EMBEDDING_MODEL && row.embedding)
-      .map((row) => `${row.canonical_chunk_id}:${row.content_hash}`),
+  const servingRowByChunk = new Map(
+    data.servingRows.map((row) => [`${row.canonical_chunk_id}:${row.content_hash}`, row]),
   );
   const targets = data.chunks
-    .filter((chunk) => options.force || !vectorReadyKeys.has(`${chunk.id}:${chunk.contentHash}`))
+    .filter((chunk) => {
+      if (options.force) return true;
+      const document = documentById.get(chunk.documentId);
+      if (!document) return false;
+      const projection = buildRagServingEmbeddingProjection({
+        content: chunk.content,
+        documentLanguage: document.language,
+      });
+      return !servingRowMatchesProjection(
+        servingRowByChunk.get(`${chunk.id}:${chunk.contentHash}`) || null,
+        projection,
+      );
+    })
     .sort((left, right) => left.documentId.localeCompare(right.documentId) || left.chunkIndex - right.chunkIndex)
     .slice(0, limit);
 
-  const results: ProjectionWriteResult[] = [];
-  for (const chunk of targets) {
-    const document = documentById.get(chunk.documentId);
-    if (!document) continue;
-    const payload = {
-      title: document.title,
-      source: document.sourceType,
-      source_url: document.sourceUrl,
-      category: document.topic,
-      language: document.language,
-      tenant_id: "default",
-      last_checked_at: document.lastCheckedAt,
-      checked_by: document.checkedBy,
-      keywords: chunk.keywords,
-      content: chunk.content,
-      canonical_chunk_id: chunk.id,
-      canonical_document_id: document.id,
-      doc_id: document.docId,
-      content_hash: chunk.contentHash,
-      embedding_model: RAG_QUERY_EMBEDDING_MODEL,
-      review_status: "approved",
-    };
+  const processChunk = async (chunk: CanonicalChunk): Promise<ProjectionWriteResult> => {
     let responseStatus: number | undefined;
+    let n8nError: string | undefined;
     try {
-      const signed = signN8nPayload("rag-ingestion", payload);
-      const response = await fetch(signed.url, {
-        method: "POST",
-        headers: signed.headers,
-        body: signed.body,
-        signal: AbortSignal.timeout(40_000),
+      const document = documentById.get(chunk.documentId);
+      if (!document) throw new Error("canonical_document_not_found");
+      const projection = buildRagServingEmbeddingProjection({
+        content: chunk.content,
+        documentLanguage: document.language,
       });
-      responseStatus = response.status;
-      const n8nRow = response.ok ? await waitForServingRow(data.supabase, chunk) : null;
-      if (n8nRow) {
-        results.push({ chunkId: chunk.id, ok: true, status: response.status, writer: "n8n" });
-        continue;
+      const payload = {
+        title: document.title,
+        source: document.sourceType,
+        source_url: document.sourceUrl,
+        category: document.topic,
+        language: document.language,
+        tenant_id: "default",
+        last_checked_at: document.lastCheckedAt,
+        checked_by: document.checkedBy,
+        keywords: chunk.keywords,
+        content: chunk.content,
+        canonical_chunk_id: chunk.id,
+        canonical_document_id: document.id,
+        doc_id: document.docId,
+        content_hash: chunk.contentHash,
+        embedding_model: RAG_QUERY_EMBEDDING_MODEL,
+        embedding_content_strategy: projection.strategy,
+        embedding_content_locale: projection.locale,
+        embedding_content_hash: projection.contentHash,
+        review_status: "approved",
+      };
+      try {
+        const signed = signN8nPayload("rag-ingestion", payload);
+        const response = await fetch(signed.url, {
+          method: "POST",
+          headers: signed.headers,
+          body: signed.body,
+          signal: AbortSignal.timeout(40_000),
+        });
+        responseStatus = response.status;
+        const n8nRow = response.ok ? await waitForServingRow(data.supabase, chunk, projection) : null;
+        if (n8nRow) return { chunkId: chunk.id, ok: true, status: response.status, writer: "n8n" };
+        n8nError = `n8n_ingestion_http_${response.status}`;
+      } catch (error) {
+        n8nError = error instanceof Error ? error.message : String(error);
       }
 
       const embeddingStatus = await writeDirectRecoveryProjection({
@@ -422,21 +562,30 @@ export async function syncRagServingProjection(options: { limit?: number; force?
         chunk,
         payload,
       });
-      results.push({
+      return {
         chunkId: chunk.id,
         ok: true,
-        status: response.status,
+        status: responseStatus,
         writer: "kaxi-direct-recovery",
         embeddingStatus,
-      });
+      };
     } catch (error) {
-      results.push({
+      return {
         chunkId: chunk.id,
         ok: false,
         status: responseStatus,
-        error: error instanceof Error ? error.message : String(error),
-      });
+        error: [
+          n8nError ? `n8n=${n8nError}` : "",
+          `direct=${error instanceof Error ? error.message : String(error)}`,
+        ].filter(Boolean).join("; "),
+      };
     }
+  };
+
+  const results: ProjectionWriteResult[] = [];
+  const concurrency = 5;
+  for (let offset = 0; offset < targets.length; offset += concurrency) {
+    results.push(...await Promise.all(targets.slice(offset, offset + concurrency).map(processChunk)));
   }
 
   await data.supabase.rpc("kaxi_refresh_rag_serving_status");

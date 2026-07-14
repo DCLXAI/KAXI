@@ -47,6 +47,10 @@ export interface AiBackendDiagnostics {
     model: string;
     baseUrl: string | null;
     managedApi: true;
+    fallbackEnabled: boolean;
+    fallbackBackend: LlmBackend;
+    fallbackConfigured: boolean;
+    configuredProviderCount: number;
   };
   kimi: {
     apiKeyConfigured: boolean;
@@ -62,6 +66,8 @@ export interface AiBackendDiagnostics {
   };
   fallbackPolicy: {
     globalFallbackAllowed: boolean;
+    providerFailoverEnabled: boolean;
+    providerFailoverReady: boolean;
   };
   issues: string[];
   warnings: string[];
@@ -186,12 +192,21 @@ export function getAiBackendDiagnostics(env: NodeJS.ProcessEnv = process.env): A
   const issues: string[] = [];
   const warnings = legacyWarnings(env);
 
-  if (!gateway.apiKeyConfigured) {
+  const managedLlmConfigured = gateway.apiKeyConfigured
+    || (gateway.fallbackEnabled && gateway.fallbackConfigured);
+  if (!managedLlmConfigured) {
     const keyName = gateway.backend === "kimi" ? "OPENAI_API_KEY/KIMI_API_KEY" : "ANTHROPIC_API_KEY";
     const message = requireLlm(env)
       ? `${keyName} is not configured for ${gateway.backend} while AI_REQUIRE_LLM=true.`
       : `${keyName} is not configured for ${gateway.backend}; LLM calls will use deterministic fallback.`;
     (requireLlm(env) ? issues : warnings).push(message);
+  } else if (!gateway.apiKeyConfigured && gateway.fallbackConfigured) {
+    warnings.push(`${gateway.backend} is not configured; managed LLM calls will start on ${gateway.fallbackBackend}.`);
+  }
+  if (env.AI_REQUIRE_PROVIDER_FAILOVER === "true" && !gateway.fallbackConfigured) {
+    issues.push(`AI_REQUIRE_PROVIDER_FAILOVER=true but ${gateway.fallbackBackend} credentials are not configured.`);
+  } else if (gateway.apiKeyConfigured && !gateway.fallbackConfigured) {
+    warnings.push(`${gateway.fallbackBackend} is not configured; a ${gateway.backend} runtime failure has no managed-provider failover.`);
   }
 
   const requested = env.AI_PROVIDER?.trim().toLowerCase();
@@ -199,7 +214,7 @@ export function getAiBackendDiagnostics(env: NodeJS.ProcessEnv = process.env): A
     warnings.push(`Unsupported AI_PROVIDER=${requested}; automatic provider selection was applied.`);
   }
 
-  const ready = gateway.apiKeyConfigured || fallbackAllowed(env);
+  const ready = managedLlmConfigured || fallbackAllowed(env);
 
   return {
     runtime: {
@@ -228,6 +243,10 @@ export function getAiBackendDiagnostics(env: NodeJS.ProcessEnv = process.env): A
       model: gateway.model,
       baseUrl: gateway.baseUrl,
       managedApi: true,
+      fallbackEnabled: gateway.fallbackEnabled,
+      fallbackBackend: gateway.fallbackBackend,
+      fallbackConfigured: gateway.fallbackConfigured,
+      configuredProviderCount: gateway.configuredProviderCount,
     },
     kimi: {
       apiKeyConfigured: kimi.apiKeyConfigured,
@@ -243,6 +262,8 @@ export function getAiBackendDiagnostics(env: NodeJS.ProcessEnv = process.env): A
     },
     fallbackPolicy: {
       globalFallbackAllowed: fallbackAllowed(env),
+      providerFailoverEnabled: gateway.fallbackEnabled,
+      providerFailoverReady: gateway.fallbackConfigured,
     },
     issues,
     warnings,

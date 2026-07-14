@@ -12,7 +12,10 @@ import type { Lang } from "@/lib/i18n/translations";
 import { findFAQ, AI_DEFAULT_REPLY } from "@/lib/data/faq";
 import { db } from "@/lib/db";
 import { generateLlmText, isLlmNotConfiguredError, type LlmGatewayMessage } from "@/lib/ai/llm-gateway";
-import { hybridSearch, initVectorStore, initTransformerStore, getStoreStats } from "@/lib/embeddings/vector-store";
+import {
+  searchSharedOpenAiRag,
+  sharedOpenAiRagRuntimeInfo,
+} from "@/lib/chat/shared-openai-rag";
 import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
 import { ensureGroundedCitationAnswer } from "@/lib/knowledge/citations";
 import {
@@ -55,21 +58,13 @@ export async function POST(req: NextRequest) {
     const { question, history } = parsed.value;
     const lang = parsed.value.lang as Lang;
 
-    // 1. Vector Store 초기화 (TF-IDF 동기 + Transformer 비동기)
-    initVectorStore();
-    try {
-      await withTimeout(
-        initTransformerStore(),
-        parsePositiveInt(process.env.AI_EMBEDDING_INIT_TIMEOUT_MS, 15_000),
-        "Transformer initialization"
-      );
-    } catch (initErr) {
-      console.error("[Transformer init timeout/failure]", initErr);
-    }
-
-    // 2. 하이브리드 검색 (Transformer + Keyword)
-    const searchResults = await hybridSearch(question, { topK: 3 });
-    const docs: KnowledgeDoc[] = searchResults.map((r) => r.doc);
+    // 1. Typebot/에이전트/행정사 상담과 동일한 OpenAI 1536d pgvector 검색
+    const sharedRag = await searchSharedOpenAiRag({
+      query: question,
+      locale: lang,
+      maxDocuments: 3,
+    });
+    const docs: KnowledgeDoc[] = sharedRag.docs;
     const sourceNotice = buildRagBasisNotice(lang, docs);
 
     // 3. FAQ 룰베이스 확인 (빠른 응답)
@@ -78,18 +73,23 @@ export async function POST(req: NextRequest) {
     let answer: string;
     let source: "rule" | "rag" | "hybrid" = "rule";
     let retrievedDocIds: string[] = docs.map((d) => d.id);
-    const searchMeta = searchResults.map((r) => ({
-      id: r.doc.id,
-      title: pickLangText(r.doc.title, lang),
-      score: Number(r.score.toFixed(3)),
-      vectorScore: Number(r.vectorScore.toFixed(3)),
-      keywordScore: r.keywordScore,
-      matchedKeywords: r.matchedKeywords,
-      method: r.method,
-      category: r.doc.category,
-      docSource: r.doc.source,
+    const searchMeta = sharedRag.search.documents.map((document) => ({
+      id: document.id,
+      title: document.title,
+      score: Number(document.rerankScore.toFixed(3)),
+      vectorScore: document.vectorScore,
+      keywordScore: document.keywordScore,
+      matchedKeywords: [],
+      method: "openai-pgvector",
+      category: document.category,
+      docSource: document.source,
     }));
-    const storeStats = getStoreStats();
+    const storeStats = {
+      ...sharedOpenAiRagRuntimeInfo(),
+      retrievalMode: sharedRag.retrieval.retrievalMode,
+      resultCount: docs.length,
+      provenance: sharedRag.retrieval.provenance,
+    };
 
     // 4. LLM 호출 (검색된 문서를 컨텍스트로 활용)
     if (docs.length > 0) {
@@ -101,9 +101,7 @@ export async function POST(req: NextRequest) {
         );
         if (llmAnswer) {
           answer = llmAnswer;
-          source = searchResults.some((r) => r.matchedKeywords.length > 0)
-            ? "hybrid"
-            : "rag";
+          source = "hybrid";
         } else {
           answer = faq ? faq[lang] : AI_DEFAULT_REPLY[lang];
         }
@@ -166,6 +164,15 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     console.error("[POST /api/ai/chat]", e);
+    if (e instanceof Error && (
+      e.message.startsWith("OPENAI_QUERY_EMBEDDING_REQUIRED")
+      || e.message.startsWith("DIRECT_RAG_RPC_FAILED")
+    )) {
+      return NextResponse.json({
+        error: "RAG retrieval unavailable",
+        message: "The shared OpenAI pgvector retrieval service is unavailable. A lower-quality fallback was not used.",
+      }, { status: 503 });
+    }
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
@@ -175,9 +182,7 @@ export async function GET(req: NextRequest) {
   const unauthorized = await requireAdmin(req);
   if (unauthorized) return unauthorized;
 
-  initVectorStore();
-  // transformer는 lazy load — 별도 요청시에만 초기화
-  return NextResponse.json(getStoreStats());
+  return NextResponse.json(sharedOpenAiRagRuntimeInfo());
 }
 
 function buildCitedFallbackAnswer(baseAnswer: string | null, doc: KnowledgeDoc, lang: Lang): string {

@@ -32,6 +32,8 @@ try {
   delete process.env.KIMI_API_KEY;
   delete process.env.MOONSHOT_API_KEY;
   delete process.env.KIMI_THINKING;
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.AI_LLM_PROVIDER_FAILOVER_ENABLED;
 
   let capturedUrl = "";
   let capturedAuthorization = "";
@@ -157,6 +159,27 @@ try {
   if (!JSON.stringify(pdfCompletionBody).includes("Passport Number P1234567")) {
     fail("extracted PDF text was not forwarded to the structured completion");
   }
+
+  process.env.AI_PROVIDER = "claude";
+  const fallbackFetch = async () => Response.json({
+    model: "kimi-k2.6-test",
+    choices: [{ message: { content: JSON.stringify({ ok: true, provider: "fallback" }) } }],
+  });
+  globalThis.fetch = Object.assign(fallbackFetch, { preconnect: originalFetch.preconnect });
+  const fallbackOutput = await generateLlmText({
+    feature: "structured",
+    jsonSchema: { name: "fallback_contract", schema: { type: "object" } },
+    messages: [{ role: "user", content: "Use the configured managed provider." }],
+  });
+  if (
+    fallbackOutput.backend !== "kimi" ||
+    fallbackOutput.primaryBackend !== "claude" ||
+    fallbackOutput.attempts !== 2 ||
+    fallbackOutput.fallbackReason !== "claude:not_configured"
+  ) {
+    fail(`provider failover metadata mismatch: ${JSON.stringify(fallbackOutput)}`);
+  }
+  process.env.AI_PROVIDER = "kimi";
 
   const truncatedFetch = async () => Response.json({
     model: "kimi-k2.6-test",

@@ -267,8 +267,7 @@ export async function runRagSystemHealth(triggerSource = "manual") {
   const typebotUrl = configured(process.env.TYPEBOT_PUBLIC_URL);
   const attachmentSecurity = getChatAttachmentSecurityDiagnostics();
   const embeddingStrategy = getRagEmbeddingStrategy();
-  const openAiEmbeddingRequired = process.env.KAXI_QUERY_EMBEDDING_REQUIRED === "true"
-    || embeddingStrategy === "openai-only";
+  const openAiEmbeddingRequired = true;
 
   const checks = await Promise.all([
     timed("supabase.database", true, async () => {
@@ -324,14 +323,12 @@ export async function runRagSystemHealth(triggerSource = "manual") {
     }),
     timed("rag.serving_projection", true, async () => {
       const status = await getRagServingProjectionStatus();
-      const ok = status.dualIndexReady;
+      const ok = status.cutoverReady;
       const detail = ok
-        ? "OpenAI and E5 indexes cover every eligible, citation-ready chunk."
-        : status.cutoverReady
-          ? `${status.eligibleChunks - status.canonicalVectorReadyChunks} chunk(s) are missing from the E5 rollback index.`
-          : status.readyChunks === status.eligibleChunks
-            ? `${status.lexicalOnlyReadyChunks} serving chunk(s) are citation-ready but still require vector embeddings.`
-            : "Serving projection is incomplete.";
+        ? "OpenAI text-embedding-3-small covers every eligible, citation-ready serving chunk."
+        : status.readyChunks === status.eligibleChunks
+          ? `${status.lexicalOnlyReadyChunks} serving chunk(s) are citation-ready but still require OpenAI vector embeddings.`
+          : "The governed OpenAI serving projection is incomplete.";
       return { ok, detail, metadata: status as unknown as Record<string, unknown> };
     }),
     timed("rag.openai_query_embedding", openAiEmbeddingRequired, async () => {
@@ -340,13 +337,13 @@ export async function runRagSystemHealth(triggerSource = "manual") {
       );
       const endpointConfigured = embedding.status !== "not_configured";
       const ready = isOpenAiQueryEmbedding(embedding);
-      const ok = ready || (!openAiEmbeddingRequired && !endpointConfigured);
+      const ok = ready;
       return {
         ok,
         detail: ready
           ? "OpenAI returned a valid text-embedding-3-small 1536d query embedding."
           : !endpointConfigured
-            ? "The dedicated OpenAI embedding credential is not configured; E5 remains available for rollback."
+            ? "The dedicated OpenAI embedding credential is not configured. Production retrieval has no E5/TF-IDF fallback."
             : `The OpenAI query embedding probe failed: ${embedding.failureReason || embedding.status}.`,
         metadata: {
           configured: endpointConfigured,

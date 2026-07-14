@@ -36,6 +36,7 @@ const rows = cases.map((item) => ({
     expectedStrictCategory: (item.category || (item.id.includes("cost") ? "cost" : item.id.includes("d4") ? "visa" : "documents")) !== "general",
     expectedLocaleHeadings: true,
     hasSyntheticAttachment: item.id.includes("attachment"),
+    expectedOpenAiVector: !item.expectedRefusal,
   },
 }));
 
@@ -56,7 +57,7 @@ const productionRegressionRows = [{
     expectedStrictCategory: true,
     expectedLocaleHeadings: true,
     expectedTopDocId: "cost-breakdown",
-    expectedReranker: "deterministic-locale-intent-v10",
+    expectedReranker: "deterministic-locale-intent-v11",
     expectedAnswerTerms: ["등록금", "기숙사", "서류비", "번역", "항공", "정착비"],
     minimumExpectedAnswerTerms: 2,
     forbiddenDocIds: [
@@ -70,6 +71,7 @@ const productionRegressionRows = [{
       "Korea Visa Portal 비자 유형 목록",
     ],
     hasSyntheticAttachment: false,
+    expectedOpenAiVector: true,
   },
 }];
 
@@ -91,6 +93,7 @@ const strictCategoryLocaleRows = [
     expectedStrictCategory: true,
     expectedLocaleHeadings: true,
     hasSyntheticAttachment: false,
+    expectedOpenAiVector: true,
   },
 }));
 
@@ -106,7 +109,11 @@ const noContextRows = [
   expected_risk_level: null,
   expected_handoff: false,
   active: true,
-  metadata: { source: "governed-no-context-regression", expectedNoContext: true },
+  metadata: {
+    source: "governed-no-context-regression",
+    expectedNoContext: true,
+    expectedOpenAiVector: true,
+  },
 }));
 
 const schoolCategoryLocaleRows = [
@@ -128,10 +135,137 @@ const schoolCategoryLocaleRows = [
     expectedStrictCategory: true,
     expectedLocaleHeadings: true,
     hasSyntheticAttachment: false,
+    expectedOpenAiVector: true,
   },
 }));
 
-const evaluationRows = [...rows, ...productionRegressionRows, ...strictCategoryLocaleRows, ...noContextRows, ...schoolCategoryLocaleRows];
+const behaviorRegressionRows = [
+  {
+    id: "ko-d4-extension-multi-intent-partial",
+    locale: "ko",
+    category: "cost",
+    question: "D-4 비자 연장은 언제 신청해야 하고 필요한 서류와 비용은 얼마인가요?",
+    expected_doc_ids: ["visa-documents", "d4-overview"],
+    expected_risk_level: null,
+    expected_handoff: false,
+    active: true,
+    metadata: {
+      source: "production-regression-2026-07-14",
+      incident: "multi-intent-question-was-discarded-when-cost-evidence-was-missing",
+      expectedNoContext: false,
+      expectedStrictCategory: true,
+      expectedLocaleHeadings: true,
+      expectedPartialContext: true,
+      expectedCoveredIntents: ["required_documents", "deadline_or_timing"],
+      expectedMissingIntents: ["cost"],
+      expectedOpenAiVector: true,
+    },
+  },
+  {
+    id: "ko-d4-context-followup-documents",
+    locale: "ko",
+    category: "documents",
+    question: "그럼 필요한 서류는 무엇인가요?",
+    expected_doc_ids: ["visa-documents"],
+    expected_risk_level: null,
+    expected_handoff: false,
+    active: true,
+    metadata: {
+      source: "conversation-memory-regression-2026-07-14",
+      conversationHistory: [{
+        question: "D-4 비자로 어학당에 다니고 있는데 체류기간 연장을 준비하고 있어요.",
+        answer: "D-4 체류기간 연장 기준을 공식 문서에서 확인했습니다.",
+      }],
+      expectedNoContext: false,
+      expectedStrictCategory: true,
+      expectedLocaleHeadings: true,
+      expectedContextResolved: true,
+      expectedVisaCodes: ["d4"],
+      expectedOpenAiVector: true,
+    },
+  },
+  {
+    id: "ko-d4-extension-typo",
+    locale: "ko",
+    category: "visa",
+    question: "D-4 비자 연장할려면 언제 신정하고 서류 머 필요해요?",
+    expected_doc_ids: ["visa-documents", "d4-overview"],
+    expected_risk_level: null,
+    expected_handoff: false,
+    active: true,
+    metadata: {
+      source: "natural-language-robustness-regression-2026-07-14",
+      expectedNoContext: false,
+      expectedCategories: ["visa", "documents"],
+      expectedLocaleHeadings: true,
+      expectedOpenAiVector: true,
+    },
+  },
+  {
+    id: "ko-vietnam-d4-nationality-documents",
+    locale: "ko",
+    category: "documents",
+    question: "베트남 국적 D-4 유학생인데 비자 연장 때 추가 서류가 있나요?",
+    expected_doc_ids: ["visa-documents"],
+    expected_risk_level: null,
+    expected_handoff: false,
+    active: true,
+    metadata: {
+      source: "nationality-specific-regression-2026-07-14",
+      expectedNoContext: false,
+      expectedStrictCategory: true,
+      expectedLocaleHeadings: true,
+      expectedVisaCodes: ["d4"],
+      expectedOpenAiVector: true,
+    },
+  },
+  {
+    id: "ko-d4-common-question-no-handoff",
+    locale: "ko",
+    category: "visa",
+    question: "D-4 비자 연장은 언제 신청해야 하나요?",
+    expected_doc_ids: ["d4-overview"],
+    expected_risk_level: null,
+    expected_handoff: false,
+    active: true,
+    metadata: {
+      source: "handoff-policy-regression-2026-07-14",
+      expectedNoContext: false,
+      expectedStrictCategory: true,
+      expectedLocaleHeadings: true,
+      expectedPartialContext: false,
+      expectedCoveredIntents: ["deadline_or_timing"],
+      expectedMissingIntents: [],
+      expectedOpenAiVector: true,
+    },
+  },
+  {
+    id: "ko-d4-explicit-human-request",
+    locale: "ko",
+    category: "documents",
+    question: "D-4 연장 서류를 설명해 주고 상담원 연결도 해 주세요.",
+    expected_doc_ids: ["visa-documents"],
+    expected_risk_level: null,
+    expected_handoff: true,
+    active: true,
+    metadata: {
+      source: "handoff-policy-regression-2026-07-14",
+      expectedNoContext: false,
+      expectedStrictCategory: true,
+      expectedLocaleHeadings: true,
+      expectedOpenAiVector: true,
+    },
+  },
+];
+
+const evaluationRows = [
+  ...rows,
+  ...productionRegressionRows,
+  ...strictCategoryLocaleRows,
+  ...noContextRows,
+  ...schoolCategoryLocaleRows,
+  ...behaviorRegressionRows,
+];
 const result = await supabase.from("rag_evaluation_cases").upsert(evaluationRows, { onConflict: "id" });
 if (result.error) throw result.error;
 console.log(`PASS seeded ${evaluationRows.length} governed RAG evaluation cases`);

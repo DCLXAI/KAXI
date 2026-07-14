@@ -17,6 +17,8 @@
 - Kimi Code membership keys are a separate credential realm. They require `OPENAI_BASE_URL=https://api.kimi.com/coding/v1` and `OPENAI_MODEL=kimi-for-coding`. Kimi documents this endpoint for interactive coding agents and recommends Kimi Platform for product integrations; record any production exception and migrate to a Platform key before broad public usage.
 - `KIMI_THINKING`: Optional `enabled` or `disabled` override for compatible Kimi models. Omit it to retain the provider default.
 - `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`: Optional Claude fallback credentials used only when `AI_PROVIDER=claude` or automatic selection resolves to Claude.
+- `AI_LLM_PROVIDER_FAILOVER_ENABLED`: Defaults to `true`. When both providers are configured, retry a failed, timed-out, empty, truncated, or invalid-JSON primary response once on the secondary provider.
+- `AI_REQUIRE_PROVIDER_FAILOVER`: Set `true` in production to make missing secondary-provider credentials a readiness issue.
 - `AI_REQUIRE_LLM`, `AI_ALLOW_LLM_FALLBACK`: Global LLM strictness policy. Keep fallback allowed in CI and local development without an API key.
 - `AI_AGENT_PREFLIGHT_ENABLED`: Enables deterministic server-side tool/RAG preflight before managed LLM calls.
 - `AI_AGENT_PREFLIGHT_TIMEOUT_MS`, `AI_AGENT_CONTEXT_MAX_CHARS`, `AI_AGENT_GROUNDED_QUESTION_MAX_CHARS`: Bound preflight latency and context sent to the managed LLM.
@@ -178,13 +180,13 @@ After KAXI production is deployed and the validated n8n draft is published:
 
 ```bash
 bun run rag:serving:sync
-bun run rag:serving:sync --execute --confirm-contract 2026-07-14.v3 --batch-size 10
+bun run rag:serving:sync --execute --confirm-contract 2026-07-14.v4 --batch-size 10
 bun run rag:openai:preflight
 ```
 
-The first command is a read-only status check. The execute command first calls the active n8n capability endpoint and refuses to ingest when the workflow contract, target table, model, dimensions, or signed-ingestion flag differs. It targets rows missing a real OpenAI vector even when their lexical projection is already marked ready, stops on a failed batch or when vector coverage makes no progress, and can be rerun to continue. The preflight sends a real OpenAI query and requires `hybrid-provider` retrieval before cutover.
+The first command is a read-only status check. The execute command first calls the active n8n capability endpoint and refuses to ingest when the workflow contract, target table, model, single-locale embedding strategy, dimensions, or signed-ingestion flag differs. It targets rows missing a current `single-locale-v1` OpenAI vector, stops on a failed batch or when vector coverage makes no progress, and can be rerun to continue. The preflight sends a real OpenAI query and requires `hybrid-provider` retrieval before cutover.
 
-Keep `KAXI_RAG_EMBEDDING_STRATEGY=e5-primary` while backfilling. Only after `vectorReadyChunks == eligibleChunks`, `canonicalVectorReadyChunks == eligibleChunks`, `citationReadyChunks == eligibleChunks`, the OpenAI preflight passes, and the full shadow evaluation meets the production gate (at least 95% overall, 90% in every locale/category, 95% expected-document recall and no-context accuracy, and 100% citation/category/locale/high-risk checks), deploy `openai-primary`. A provider outage then falls back to E5 without interrupting the user. Rollback is the environment-only change back to `e5-primary`; do not delete either index during the observation window.
+Production uses `KAXI_RAG_EMBEDDING_STRATEGY=openai-only`. Cut over only after `vectorReadyChunks == eligibleChunks`, `outdatedEmbeddingChunks == 0`, `citationReadyChunks == eligibleChunks`, the OpenAI preflight passes, and the full evaluation meets the production gate. Query-embedding failure is fail-closed; E5, TF-IDF, lexical-only, and stored-vector centroid are not production answer paths.
 
 ```bash
 bun run rag:evaluation:run
@@ -313,7 +315,7 @@ The ledger records IP/user id, backend, duration, estimated tokens, grounded/too
 ## Managed LLM Backend
 
 Agent, Consult, general chat, OCR, and structured admin suggestions use `src/lib/ai/llm-gateway.ts`.
-The default Kimi adapter calls the OpenAI-compatible Chat Completions endpoint, defaults to `kimi-k2.6`, converts image blocks to OpenAI format, and uses `response_format.type=json_schema` for structured outputs. PDF OCR uploads the file with `purpose=file-extract`, retrieves extracted content, and deletes the temporary provider file.
+The default Kimi adapter calls the OpenAI-compatible Chat Completions endpoint, defaults to `kimi-k2.6`, converts image blocks to OpenAI format, and uses `response_format.type=json_schema` for structured outputs. PDF OCR uploads the file with `purpose=file-extract`, retrieves extracted content, and deletes the temporary provider file. When both Kimi and Claude credentials are configured, the gateway automatically makes one secondary-provider attempt after a timeout, empty/truncated response, provider error, or invalid structured JSON.
 `OPENAI_MODEL` and `OPENAI_BASE_URL` can override the model and endpoint without code changes.
 
 Every ordinary text call passes through the gateway, which redacts emails, phone numbers, and private messenger handles before sending text to the selected provider. OCR media remains available to the provider because field extraction requires the visible document content.
@@ -328,6 +330,7 @@ The runtime selector in `src/lib/ai/backend-selector.ts` is the single policy so
 | --- | --- |
 | `AI_PROVIDER=kimi` and a Kimi key is configured | Kimi OpenAI-compatible API serves Agent/Consult/OCR. |
 | `AI_PROVIDER=claude` and `ANTHROPIC_API_KEY` is configured | Claude serves Agent/Consult/OCR as an optional fallback provider. |
+| primary and secondary credentials are configured | The selected provider runs first; a classified runtime or structured-output failure retries once on the other managed provider. |
 | key missing and `AI_REQUIRE_LLM=false` | Agent uses built-in tools; Consult summarizes retrieved approved official sources. |
 | key missing and `AI_REQUIRE_LLM=true` with no fallback override | endpoints return `503 LLM backend unavailable`; readiness reports an AI backend issue. |
 | legacy Codex/bridge/Z.ai env vars present | ignored and surfaced as warnings only. |

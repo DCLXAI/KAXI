@@ -32,6 +32,16 @@ function record(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function conversationHistory(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(-3).flatMap((item) => {
+    const turn = record(item);
+    const question = text(turn?.question, 600);
+    if (!question) return [];
+    return [{ question, answer: text(turn?.answer, 1_000) }];
+  });
+}
+
 export async function POST(req: NextRequest) {
   const limited = await rateLimit(req, {
     key: "n8n-rag-runtime",
@@ -84,8 +94,10 @@ export async function POST(req: NextRequest) {
       requestId,
       fallbackReason: "n8n_orchestrated_runtime",
       attachmentCount: Array.isArray(payload.attachments) ? Math.min(payload.attachments.length, 3) : 0,
-      allowStoredVectorExpansion: true,
+      allowStoredVectorExpansion: false,
+      requireOpenAiEmbedding: true,
       mediation,
+      conversationHistory: conversationHistory(payload.conversationContext),
     });
     const guarded = applyChatResponseGuardrail(direct, question, resolvedLocale);
     const currentSearchMeta = record(guarded.searchMeta) || {};

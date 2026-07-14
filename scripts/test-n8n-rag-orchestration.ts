@@ -9,12 +9,19 @@ const workflow = JSON.parse(
 ) as {
   nodes: Array<{ name: string; type: string; parameters?: Record<string, unknown> }>;
   connections: Record<string, { main?: Array<Array<{ node: string }> | null> }>;
+  settings?: Record<string, unknown>;
 };
 
 const railwayWorkflow = readFileSync(
   "infra/n8n/kaxi-rag-typebot-orchestrator.mjs",
   "utf8",
 );
+const errorWorkflow = JSON.parse(
+  readFileSync("infra/n8n/kaxi-shared-error-handler.json", "utf8"),
+) as {
+  nodes: Array<{ name: string; type: string; parameters?: Record<string, unknown> }>;
+  settings?: Record<string, unknown>;
+};
 for (const required of [
   "api/internal/n8n/verify",
   "api/internal/n8n/rag-runtime",
@@ -39,7 +46,7 @@ assert(
   "every Railway write/runtime branch must verify the KAXI signature first",
 );
 assert(
-  railwayWorkflow.includes('const release = "kaxi-rag-runtime@2026-07-14.railway-mcp-v2"'),
+  railwayWorkflow.includes('const release = "kaxi-rag-runtime@2026-07-14.railway-mcp-v3"'),
   "Railway runtime semantic release must match the production provenance contract",
 );
 const railwayRuntimeSource = railwayWorkflow.slice(
@@ -116,12 +123,15 @@ assert(
 );
 assert(
   String(respond?.parameters?.responseBody || "").includes("n8n-kaxi-orchestrated")
-    && String(respond?.parameters?.responseBody || "").includes("provider-independent-hybrid-v2"),
+    && String(respond?.parameters?.responseBody || "").includes("railway-mcp-v3")
+    && String(respond?.parameters?.responseBody || "").includes("n8nWorkflowVersionId"),
   "Typebot response must expose orchestrated runtime provenance",
 );
 const responseBody = String(respond?.parameters?.responseBody || "");
 assert(
   responseBody.includes("JSON.stringify({ answer: $('Run KAXI RAG Core').item.json.answer")
+    && responseBody.includes("item.json.workflowVersionId")
+    && responseBody.includes("item.json.promptVersion")
     && !responseBody.includes("const searchMeta")
     && !responseBody.includes("const retrieval")
     && !responseBody.includes("...$json"),
@@ -130,22 +140,42 @@ assert(
 assert(capability?.type === "n8n-nodes-base.respondToWebhook", "capability responder missing");
 const capabilityBody = String(capability.parameters?.responseBody || "");
 for (const requiredContractValue of [
-  "2026-07-14.v3",
-  "hybrid-rrf-v3-with-seeded-vector-and-lexical-fallback",
+  "2026-07-14.v4",
+  "hybrid-rrf-v3-openai-required",
   "embeddingModel: 'text-embedding-3-small'",
+  "embeddingContentStrategy: 'single-locale-v1'",
   "lexicalCandidateCount: 20",
   "vectorCandidateCount: 20",
   "finalMatchCount: 6",
-  "queryEmbeddingOptional: true",
-  "storedVectorFallback: 'lexical-centroid'",
-  "vectorSeedCount: 3",
-  "providerFailureMode: 'lexical-only'",
+  "queryEmbeddingOptional: false",
+  "storedVectorFallback: 'disabled'",
+  "vectorSeedCount: 0",
+  "providerFailureMode: 'fail-closed'",
 ]) {
   assert(
     capabilityBody.includes(requiredContractValue),
     `capability contract is missing: ${requiredContractValue}`,
   );
 }
+
+assert(
+  workflow.settings?.saveDataSuccessExecution === "all"
+    && workflow.settings?.saveDataErrorExecution === "all"
+    && workflow.settings?.saveExecutionProgress === true,
+  "n8n must retain successful and failed execution metadata for operations review",
+);
+
+const errorReporter = errorWorkflow.nodes.find((node) => node.name === "Persist Operational Failure");
+assert(
+  errorWorkflow.nodes.some((node) => node.type === "n8n-nodes-base.errorTrigger")
+    && errorReporter?.type === "n8n-nodes-base.httpRequest",
+  "shared n8n Error Workflow must use Error Trigger and the KAXI alert gateway",
+);
+assert(
+  errorReporter?.parameters?.url === "https://kaxi.vercel.app/api/internal/n8n/error-report"
+    && JSON.stringify(errorReporter.parameters).includes("KAXI_N8N_ERROR_TOKEN"),
+  "n8n errors must be authenticated into KAXI recordOpsEvent/Slack/email delivery",
+);
 
 const activeRuntimeText = JSON.stringify([verify, core, respond]);
 assert(
