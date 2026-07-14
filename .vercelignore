@@ -3,8 +3,12 @@
 .worktrees
 .env*
 .tmp
+.local
+.bun-cache
 .next
 node_modules
+logs
+*.tsbuildinfo
 test-results
 playwright-report
 tests
