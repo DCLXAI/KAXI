@@ -59,9 +59,17 @@ function extensionFor(mediaType: string): string {
   return "jpg";
 }
 
-async function providerFetch(url: string, init: RequestInit, env: NodeJS.ProcessEnv = process.env): Promise<Response> {
+async function providerFetch(
+  url: string,
+  init: RequestInit,
+  env: NodeJS.ProcessEnv = process.env,
+  timeoutOverrideMs?: number,
+): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs(env));
+  const effectiveTimeout = Number.isFinite(timeoutOverrideMs) && Number(timeoutOverrideMs) > 0
+    ? Number(timeoutOverrideMs)
+    : timeoutMs(env);
+  const timer = setTimeout(() => controller.abort(), effectiveTimeout);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } finally {
@@ -250,7 +258,7 @@ export async function generateOpenAICompatibleText(options: LlmGatewayOptions): 
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
-  });
+  }, process.env, options.timeoutMs);
   if (!response.ok) throw await responseError(response);
 
   const completion = textFromResponse(await response.json());

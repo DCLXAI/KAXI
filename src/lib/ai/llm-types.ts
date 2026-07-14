@@ -11,6 +11,7 @@ export interface LlmGatewayOptions {
   feature: "agent" | "consult" | "structured";
   messages: LlmGatewayMessage[];
   maxTokens?: number;
+  timeoutMs?: number;
   temperature?: number;
   expectLongResponse?: boolean;
   jsonSchema?: {

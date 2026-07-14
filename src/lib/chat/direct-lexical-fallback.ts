@@ -1192,6 +1192,20 @@ export async function runDirectRagFallback(
   const parsed = parseCandidates(result.data, resolvedInput);
   const selection = selectAnswerableDocuments(parsed.documents, resolvedInput);
   if (selection.documents.length === 0) return fallbackResponse;
+  const currentSearchMeta = metadataRecord(fallbackResponse.searchMeta);
+
+  if (shouldUseDeterministicExtractiveAnswer(input.mediation)) {
+    return {
+      ...fallbackResponse,
+      searchMeta: {
+        ...currentSearchMeta,
+        answerGenerationStatus: "skipped",
+        answerGenerationSkipReason: "deterministic_simple_intent",
+        answerPromptVersion: GROUNDED_RAG_PROMPT_VERSION,
+        answerMode: "deterministic-extractive",
+      },
+    };
+  }
 
   const generation = await (dependencies.generateAnswer || generateGroundedRagAnswer)({
     question: input.question,
@@ -1208,8 +1222,6 @@ export async function runDirectRagFallback(
       checkedBy: document.checkedBy,
     })),
   });
-  const currentSearchMeta = metadataRecord(fallbackResponse.searchMeta);
-
   if (generation.status === "unavailable") {
     return {
       ...fallbackResponse,
@@ -1309,6 +1321,24 @@ export async function runDirectRagFallback(
     modelVersion: generation.model,
     promptVersion: GROUNDED_RAG_PROMPT_VERSION,
   };
+}
+
+const DETERMINISTIC_EXTRACTIVE_INTENTS = new Set([
+  "required_documents",
+  "cost",
+  "school_selection",
+]);
+
+export function shouldUseDeterministicExtractiveAnswer(mediation?: QuestionMediation) {
+  if (
+    !mediation
+    || mediation.status !== "deterministic"
+    || mediation.action !== "retrieve"
+    || mediation.needsHumanReview
+  ) return false;
+
+  const specificIntents = mediation.intents.filter((intent) => intent !== "general_information");
+  return specificIntents.length === 1 && DETERMINISTIC_EXTRACTIVE_INTENTS.has(specificIntents[0]);
 }
 
 export function shouldUseDirectLexicalFallback(input: {

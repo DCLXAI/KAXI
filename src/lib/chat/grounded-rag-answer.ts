@@ -54,6 +54,11 @@ export type GroundedAnswerGenerator = (
   request: GroundedAnswerRequest,
 ) => Promise<GroundedAnswerResult>;
 
+export function groundedRagAnswerTimeoutMs(env: NodeJS.ProcessEnv = process.env) {
+  const configured = Number.parseInt(env.RAG_GROUNDED_ANSWER_TIMEOUT_MS || "", 10);
+  return Number.isFinite(configured) ? Math.min(Math.max(configured, 3_000), 12_000) : 7_500;
+}
+
 type GroundedModelOutput = {
   supported: boolean;
   answer: string;
@@ -84,7 +89,7 @@ const OUTPUT_SCHEMA = {
     nextStep: { type: "string" },
     usedSourceIndexes: {
       type: "array",
-      items: { type: "integer", minimum: 1, maximum: 4 },
+      items: { type: "integer", minimum: 1, maximum: 3 },
       maxItems: 3,
     },
   },
@@ -116,7 +121,7 @@ function parseModelOutput(value: string): GroundedModelOutput | null {
 }
 
 function buildContext(documents: GroundedAnswerDocument[]) {
-  return documents.slice(0, 4).map((document, index) => [
+  return documents.slice(0, 3).map((document, index) => [
     `<source index="${index + 1}">`,
     `title: ${document.title}`,
     `publisher: ${document.source}`,
@@ -124,7 +129,7 @@ function buildContext(documents: GroundedAnswerDocument[]) {
     `checkedAt: ${document.checkedAt}`,
     `checkedBy: ${document.checkedBy}`,
     "content:",
-    document.content.slice(0, 4_000),
+    document.content.slice(0, 2_400),
     "</source>",
   ].join("\n")).join("\n\n");
 }
@@ -165,7 +170,8 @@ ${context}`;
         { role: "user", content: request.question },
       ],
       temperature: 0.1,
-      maxTokens: 520,
+      maxTokens: 420,
+      timeoutMs: groundedRagAnswerTimeoutMs(),
       jsonSchema: {
         name: "kaxi_grounded_answer",
         schema: OUTPUT_SCHEMA,
@@ -175,7 +181,7 @@ ${context}`;
     if (!output) return { status: "unavailable", reason: "invalid_generation" };
 
     const usedSourceIndexes = Array.from(new Set(output.usedSourceIndexes))
-      .filter((index) => index >= 1 && index <= Math.min(request.documents.length, 4))
+      .filter((index) => index >= 1 && index <= Math.min(request.documents.length, 3))
       .slice(0, 3);
     const metadata: GenerationMetadata = {
       backend: completion.backend,

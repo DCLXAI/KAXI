@@ -187,6 +187,10 @@ export function n8nRuntimeTimeoutMs() {
   return Math.min(Math.max(Math.trunc(configured), 1_000), 45_000);
 }
 
+export function ragRuntimePrimary(env: NodeJS.ProcessEnv = process.env): "direct" | "n8n" {
+  return env.KAXI_RAG_RUNTIME_PRIMARY?.trim().toLowerCase() === "n8n" ? "n8n" : "direct";
+}
+
 function runtimeErrorReason(error: unknown) {
   if (error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError")) {
     return "n8n_timeout";
@@ -395,7 +399,7 @@ export async function POST(req: NextRequest) {
       }
     };
 
-    const reportOpsEventAsync = (
+    const recordGatewayOpsEvent = async (
       eventType: string,
       message: string,
       provenance: RagProvenance,
@@ -403,28 +407,30 @@ export async function POST(req: NextRequest) {
       payload: Record<string, unknown> = {},
       severity: "warning" | "error" = "error",
     ) => {
-      after(async () => {
-        await recordOpsEvent({
-          source: "kaxi-typebot-gateway",
-          severity,
-          eventType,
-          message,
-          workflowId: provenance.workflowId,
-          workflowVersionId: provenance.workflowVersionId,
-          modelVersion: provenance.modelVersion,
-          promptVersion: provenance.promptVersion,
-          executionId: executionId || identity.requestId,
-          payload: {
-            requestId: identity.requestId,
-            source,
-            locale,
-            category,
-            ...payload,
-          },
-        }).catch((alertError) => {
-          console.error("[POST /api/typebot-rag] operations alert failed", alertError);
-        });
+      await recordOpsEvent({
+        source: "kaxi-typebot-gateway",
+        severity,
+        eventType,
+        message,
+        workflowId: provenance.workflowId,
+        workflowVersionId: provenance.workflowVersionId,
+        modelVersion: provenance.modelVersion,
+        promptVersion: provenance.promptVersion,
+        executionId: executionId || identity.requestId,
+        payload: {
+          requestId: identity.requestId,
+          source,
+          locale,
+          category,
+          ...payload,
+        },
+      }).catch((alertError) => {
+        console.error("[POST /api/typebot-rag] operations alert failed", alertError);
       });
+    };
+
+    const reportOpsEventAsync = (...args: Parameters<typeof recordGatewayOpsEvent>) => {
+      after(() => recordGatewayOpsEvent(...args));
     };
 
     let upstreamPayload: GuardedChatResponse;
@@ -454,6 +460,61 @@ export async function POST(req: NextRequest) {
         runtimePath: "kaxi-question-mediator",
         ...provenance,
       };
+    } else if (ragRuntimePrimary() === "direct") {
+      try {
+        upstreamPayload = await runDirectRagFallback({
+          question,
+          retrievalQuery: mediation.searchQuery,
+          category,
+          locale,
+          tenantId: "default",
+          requestId: identity.requestId,
+          fallbackReason: "kaxi_direct_primary",
+          attachmentCount: verifiedAttachments.length,
+          allowStoredVectorExpansion: true,
+          mediation,
+        });
+        provenance = resolveRagProvenance(upstreamPayload);
+      } catch (directError) {
+        console.warn("[POST /api/typebot-rag] direct primary failed; trying n8n backup", directError);
+        const n8nAttempt = await requestN8nRuntime(n8nRequest);
+        if (n8nAttempt.ok) {
+          upstreamPayload = n8nAttempt.payload;
+          provenance = n8nAttempt.provenance;
+          reportOpsEventAsync(
+            "direct_runtime_n8n_backup_succeeded",
+            "KAXI served the request through the signed n8n backup runtime.",
+            provenance,
+            upstreamPayload.executionId,
+            {
+              runtimePath: upstreamPayload.runtimePath,
+              directError: directError instanceof Error ? directError.message.slice(0, 240) : "unknown",
+            },
+            "warning",
+          );
+        } else {
+          const directExecutionId = `direct-${identity.requestId}`;
+          await persistFailure("rag_runtime_unavailable", DIRECT_LEXICAL_PROVENANCE, directExecutionId);
+          reportOpsEventAsync(
+            "rag_runtime_unavailable",
+            "Both the KAXI direct runtime and n8n backup runtime failed.",
+            DIRECT_LEXICAL_PROVENANCE,
+            directExecutionId,
+            {
+              runtimePath: "unavailable",
+              attemptedRuntimePaths: [DIRECT_HYBRID_RUNTIME_PATH, DIRECT_LEXICAL_RUNTIME_PATH, "n8n-workflow"],
+              n8nFallbackReason: n8nAttempt.fallbackReason,
+              n8nHttpStatus: n8nAttempt.httpStatus,
+              directError: directError instanceof Error ? directError.message.slice(0, 240) : "unknown",
+            },
+          );
+          return ragJson({
+            error: "RAG runtime unavailable",
+            runtimePath: "unavailable",
+            attemptedRuntimePaths: [DIRECT_HYBRID_RUNTIME_PATH, DIRECT_LEXICAL_RUNTIME_PATH, "n8n-workflow"],
+          }, { status: 502 }, DIRECT_LEXICAL_PROVENANCE);
+        }
+      }
     } else {
       const n8nAttempt = await requestN8nRuntime(n8nRequest);
       const n8nNeedsCanonicalRetry = n8nAttempt.ok && shouldRetryN8nNoContext(n8nAttempt.payload);
@@ -554,73 +615,86 @@ export async function POST(req: NextRequest) {
     let storedMessageId: string | undefined;
     let persistenceMode: string | undefined;
     let handoffTaskPersisted = false;
-    try {
-      const needsHuman = normalizeBoolean(normalizedPayload.needsHuman);
-      const riskLevel = typeof normalizedPayload.riskLevel === "string" ? normalizedPayload.riskLevel : "low";
-      const persisted = await persistChatExchange({
-        requestId: identity.requestId,
-        idempotencyKey: identity.idempotencyKey,
-        sessionKey: sessionId,
-        tenantId: "default",
-        locale,
-        source,
-        typebotResultId: typebotResultId || undefined,
-        question,
-        answer: normalizedPayload.answer || "",
-        riskLevel,
-        needsHuman,
-        leadStage: typeof normalizedPayload.leadStage === "string" ? normalizedPayload.leadStage : undefined,
-        nextStep: normalizedPayload.nextStep,
-        attachments: verifiedAttachments,
-        executionId: normalizedPayload.executionId,
-        provenance,
-        sources: normalizedPayload.sources,
-        searchMeta: normalizedPayload.searchMeta,
-        latencyMs: Date.now() - startedAt,
-      });
-      storedMessageId = persisted.id.toString();
-      persistenceMode = persisted.mode;
-      if (needsHuman) {
-        try {
-          handoffTaskPersisted = await persistCanonicalHandoffTask({
-            requestId: identity.requestId,
-            idempotencyKey: identity.idempotencyKey,
-            messageId: persisted.id,
-            sessionKey: sessionId,
-            tenantId: "default",
-            locale,
-            source,
-            typebotResultId: typebotResultId || undefined,
-            question,
-            answer: normalizedPayload.answer || "",
-            riskLevel,
-            needsHuman,
-            leadStage: typeof normalizedPayload.leadStage === "string" ? normalizedPayload.leadStage : undefined,
-            nextStep: normalizedPayload.nextStep,
-            executionId: normalizedPayload.executionId,
-            provenance,
-            sources: normalizedPayload.sources,
-            searchMeta: normalizedPayload.searchMeta,
-            latencyMs: Date.now() - startedAt,
-          });
-        } catch (handoffError) {
-          console.error("[POST /api/typebot-rag] canonical handoff persistence failed", handoffError);
-          reportOpsEventAsync(
-            "handoff_persistence_failed",
-            "A required human handoff could not be persisted.",
-            provenance,
-            normalizedPayload.executionId,
-          );
+    let persistenceAccepted = false;
+    const persistSuccessfulExchange = async () => {
+      try {
+        const needsHuman = normalizeBoolean(normalizedPayload.needsHuman);
+        const riskLevel = typeof normalizedPayload.riskLevel === "string" ? normalizedPayload.riskLevel : "low";
+        const persisted = await persistChatExchange({
+          requestId: identity.requestId,
+          idempotencyKey: identity.idempotencyKey,
+          sessionKey: sessionId,
+          tenantId: "default",
+          locale,
+          source,
+          typebotResultId: typebotResultId || undefined,
+          question,
+          answer: normalizedPayload.answer || "",
+          riskLevel,
+          needsHuman,
+          leadStage: typeof normalizedPayload.leadStage === "string" ? normalizedPayload.leadStage : undefined,
+          nextStep: normalizedPayload.nextStep,
+          attachments: verifiedAttachments,
+          executionId: normalizedPayload.executionId,
+          provenance,
+          sources: normalizedPayload.sources,
+          searchMeta: normalizedPayload.searchMeta,
+          latencyMs: Date.now() - startedAt,
+        });
+        storedMessageId = persisted.id.toString();
+        persistenceMode = persisted.mode;
+        if (needsHuman) {
+          try {
+            handoffTaskPersisted = await persistCanonicalHandoffTask({
+              requestId: identity.requestId,
+              idempotencyKey: identity.idempotencyKey,
+              messageId: persisted.id,
+              sessionKey: sessionId,
+              tenantId: "default",
+              locale,
+              source,
+              typebotResultId: typebotResultId || undefined,
+              question,
+              answer: normalizedPayload.answer || "",
+              riskLevel,
+              needsHuman,
+              leadStage: typeof normalizedPayload.leadStage === "string" ? normalizedPayload.leadStage : undefined,
+              nextStep: normalizedPayload.nextStep,
+              executionId: normalizedPayload.executionId,
+              provenance,
+              sources: normalizedPayload.sources,
+              searchMeta: normalizedPayload.searchMeta,
+              latencyMs: Date.now() - startedAt,
+            });
+          } catch (handoffError) {
+            console.error("[POST /api/typebot-rag] canonical handoff persistence failed", handoffError);
+            await recordGatewayOpsEvent(
+              "handoff_persistence_failed",
+              "A required human handoff could not be persisted.",
+              provenance,
+              normalizedPayload.executionId,
+            );
+          }
         }
+        return true;
+      } catch (persistError) {
+        console.error("[POST /api/typebot-rag] chat persistence failed", persistError);
+        await recordGatewayOpsEvent(
+          "chat_persistence_failed",
+          "A chatbot exchange could not be persisted.",
+          provenance,
+          normalizedPayload.executionId,
+        );
+        return false;
       }
-    } catch (persistError) {
-      console.error("[POST /api/typebot-rag] chat persistence failed", persistError);
-      reportOpsEventAsync(
-        "chat_persistence_failed",
-        "A chatbot exchange could not be persisted.",
-        provenance,
-        normalizedPayload.executionId,
-      );
+    };
+
+    if (source === "typebot") {
+      persistenceAccepted = true;
+      persistenceMode = "deferred";
+      after(() => persistSuccessfulExchange());
+    } else {
+      persistenceAccepted = await persistSuccessfulExchange();
     }
 
     const handoffToken = source === "typebot" ? createTypebotHandoffToken(sessionId) : undefined;
@@ -628,7 +702,8 @@ export async function POST(req: NextRequest) {
       ...normalizedPayload,
       requestId: identity.requestId,
       handoffToken,
-      persisted: Boolean(storedMessageId),
+      persisted: persistenceAccepted,
+      persistenceAccepted,
       messageId: storedMessageId,
       persistenceMode,
       handoffTaskPersisted,

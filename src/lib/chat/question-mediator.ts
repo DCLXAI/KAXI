@@ -30,7 +30,7 @@ export type QuestionMediationAction = "retrieve" | "clarify";
 export type QuestionResponseMode = "concise_answer" | "checklist" | "steps" | "comparison" | "estimate" | "clarification";
 
 export type QuestionMediation = {
-  status: "llm" | "fallback";
+  status: "llm" | "deterministic" | "fallback";
   action: QuestionMediationAction;
   category: ChatCategory;
   searchQuery: string;
@@ -88,6 +88,26 @@ const EVIDENCE_REQUIRED_RISK_PATTERNS = [
   /giả(?:\s*mạo)?|hồ\s*sơ\s*giả|sao\s*kê\s*giả|bỏ\s*qua.{0,24}(?:quy\s*tắc|hướng\s*dẫn)/iu,
   /хуурамч|хуурмаг|систем(?:ийн)?\s*(?:prompt|промпт)|дүрм(?:ийг|үүдийг).{0,24}үл\s*тоомсор|шалгалт.{0,24}тойрох/iu,
 ];
+
+const HIGH_IMPACT_REVIEW_PATTERNS = [
+  ...EVIDENCE_REQUIRED_RISK_PATTERNS,
+  /불법\s*체류|체류\s*기간.{0,20}(?:지났|초과)|강제\s*퇴거|입국\s*금지|출국\s*명령|보호\s*(?:명령|시설)|구금|난민|이의\s*신청|행정\s*소송|허가\s*없이.{0,20}(?:일|취업)|불법\s*취업/iu,
+  /overstay|expired\s+stay|(?:permitted\s+)?stay.{0,24}(?:has\s+)?(?:already\s+)?expired|deport(?:ation|ed)?|entry\s+ban|departure\s+order|detention|refugee|asylum|appeal|litigation|(?:work|job).{0,48}without\s+(?:(?:any|a)\s+)?(?:work\s+)?permit|unauthori[sz]ed\s+work/iu,
+  /quá\s*hạn\s+lưu\s*trú|thời\s+hạn\s+lưu\s*trú.{0,32}(?:đã\s*)?hết|trục\s*xuất|cấm\s*nhập\s*cảnh|lệnh\s*xuất\s*cảnh|tạm\s*giữ|tị\s*nạn|khiếu\s*nại|không\s*cần\s*giấy\s*phép|làm\s*việc\s*không\s*(?:có\s*)?phép/iu,
+  /хууль\s*бус\s*оршин|хугацаа.{0,32}(?:хэтэр|дууссан)|албадан\s*гаргах|нэвтрэх\s*хориг|саатуулах|дүрвэгч|гомдол|зөвшөөрөлгүй.{0,48}ажил/iu,
+];
+
+const SPECIFIC_SUBJECT_PATTERNS = [
+  /\b[cdef][-\s]?\d+(?:[-\s]?\d+)?\b/iu,
+  /어학\s*(?:연수|당)|학위\s*과정|전문\s*학사|학사\s*과정|석사\s*과정|박사\s*과정|한국\s*유학|구직|시간제\s*취업|잔고\s*증명|재정\s*증빙|결핵\s*진단|표준\s*입학\s*허가|학력\s*증빙|아포스티유/iu,
+  /language\s+(?:course|program|school)|stud(?:y|ying)\s+(?:the\s+)?korean\s+language|degree\s+program|bachelor|master(?:'s)?|doctorate|study(?:ing)?\s+in\s+korea|job\s*seek|part[- ]?time\s+work|bank\s+(?:statement|balance\s+certificate)|proof\s+of\s+funds|tuberculosis\s+certificate|certificate\s+of\s+admission|apostille/iu,
+  /kh[oó]a\s+tiếng\s+hàn|học\s+tiếng\s+hàn|chương\s+trình\s+(?:cử\s+nhân|thạc\s+sĩ|tiến\s+sĩ)|du\s+học\s+hàn\s+quốc|tìm\s+việc|làm\s+thêm|sao\s+kê\s+ngân\s+hàng|giấy\s+xác\s+nhận\s+số\s+dư|chứng\s+minh\s+tài\s+chính|giấy\s+báo\s+nhập\s+học|apostille/iu,
+  /солонгос\s+хэл(?:ний\s+бэлтгэл|\s+сурах)|бакалавр|магистр|доктор|солонгост\s+сура(?:лц|хад)|ажил\s+хай|цагийн\s+ажил|банкны\s+(?:хуулга|үлдэгдлийн\s+тодорхойлолт)|санхүүгийн\s+нотолгоо|элсэлтийн\s+зөвшөөрөл|апостиль/iu,
+];
+
+const CLEAR_SCHOOL_TASK_PATTERN = /인증\s*대학|학교.{0,20}(?:추천|비교|선택)|어느\s*(?:학교|대학)|accredited\s*universit|certified\s*universit|which\s+(?:school|university)|compare.{0,20}(?:school|universit)|recommend.{0,20}(?:school|universit)|trường.{0,20}(?:chứng\s*nhận|nào|so\s*sánh|đề\s*xuất)|итгэмжлэгдсэн\s*их\s*сургууль|ямар\s*их\s*сургууль|сургууль.{0,20}(?:харьцуул|санал)/iu;
+
+const VISA_SELECTION_PATTERN = /어떤\s*비자|무슨\s*비자|어느\s*체류\s*자격|which\s+visa|what\s+visa|loại\s+visa\s+nào|xin\s+visa\s+gì|визийн\s+ямар\s+төрөл|ямар\s+виз\s+хэрэгтэй/iu;
 
 const LOCALE_NAMES: Record<GuardrailLocale, string> = {
   ko: "Korean",
@@ -368,11 +388,83 @@ function deterministicMediation(
   };
 }
 
+function matchesAny(question: string, patterns: RegExp[]) {
+  return patterns.some((pattern) => pattern.test(question));
+}
+
+function hasSpecificSubject(question: string) {
+  return matchesAny(question, SPECIFIC_SUBJECT_PATTERNS);
+}
+
+function shouldUseDeterministicRetrieval(
+  question: string,
+  category: ChatCategory,
+  intents: QuestionMediationIntent[],
+) {
+  if (matchesAny(question, HIGH_IMPACT_REVIEW_PATTERNS)) return true;
+
+  const specificSubject = hasSpecificSubject(question);
+  if (category === "documents") {
+    return specificSubject && intents.includes("required_documents");
+  }
+  if (category === "cost") return specificSubject;
+  if (category === "school") return CLEAR_SCHOOL_TASK_PATTERN.test(question);
+  if (category === "visa") {
+    return specificSubject && (
+      intents.some((intent) => intent !== "general_information")
+      || VISA_SELECTION_PATTERN.test(question)
+      || explicitVisaCodes(question).length > 0
+    );
+  }
+  return false;
+}
+
+export function planDeterministicRagQuestion(input: {
+  question: string;
+  locale: GuardrailLocale;
+  deterministicCategory?: ChatCategory;
+}): QuestionMediation | null {
+  const question = input.question.normalize("NFKC").trim();
+  const category = input.deterministicCategory || inferChatCategory(question);
+  const isVague = vagueQuestion(question, category);
+  const intents = deterministicIntents(question, category);
+  if (!isVague && !shouldUseDeterministicRetrieval(question, category, intents)) return null;
+
+  const action: QuestionMediationAction = isVague ? "clarify" : "retrieve";
+  const highImpact = matchesAny(question, HIGH_IMPACT_REVIEW_PATTERNS);
+  return {
+    status: "deterministic",
+    action,
+    category,
+    searchQuery: action === "retrieve" ? question.slice(0, 800) : "",
+    answerFocus: action === "retrieve" ? question.slice(0, 500) : "",
+    responseMode: action === "clarify" ? "clarification" : deterministicMode(category, intents),
+    clarificationQuestion: action === "clarify" ? CLARIFICATION_COPY[input.locale].question : "",
+    intents,
+    visaCodes: explicitVisaCodes(question),
+    needsHumanReview: action === "retrieve" && highImpact,
+    confidence: action === "clarify" ? 0.95 : hasSpecificSubject(question) ? 0.92 : 0.88,
+    backend: "none",
+    model: "deterministic-question-router-v2",
+    durationMs: 0,
+    attempts: 0,
+    failureReason: null,
+    promptVersion: QUESTION_MEDIATOR_PROMPT_VERSION,
+  };
+}
+
 export async function mediateRagQuestion(
   input: { question: string; locale: GuardrailLocale; deterministicCategory?: ChatCategory },
-  dependencies: { generate?: MediationGenerator } = {},
+  dependencies: { generate?: MediationGenerator; forceLlm?: boolean } = {},
 ): Promise<QuestionMediation> {
   const deterministicCategory = input.deterministicCategory || inferChatCategory(input.question);
+  if (!dependencies.forceLlm) {
+    const deterministic = planDeterministicRagQuestion({
+      ...input,
+      deterministicCategory,
+    });
+    if (deterministic) return deterministic;
+  }
   const generate = dependencies.generate || generateLlmText;
   if (!dependencies.generate && !isLlmConfigured()) {
     return deterministicMediation(input.question, input.locale, deterministicCategory, "not_configured");
@@ -529,7 +621,7 @@ export function parseRuntimeQuestionMediation(
   return {
     ...parsed,
     visaCodes: explicitVisaCodes(input.question),
-    status: raw.status === "llm" ? "llm" : "fallback",
+    status: raw.status === "llm" || raw.status === "deterministic" ? raw.status : "fallback",
     backend,
     model: typeof raw.model === "string" ? raw.model.trim().slice(0, 160) : "runtime-question-plan",
     durationMs: Number.isFinite(durationMs) ? Math.max(0, Math.trunc(durationMs)) : 0,

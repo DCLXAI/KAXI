@@ -6,13 +6,16 @@ import {
   DIRECT_LEXICAL_RUNTIME_PATH,
   runDirectRagFallback,
   runDirectLexicalFallback,
+  shouldUseDeterministicExtractiveAnswer,
   shouldUseDirectLexicalFallback,
   type DirectLexicalFallbackInput,
 } from "../src/lib/chat/direct-lexical-fallback";
 import { applyChatResponseGuardrail } from "../src/lib/chat/response-guardrail";
+import { inferChatCategory } from "../src/lib/chat/category";
 import {
   n8nQuestionPlan,
   n8nRuntimeTimeoutMs,
+  ragRuntimePrimary,
   requestN8nRuntime,
   shouldRetryN8nNoContext,
 } from "../src/app/api/typebot-rag/route";
@@ -27,12 +30,14 @@ import {
 } from "../src/lib/chat/query-embedding";
 import {
   mediateRagQuestion,
+  planDeterministicRagQuestion,
   parseRuntimeQuestionMediation,
   parseQuestionMediationOutput,
   questionMediationMetadata,
   questionMediationRuntimePayload,
 } from "../src/lib/chat/question-mediator";
 import { retrievalRunHasNoContext } from "../src/lib/chat/persistence";
+import { groundedRagAnswerTimeoutMs } from "../src/lib/chat/grounded-rag-answer";
 
 const lexicalV2Migration = await Bun.file(new URL(
   "../prisma/postgres/migrations/20260713153000_rag_lexical_search_v2/migration.sql",
@@ -74,6 +79,13 @@ const input: DirectLexicalFallbackInput = {
   requestId: "c0802045-3332-4491-b33f-4d38d3fdac2a",
   fallbackReason: "n8n_http_402",
 };
+
+assert.equal(ragRuntimePrimary({} as NodeJS.ProcessEnv), "direct");
+assert.equal(ragRuntimePrimary({ KAXI_RAG_RUNTIME_PRIMARY: "n8n" } as NodeJS.ProcessEnv), "n8n");
+assert.equal(ragRuntimePrimary({ KAXI_RAG_RUNTIME_PRIMARY: "invalid" } as NodeJS.ProcessEnv), "direct");
+assert.equal(groundedRagAnswerTimeoutMs({} as NodeJS.ProcessEnv), 7_500);
+assert.equal(groundedRagAnswerTimeoutMs({ RAG_GROUNDED_ANSWER_TIMEOUT_MS: "1000" } as NodeJS.ProcessEnv), 3_000);
+assert.equal(groundedRagAnswerTimeoutMs({ RAG_GROUNDED_ANSWER_TIMEOUT_MS: "20000" } as NodeJS.ProcessEnv), 12_000);
 
 const validRow = {
   id: 10,
@@ -277,11 +289,121 @@ assert.equal(tolerantMediation?.responseMode, "checklist");
 assert.equal(tolerantMediation?.needsHumanReview, true);
 assert.equal(tolerantMediation?.confidence, 0.91);
 
+let fastPathGeneratorCalls = 0;
+const deterministicD4 = await mediateRagQuestion({
+  question: "D-4 비자 신청에 필요한 기본 서류가 무엇인가요?",
+  locale: "ko",
+  deterministicCategory: "documents",
+}, {
+  generate: async () => {
+    fastPathGeneratorCalls += 1;
+    throw new Error("clear questions must not call the mediation LLM");
+  },
+});
+assert.equal(deterministicD4.status, "deterministic");
+assert.equal(deterministicD4.action, "retrieve");
+assert.equal(deterministicD4.category, "documents");
+assert.equal(deterministicD4.responseMode, "checklist");
+assert.equal(deterministicD4.needsHumanReview, false);
+assert.deepEqual(deterministicD4.visaCodes, ["D-4"]);
+assert.equal(deterministicD4.attempts, 0);
+assert.equal(fastPathGeneratorCalls, 0);
+assert.equal(shouldUseDeterministicExtractiveAnswer(deterministicD4), true);
+assert.equal(
+  parseRuntimeQuestionMediation(
+    questionMediationRuntimePayload(deterministicD4),
+    { question: deterministicD4.searchQuery, locale: "ko", category: "documents" },
+  )?.status,
+  "deterministic",
+);
+
+const deterministicVague = planDeterministicRagQuestion({
+  question: "도와줘",
+  locale: "ko",
+  deterministicCategory: "general",
+});
+assert.equal(deterministicVague?.status, "deterministic");
+assert.equal(deterministicVague?.action, "clarify");
+
+const deterministicHighImpact = planDeterministicRagQuestion({
+  question: "My stay expired and I am still in Korea. What should I do?",
+  locale: "en",
+  deterministicCategory: "visa",
+});
+assert.equal(deterministicHighImpact?.action, "retrieve");
+assert.equal(deterministicHighImpact?.needsHumanReview, true);
+assert.equal(shouldUseDeterministicExtractiveAnswer(deterministicHighImpact || undefined), false);
+
+let ambiguousGeneratorCalls = 0;
+const ambiguousCost = await mediateRagQuestion({
+  question: "비자 신청 비용을 알려주세요.",
+  locale: "ko",
+  deterministicCategory: "cost",
+}, {
+  generate: async () => {
+    ambiguousGeneratorCalls += 1;
+    return {
+      text: JSON.stringify({
+        action: "clarify",
+        category: "cost",
+        searchQuery: "",
+        answerFocus: "",
+        responseMode: "clarification",
+        clarificationQuestion: "어떤 체류자격의 신청 비용을 확인할까요?",
+        intents: ["cost"],
+        visaCodes: [],
+        needsHumanReview: false,
+        confidence: 0.9,
+      }),
+      backend: "kimi",
+      model: "kimi-question-router-test",
+      durationMs: 5,
+      inputChars: 40,
+      outputChars: 100,
+    };
+  },
+});
+assert.equal(ambiguousGeneratorCalls, 1);
+assert.equal(ambiguousCost.status, "llm");
+assert.equal(ambiguousCost.action, "clarify");
+
+const routingEvaluationCases = await Bun.file(new URL(
+  "../quality/multilingual-eval-cases.json",
+  import.meta.url,
+)).json() as Array<{
+  id: string;
+  lang: "ko" | "en" | "vi" | "mn";
+  category: "visa" | "documents" | "school" | "cost" | "general";
+  question: string;
+}>;
+const fastPathRows = routingEvaluationCases.map((testCase) => ({
+  ...testCase,
+  plan: planDeterministicRagQuestion({
+    question: testCase.question,
+    locale: testCase.lang,
+    deterministicCategory: inferChatCategory(testCase.question, testCase.category),
+  }),
+}));
+const fastPathCoverage = fastPathRows.filter((row) => row.plan).length / fastPathRows.length;
+assert(
+  fastPathCoverage >= 0.9,
+  `deterministic routing coverage must stay at or above 90%, received ${fastPathCoverage}`,
+);
+for (const locale of ["ko", "en", "vi", "mn"] as const) {
+  const localeRows = fastPathRows.filter((row) => row.lang === locale);
+  const localeCoverage = localeRows.filter((row) => row.plan).length / localeRows.length;
+  assert(
+    localeCoverage >= 0.85,
+    `${locale} deterministic routing coverage must stay at or above 85%, received ${localeCoverage}`,
+  );
+}
+
 const mediatedD10 = await mediateRagQuestion({
   question: "D-10으로 변경할 때 기본 서류가 뭐예요?",
   locale: "ko",
   deterministicCategory: "documents",
 }, {
+  forceLlm: true,
   generate: async (options) => {
     assert.equal(options.feature, "structured");
     assert.equal(options.temperature, 0);
@@ -308,6 +430,7 @@ const mediatedD10 = await mediateRagQuestion({
   },
 });
 assert.equal(mediatedD10.status, "llm");
+assert.equal(shouldUseDeterministicExtractiveAnswer(mediatedD10), false);
 assert.equal(mediatedD10.action, "retrieve");
 assert.equal(mediatedD10.category, "documents");
 assert.equal(mediatedD10.searchQuery, "D-10 구직 체류자격 변경 신청 기본 서류");
@@ -352,6 +475,7 @@ const mediatedCost = await mediateRagQuestion({
   locale: "ko",
   deterministicCategory: "cost",
 }, {
+  forceLlm: true,
   generate: async () => ({
     text: JSON.stringify({
       action: "retrieve",
@@ -379,6 +503,7 @@ const clarifiedQuestion = await mediateRagQuestion({
   locale: "ko",
   deterministicCategory: "general",
 }, {
+  forceLlm: true,
   generate: async () => ({
     text: JSON.stringify({
       action: "clarify",
@@ -406,6 +531,7 @@ const safetyRoutedQuestion = await mediateRagQuestion({
   locale: "en",
   deterministicCategory: "documents",
 }, {
+  forceLlm: true,
   generate: async () => ({
     text: JSON.stringify({
       action: "clarify",
@@ -436,6 +562,7 @@ const safetyCategoryCorrectedQuestion = await mediateRagQuestion({
   locale: "en",
   deterministicCategory: "documents",
 }, {
+  forceLlm: true,
   generate: async () => ({
     text: JSON.stringify({
       action: "retrieve",
@@ -482,6 +609,7 @@ const invalidMediationFallback = await mediateRagQuestion({
   locale: "ko",
   deterministicCategory: "general",
 }, {
+  forceLlm: true,
   generate: async () => ({
     text: "not-json",
     backend: "kimi",
@@ -502,6 +630,7 @@ const retriedMediation = await mediateRagQuestion({
   locale: "ko",
   deterministicCategory: "visa",
 }, {
+  forceLlm: true,
   generate: async () => {
     mediationAttempts += 1;
     return {
