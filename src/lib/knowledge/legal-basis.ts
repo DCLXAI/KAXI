@@ -311,7 +311,7 @@ export function immigrationLegalBasisDocIdsForQuery(query: string, mode?: string
 export function withImmigrationLegalBasisDocs(
   query: string,
   docs: KnowledgeDoc[],
-  options: { mode?: string; maxDocs?: number } = {}
+  options: { mode?: string; maxDocs?: number; minRetrievedDocs?: number } = {}
 ): KnowledgeDoc[] {
   const legalDocIds = immigrationLegalBasisDocIdsForQuery(query, options.mode);
   if (legalDocIds.length === 0) return docs.slice(0, options.maxDocs || docs.length);
@@ -326,6 +326,21 @@ export function withImmigrationLegalBasisDocs(
     .map((id) => retrievedDocs.get(id) || activeDocs.get(id))
     .filter((doc): doc is KnowledgeDoc => Boolean(doc));
   const rest = docs.filter((doc) => !legalDocIds.includes(doc.id));
+
+  const minRetrievedDocs = Math.min(
+    Math.max(Math.trunc(options.minRetrievedDocs || 0), 0),
+    maxDocs,
+    rest.length,
+  );
+  if (minRetrievedDocs > 0) {
+    const legalLimit = Math.max(0, maxDocs - minRetrievedDocs);
+    return [
+      ...legalDocs.slice(0, legalLimit),
+      ...rest.slice(0, minRetrievedDocs),
+      ...legalDocs.slice(legalLimit),
+      ...rest.slice(minRetrievedDocs),
+    ].slice(0, maxDocs);
+  }
 
   return [...legalDocs, ...rest].slice(0, maxDocs);
 }

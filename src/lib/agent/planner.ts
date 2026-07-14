@@ -1,5 +1,5 @@
 import type { Lang } from "@/lib/i18n/translations";
-import { extractAgentSlots } from "@/lib/agent/slot-extraction";
+import { extractAgentSlots, isDocumentMatrixVisaType } from "@/lib/agent/slot-extraction";
 import type {
   AgentEducation,
   AgentGoal,
@@ -110,7 +110,7 @@ export interface AgentIntentAnalysis {
   region: string;
   program: string;
   accreditation: string;
-  visaType: AgentVisaType;
+  visaType?: AgentVisaType;
   nationality: string;
   partnerType: string;
   education: AgentEducation;
@@ -190,9 +190,9 @@ const SLOT_DEFINITIONS: PlannerSlotDefinition[] = [
     slot: "visaType",
     missingSlot: "visa_type",
     getValue: (slots) => slots.visaType,
-    isResolved: (slots) => slots.signals.explicitVisaType,
-    isExplicit: (slots) => slots.signals.explicitVisaType,
-    isMissing: (slots) => slots.signals.documents && !slots.signals.explicitVisaType,
+    isResolved: (slots) => slots.signals.explicitVisaType && Boolean(slots.visaType),
+    isExplicit: (slots) => slots.signals.explicitVisaType && Boolean(slots.visaType),
+    isMissing: (slots) => slots.signals.documents && !slots.visaType,
     requiredFor: () => ["get_documents"],
     missingReason: "document_request_without_explicit_visa_type",
   },
@@ -202,9 +202,12 @@ const SLOT_DEFINITIONS: PlannerSlotDefinition[] = [
     getValue: (slots) => slots.nationality,
     isResolved: (slots) => slots.nationality !== "other",
     isExplicit: (slots) => slots.nationality !== "other",
-    isMissing: (slots) => (slots.signals.documents || slots.signals.diagnosis) && slots.nationality === "other",
+    isMissing: (slots) => (
+      slots.signals.diagnosis
+      || (slots.signals.documents && (!slots.visaType || isDocumentMatrixVisaType(slots.visaType)))
+    ) && slots.nationality === "other",
     requiredFor: (slots) => compactTools([
-      slots.signals.documents && "get_documents",
+      slots.signals.documents && isDocumentMatrixVisaType(slots.visaType) && "get_documents",
       slots.signals.diagnosis && "diagnose_path",
     ]),
     missingReason: "visa_or_diagnosis_request_without_nationality",
@@ -312,7 +315,7 @@ function buildToolPlan(question: string, slots: ExtractedAgentSlots): PlannedToo
     });
   }
 
-  if (signals.documents) {
+  if (signals.documents && isDocumentMatrixVisaType(visaType)) {
     plan.push({
       tool: "get_documents",
       args: { visa_type: visaType, nationality },

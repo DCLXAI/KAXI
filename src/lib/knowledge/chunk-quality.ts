@@ -319,7 +319,11 @@ function bodyOnlyText(cleanedContent: string): string {
       const trimmed = line.trim();
       if (!trimmed) return false;
       if (trimmed.startsWith("# ")) return false;
-      if (/^(source_url|source_type|topic|legal_priority|monitor_cadence|change_signals):/.test(trimmed)) return false;
+      if (
+        /^(source_url|source_type|topic|legal_priority|monitor_cadence|change_signals|evidence_kind|applicant_region|required_content_signals|extraction_method|body_sha256|content_type|content_encoding|byte_sha256|byte_length|extracted_chars|extraction_error):/.test(
+          trimmed,
+        )
+      ) return false;
       return true;
     })
     .join("\n");

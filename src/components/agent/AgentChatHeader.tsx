@@ -1,9 +1,8 @@
 "use client";
 
 import { RefreshCw } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { KaxiCat } from "@/components/brand/KaxiCat";
+import { KaxiPawMark } from "@/components/brand/KaxiPawMark";
 import { statusDotClass, statusText } from "./agent-config";
 import type { AgentLocale, AgentStatus } from "./types";
 
@@ -17,13 +16,12 @@ export function AgentChatHeader({ agentStatus, locale, onReset }: AgentChatHeade
   return (
     <div className="flex items-center justify-between mb-6 pb-4 border-b">
       <div className="flex items-center gap-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <KaxiCat state="breath" size={28} inverted />
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-icon-accent/15">
+          <KaxiPawMark className="h-4 w-4" />
         </div>
         <div>
           <div className="font-semibold text-sm flex items-center gap-1.5">
-            {locale === "ko" ? "AI 에이전트" : "AI Agent"}
-            <Badge variant="outline" className="text-[10px] py-0 h-4">ReAct</Badge>
+            KAXI AI
           </div>
           <div className="text-xs text-muted-foreground flex items-center gap-1.5">
             <span className={`h-1.5 w-1.5 rounded-full ${statusDotClass(agentStatus)}`} />

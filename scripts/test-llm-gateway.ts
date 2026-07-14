@@ -1,5 +1,6 @@
 import {
   generateLlmJson,
+  generateLlmText,
   getConfiguredLlmBackend,
   getLlmGatewayDiagnostics,
   isLlmNotConfiguredError,
@@ -30,6 +31,7 @@ try {
   });
   delete process.env.KIMI_API_KEY;
   delete process.env.MOONSHOT_API_KEY;
+  delete process.env.KIMI_THINKING;
 
   let capturedUrl = "";
   let capturedAuthorization = "";
@@ -92,6 +94,9 @@ try {
   if (serialized.includes("user@example.com")) fail("PII was not redacted before the Kimi request");
   if (!serialized.includes("[redacted-email]")) fail("redacted PII marker missing from Kimi request");
   if (!serialized.includes("data:image/png;base64,aGVsbG8=")) fail("Anthropic image block was not converted to OpenAI format");
+  if (!serialized.includes('"thinking":{"type":"disabled"}')) {
+    fail("structured Kimi requests must disable thinking unless explicitly configured");
+  }
   if (!serialized.includes('"type":"json_schema"')) fail("structured output schema was not forwarded");
 
   const diagnostics = getLlmGatewayDiagnostics();
@@ -152,6 +157,26 @@ try {
   if (!JSON.stringify(pdfCompletionBody).includes("Passport Number P1234567")) {
     fail("extracted PDF text was not forwarded to the structured completion");
   }
+
+  const truncatedFetch = async () => Response.json({
+    model: "kimi-k2.6-test",
+    choices: [{
+      finish_reason: "length",
+      message: { content: "This answer was cut off in the middle of a sent" },
+    }],
+  });
+  globalThis.fetch = Object.assign(truncatedFetch, { preconnect: originalFetch.preconnect });
+  let truncatedCompletionRejected = false;
+  try {
+    await generateLlmText({
+      feature: "agent",
+      maxTokens: 1200,
+      messages: [{ role: "user", content: "Return a complete answer." }],
+    });
+  } catch (error) {
+    truncatedCompletionRejected = error instanceof Error && error.message.includes("output budget");
+  }
+  if (!truncatedCompletionRejected) fail("Kimi length-truncated text must not be accepted as a complete answer");
 
   process.env.OPENAI_API_KEY = "";
   let missingKeyDetected = false;

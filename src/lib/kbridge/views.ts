@@ -1,7 +1,6 @@
 export const VIEW_KEYS = [
   "home",
   "agent",
-  "consult",
   "diagnose",
   "schools",
   "cost",
@@ -16,7 +15,6 @@ export type ViewKey = (typeof VIEW_KEYS)[number];
 export const VIEW_PATHS: Record<ViewKey, string> = {
   home: "/",
   agent: "/agent",
-  consult: "/consult",
   diagnose: "/diagnose",
   schools: "/schools",
   cost: "/cost",
@@ -32,12 +30,8 @@ export const VIEW_METADATA: Record<ViewKey, { title: string; description: string
     description: "한국 유학 준비생을 위한 학교, 비용, 서류, 비자 상담 도구",
   },
   agent: {
-    title: "KAXI AI 에이전트",
-    description: "학교 검색, 비용 계산, 서류 확인을 돕는 KAXI AI 에이전트",
-  },
-  consult: {
-    title: "KAXI 전문 상담",
-    description: "공식 문서 기반 비자, 서류, 체류 전문 상담",
+    title: "KAXI AI",
+    description: "학교·비용 도구 실행과 공식 문서 기반 비자 상담을 하나로 제공하는 KAXI AI",
   },
   diagnose: {
     title: "KAXI 유학 경로 진단",

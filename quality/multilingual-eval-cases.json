@@ -69,7 +69,7 @@
     "lang": "ko",
     "category": "visa",
     "question": "어학연수 D-4에서 대학 D-2로 바꾸려면 새 활동을 시작하기 전에 무엇을 해야 하나요?",
-    "expectedDocIds": ["hikorea-status-change", "immigration-act-status-change"],
+    "expectedDocIds": ["d-4-to-d-2-transfer", "hikorea-status-change", "immigration-act-status-change"],
     "expectedRefusal": false,
     "expectedCostFormat": "none"
   },
@@ -193,7 +193,7 @@
     "lang": "vi",
     "category": "visa",
     "question": "Muốn chuyển từ D-4 học tiếng sang D-2 đại học thì phải xin phép trước khi bắt đầu học đúng không?",
-    "expectedDocIds": ["hikorea-status-change", "immigration-act-status-change"],
+    "expectedDocIds": ["d-4-to-d-2-transfer", "hikorea-status-change", "immigration-act-status-change"],
     "expectedRefusal": false,
     "expectedCostFormat": "none"
   },
@@ -441,7 +441,7 @@
     "lang": "en",
     "category": "visa",
     "question": "To change from D-4 language training to D-2 university study, do I need permission before the new program starts?",
-    "expectedDocIds": ["hikorea-status-change", "immigration-act-status-change"],
+    "expectedDocIds": ["d-4-to-d-2-transfer", "hikorea-status-change", "immigration-act-status-change"],
     "expectedRefusal": false,
     "expectedCostFormat": "none"
   },

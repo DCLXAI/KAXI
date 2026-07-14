@@ -1,5 +1,71 @@
 import { expect, test } from "@playwright/test";
 
+test("home quick diagnosis uses three answers for its path result", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto("/ko");
+
+  const quickDiagnosis = page.getByTestId("home-quick-diagnosis");
+  await expect(page.locator('[data-kaxi-running-cat="travel"]')).toHaveCount(0);
+  await expect(quickDiagnosis.locator('[data-kaxi-mark="paw"]')).toBeVisible();
+  await expect(page.locator('#kaxi-ai [data-kaxi-mark="paw"]')).toBeVisible();
+  await expect(quickDiagnosis).toBeVisible();
+  await expect(page.getByText("무료 진단 시작")).toHaveCount(0);
+
+  const initialPalette = await page.evaluate(() => {
+    const paw = document.querySelector('[data-testid="home-quick-diagnosis"] [data-kaxi-mark="paw"]');
+    const option = document.querySelector('[data-testid="quick-diagnosis-option-language"]');
+    return {
+      iconToken: getComputedStyle(document.documentElement).getPropertyValue("--icon-accent").trim(),
+      pawColor: paw ? getComputedStyle(paw).color : "",
+      optionBorder: option ? getComputedStyle(option).borderColor : "",
+    };
+  });
+  expect(initialPalette).toMatchObject({
+    iconToken: "#e5a0b3",
+    pawColor: "rgb(229, 160, 179)",
+  });
+  expect(initialPalette.optionBorder).toContain("0.45");
+
+  await page.getByTestId("quick-diagnosis-option-language").click();
+  await expect(page.getByTestId("quick-diagnosis-step-korean")).toBeVisible();
+  await page.getByTestId("quick-diagnosis-korean-none").click();
+  await expect(page.getByTestId("quick-diagnosis-step-budget")).toBeVisible();
+  await page.getByTestId("quick-diagnosis-budget-8to12").click();
+
+  const result = page.getByTestId("quick-diagnosis-result");
+  await expect(result).toBeVisible();
+  await expect(result).toContainText("D-4");
+  await expect(result).toContainText("7,000,000–9,000,000 KRW");
+  await expect(result).toContainText("이렇게 추천한 이유");
+  await expect(result.getByRole("button", { name: "내 조건으로 정밀 진단" })).toBeVisible();
+  await page.waitForTimeout(250);
+
+  const primaryButtonBackground = await page.evaluate(() => {
+    const primaryButton = document.querySelector('[data-testid="quick-diagnosis-result"] button');
+    return primaryButton ? getComputedStyle(primaryButton).backgroundColor : "";
+  });
+  expect(primaryButtonBackground).toBe("rgb(201, 100, 66)");
+
+  const resultBox = await result.boundingBox();
+  expect(resultBox).not.toBeNull();
+  expect(resultBox?.x || 0).toBeGreaterThanOrEqual(0);
+  expect((resultBox?.x || 0) + (resultBox?.width || 0)).toBeLessThanOrEqual(320);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  const note = page.getByTestId("quick-diagnosis-note");
+  await note.scrollIntoViewIfNeeded();
+  const noteBox = await note.boundingBox();
+  const launcherBox = await page.getByRole("button", { name: "KAXI 상담 열기" }).boundingBox();
+  expect(noteBox).not.toBeNull();
+  expect(launcherBox).not.toBeNull();
+  const overlapsLauncher =
+    (noteBox?.x || 0) < (launcherBox?.x || 0) + (launcherBox?.width || 0) &&
+    (noteBox?.x || 0) + (noteBox?.width || 0) > (launcherBox?.x || 0) &&
+    (noteBox?.y || 0) < (launcherBox?.y || 0) + (launcherBox?.height || 0) &&
+    (noteBox?.y || 0) + (noteBox?.height || 0) > (launcherBox?.y || 0);
+  expect(overlapsLauncher).toBe(false);
+});
+
 test("landing -> diagnosis save -> admin lookup -> Agent question -> RAG consult", async ({ page, request }) => {
   await page.goto("/ko");
   await expect(page.getByText("KAXI").first()).toBeVisible();
@@ -69,19 +135,23 @@ test("landing -> diagnosis save -> admin lookup -> Agent question -> RAG consult
   expect(Array.isArray(consultData.retrievedDocs)).toBe(true);
 });
 
-test("KAXI widget receives a server-owned session and rejects a forged session", async ({ page, request }) => {
+test("KAXI Typebot bubble loads the published flow and rejects a forged session", async ({ page, request }) => {
   await page.goto("/ko");
-  await page.getByRole("button", { name: "KAXI 상담 열기" }).click();
-  const panel = page.getByRole("region", { name: "KAXI 상담 채팅" });
-  await expect(panel).toBeVisible();
-  await expect(page.getByPlaceholder("KAXI에게 질문해 주세요.")).toBeEnabled();
+  const launcher = page.getByRole("button", { name: "Open chatbot" });
+  await expect(launcher).toBeVisible();
 
-  const box = await panel.boundingBox();
-  expect(box).not.toBeNull();
-  expect((box?.y || 0) + (box?.height || 0)).toBeLessThanOrEqual(720);
+  const configuration = await page.locator("typebot-bubble").evaluate((element) => {
+    const bubble = element as HTMLElement & { typebot?: string; apiHost?: string };
+    return { typebot: bubble.typebot, apiHost: bubble.apiHost };
+  });
+  expect(configuration).toEqual({
+    typebot: "kaxi-rag-typebot",
+    apiHost: "https://typebot.io",
+  });
 
-  const cookies = await page.context().cookies();
-  expect(cookies.some((cookie) => cookie.name === "kaxi_chat_session" && cookie.httpOnly)).toBe(true);
+  await launcher.click();
+  await expect(page.getByRole("button", { name: "Close chatbot" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "예: D-4 비자 연장에는 어떤 서류가 필요한가요?" })).toBeEnabled();
 
   const forged = await request.post("/api/typebot-rag", {
     data: {
@@ -94,33 +164,16 @@ test("KAXI widget receives a server-owned session and rejects a forged session",
   expect(forged.status()).toBe(401);
 });
 
-test("KAXI widget localizes its controls and stays usable on a small mobile viewport", async ({ page }) => {
+test("KAXI Typebot bubble stays usable on mobile and is hidden on account routes", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await page.goto("/en");
-  await page.getByRole("button", { name: "Open KAXI chat" }).click();
+  const launcher = page.getByRole("button", { name: "Open chatbot" });
+  await expect(launcher).toBeVisible();
+  const launcherBox = await launcher.boundingBox();
+  expect(launcherBox).not.toBeNull();
+  expect((launcherBox?.x || 0) + (launcherBox?.width || 0)).toBeLessThanOrEqual(320);
+  expect((launcherBox?.y || 0) + (launcherBox?.height || 0)).toBeLessThanOrEqual(568);
 
-  const panel = page.getByRole("region", { name: "KAXI consultation chat" });
-  await expect(panel).toBeVisible();
-  await expect(page.getByText("Hello! Nice to meet you 👋")).toBeVisible();
-  const textbox = page.getByRole("textbox", { name: "Question for KAXI" });
-  await expect(textbox).toHaveAttribute("placeholder", "Ask KAXI a question.");
-  await expect(textbox).toBeEnabled();
-
-  const panelBox = await panel.boundingBox();
-  const textboxBox = await textbox.boundingBox();
-  const attachmentBox = await page.getByRole("button", { name: "Attach file" }).boundingBox();
-  const disclaimer = page.getByText("KAXI provides guidance grounded in official sources.");
-  await expect(disclaimer).toBeVisible();
-  const disclaimerBox = await disclaimer.boundingBox();
-  expect(panelBox).not.toBeNull();
-  expect((panelBox?.x || 0) + (panelBox?.width || 0)).toBeLessThanOrEqual(320);
-  expect((panelBox?.y || 0) + (panelBox?.height || 0)).toBeLessThanOrEqual(568);
-  expect(textboxBox).not.toBeNull();
-  expect(attachmentBox).not.toBeNull();
-  expect(disclaimerBox).not.toBeNull();
-  expect((textboxBox?.y || 0) + (textboxBox?.height || 0)).toBeLessThanOrEqual(attachmentBox?.y || 0);
-  expect((disclaimerBox?.y || 0) + (disclaimerBox?.height || 0)).toBeLessThanOrEqual(568);
-  expect((disclaimerBox?.y || 0) + (disclaimerBox?.height || 0)).toBeLessThanOrEqual(
-    (panelBox?.y || 0) + (panelBox?.height || 0),
-  );
+  await page.goto("/login");
+  await expect(page.locator("typebot-bubble")).toHaveCount(0);
 });

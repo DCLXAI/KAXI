@@ -2,19 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { canWriteRuntimeDatabase } from "@/lib/db";
 import { recordRequestAudit } from "@/lib/audit";
 import { enforcePrivacyRetention } from "@/lib/privacy/retention";
-import { getAdminContext, jsonError, requireAdmin } from "@/lib/api/security";
-
-function authorizeCron(req: NextRequest): NextResponse | null {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    return process.env.NODE_ENV === "production"
-      ? jsonError("CRON_SECRET is not configured", 503)
-      : null;
-  }
-
-  const auth = req.headers.get("authorization");
-  return auth === `Bearer ${secret}` ? null : jsonError("Unauthorized", 401);
-}
+import { getAdminContext, requireAdmin } from "@/lib/api/security";
+import { authorizeCronRequest } from "@/lib/security/cron-auth";
 
 export async function GET(req: NextRequest) {
   if (!canWriteRuntimeDatabase()) {
@@ -24,7 +13,7 @@ export async function GET(req: NextRequest) {
       reason: "Writable production database is not configured",
     }, { status: 202 });
   }
-  const unauthorized = authorizeCron(req);
+  const unauthorized = authorizeCronRequest(req);
   if (unauthorized) return unauthorized;
 
   const result = await enforcePrivacyRetention();

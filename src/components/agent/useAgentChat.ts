@@ -4,17 +4,96 @@ import { useEffect, useRef, useState } from "react";
 import { useLocale } from "next-intl";
 import { defaultLocale, isLocale } from "@/i18n/routing";
 import {
+  AgentSessionResponseCache,
+  agentResponseCacheKey,
+  isCacheableAgentQuestion,
+} from "@/lib/ai/agent-response-cache";
+import {
+  readUnifiedAiEventStream,
+  UnifiedAiStreamError,
+  type UnifiedAiStreamEvent,
+} from "@/lib/ai/unified-stream";
+import {
   buildClarifyPrompt,
   cloneEmptyClarifyDraft,
 } from "./agent-config";
-import type { AgentLocale, AgentMessage, AgentStatus, ClarifyDraft } from "./types";
+import type { AgentLocale, AgentMessage, AgentProgress, AgentStatus, ClarifyDraft } from "./types";
 
-async function fetchAgent(payload: unknown): Promise<Response> {
-  return fetch("/api/ai/agent", {
+const CLIENT_STREAM_TIMEOUT_MS = 25_000;
+
+async function fetchAgent(payload: unknown, signal: AbortSignal): Promise<Response> {
+  return fetch("/api/ai/unified/stream", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      Accept: "application/x-ndjson",
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify(payload),
+    signal,
   });
+}
+
+function agentMessageFromResponse(data: Record<string, unknown>, requestId: string): AgentMessage {
+  return {
+    role: "agent",
+    requestId,
+    state: "complete",
+    text: typeof data.answer === "string" ? data.answer : "",
+    steps: Array.isArray(data.steps) ? data.steps as AgentMessage["steps"] : undefined,
+    toolResults: Array.isArray(data.toolResults) ? data.toolResults as AgentMessage["toolResults"] : undefined,
+    iterations: typeof data.iterations === "number" ? data.iterations : undefined,
+    backend: typeof data.backend === "string" ? data.backend : undefined,
+    durationMs: typeof data.durationMs === "number" ? data.durationMs : undefined,
+    grounded: Boolean(data.grounded),
+    meta: data.meta && typeof data.meta === "object" ? data.meta as AgentMessage["meta"] : undefined,
+    routing: data.routing && typeof data.routing === "object" ? data.routing as AgentMessage["routing"] : undefined,
+    expert: data.expert && typeof data.expert === "object" ? data.expert as AgentMessage["expert"] : undefined,
+    needsHumanExpert: data.needsHumanExpert === true,
+    escalationCaseCreated: data.escalationCaseCreated === true,
+  };
+}
+
+function upsertAgentMessage(messages: AgentMessage[], requestId: string, next: AgentMessage): AgentMessage[] {
+  const index = messages.findIndex((message) => message.requestId === requestId);
+  if (index === -1) return [...messages, next];
+  return messages.map((message, messageIndex) => messageIndex === index ? next : message);
+}
+
+function errorCopy(locale: AgentLocale, code: string, status: number): string {
+  if (status === 401 || status === 403) {
+    return locale === "ko"
+      ? "AI 에이전트는 로그인 후 사용할 수 있습니다."
+      : locale === "vi"
+        ? "Bạn cần đăng nhập để sử dụng AI agent."
+        : locale === "mn"
+          ? "AI агентийг ашиглахын тулд нэвтэрнэ үү."
+          : "Sign in to use the AI agent.";
+  }
+  if (code.includes("timeout") || code === "client_timeout") {
+    return locale === "ko"
+      ? "답변 시간이 길어져 요청을 안전하게 중단했습니다. 같은 질문으로 다시 시도할 수 있습니다."
+      : locale === "vi"
+        ? "Yêu cầu đã được dừng vì phản hồi mất quá nhiều thời gian. Bạn có thể thử lại cùng câu hỏi."
+        : locale === "mn"
+          ? "Хариу удааширсан тул хүсэлтийг аюулгүй зогсоолоо. Ижил асуултаар дахин оролдоно уу."
+          : "The request was stopped because the response took too long. You can retry the same question.";
+  }
+  if (status === 429) {
+    return locale === "ko"
+      ? "요청이 잠시 몰렸습니다. 잠시 후 다시 시도해주세요."
+      : locale === "vi"
+        ? "Hiện có quá nhiều yêu cầu. Vui lòng thử lại sau ít phút."
+        : locale === "mn"
+          ? "Одоогоор хүсэлт их байна. Түр хүлээгээд дахин оролдоно уу."
+          : "There are too many requests right now. Please retry shortly.";
+  }
+  return locale === "ko"
+    ? "답변을 완료하지 못했습니다. 질문은 그대로 두고 다시 시도할 수 있습니다."
+    : locale === "vi"
+      ? "Không thể hoàn tất câu trả lời. Bạn có thể thử lại mà không cần nhập lại câu hỏi."
+      : locale === "mn"
+        ? "Хариуг дуусгаж чадсангүй. Асуултаа дахин бичихгүйгээр оролдоно уу."
+        : "The answer could not be completed. You can retry without retyping the question.";
 }
 
 export function useAgentChat() {
@@ -25,9 +104,13 @@ export function useAgentChat() {
   const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [started, setStarted] = useState(false);
   const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
+  const [progress, setProgress] = useState<AgentProgress | null>(null);
   const [clarifyDrafts, setClarifyDrafts] = useState<Record<number, ClarifyDraft>>({});
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const activeRequestIdRef = useRef<string | null>(null);
+  const responseCacheRef = useRef(new AgentSessionResponseCache<AgentMessage>());
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -40,7 +123,7 @@ export function useAgentChat() {
   useEffect(() => {
     let alive = true;
 
-    fetch("/api/ai/agent")
+    fetch("/api/ai/unified")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (alive && data) setAgentStatus(data);
@@ -52,72 +135,142 @@ export function useAgentChat() {
     };
   }, []);
 
-  const send = async (text?: string) => {
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  const send = async (
+    text?: string,
+    options: { appendUser?: boolean; bypassCache?: boolean } = {},
+  ) => {
     const userMsg = (text ?? input).trim();
     if (!userMsg || loading) return;
 
     setStarted(true);
     setInput("");
-    setMessages((current) => [...current, { role: "user", text: userMsg }]);
+    const requestId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+    const appendUser = options.appendUser !== false;
+    const cacheKey = agentResponseCacheKey(userMsg, locale);
+    const cached = !options.bypassCache && isCacheableAgentQuestion(userMsg)
+      ? responseCacheRef.current.get(cacheKey)
+      : undefined;
+
+    if (cached) {
+      setProgress(null);
+      setMessages((current) => [
+        ...current,
+        ...(appendUser ? [{ role: "user" as const, text: userMsg }] : []),
+        { ...cached, requestId, state: "complete", cached: true, durationMs: 0 },
+      ]);
+      return;
+    }
+
+    setMessages((current) => [
+      ...current,
+      ...(appendUser ? [{ role: "user" as const, text: userMsg }] : []),
+    ]);
     setLoading(true);
+    setProgress({ stage: "routing" });
+    activeRequestIdRef.current = requestId;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const clientTimeout = window.setTimeout(() => controller.abort(), CLIENT_STREAM_TIMEOUT_MS);
 
     try {
-      const history = messages.slice(-6).map((message) => ({
+      const usableMessages = messages.filter((message) => message.state !== "error");
+      const history = usableMessages.slice(-6).map((message) => ({
         role: message.role === "user" ? "user" : "assistant",
         content: message.text,
       }));
+      const previousAgentMessage = usableMessages.slice().reverse().find((message) => message.role === "agent");
 
-      const res = await fetchAgent({ question: userMsg, lang: locale, history });
+      const res = await fetchAgent({
+        question: userMsg,
+        lang: locale,
+        history,
+        previousCapability: previousAgentMessage?.routing?.capability,
+        previousExpertMode: previousAgentMessage?.expert?.mode,
+      }, controller.signal);
 
-      if (!res.ok) {
-        const errorBody = await res.json().catch(() => ({}));
-        const message =
-          res.status === 401
-            ? locale === "ko"
-              ? "AI 에이전트는 관리자 로그인 후 사용할 수 있습니다."
-              : "AI agent requires admin login."
-            : errorBody.error || "API failed";
-        throw new Error(message);
+      const completedData = await readUnifiedAiEventStream(res, (event: UnifiedAiStreamEvent) => {
+        if (activeRequestIdRef.current !== requestId) return;
+        if (event.type === "progress") {
+          setProgress({ stage: event.stage, capability: event.capability });
+          return;
+        }
+        if (event.type === "delta") {
+          setMessages((current) => {
+            const existing = current.find((message) => message.requestId === requestId);
+            const next: AgentMessage = {
+              role: "agent",
+              requestId,
+              state: "streaming",
+              text: `${existing?.text || ""}${event.delta}`,
+            };
+            return upsertAgentMessage(current, requestId, next);
+          });
+          return;
+        }
+      });
+      const completedMessage = agentMessageFromResponse(completedData, requestId);
+      setMessages((current) => upsertAgentMessage(current, requestId, completedMessage));
+
+      if (
+        isCacheableAgentQuestion(userMsg)
+        && !completedMessage.expert?.needsHumanExpert
+        && !completedMessage.meta?.safetyFlags?.length
+      ) {
+        responseCacheRef.current.set(cacheKey, { ...completedMessage, requestId: undefined, cached: false });
       }
-
-      const data = await res.json();
-      setMessages((current) => [
-        ...current,
-        {
-          role: "agent",
-          text: data.answer,
-          steps: data.steps,
-          toolResults: data.toolResults,
-          iterations: data.iterations,
-          backend: data.backend,
-          durationMs: data.durationMs,
-          grounded: Boolean(data.grounded),
-          meta: data.meta,
-          needsHumanExpert: data.needsHumanExpert,
-          escalationCaseCreated: data.escalationCaseCreated,
-        },
-      ]);
     } catch (error) {
-      console.error("[agent]", error);
-      const message = error instanceof Error ? error.message : "";
-      setMessages((current) => [
-        ...current,
-        {
-          role: "agent",
-          text: message || (locale === "ko" ? "일시적 오류가 발생했습니다." : "Temporary error."),
-        },
-      ]);
+      if (activeRequestIdRef.current !== requestId) return;
+      const aborted = error instanceof DOMException && error.name === "AbortError";
+      const streamError = error instanceof UnifiedAiStreamError ? error : null;
+      const code = aborted ? "client_timeout" : streamError?.code || "stream_failed";
+      const status = aborted ? 504 : streamError?.status || 502;
+      const retryable = aborted || streamError?.retryable !== false;
+      console.error("[agent stream]", code, status);
+      setMessages((current) => {
+        const withoutPartial = current.filter((message) => message.requestId !== requestId);
+        return [
+          ...withoutPartial,
+          {
+            role: "agent",
+            requestId,
+            state: "error",
+            text: errorCopy(locale, code, status),
+            retry: retryable ? { question: userMsg, code } : undefined,
+          },
+        ];
+      });
     } finally {
-      setLoading(false);
+      window.clearTimeout(clientTimeout);
+      if (activeRequestIdRef.current === requestId) {
+        activeRequestIdRef.current = null;
+        abortRef.current = null;
+        setLoading(false);
+        setProgress(null);
+      }
     }
   };
 
   const reset = () => {
+    activeRequestIdRef.current = null;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    responseCacheRef.current.clear();
     setMessages([]);
     setClarifyDrafts({});
+    setLoading(false);
+    setProgress(null);
     setStarted(false);
     setInput("");
     setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const retry = (messageIndex: number) => {
+    const retryRequest = messages[messageIndex]?.retry;
+    if (!retryRequest || loading) return;
+    setMessages((current) => current.filter((_, index) => index !== messageIndex));
+    void send(retryRequest.question, { appendUser: false, bypassCache: true });
   };
 
   const updateClarifyDraft = (messageIndex: number, patch: Partial<ClarifyDraft>) => {
@@ -146,7 +299,9 @@ export function useAgentChat() {
     loading,
     locale,
     messages,
+    progress,
     reset,
+    retry,
     send,
     sendClarifyDraft,
     setInput,

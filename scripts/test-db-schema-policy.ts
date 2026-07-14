@@ -128,6 +128,10 @@ assert(postgresSql.includes("kaxi_claim_chat_attachment_jobs"), "missing durable
 assert(postgresSql.includes("CREATE TABLE IF NOT EXISTS public.chat_attachment_jobs"), "missing durable chat attachment jobs table");
 assert(postgresSql.includes("kaxi_sanitize_n8n_audit_content"), "missing metadata-only n8n audit sanitizer");
 assert(postgresSql.includes("chat_messages_provenance_idx"), "missing RAG response provenance migration");
+assert(
+  postgresSql.includes("KnowledgeDocument_one_open_candidate_per_source_key"),
+  "missing single-open knowledge candidate constraint",
+);
 for (const provenanceColumn of ["workflow_version_id", "model_version", "prompt_version"]) {
   assert(postgresSql.includes(provenanceColumn), `missing RAG provenance column ${provenanceColumn}`);
 }

@@ -21,6 +21,7 @@ async function responseJson(res: Response) {
 }
 
 process.env.ADMIN_API_KEY = "test-admin-key";
+process.env.KNOWLEDGE_MONITOR_PERSIST_CANDIDATES = "false";
 prepareTestDb("admin dashboard");
 
 const { NextRequest } = await import("next/server");
@@ -55,6 +56,11 @@ try {
   const auditRoute = await import("../src/app/api/admin/audit/route");
   const opsRoute = await import("../src/app/api/admin/ops/route");
   const handoffsRoute = await import("../src/app/api/admin/handoffs/route");
+  const analyticsRoute = await import("../src/app/api/admin/analytics/route");
+
+  const analytics = await json(await analyticsRoute.GET(adminRequest("/api/admin/analytics?days=30")));
+  assert(typeof analytics.funnel.answerSuccessRate === "number", "admin analytics should expose answer success rate");
+  assert(Array.isArray(analytics.locales), "admin analytics should expose locale funnels");
 
   const caseList = await json(await casesRoute.GET(adminRequest("/api/admin/cases")));
   assert(caseList.counts.total >= 5, `expected at least 5 cases, got ${caseList.counts.total}`);
@@ -115,8 +121,20 @@ try {
   );
   assert(approvedVersion.version.reviewStatus === "APPROVED", "rule review status should update to APPROVED");
 
-  const knowledge = await json(await knowledgeRoute.GET(adminRequest("/api/admin/knowledge")));
+  const knowledgeResponse = await knowledgeRoute.GET(adminRequest("/api/admin/knowledge"));
+  assert(knowledgeResponse.headers.get("server-timing")?.includes("enrichment;dur="), "admin knowledge should expose server timing");
+  const knowledge = await json(knowledgeResponse);
   assert(knowledge.documents.length >= 1, "admin knowledge should list source documents");
+  assert(knowledge.pagination?.page === 1, "admin knowledge should return the current page");
+  assert(knowledge.pagination?.pageSize === 25, "admin knowledge should use the bounded default page size");
+  assert(knowledge.pagination?.total >= knowledge.documents.length, "admin knowledge should return the total document count");
+  const pagedKnowledge = await json(
+    await knowledgeRoute.GET(adminRequest("/api/admin/knowledge?page=1&pageSize=1"))
+  );
+  assert(pagedKnowledge.documents.length === 1, "admin knowledge should enforce requested page size");
+  assert(pagedKnowledge.pagination.pageSize === 1, "admin knowledge pagination should echo page size");
+  assert(typeof pagedKnowledge.documents[0]?.impact?.ruleCount === "number", "paged knowledge should include batch impact data");
+  assert(pagedKnowledge.documents[0]?.impact?.users.length === 0, "paged knowledge should return compact impact summaries");
   assert(knowledge.readiness?.candidateApproval, "admin knowledge should expose candidate approval readiness");
   assert(knowledge.readiness?.corpus, "admin knowledge should expose production corpus readiness");
   assert(
@@ -180,6 +198,18 @@ try {
       "admin monitor sourceIds should select the requested source"
     );
 
+    const pausedPersist = await json(
+      await knowledgeMonitorRoute.POST(
+        adminRequest("/api/knowledge/monitor", {
+          method: "POST",
+          body: JSON.stringify({ persistCandidates: true, maxSources: 1 }),
+        })
+      )
+    );
+    assert(pausedPersist.candidateWritePaused === true, "candidate kill switch should keep admin runs audit-only");
+    assert(pausedPersist.candidatesCreated === 0, "paused candidate writes must not create a pending candidate");
+
+    process.env.KNOWLEDGE_MONITOR_PERSIST_CANDIDATES = "true";
     const monitorPersist = await json(
       await knowledgeMonitorRoute.POST(
         adminRequest("/api/knowledge/monitor", {
@@ -397,7 +427,7 @@ try {
       await knowledgeRoute.PATCH(
         adminRequest("/api/admin/knowledge", {
           method: "PATCH",
-          body: JSON.stringify({ action: "bulkDiscardCandidates", docIds: [discardCandidateDocId] }),
+          body: JSON.stringify({ action: "bulkDiscardCandidates", allPendingCandidates: true }),
         })
       )
     );
@@ -460,7 +490,12 @@ try {
 
   const handoffs = await json(await handoffsRoute.GET(adminRequest("/api/admin/handoffs")));
   assert(Array.isArray(handoffs.tasks), "admin handoffs should expose a task list");
+  assert(Array.isArray(handoffs.assignees), "admin handoffs should expose validated partner assignees");
   assert(typeof handoffs.counts.active === "number", "admin handoffs should expose queue counts");
+  assert(typeof handoffs.counts.overdue === "number", "admin handoffs should expose overdue SLA counts");
+  assert(typeof handoffs.counts.noContext === "number", "admin handoffs should expose no-context review counts");
+  assert(typeof handoffs.counts.lowConfidence === "number", "admin handoffs should expose low-confidence review counts");
+  assert(typeof handoffs.counts.pendingEvaluation === "number", "admin handoffs should expose pending evaluation counts");
   const invalidHandoffAction = await responseJson(
     await handoffsRoute.PATCH(
       adminRequest("/api/admin/handoffs", {
@@ -473,5 +508,6 @@ try {
 
   console.log("PASS admin dashboard API: cases, actions, rules, knowledge, audit, ops, handoffs");
 } finally {
+  delete process.env.KNOWLEDGE_MONITOR_PERSIST_CANDIDATES;
   await db.$disconnect();
 }

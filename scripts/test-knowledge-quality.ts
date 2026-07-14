@@ -4,6 +4,7 @@ import {
   cleanKnowledgeChunkContent,
   evaluateKnowledgeDocumentQuality,
 } from "../src/lib/knowledge/chunk-quality";
+import { KNOWLEDGE_DOCS } from "../src/lib/data/knowledge-corpus";
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -93,4 +94,15 @@ assert(
   "candidate title prefix should be stripped"
 );
 
-console.log("PASS knowledge quality: law UI cleaning, required body gate, candidate canonicalization");
+const visaPortal = KNOWLEDGE_DOCS.find((document) => document.id === "visa-portal-visa-types");
+assert(visaPortal, "visa portal knowledge document should exist");
+assert(
+  !/[a-z]/iu.test(visaPortal.title.ko),
+  "Korean visa portal title must not mix Latin branding into the localized title",
+);
+assert(
+  /[А-Яа-яЁёӨөҮү]/u.test(visaPortal.title.mn) && !/[a-z]/iu.test(visaPortal.title.mn),
+  "Mongolian visa portal title must remain fully localized in Cyrillic",
+);
+
+console.log("PASS knowledge quality: law UI cleaning, required body gate, canonicalization, localized titles");

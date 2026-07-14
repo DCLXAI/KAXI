@@ -6,10 +6,20 @@ import { extractRagProvenance, resolveRagProvenance } from "@/lib/n8n/provenance
 import { signN8nPayload } from "@/lib/n8n/signature";
 import {
   TypebotRuntimeTurn,
+  typebotRuntimeBlockId,
   typebotRuntimeMessageTextById,
   validatePublishedTypebotRuntime,
 } from "@/lib/typebot/runtime-health";
 import { enforceTypebotResultRetention } from "@/lib/typebot/result-retention";
+import {
+  checkManagedAttachmentScanner,
+  getChatAttachmentSecurityDiagnostics,
+} from "@/lib/chat/attachment-security";
+import {
+  createRagQueryEmbedding,
+  getRagEmbeddingStrategy,
+  isOpenAiQueryEmbedding,
+} from "@/lib/chat/query-embedding";
 
 export type SystemHealthCheck = {
   key: string;
@@ -36,6 +46,70 @@ export function summarizeRagSystemHealth(checks: SystemHealthCheck[]) {
 function configured(value: string | undefined) {
   const text = value?.trim() || "";
   return text && !/^replace-with-/i.test(text) ? text : "";
+}
+
+type EvaluationHealthRow = {
+  id?: string;
+  status?: string;
+  case_count?: number;
+  passed_count?: number;
+  metrics?: unknown;
+  workflow_id?: string;
+  workflow_version_id?: string;
+  model_version?: string;
+  prompt_version?: string;
+  completed_at?: string;
+};
+
+function metric(value: unknown, key: string) {
+  const metrics = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const result = Number(metrics[key]);
+  return Number.isFinite(result) ? result : null;
+}
+
+export function evaluateRagQualityRun(
+  row: EvaluationHealthRow | null,
+  expected = resolveRagProvenance(),
+  now = Date.now(),
+) {
+  if (!row) return { ok: false, detail: "No complete full-suite RAG evaluation run exists.", metadata: {} };
+  const completedAt = row.completed_at ? new Date(row.completed_at).getTime() : Number.NaN;
+  const ageHours = Number.isFinite(completedAt) ? Math.max(0, (now - completedAt) / 3_600_000) : null;
+  const thresholds = {
+    passRate: 0.95,
+    minimumGroupPassRate: 0.9,
+    expectedDocumentRecall: 0.95,
+    citationValidityRate: 1,
+    strictCategoryAccuracy: 1,
+    localeSourceAccuracy: 1,
+    highRiskRecall: 1,
+    noContextAccuracy: 0.95,
+  } as const;
+  const failures = Object.entries(thresholds)
+    .filter(([key, threshold]) => (metric(row.metrics, key) ?? -1) < threshold)
+    .map(([key]) => key);
+  const provenanceMatches = row.workflow_id === expected.workflowId
+    && row.workflow_version_id === expected.workflowVersionId
+    && row.model_version === expected.modelVersion
+    && row.prompt_version === expected.promptVersion;
+  if (!provenanceMatches) failures.push("provenance");
+  if (row.status !== "passed") failures.push("status");
+  if ((row.case_count || 0) < 64) failures.push("caseCount");
+  if (ageHours === null || ageHours > 24 * 7) failures.push("freshness");
+  return {
+    ok: failures.length === 0,
+    detail: failures.length === 0
+      ? `Latest ${row.case_count}-case RAG evaluation meets the production quality gate.`
+      : `Latest full-suite RAG evaluation failed: ${failures.join(", ")}.`,
+    metadata: {
+      runId: row.id || null,
+      caseCount: row.case_count || 0,
+      passedCount: row.passed_count || 0,
+      ageHours,
+      failures,
+      metrics: row.metrics || {},
+    },
+  };
 }
 
 async function timed(key: string, required: boolean, run: () => Promise<Omit<SystemHealthCheck, "key" | "required" | "latencyMs">>) {
@@ -79,7 +153,7 @@ export async function checkPublishedTypebotRuntime() {
     body: JSON.stringify({
       isOnlyRegistering: false,
       isStreamEnabled: false,
-      prefilledVariables: { KAXI_HEALTH_CHECK: "true" },
+      prefilledVariables: { KAXI_HEALTH_CHECK: "true", locale: "ko" },
       textBubbleContentFormat: "markdown",
     }),
     signal: AbortSignal.timeout(15_000),
@@ -108,7 +182,10 @@ export async function checkPublishedTypebotRuntime() {
   }
   const errors = validatePublishedTypebotRuntime(payload, continuation);
   if (errors.length > 0) throw new Error(errors.join("; "));
-  const answerLength = typebotRuntimeMessageTextById(continuation, "block_answer").length;
+  const answerLength = typebotRuntimeMessageTextById(
+    continuation,
+    typebotRuntimeBlockId("ko", "answer"),
+  ).length;
 
   return {
     ok: true,
@@ -188,6 +265,10 @@ export async function runRagSystemHealth(triggerSource = "manual") {
   const bucket = configured(process.env.SUPABASE_CHAT_ATTACHMENTS_BUCKET) || configured(process.env.SUPABASE_STORAGE_BUCKET) || "kaxi-documents";
   const n8nWebhook = configured(process.env.N8N_TYPEBOT_RAG_WEBHOOK_URL);
   const typebotUrl = configured(process.env.TYPEBOT_PUBLIC_URL);
+  const attachmentSecurity = getChatAttachmentSecurityDiagnostics();
+  const embeddingStrategy = getRagEmbeddingStrategy();
+  const openAiEmbeddingRequired = process.env.KAXI_QUERY_EMBEDDING_REQUIRED === "true"
+    || embeddingStrategy === "openai-only";
 
   const checks = await Promise.all([
     timed("supabase.database", true, async () => {
@@ -199,6 +280,19 @@ export async function runRagSystemHealth(triggerSource = "manual") {
       const result = await supabase.storage.getBucket(bucket);
       if (result.error || !result.data) throw new Error(result.error?.message || "Attachment bucket not found");
       return { ok: result.data.public === false, detail: result.data.public ? "Attachment bucket must be private." : "Private attachment bucket is reachable.", metadata: { bucket, public: result.data.public } };
+    }),
+    timed("attachments.external_malware_scanner", attachmentSecurity.externalScannerRequired, async () => {
+      const result = await checkManagedAttachmentScanner();
+      return {
+        ok: result.ok,
+        detail: result.detail,
+        metadata: {
+          engine: result.engine,
+          configured: attachmentSecurity.externalScannerConfigured,
+          required: attachmentSecurity.externalScannerRequired,
+          uploadsEnabled: attachmentSecurity.uploadsEnabled,
+        },
+      };
     }),
     timed("n8n.workflow", true, async () => {
       if (!n8nWebhook) throw new Error("N8N_TYPEBOT_RAG_WEBHOOK_URL is not configured");
@@ -230,8 +324,54 @@ export async function runRagSystemHealth(triggerSource = "manual") {
     }),
     timed("rag.serving_projection", true, async () => {
       const status = await getRagServingProjectionStatus();
-      const ok = status.eligibleChunks > 0 && status.readyChunks === status.eligibleChunks && status.citationReadyChunks === status.eligibleChunks;
-      return { ok, detail: ok ? "All eligible chunks are embedded and citation-ready." : "Serving projection is incomplete.", metadata: status as unknown as Record<string, unknown> };
+      const ok = status.dualIndexReady;
+      const detail = ok
+        ? "OpenAI and E5 indexes cover every eligible, citation-ready chunk."
+        : status.cutoverReady
+          ? `${status.eligibleChunks - status.canonicalVectorReadyChunks} chunk(s) are missing from the E5 rollback index.`
+          : status.readyChunks === status.eligibleChunks
+            ? `${status.lexicalOnlyReadyChunks} serving chunk(s) are citation-ready but still require vector embeddings.`
+            : "Serving projection is incomplete.";
+      return { ok, detail, metadata: status as unknown as Record<string, unknown> };
+    }),
+    timed("rag.openai_query_embedding", openAiEmbeddingRequired, async () => {
+      const embedding = await createRagQueryEmbedding(
+        "한국 유학 D-10 구직 비자 체류자격 변경",
+      );
+      const endpointConfigured = embedding.status !== "not_configured";
+      const ready = isOpenAiQueryEmbedding(embedding);
+      const ok = ready || (!openAiEmbeddingRequired && !endpointConfigured);
+      return {
+        ok,
+        detail: ready
+          ? "OpenAI returned a valid text-embedding-3-small 1536d query embedding."
+          : !endpointConfigured
+            ? "The dedicated OpenAI embedding credential is not configured; E5 remains available for rollback."
+            : `The OpenAI query embedding probe failed: ${embedding.failureReason || embedding.status}.`,
+        metadata: {
+          configured: endpointConfigured,
+          required: openAiEmbeddingRequired,
+          strategy: embeddingStrategy,
+          status: embedding.status,
+          provider: embedding.provider,
+          model: embedding.model,
+          dimensions: embedding.dimensions,
+          failureReason: embedding.failureReason,
+          latencyMs: embedding.latencyMs,
+        },
+      };
+    }),
+    timed("rag.quality_evaluation", true, async () => {
+      const result = await supabase
+        .from("rag_evaluation_runs")
+        .select("id,status,case_count,passed_count,metrics,workflow_id,workflow_version_id,model_version,prompt_version,completed_at")
+        .gte("case_count", 64)
+        .not("completed_at", "is", null)
+        .order("completed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (result.error) throw result.error;
+      return evaluateRagQualityRun(result.data as EvaluationHealthRow | null, provenance);
     }),
     timed("ops.open_events", false, async () => {
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();

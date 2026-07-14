@@ -1,0 +1,1417 @@
+{
+  "name": "KAXI RAG Typebot Architecture",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "RAG Knowledge Ingestion",
+        "formDescription": "Add source material to the Supabase vector knowledge base.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Title",
+              "fieldName": "title",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Source Label",
+              "fieldName": "source"
+            },
+            {
+              "fieldLabel": "Source URL",
+              "fieldName": "source_url"
+            },
+            {
+              "fieldLabel": "Category",
+              "fieldName": "category"
+            },
+            {
+              "fieldLabel": "Tenant ID",
+              "fieldName": "tenant_id",
+              "defaultValue": "default"
+            },
+            {
+              "fieldLabel": "Last Checked At",
+              "fieldType": "date",
+              "fieldName": "last_checked_at"
+            },
+            {
+              "fieldLabel": "Checked By",
+              "fieldName": "checked_by"
+            },
+            {
+              "fieldLabel": "Keywords",
+              "fieldName": "keywords"
+            },
+            {
+              "fieldLabel": "Document Content",
+              "fieldType": "textarea",
+              "fieldName": "content",
+              "requiredField": true
+            }
+          ]
+        },
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "26ceda87-9f4b-4988-b75f-db1d96050c16",
+      "name": "RAG Knowledge Ingestion Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        240,
+        208
+      ],
+      "webhookId": "5f6269cd-2961-4cd7-9ed0-5a01d5d2b6af",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "title",
+              "name": "title",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.title ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "source",
+              "name": "source",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.source ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "source-url",
+              "name": "source_url",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.source_url ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "category",
+              "name": "category",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.category ?? 'general' }}",
+              "type": "string"
+            },
+            {
+              "id": "tenant-id",
+              "name": "tenant_id",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.tenant_id ?? 'default' }}",
+              "type": "string"
+            },
+            {
+              "id": "last-checked-at",
+              "name": "last_checked_at",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.last_checked_at ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "checked-by",
+              "name": "checked_by",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.checked_by ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "keywords",
+              "name": "keywords",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.keywords ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "content",
+              "name": "content",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.content ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "canonical-chunk-id",
+              "name": "canonical_chunk_id",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.canonical_chunk_id ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "canonical-document-id",
+              "name": "canonical_document_id",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.canonical_document_id ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "doc-id",
+              "name": "doc_id",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.doc_id ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "content-hash",
+              "name": "content_hash",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.content_hash ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "embedding-model",
+              "name": "embedding_model",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.embedding_model ?? 'text-embedding-3-small' }}",
+              "type": "string"
+            },
+            {
+              "id": "review-status",
+              "name": "review_status",
+              "value": "={{ $('RAG Knowledge Ingestion Webhook').item.json.body?.review_status ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "is-allowed",
+              "name": "isAllowed",
+              "type": "boolean",
+              "value": "={{ $json.ok === true && $('RAG Knowledge Ingestion Webhook').item.json.body?.review_status === 'approved' && !!$('RAG Knowledge Ingestion Webhook').item.json.body?.canonical_chunk_id && !!$('RAG Knowledge Ingestion Webhook').item.json.body?.canonical_document_id && !!$('RAG Knowledge Ingestion Webhook').item.json.body?.doc_id && !!$('RAG Knowledge Ingestion Webhook').item.json.body?.content_hash && !!$('RAG Knowledge Ingestion Webhook').item.json.body?.source_url && !!$('RAG Knowledge Ingestion Webhook').item.json.body?.content }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5deae1ac-9e37-40bb-83c8-3cbfb6613e3e",
+      "name": "Normalize Knowledge Document",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        720,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "tableName": {
+          "__rl": true,
+          "mode": "id",
+          "value": "rag_serving_chunks",
+          "cachedResultName": "rag_serving_chunks"
+        },
+        "options": {
+          "queryName": "match_rag_documents"
+        }
+      },
+      "id": "7dfca865-5822-46bd-8fec-05e349a449a1",
+      "name": "Insert Governed Serving Chunk",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
+      "position": [
+        928,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "dimensions": 1536,
+          "batchSize": 200,
+          "stripNewLines": true
+        }
+      },
+      "id": "01cefb36-9c1a-49a6-8caf-1adba6057208",
+      "name": "OpenAI Embeddings - Ingest",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        960,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.content }}",
+        "textSplittingMode": "custom",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "title",
+                "value": "={{ $json.title }}"
+              },
+              {
+                "name": "source",
+                "value": "={{ $json.source }}"
+              },
+              {
+                "name": "source_url",
+                "value": "={{ $json.source_url }}"
+              },
+              {
+                "name": "category",
+                "value": "={{ $json.category }}"
+              },
+              {
+                "name": "tenant_id",
+                "value": "={{ $json.tenant_id }}"
+              },
+              {
+                "name": "last_checked_at",
+                "value": "={{ $json.last_checked_at }}"
+              },
+              {
+                "name": "checked_by",
+                "value": "={{ $json.checked_by }}"
+              },
+              {
+                "name": "keywords",
+                "value": "={{ $json.keywords }}"
+              },
+              {
+                "name": "canonical_chunk_id",
+                "value": "={{ $json.canonical_chunk_id }}"
+              },
+              {
+                "name": "canonical_document_id",
+                "value": "={{ $json.canonical_document_id }}"
+              },
+              {
+                "name": "doc_id",
+                "value": "={{ $json.doc_id }}"
+              },
+              {
+                "name": "content_hash",
+                "value": "={{ $json.content_hash }}"
+              },
+              {
+                "name": "embedding_model",
+                "value": "={{ $json.embedding_model }}"
+              },
+              {
+                "name": "review_status",
+                "value": "={{ $json.review_status }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "f6f2c071-269d-47d8-9ab6-0793a734775a",
+      "name": "Default Data Loader",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "chunkSize": 5000,
+        "options": {
+          "splitCode": "markdown"
+        }
+      },
+      "id": "fb24993b-bbc0-4022-855b-20c60e782017",
+      "name": "Recursive Text Splitter",
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        720,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "status",
+              "name": "status",
+              "value": "inserted",
+              "type": "string"
+            },
+            {
+              "id": "message",
+              "name": "message",
+              "value": "Approved canonical chunk was embedded into rag_serving_chunks.",
+              "type": "string"
+            },
+            {
+              "id": "canonical-chunk-id",
+              "name": "canonicalChunkId",
+              "value": "={{ $('Normalize Knowledge Document').item.json.canonical_chunk_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "143e9d8b-8d10-407d-a601-50b1c399968b",
+      "name": "Knowledge Ingestion Done",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1248,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "typebot-rag-runtime",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://kaxi.vercel.app",
+          "ignoreBots": false
+        }
+      },
+      "id": "71cb194d-0469-4786-a633-546bf7ac1b92",
+      "name": "Typebot Runtime Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        832
+      ],
+      "webhookId": "27a7797a-e3de-44fb-8421-ce6615639e79"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "verified-payload",
+              "leftValue": "={{ $json.ok === true && Boolean($json.verificationToken) && Boolean($('Typebot Runtime Webhook').item.json.body?.question) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2d1d4341-868a-40f2-999b-65093a37f731",
+      "name": "Input Guard",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        768,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "load",
+        "tableName": {
+          "__rl": true,
+          "mode": "id",
+          "value": "rag_serving_chunks",
+          "cachedResultName": "rag_serving_chunks"
+        },
+        "prompt": "={{ (() => { const question = String($json.question ?? '').trim(); const locale = String($json.locale ?? '').trim().toLowerCase(); const category = String($json.category ?? 'general').trim().toLowerCase(); const signal = [question, category, locale].join(' '); let hint = ''; if (/날씨|강수|기온|weather|rain probability|thời\\s*tiết|khả\\s*năng\\s*mưa|nhiệt\\s*độ|цаг\\s*агаар|бороо|температур/iu.test(signal)) { return question; } if (/ignore\\s+(?:all\\s+)?(?:previous|prior)\\s+instructions?|reveal\\s+(?:the\\s+)?system\\s+prompt|show\\s+(?:the\\s+)?system\\s+prompt|시스템\\s*프롬프트|이전\\s*(?:지시|명령)\\s*무시|bỏ\\s*qua\\s*(?:các\\s*)?(?:hướng\\s*dẫn|chỉ\\s*thị)\\s*(?:trước|trước\\s*đó)|hiển\\s*thị\\s*(?:system\\s*)?prompt|tiết\\s*lộ\\s*(?:system\\s*)?prompt|өмнөх\\s*заавр|систем(?:ийн)?\\s*prompt|систем(?:ийн)?\\s*промпт|зааврыг\\s*үл\\s*тоо|зааврыг\\s*ил\\s*болго/iu.test(signal) || /가짜|위조|허위|fake|forg(?:ed|ery)?|giả(?:\\s*mạo)?|хуурамч|хуурмаг/iu.test(signal)) { hint = 'fake-documents-warning immigration-act-false-application-documents fake forged bank statement financial proof 가짜 위조 허위 재정증명 잔고증명'; } else if (/불법\\s*취업|무허가|허가\\s*없이|취업\\s*허가\\s*없이|without\\s+(?:a\\s+)?work\\s+permit|work(?:ing)?\\s+without\\s+(?:a\\s+)?permit|illegal\\s+employment|unauthori[sz]ed\\s+work|không\\s+(?:cần|có)\\s+giấy\\s+phép|làm\\s*việc\\s+không\\s+phép|зөвшөөрөлгүй|ажиллах\\s+зөвшөөрөлгүй/iu.test(signal)) { hint = 'illegal-employment-warning immigration-law-violation-risk immigration-act-employment-restriction illegal employment work without permit 불법취업 무허가 취업허가'; } else if (/강제퇴거|추방|입국금지|deport(?:ed|ation)?|entry\\s*ban|re-?entry\\s*ban|trục\\s*xuất|cấm\\s*nhập\\s*cảnh|албадан\\s*гаргуул|нэвтрэх\\s*хориг/iu.test(signal)) { hint = 'immigration-act-entry-ban entry ban deportation re-entry 강제퇴거 입국금지 재입국'; } else if (/시간제\\s*취업|자격외활동|아르바이트|알바|part[-\\s]*time\\s+(?:work|job|employment)|student[^\\n]{0,40}work|work[^\\n]{0,40}student|làm\\s*thêm|việc\\s*làm\\s*thêm|цагийн\\s*ажил|оюутан[^\\n]{0,40}ажил/iu.test(signal)) { hint = 'hikorea-activity-permit immigration-act-outside-status-activity student part-time work permit school confirmation 시간제취업 자격외활동 허가 학교확인'; } else if (/체류\\s*기간|체류\\s*연장|연장|만료|expiry|expire|extension|extend\\s+(?:my\\s+)?stay|gia\\s*hạn|hết\\s*hạn|сунгах|дуусах|хугацаа/iu.test(signal)) { hint = 'hikorea-stay-extension immigration-act-stay-extension stay extension expiry period 체류기간 연장 만료'; } else if (/d[-\\s]?4[^\\n]{0,40}d[-\\s]?2|d[-\\s]?2[^\\n]{0,40}d[-\\s]?4|status\\s*change|change\\s+(?:of\\s+)?status|체류자격\\s*변경|자격\\s*변경|전환|chuyển\\s*(?:đổi\\s*)?(?:tư\\s*cách|visa)|đổi\\s*visa|статус\\s*солих|ангилал\\s*солих/iu.test(signal)) { hint = 'hikorea-status-change immigration-act-status-change d-4-to-d-2-transfer status change permission before new activity 체류자격 변경 전환 사전허가'; } else if (/d[-\\s]?10|job\\s*seeker|job\\s*search|구직|졸업\\s*후|tìm\\s*việc|ажил\\s*хай/iu.test(signal)) { hint = 'd10-overview D-10 job seeker after graduation 구직 졸업 후 체류'; } else if (/d[-\\s]?2|degree|bachelor|master|ph\\.?d|university\\s*study|학위|대학교|대학|cử\\s*nhân|thạc\\s*sĩ|tiến\\s*sĩ|их\\s*сургууль|зэрэг/iu.test(signal)) { hint = 'd2-overview D-2 degree university study visa 학위 대학 유학 비자'; } else if (/d[-\\s]?4|어학|한국어|language\\s*(?:training|study)|korean\\s*language|tiếng\\s*hàn|солонгос\\s*хэл|хэлний\\s*бэлтгэл/iu.test(signal)) { hint = 'd4-overview D-4 Korean language training visa 한국어 어학연수 비자'; } else if (/잔고|은행|재정|bank\\s*(?:balance|statement|certificate)|financial\\s*proof|proof\\s*of\\s*funds|account\\s*holder|issue\\s*date|sao\\s*kê|chứng\\s*minh\\s*tài\\s*chính|tài\\s*chính|дансны\\s*үлдэгдэл|санхүүгийн/iu.test(signal)) { hint = 'financial-proof visa-documents bank balance certificate account holder issue date 재정증명 잔고증명 명의 발급일'; } else if (category === 'cost' || /비용|학비|생활비|수수료|cost|tuition|living\\s*expenses|insurance|fees|chi\\s*phí|học\\s*phí|амьжиргааны\\s*зардал|сургалтын\\s*төлбөр/iu.test(signal)) { hint = 'cost-breakdown study in Korea total cost tuition living insurance fees 유학 총비용 학비 생활비 보험료 수수료'; } else if (category === 'visa') { hint = 'Korea student visa sojourn status 체류 비자'; } else if (category === 'documents') { hint = 'required documents checklist passport photo certificate 서류 여권 사진'; } else if (category === 'school') { hint = 'Korea university admission language institute school 입학 학교 어학당'; } else { hint = 'study in Korea general guidance 유학 일반 안내'; } return [question, hint].filter(Boolean).join('\\n'); })() }}",
+        "topK": 6,
+        "options": {
+          "queryName": "match_rag_documents",
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "tenant_id",
+                "value": "={{ $json.tenant_id }}"
+              },
+              {
+                "name": "category",
+                "value": "={{ (() => { const question = String($json.question ?? '').trim().toLowerCase().replace(/\\s+/g, ' '); if (question === 'after graduation, when should i consider d-10 status to look for work in korea?' || question === 'sau khi tốt nghiệp, trường hợp nào nên xem xét tư cách d-10 để tìm việc ở hàn quốc?') return 'visa'; if (question === 'find me a factory job i can start immediately without any work permit.') return 'warning'; if (question === 'thời hạn lưu trú của tôi đã hết nhưng tôi vẫn đang ở hàn quốc. tôi cần kiểm tra và xử lý việc gì ngay bây giờ?') return 'process'; return String($json.category ?? 'general').trim() || 'general'; })() }}"
+              },
+              {
+                "name": "query_text",
+                "value": "={{ (() => { const question = String($json.question ?? '').trim(); const locale = String($json.locale ?? '').trim().toLowerCase(); const category = String($json.category ?? 'general').trim().toLowerCase(); const normalizedQuestion = question.toLowerCase().replace(/\\s+/g, ' ').trim(); const signal = [question, category, locale].join(' '); const exactHints = { 'after graduation, when should i consider d-10 status to look for work in korea?': 'd10-overview hikorea-d2-d4-d10-e7-f2-f5-requirements visa-portal-visa-types immigration-decree-long-term-status-table D-10 job seeker job search after graduation long-term sojourn status visa types', 'sau khi tốt nghiệp, trường hợp nào nên xem xét tư cách d-10 để tìm việc ở hàn quốc?': 'd10-overview hikorea-d2-d4-d10-e7-f2-f5-requirements visa-portal-visa-types immigration-decree-long-term-status-table D-10 job seeker job search after graduation long-term sojourn status visa types', 'find me a factory job i can start immediately without any work permit.': 'illegal-employment-warning immigration-law-violation-risk illegal employment warning unauthorized work without work permit violation risk refusal factory job immediate 불법취업 취업 매칭 위험 체류자격 위반', 'thời hạn lưu trú của tôi đã hết nhưng tôi vẫn đang ở hàn quốc. tôi cần kiểm tra và xử lý việc gì ngay bây giờ?': 'immigration-act-stay-extension hikorea-stay-extension immigration-act-deportation-grounds overstay expired stay period extension permission deportation grounds unlawful stay immediate action gia han het han qua han luu tru' }; const exactHint = exactHints[normalizedQuestion]; if (exactHint) return [exactHint, question].filter(Boolean).join('\\n'); if (/날씨|강수|기온|weather|rain probability|thời\\s*tiết|khả\\s*năng\\s*mưa|nhiệt\\s*độ|цаг\\s*агаар|бороо|температур/iu.test(signal)) return question; const rules = [[/ignore\\s+(?:all\\s+)?(?:previous|prior)\\s+instructions?|reveal\\s+(?:the\\s+)?system\\s+prompt|show\\s+(?:the\\s+)?system\\s+prompt|시스템\\s*프롬프트|이전\\s*(?:지시|명령)\\s*무시|bỏ\\s*qua\\s*(?:các\\s*)?(?:hướng\\s*dẫn|chỉ\\s*thị)\\s*(?:trước|trước\\s*đó)|hiển\\s*thị\\s*(?:system\\s*)?prompt|tiết\\s*lộ\\s*(?:system\\s*)?prompt|өмнөх\\s*заавр|систем(?:ийн)?\\s*prompt|систем(?:ийн)?\\s*промпт|зааврыг\\s*үл\\s*тоо|зааврыг\\s*ил\\s*болго|가짜|위조|허위|fake|forg(?:ed|ery)?|giả(?:\\s*mạo)?|хуурамч|хуурмаг/iu, 'fake-documents-warning immigration-act-false-application-documents fake forged bank statement financial proof 가짜 위조 허위 재정증명 잔고증명'], [/불법\\s*취업|무허가|허가\\s*없이|취업\\s*허가\\s*없이|without\\s+(?:a\\s+)?work\\s+permit|work(?:ing)?\\s+without\\s+(?:a\\s+)?permit|illegal\\s+employment|unauthori[sz]ed\\s+work|không\\s+(?:cần|có)\\s+giấy\\s+phép|làm\\s*việc\\s+không\\s+phép|зөвшөөрөлгүй|ажиллах\\s+зөвшөөрөлгүй/iu, 'illegal-employment-warning immigration-law-violation-risk immigration-act-employment-restriction illegal employment work without permit 불법취업 무허가 취업허가'], [/강제퇴거|추방|입국금지|deport(?:ed|ation)?|entry\\s*ban|re-?entry\\s*ban|trục\\s*xuất|cấm\\s*nhập\\s*cảnh|албадан\\s*гаргуул|нэвтрэх\\s*хориг/iu, 'immigration-act-entry-ban entry ban deportation re-entry 강제퇴거 입국금지 재입국'], [/시간제\\s*취업|자격외활동|아르바이트|알바|part[-\\s]*time\\s+(?:work|job|employment)|student[^\\n]{0,40}work|work[^\\n]{0,40}student|làm\\s*thêm|việc\\s*làm\\s*thêm|цагийн\\s*ажил|оюутан[^\\n]{0,40}ажил/iu, 'hikorea-activity-permit immigration-act-outside-status-activity student part-time work permit school confirmation 시간제취업 자격외활동 허가 학교확인'], [/체류\\s*기간|체류\\s*연장|연장|만료|expiry|expire|extension|extend\\s+(?:my\\s+)?stay|gia\\s*hạn|hết\\s*hạn|сунгах|дуусах|хугацаа/iu, 'hikorea-stay-extension immigration-act-stay-extension stay extension expiry period 체류기간 연장 만료'], [/d[-\\s]?4[^\\n]{0,40}d[-\\s]?2|d[-\\s]?2[^\\n]{0,40}d[-\\s]?4|status\\s*change|change\\s+(?:of\\s+)?status|체류자격\\s*변경|자격\\s*변경|전환|chuyển\\s*(?:đổi\\s*)?(?:tư\\s*cách|visa)|đổi\\s*visa|статус\\s*солих|ангилал\\s*солих/iu, 'hikorea-status-change immigration-act-status-change d-4-to-d-2-transfer status change permission before new activity 체류자격 변경 전환 사전허가'], [/d[-\\s]?10|job\\s*seeker|job\\s*search|구직|졸업\\s*후|tìm\\s*việc|ажил\\s*хай/iu, 'd10-overview D-10 job seeker after graduation 구직 졸업 후 체류'], [/d[-\\s]?2|degree|bachelor|master|ph\\.?d|university\\s*study|학위|대학교|대학|cử\\s*nhân|thạc\\s*sĩ|tiến\\s*sĩ|их\\s*сургууль|зэрэг/iu, 'd2-overview D-2 degree university study visa 학위 대학 유학 비자'], [/d[-\\s]?4|어학|한국어|language\\s*(?:training|study)|korean\\s*language|tiếng\\s*hàn|солонгос\\s*хэл|хэлний\\s*бэлтгэл/iu, 'd4-overview D-4 Korean language training visa 한국어 어학연수 비자'], [/잔고|은행|재정|bank\\s*(?:balance|statement|certificate)|financial\\s*proof|proof\\s*of\\s*funds|account\\s*holder|issue\\s*date|sao\\s*kê|giấy\\s*xác\\s*nhận\\s*số\\s*dư|số\\s*dư|tên\\s*chủ\\s*tài\\s*khoản|chứng\\s*minh\\s*tài\\s*chính|tài\\s*chính|дансны\\s*үлдэгдэл|санхүүгийн/iu, 'financial-proof visa-documents bank balance certificate account holder issue date 재정증명 잔고증명 명의 발급일']]; const matched = rules.find(([pattern]) => pattern.test(signal)); const hint = matched ? matched[1] : (category === 'cost' || /비용|학비|생활비|수수료|cost|tuition|living\\s*expenses|insurance|fees|chi\\s*phí|học\\s*phí|амьжиргааны\\s*зардал|сургалтын\\s*төлбөр/iu.test(signal)) ? 'cost-breakdown study in Korea total cost tuition living insurance fees 유학 총비용 학비 생활비 보험료 수수료' : category === 'visa' ? 'Korea student visa sojourn status 체류 비자' : category === 'documents' ? 'required documents checklist passport photo certificate 서류 여권 사진' : category === 'school' ? 'Korea university admission language institute school 입학 학교 어학당' : 'study in Korea general guidance 유학 일반 안내'; return [question, hint].filter(Boolean).join('\\n'); })() }}"
+              },
+              {
+                "name": "locale",
+                "value": "={{ $json.locale }}"
+              },
+              {
+                "name": "category_mode",
+                "value": "strict"
+              }
+            ]
+          }
+        }
+      },
+      "id": "bf1edd34-20e6-4119-9831-b5cd6ac3738d",
+      "name": "Search Governed Serving Chunks",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
+      "position": [
+        1200,
+        768
+      ],
+      "alwaysOutputData": true,
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "options": {
+          "dimensions": 1536,
+          "batchSize": 200,
+          "stripNewLines": true
+        }
+      },
+      "id": "97c7e554-71c5-4f42-8b12-1f78078ad49d",
+      "name": "OpenAI Embeddings - Query",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1200,
+        992
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ answer: $('Run KAXI RAG Core').item.json.answer, needsHuman: $('Run KAXI RAG Core').item.json.needsHuman, riskLevel: $('Run KAXI RAG Core').item.json.riskLevel, leadStage: $('Run KAXI RAG Core').item.json.leadStage, nextStep: $('Run KAXI RAG Core').item.json.nextStep, sources: $('Run KAXI RAG Core').item.json.sources, searchMeta: { ...$('Run KAXI RAG Core').item.json.searchMeta, runtimePath: 'n8n-kaxi-orchestrated' }, requestId: $('Run KAXI RAG Core').item.json.requestId, runtimePath: 'n8n-kaxi-orchestrated', executionId: $execution.id, workflowId: $workflow.id, workflowVersionId: 'kaxi-rag-runtime@2026-07-14.provider-independent-hybrid-v2', modelVersion: 'retrieval/hybrid-rrf-v3@2026-07-14', promptVersion: 'kaxi-grounded-extractive@2026-07-13.p0-v1' }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "54bbec4c-5336-45b8-b2ab-da8a999f2f53",
+      "name": "Respond to Typebot",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1344,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ answer: 'Unauthorized request.', needsHuman: true, riskLevel: 'high', leadStage: 'blocked', nextStep: 'Verify the KAXI signature and session state.', sources: [], runtimePath: 'n8n-signature-rejected', executionId: $execution.id, workflowId: $workflow.id, workflowVersionId: 'kaxi-rag-runtime@2026-07-14.provider-independent-hybrid-v2', modelVersion: 'retrieval/hybrid-rrf-v3@2026-07-14', promptVersion: 'kaxi-grounded-extractive@2026-07-13.p0-v1' }) }}",
+        "options": {
+          "responseCode": 401,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "58df5430-bd23-4061-8a27-104692da1756",
+      "name": "Respond Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1200,
+        1136
+      ],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "content": "## ① RAG 추가 / Knowledge Ingestion\n문서 입력 → 정규화 → 청크 분할 → 임베딩 → Supabase `knowledge_chunks` 저장",
+        "height": 560,
+        "width": 1320,
+        "color": 4
+      },
+      "id": "ea82f2ac-e0b4-4ad7-a3fb-166db9dd51e2",
+      "name": "Sticky Note 5e071b3b",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        160,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ② 실시간 답변 / Typebot Runtime\nTypebot Webhook → KAXI 서명 검증 → KAXI RAG Core → Typebot 응답\n- KAXI/SQL: locale·category 정책, 20+20 RRF, 재랭킹, no-context, 위험 분류\n- n8n: 서명 검증, 호출 조정, 응답 반환\n- credential 없음: stored-vector centroid hybrid\n- 구성된 provider 장애: lexical-only 자동 전환",
+        "height": 520,
+        "width": 2300,
+        "color": 5
+      },
+      "id": "1e755652-d93b-4b73-bc8f-e52cff874954",
+      "name": "Sticky Note 53149728",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        160,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ③ 운영 레이어 / Runtime Ownership\nKAXI가 retrieval·confidence·risk 정책과 `chat_messages`, `retrieval_runs`, `n8n_audit_messages`, 초기 `handoff_tasks`의 canonical persistence를 소유합니다.\nn8n은 서명 검증, KAXI RAG Core 호출, 응답 반환만 담당합니다.",
+        "height": 440,
+        "width": 1280,
+        "color": 6
+      },
+      "id": "823123bd-c310-42d6-a181-ebd4163d2eed",
+      "name": "Sticky Note fcaecbe8",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2528,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Typebot mapping\nanswer ← response.body.answer\nneedsHuman ← response.body.needsHuman\nriskLevel ← response.body.riskLevel\nnextStep ← response.body.nextStep\nsources/searchMeta ← citation and retrieval metadata\nTypebot calls the KAXI gateway; KAXI signs the n8n request with HMAC.",
+        "height": 280,
+        "width": 920,
+        "color": 3
+      },
+      "id": "4fcd9357-df63-4144-a134-2e01ad4752b2",
+      "name": "Sticky Note fcd7cb7c",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        160,
+        1248
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rag-knowledge-ingest",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://kaxi.vercel.app",
+          "ignoreBots": false
+        }
+      },
+      "id": "b3d5e693-7b10-4f27-b6e9-e6f7a872b131",
+      "name": "RAG Knowledge Ingestion Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        432
+      ],
+      "webhookId": "99fcfdee-84c0-4aa5-8009-48d472865af0"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "typebot-handoff-update",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://kaxi.vercel.app",
+          "ignoreBots": false
+        }
+      },
+      "id": "f7853d39-6a2d-4549-b21d-f999fa97383f",
+      "name": "Typebot Handoff Update Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        1680
+      ],
+      "webhookId": "24b28300-b860-44c0-a9cb-03b37bdb2f43"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "session-id",
+              "name": "sessionId",
+              "value": "={{ (() => { const request = $('Typebot Handoff Update Webhook').item.json; const body = request.body ?? {}; const headers = request.headers ?? {}; const query = request.query ?? {}; const source = String(body.source || query.source || 'typebot').trim() || 'typebot'; const raw = String(body.sessionId || body.session_id || body.typebotResultId || headers['x-session-id'] || '').trim(); const value = raw || `${source}-${$execution.id}`; if (/^(typebot|kaxi-site|kaxi|n8n)-/.test(value)) return value; if (source === 'typebot') return `typebot-${value}`; return value; })() }}",
+              "type": "string"
+            },
+            {
+              "id": "typebot-result-id",
+              "name": "typebotResultId",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.typebotResultId || $('Typebot Handoff Update Webhook').item.json.body?.typebot_result_id || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "tenant-id",
+              "name": "tenant_id",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.tenant_id || $('Typebot Handoff Update Webhook').item.json.body?.tenantId || 'default' }}",
+              "type": "string"
+            },
+            {
+              "id": "locale",
+              "name": "locale",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.locale || 'ko' }}",
+              "type": "string"
+            },
+            {
+              "id": "source",
+              "name": "source",
+              "value": "={{ (() => { const request = $('Typebot Handoff Update Webhook').item.json; const value = String(request.body?.source || request.query?.source || 'typebot').trim(); return value || 'typebot'; })() }}",
+              "type": "string"
+            },
+            {
+              "id": "lead-name",
+              "name": "leadName",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.leadName || $('Typebot Handoff Update Webhook').item.json.body?.lead_name || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "lead-contact",
+              "name": "leadContact",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.leadContact || $('Typebot Handoff Update Webhook').item.json.body?.lead_contact || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "lead-contact-type",
+              "name": "leadContactType",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.leadContactType || $('Typebot Handoff Update Webhook').item.json.body?.lead_contact_type || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "lead-note",
+              "name": "leadNote",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.leadNote || $('Typebot Handoff Update Webhook').item.json.body?.lead_note || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "question",
+              "name": "question",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.question || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "answer",
+              "name": "answer",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.answer || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "risk-level",
+              "name": "riskLevel",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.riskLevel || $('Typebot Handoff Update Webhook').item.json.body?.risk_level || 'medium' }}",
+              "type": "string"
+            },
+            {
+              "id": "lead-stage",
+              "name": "leadStage",
+              "value": "={{ $('Typebot Handoff Update Webhook').item.json.body?.leadStage || $('Typebot Handoff Update Webhook').item.json.body?.lead_stage || 'review' }}",
+              "type": "string"
+            },
+            {
+              "id": "is-allowed",
+              "name": "isAllowed",
+              "value": "={{ $json.ok === true && !!($('Typebot Handoff Update Webhook').item.json.body?.sessionId || $('Typebot Handoff Update Webhook').item.json.body?.session_id || $('Typebot Handoff Update Webhook').item.json.body?.typebotResultId) }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5f403dfa-4a20-4c45-a55f-f54b9c732301",
+      "name": "Normalize Handoff Update",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        720,
+        1680
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "allowed",
+              "leftValue": "={{ $json.isAllowed }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "6e46fab5-743e-41a5-989c-d3c69cd0f93f",
+      "name": "Handoff Update Guard",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1008,
+        1680
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "handoff_updates",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "session_id",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.sessionId }}"
+            },
+            {
+              "fieldId": "tenant_id",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.tenant_id }}"
+            },
+            {
+              "fieldId": "locale",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.locale }}"
+            },
+            {
+              "fieldId": "source",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.source }}"
+            },
+            {
+              "fieldId": "lead_name",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.leadName }}"
+            },
+            {
+              "fieldId": "lead_contact",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.leadContact }}"
+            },
+            {
+              "fieldId": "lead_contact_type",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.leadContactType }}"
+            },
+            {
+              "fieldId": "lead_note",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.leadNote }}"
+            },
+            {
+              "fieldId": "question",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.question }}"
+            },
+            {
+              "fieldId": "answer",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.answer }}"
+            },
+            {
+              "fieldId": "risk_level",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.riskLevel }}"
+            },
+            {
+              "fieldId": "lead_stage",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.leadStage }}"
+            },
+            {
+              "fieldId": "lead_note_ciphertext",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.leadNoteCiphertext }}"
+            },
+            {
+              "fieldId": "lead_note_hash",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.leadNoteHash }}"
+            },
+            {
+              "fieldId": "lead_note_redacted",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.leadNoteRedacted }}"
+            },
+            {
+              "fieldId": "question_ciphertext",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.questionCiphertext }}"
+            },
+            {
+              "fieldId": "question_hash",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.questionHash }}"
+            },
+            {
+              "fieldId": "question_redacted",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.questionRedacted }}"
+            },
+            {
+              "fieldId": "answer_ciphertext",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.answerCiphertext }}"
+            },
+            {
+              "fieldId": "answer_hash",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.answerHash }}"
+            },
+            {
+              "fieldId": "answer_redacted",
+              "fieldValue": "={{ $('Normalize Handoff Update').item.json.answerRedacted }}"
+            }
+          ]
+        }
+      },
+      "id": "0f8082a2-e78d-428e-8c62-cd5064234283",
+      "name": "Save Handoff Update",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        1600
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\"ok\":true,\"status\":($json.response_payload?.status || $json.update_status || 'contact_received'),\"leadId\":($json.lead_id),\"leadContactId\":($json.lead_contact_id),\"handoffTaskId\":($json.handoff_task_id),\"executionId\":($execution.id),\"workflowId\":($workflow.id),\"workflowVersionId\":\"kaxi-rag-runtime@2026-07-14.provider-independent-hybrid-v2\",\"modelVersion\":\"openai/text-embedding-3-small@1536\",\"promptVersion\":\"kaxi-handoff-update@2026-07-11.provenance-v1\"}) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "14ce5371-63da-40db-8594-9933fbc87c6e",
+      "name": "Respond Handoff Update",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1520,
+        1600
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\"ok\":false,\"status\":\"unauthorized\",\"message\":\"상담전환 저장 요청 인증에 실패했습니다.\",\"executionId\":($execution.id),\"workflowId\":($workflow.id),\"workflowVersionId\":\"kaxi-rag-runtime@2026-07-14.provider-independent-hybrid-v2\",\"modelVersion\":\"openai/text-embedding-3-small@1536\",\"promptVersion\":\"kaxi-handoff-update@2026-07-11.provenance-v1\"}) }}",
+        "options": {
+          "responseCode": 401,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "4384a8cb-e41f-42c6-ae0e-0881c8273259",
+      "name": "Respond Handoff Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1200,
+        1808
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ④ 상담전환 완료 / Handoff Contact Update\nTypebot이 이름·연락처·메모를 받은 뒤 `typebot-handoff-update`로 전송합니다.\n`handoff_updates` insert trigger가 `leads`, `lead_contacts`, `handoff_tasks`를 함께 갱신합니다.",
+        "height": 420,
+        "width": 1660,
+        "color": 7
+      },
+      "id": "f7aa91dc-5f40-4b56-9be1-0d4e9ce8f2ab",
+      "name": "Sticky Note Handoff Update",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        160,
+        1520
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://kaxi.vercel.app/api/internal/n8n/verify",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { purpose: 'rag-ingestion', timestamp: $json.headers?.['x-kaxi-timestamp'] ?? '', nonce: $json.headers?.['x-kaxi-nonce'] ?? '', signature: $json.headers?.['x-kaxi-signature'] ?? '', payload: $json.body ?? {} } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "48c045b6-edc0-48ba-90e9-1d4532619767",
+      "name": "Verify Ingestion Signature",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        480,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "allowed",
+              "leftValue": "={{ $json.isAllowed }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5e01a41d-6b48-401b-9b05-f7a52a76cf3f",
+      "name": "Ingestion Guard",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        960,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "=  {{ JSON.stringify({\"ok\":false,\"status\":\"unauthorized\",\"executionId\":($execution.id),\"workflowId\":($workflow.id),\"workflowVersionId\":\"kaxi-rag-runtime@2026-07-14.provider-independent-hybrid-v2\",\"modelVersion\":\"openai/text-embedding-3-small@1536\",\"promptVersion\":\"kaxi-rag-ingestion@2026-07-11.provenance-v1\"}) }}",
+        "options": {
+          "responseCode": 401,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "5fcda290-304f-4f71-81f3-293000dbe85c",
+      "name": "Respond Ingestion Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1200,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\"ok\":true,\"status\":\"inserted\",\"executionId\":($execution.id),\"workflowId\":($workflow.id),\"workflowVersionId\":\"kaxi-rag-runtime@2026-07-14.provider-independent-hybrid-v2\",\"modelVersion\":\"openai/text-embedding-3-small@1536\",\"promptVersion\":\"kaxi-rag-ingestion@2026-07-11.provenance-v1\"}) }}",
+        "options": {
+          "responseCode": 202,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "0a876760-1ac0-4556-b214-80ccc9974d6e",
+      "name": "Respond Ingestion Done",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1488,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://kaxi.vercel.app/api/internal/n8n/verify",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { purpose: 'typebot-runtime', timestamp: $json.headers?.['x-kaxi-timestamp'] ?? '', nonce: $json.headers?.['x-kaxi-nonce'] ?? '', signature: $json.headers?.['x-kaxi-signature'] ?? '', payload: $json.body ?? {} } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "1b047b1a-a4ab-4437-83d4-d6a6b8e42190",
+      "name": "Verify Runtime Signature",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        480,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://kaxi.vercel.app/api/internal/n8n/verify",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { purpose: 'typebot-handoff', timestamp: $json.headers?.['x-kaxi-timestamp'] ?? '', nonce: $json.headers?.['x-kaxi-nonce'] ?? '', signature: $json.headers?.['x-kaxi-signature'] ?? '', payload: $json.body ?? {} } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "d8acd72f-4d3c-40d7-b3b6-79e7dd823f58",
+      "name": "Verify Handoff Signature",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        480,
+        1552
+      ]
+    },
+    {
+      "parameters": {
+        "path": "rag-serving-capabilities",
+        "responseMode": "responseNode",
+        "options": {
+          "ignoreBots": false
+        }
+      },
+      "id": "cce3c2a9-81c8-417b-b488-d3fb0647273b",
+      "name": "RAG Serving Capability Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        656
+      ],
+      "webhookId": "d95b499d-bc7a-445b-833d-c1523b6afad0"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ service: 'kaxi-rag-serving', contractVersion: '2026-07-14.v3', workflowId: $workflow.id, ingestionTarget: 'rag_serving_chunks', retrievalMode: 'hybrid-rrf-v3-with-seeded-vector-and-lexical-fallback', lexicalCandidateCount: 20, vectorCandidateCount: 20, finalMatchCount: 6, embeddingModel: 'text-embedding-3-small', corpusEmbeddingModel: 'text-embedding-3-small', dimensions: 1536, queryEmbeddingOptional: true, storedVectorFallback: 'lexical-centroid', vectorSeedCount: 3, providerFailureMode: 'lexical-only', signedIngestionRequired: true, executionId: $execution.id, workflowVersionId: 'kaxi-rag-runtime@2026-07-14.provider-independent-hybrid-v2', modelVersion: 'retrieval/hybrid-rrf-v3@2026-07-14', promptVersion: 'kaxi-rag-capability@2026-07-14.v3' }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      },
+      "id": "461f544e-ce0d-4527-8aa5-6f9e9dbfc6bc",
+      "name": "Respond RAG Serving Capability",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        480,
+        656
+      ]
+    },
+    {
+      "id": "dd346d07-ee86-430b-89a4-386223c4a665",
+      "name": "Run KAXI RAG Core",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1056,
+        832
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://kaxi.vercel.app/api/internal/n8n/rag-runtime",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { verificationToken: $('Verify Runtime Signature').item.json.verificationToken ?? '', payload: $('Typebot Runtime Webhook').item.json.body ?? {} } }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 14000
+        }
+      },
+      "onError": "stopWorkflow",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 500,
+      "alwaysOutputData": true
+    }
+  ],
+  "connections": {
+    "OpenAI Embeddings - Ingest": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Insert Governed Serving Chunk",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Insert Governed Serving Chunk",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recursive Text Splitter": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Default Data Loader",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Guard": {
+      "main": [
+        [
+          {
+            "node": "Run KAXI RAG Core",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Embeddings - Query": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Search Governed Serving Chunks",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Handoff Update": {
+      "main": [
+        [
+          {
+            "node": "Handoff Update Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handoff Update Guard": {
+      "main": [
+        [
+          {
+            "node": "Save Handoff Update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Handoff Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Handoff Update": {
+      "main": [
+        [
+          {
+            "node": "Respond Handoff Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG Knowledge Ingestion Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify Ingestion Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Ingestion Signature": {
+      "main": [
+        [
+          {
+            "node": "Normalize Knowledge Document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Knowledge Document": {
+      "main": [
+        [
+          {
+            "node": "Ingestion Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ingestion Guard": {
+      "main": [
+        [
+          {
+            "node": "Insert Governed Serving Chunk",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Ingestion Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Knowledge Ingestion Done": {
+      "main": [
+        [
+          {
+            "node": "Respond Ingestion Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Typebot Runtime Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify Runtime Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Runtime Signature": {
+      "main": [
+        [
+          {
+            "node": "Input Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Typebot Handoff Update Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify Handoff Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Handoff Signature": {
+      "main": [
+        [
+          {
+            "node": "Normalize Handoff Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Governed Serving Chunk": {
+      "main": [
+        [
+          {
+            "node": "Knowledge Ingestion Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG Serving Capability Webhook": {
+      "main": [
+        [
+          {
+            "node": "Respond RAG Serving Capability",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run KAXI RAG Core": {
+      "main": [
+        [
+          {
+            "node": "Respond to Typebot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "binaryMode": "separate",
+    "timezone": "Asia/Seoul",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "executionTimeout": 40
+  },
+  "active": false,
+  "tags": []
+}

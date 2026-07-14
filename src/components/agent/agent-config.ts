@@ -24,35 +24,35 @@ export const FALLBACK_TOOL_ICON = Wrench;
 export const TOOL_LABELS: Record<string, Record<AgentLocale, string>> = {
   search_schools: { ko: "학교 검색", vi: "Tìm trường", mn: "Сургууль хайх", en: "Search Schools" },
   calculate_cost: { ko: "비용 계산", vi: "Tính chi phí", mn: "Зардал", en: "Calculate Cost" },
-  get_documents: { ko: "서류 생성", vi: "Hồ sơ", mn: "Баримт", en: "Documents" },
-  search_knowledge: { ko: "지식 검색", vi: "Tìm kiến thức", mn: "Мэдлэг", en: "Knowledge" },
+  get_documents: { ko: "서류 안내", vi: "Hồ sơ", mn: "Баримт", en: "Documents" },
+  search_knowledge: { ko: "공식 문서", vi: "Nguồn chính thức", mn: "Албан эх сурвалж", en: "Official Sources" },
   diagnose_path: { ko: "경로 진단", vi: "Đánh giá", mn: "Маршрут", en: "Diagnose" },
-  request_partner: { ko: "파트너 요청", vi: "Đối tác", mn: "Түнш", en: "Partner" },
+  request_partner: { ko: "전문가 연결", vi: "Chuyên gia", mn: "Мэргэжилтэн", en: "Expert" },
 };
 
 export const EXAMPLE_PROMPTS: Record<AgentLocale, string[]> = {
   ko: [
     "서울에 있는 인증대학 어학당 3곳 찾아주고 비용도 계산해줘",
     "베트남 학생인데 D-4 비자로 가려면 필요한 서류 뭐야?",
-    "D-2 비자 거절당했는데 어떻게 해야 해? 행정사 상담도 연결해줘",
+    "D-2 비자 거절당했는데 어떻게 해야 해? 전문가 상담도 연결해줘",
     "예산 500만원으로 갈 수 있는 학교 찾아줘",
   ],
   vi: [
     "Tìm 3 trường tiếng Hàn ở Seoul có认证 và tính chi phí",
     "Tôi là người Việt, hồ sơ visa D-4 cần gì?",
-    "Bị từ chối D-2, phải làm sao? Kết nối luật sư",
+    "Bị từ chối D-2, phải làm sao? Kết nối chuyên gia",
     "Tìm trường với ngân sách 5 triệu won",
   ],
   mn: [
     "Сеул дахь итгэмжлэгдсэн 3 хэлний курс олж зардал тооцоол",
     "Би монгол, D-4 визанд ямар баримт хэрэгтэй вэ?",
-    "D-2 татгалзсан, яах вэ? Зөвлөгөө холбох",
+    "D-2 татгалзсан, яах вэ? Мэргэжилтэнтэй холбох",
     "5 сая вон төсөвтэй сургууль хай",
   ],
   en: [
     "Find 3 accredited language schools in Seoul and calculate costs",
     "I'm Vietnamese, what documents do I need for D-4 visa?",
-    "My D-2 was refused, what should I do? Connect me to a lawyer",
+    "My D-2 was refused, what should I do? Connect me to an expert",
     "Find schools within 5M KRW budget",
   ],
 };
@@ -80,21 +80,14 @@ export const SLOT_TO_DRAFT_KEY: Record<string, OptionKey | null> = {
   budget: null,
 };
 
-export function backendLabel(backend?: string): string {
-  if (!backend) return "Agent";
-  if (backend === "kimi") return "Kimi";
-  if (backend === "claude") return "Claude";
-  if (backend === "tool-fallback") return "KAXI Tools";
-  return backend;
-}
-
 export function statusText(locale: AgentLocale, status: AgentStatus | null): string {
-  if (!status) return locale === "ko" ? "상태 확인 중" : "Checking";
-  if (!status.llm?.apiKeyConfigured) {
-    const provider = backendLabel(status.backend);
-    return locale === "ko" ? `${provider} 미설정 · 도구 fallback` : `${provider} fallback`;
+  if (!status) {
+    return locale === "ko" ? "상태 확인 중" : locale === "vi" ? "Đang kiểm tra" : locale === "mn" ? "Шалгаж байна" : "Checking";
   }
-  return backendLabel(status.backend);
+  if (!status.llm?.apiKeyConfigured) {
+    return locale === "ko" ? "기본 도구 모드" : locale === "vi" ? "Chế độ công cụ cơ bản" : locale === "mn" ? "Үндсэн хэрэгслийн горим" : "Core tools mode";
+  }
+  return locale === "ko" ? "온라인" : locale === "vi" ? "Trực tuyến" : locale === "mn" ? "Онлайн" : "Online";
 }
 
 export function statusDotClass(status: AgentStatus | null): string {

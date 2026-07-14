@@ -12,6 +12,8 @@ const guardedFiles = [
   "src/lib/agent/agent.ts",
   "src/app/api/ai/chat/route.ts",
   "src/app/api/ai/consult/route.ts",
+  "src/app/api/ai/unified/route.ts",
+  "src/lib/ai/unified-router.ts",
   "src/lib/partners/repository.ts",
   "src/app/api/partner-requests/route.ts",
   "src/lib/privacy/serializers.ts",

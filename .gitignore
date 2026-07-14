@@ -67,3 +67,7 @@ server.log
 /upload/
 /tool-results/
 /supabase/.temp/
+
+# local coding-agent workspaces
+/.superpowers/
+/.worktrees/

@@ -8,12 +8,27 @@ export function inferChatCategory(question: string, explicitValue?: unknown): Ch
   const explicit = typeof explicitValue === "string" ? explicitValue.trim().toLowerCase() : "";
   if (CHAT_CATEGORY_SET.has(explicit) && explicit !== "general") return explicit as ChatCategory;
 
-  const normalized = question.trim().toLowerCase();
-  if (/비자|visa|체류|d-?\d|e-?\d|f-?\d|연장|전환|출입국/.test(normalized)) return "visa";
-  if (/서류|documents?|입학허가|재정|잔고|여권|사진|결핵|증빙|hồ sơ/.test(normalized)) {
-    return "documents";
-  }
-  if (/학교|대학|입학|어학당|university|school/.test(normalized)) return "school";
-  if (/비용|학비|수수료|잔고|재정|cost|tuition/.test(normalized)) return "cost";
+  const normalized = question.normalize("NFKC").trim().toLowerCase();
+
+  // Classify the requested task before the visa/school entity. This keeps
+  // "D-2 cost" in cost and "D-4 documents" in documents under strict search.
+  if (
+    /비용|학비(?!자)|등록금|수수료|예산|기숙사비|생활비|costs?|tuition|fees?|budget|living\s*expenses?|chi\s*phí|học\s*phí|lệ\s*phí|ngân\s*sách|ký\s*túc\s*xá|зард(?:ал|лууд?|лын)|сургалтын\s*төлбөр|хураамж|төсөв|дотуур\s*байр/u.test(normalized)
+  ) return "cost";
+  if (
+    /체류.{0,20}(?:만료|연장|변경|전환)|연장\s*신청|체류기간|status\s*of\s*stay|permitted\s*stay|stay\s*period|stay.{0,20}(?:expir|extension)|change\s*of\s*status|lưu\s*trú|hết\s*hạn|gia\s*hạn|chuyển\s*đổi|хугацаа.{0,20}(?:дуус|сунг)|сунгалт|оршин\s*суух/u.test(normalized)
+  ) return "visa";
+  if (
+    /서류|입학허가|재정\s*증빙|잔고\s*증명|여권|증명서|결핵|documents?|paperwork|certificate|bank\s*statement|proof\s*of\s*funds|passport|hồ\s*sơ|giấy\s*tờ|chứng\s*minh\s*tài\s*chính|sổ\s*tiết\s*kiệm|số\s*dư|hộ\s*chiếu|бичиг\s*баримт|материал|тодорхойлолт|санхүүгийн\s*нотолгоо|банкны\s*үлдэгдэл|паспорт/u.test(normalized)
+  ) return "documents";
+  if (
+    /인증\s*대학|학교.{0,20}(?:추천|비교|선택)|어느\s*(?:학교|대학)|accredited\s*universit|certified\s*universit|which\s+(?:school|university)|compare.{0,20}(?:school|universit)|recommend.{0,20}(?:school|universit)|trường\s+(?:đại\s*học|cao\s*đẳng).{0,20}(?:chứng\s*nhận|nào|so\s*sánh|đề\s*xuất)|đại\s*học.{0,20}(?:chứng\s*nhận|nào)|итгэмжлэгдсэн\s*их\s*сургууль|ямар\s*их\s*сургууль|сургууль.{0,20}(?:харьцуул|санал)/u.test(normalized)
+  ) return "school";
+  if (
+    /비자|체류|연장|전환|출입국|d-?\d|e-?\d|f-?\d|visa|status\s*of\s*stay|permitted\s*stay|stay\s*period|immigration|extension|change\s*of\s*status|thị\s*thực|lưu\s*trú|gia\s*hạn|chuyển\s*đổi|xuất\s*nhập\s*cảnh|виз|оршин\s*суух|хугацаа\s*сунгах|ангилал\s*солих|цагаачлал/u.test(normalized)
+  ) return "visa";
+  if (
+    /학교|대학|입학|어학당|university|college|school|admission|trường|đại\s*học|nhập\s*học|viện\s*ngôn\s*ngữ|сургууль|их\s*сургууль|элсэлт|хэлний\s*бэлтгэл/u.test(normalized)
+  ) return "school";
   return "general";
 }

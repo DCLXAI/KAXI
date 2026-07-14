@@ -38,6 +38,17 @@ export const SOURCE_METADATA: Record<string, SourceMetadata> = {
     reviewAfter: DEFAULT_REVIEW_AFTER,
     owner: "official",
   },
+  "Study in Korea · D-10 체류자격 변경 안내": {
+    label: "Study in Korea · D-10-1 구직 체류자격 변경",
+    url: "https://studyinkorea.go.kr/ko/life/residenceAndStayInfo.do?tab=job-seeker-visa",
+    verifiedAt: "2026-07-14",
+    reviewAfter: STUDY_IN_KOREA_REVIEW_AFTER,
+    owner: "official",
+    sourceType: "official_government",
+    jurisdiction: "KR",
+    validFrom: "2026-07-01",
+    checkedBy: "kaxi-official-source-review",
+  },
   "법무부 출입국외국인정책본부": {
     label: "법무부 출입국외국인정책본부",
     url: "https://www.immigration.go.kr",

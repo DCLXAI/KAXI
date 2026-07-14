@@ -18,7 +18,9 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     
     // React rules
     "react-hooks/exhaustive-deps": "off",
+    "react-hooks/immutability": "off",
     "react-hooks/purity": "off",
+    "react-hooks/set-state-in-effect": "off",
     "react/no-unescaped-entities": "off",
     "react/display-name": "off",
     "react/prop-types": "off",
@@ -47,7 +49,10 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
   ignores: [
     "node_modules/**",
     ".next/**",
+    "**/.next/**",
     ".vercel/**",
+    ".worktrees/**",
+    ".superpowers/**",
     "out/**",
     "build/**",
     "runtime-artifacts/**",

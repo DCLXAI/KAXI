@@ -4,7 +4,7 @@
 
 import { TOOL_MAP, getToolsDescription, parseToolCall, sanitizeToolArgsForDisplay, type ToolArgs, type ToolResult, type ToolContext } from "./tools";
 import type { Lang } from "../i18n/translations";
-import { LlmNotConfiguredError, generateLlmText, type LlmGatewayMessage } from "../ai/llm-gateway";
+import { generateLlmText, type LlmGatewayMessage } from "../ai/llm-gateway";
 
 export interface AgentStep {
   type: "thinking" | "tool_call" | "tool_result" | "final_answer" | "error";
@@ -20,6 +20,10 @@ export interface AgentResponse {
   toolResults: ToolResult[];
   iterations: number;
 }
+
+type AgentDependencies = {
+  generateText?: typeof generateLlmText;
+};
 
 const MAX_ITERATIONS = 5;
 
@@ -76,7 +80,8 @@ export async function runAgent(
   question: string,
   lang: Lang,
   history: { role: string; content: string }[],
-  ctx: ToolContext
+  ctx: ToolContext,
+  dependencies: AgentDependencies = {},
 ): Promise<AgentResponse> {
   const steps: AgentStep[] = [];
   const toolResults: ToolResult[] = [];
@@ -115,6 +120,7 @@ ${getToolsDescription()}
 12. request_partner는 상담 요청 초안만 만들며, 실제 접수에는 사용자 확인과 운영 접수 절차가 필요함을 안내
 13. 하이코리아·비자포털 안내는 운영 보조 근거이며, 법령과 충돌하거나 최신성이 불명확하면 법령과 관할 출입국외국인관서 확인을 우선
 14. 근거가 없는 요건 단정은 하지 말고 "공식 근거 확인 필요"라고 말함
+15. 최종 답변은 표 없이 약 1,200자 이내, 최대 4개 짧은 섹션으로 완결하고 마지막에 다음 확인 단계를 한 문장으로 제시
 
 ## 현재 컨텍스트
 - 언어: ${lang}
@@ -138,7 +144,7 @@ ${getToolsDescription()}
     iteration++;
 
     try {
-      const completion = await generateLlmText({
+      const completion = await (dependencies.generateText || generateLlmText)({
         feature: "agent",
         messages,
         temperature: 0.2,
@@ -216,11 +222,6 @@ ${getToolsDescription()}
       });
       break;
     } catch (e) {
-      if (e instanceof LlmNotConfiguredError) {
-        // 키/SDK 부재는 여기서 삼키지 않고 라우트의 deterministic tool
-        // fallback으로 승격시킨다.
-        throw e;
-      }
       console.error("[Agent iteration error]", e);
       const errMsg = errorMessage(e);
       steps.push({
@@ -228,10 +229,10 @@ ${getToolsDescription()}
         content: `LLM 오류: ${errMsg}`,
         timestamp: Date.now(),
       });
-      finalAnswer = lang === "ko"
-        ? "일시적 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
-        : "Temporary error. Please retry.";
-      break;
+      // Route-level recovery reruns the deterministic plan and tools. Returning
+      // a generic error here would incorrectly record the request as successful
+      // even when grounded tool results are already available.
+      throw e instanceof Error ? e : new Error(errMsg);
     }
   }
 

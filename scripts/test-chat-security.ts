@@ -3,6 +3,7 @@ import { JsonBodyError, readJsonBody } from "../src/lib/api/json-body";
 import { CHAT_ATTACHMENT_MIME_TYPES, detectChatAttachmentMimeType } from "../src/lib/chat/attachment-files";
 import sharp from "sharp";
 import {
+  checkManagedAttachmentScanner,
   getChatAttachmentSecurityDiagnostics,
   isTerminalChatAttachmentError,
   secureChatAttachmentUpload,
@@ -16,6 +17,7 @@ import {
   extractRagProvenance,
   ragProvenanceHeaders,
   resolveRagProvenance,
+  summarizeRagProvenance,
 } from "../src/lib/n8n/provenance";
 import {
   isTypebotGatewayAuthConfigured,
@@ -45,6 +47,24 @@ const explicitProvenance = resolveRagProvenance({
 }, {} as NodeJS.ProcessEnv);
 assert.deepEqual(extractRagProvenance(explicitProvenance), explicitProvenance);
 assert.equal(extractRagProvenance({ workflowId: "workflow-test" }), null);
+const observedProvenance = {
+  workflowId: "workflow-live",
+  workflowVersionId: "workflow-live@v3",
+  modelVersion: "retrieval-live@v3",
+  promptVersion: "prompt-live@v2",
+};
+assert.deepEqual(
+  summarizeRagProvenance([observedProvenance, observedProvenance], explicitProvenance),
+  {
+    effective: observedProvenance,
+    observed: [{ provenance: observedProvenance, count: 2 }],
+    mixed: false,
+  },
+);
+assert.deepEqual(
+  summarizeRagProvenance([observedProvenance, explicitProvenance], explicitProvenance).effective,
+  explicitProvenance,
+);
 assert.equal(ragProvenanceHeaders(explicitProvenance)["x-kaxi-workflow-version-id"], "workflow-version-test");
 
 const now = Date.UTC(2026, 6, 10, 0, 0, 0);
@@ -52,6 +72,16 @@ const sessionId = createKaxiSessionId();
 const token = issueChatSessionToken(sessionId, now);
 
 assert.equal(verifyChatSessionToken(token, sessionId, now + 1000)?.sessionId, sessionId);
+const previousChatSecret = process.env.CHAT_SESSION_SIGNING_SECRET;
+process.env.CHAT_SESSION_SIGNING_SECRET = "rotated-chat-session-secret-that-is-longer-than-thirty-two-characters";
+process.env.CHAT_SESSION_SIGNING_SECRET_PREVIOUS = previousChatSecret;
+assert.equal(
+  verifyChatSessionToken(token, sessionId, now + 1000)?.sessionId,
+  sessionId,
+  "tokens signed before rotation should pass during the overlap window",
+);
+process.env.CHAT_SESSION_SIGNING_SECRET = previousChatSecret;
+delete process.env.CHAT_SESSION_SIGNING_SECRET_PREVIOUS;
 assert.equal(verifyChatSessionToken(`${token.slice(0, -1)}x`, sessionId, now + 1000), null);
 assert.equal(verifyChatSessionToken(token, createKaxiSessionId(), now + 1000), null);
 assert.equal(verifyChatSessionToken(token, sessionId, now + (CHAT_SESSION_MAX_AGE_SECONDS + 1) * 1000), null);
@@ -128,12 +158,57 @@ assert.equal(productionManagedDiagnostics.externalScannerConfigured, true);
 assert.equal(productionManagedDiagnostics.uploadsEnabled, true);
 assert.equal(productionManagedDiagnostics.ready, true);
 
+const originalFetch = globalThis.fetch;
+let scannerCalls = 0;
+try {
+  globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+    scannerCalls += 1;
+    assert.equal(new Headers(init?.headers).get("x-kaxi-content-sha256")?.length, 64);
+    return new Response(JSON.stringify({ clean: true, engine: "test-managed-scanner" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+  const managedEnv = {
+    NODE_ENV: "production",
+    CHAT_ATTACHMENTS_ENABLED: "true",
+    ATTACHMENT_MALWARE_SCAN_MODE: "http",
+    ATTACHMENT_MALWARE_SCAN_URL: "https://scanner.example.test/v1/scan",
+    ATTACHMENT_MALWARE_SCAN_TOKEN: "managed-scanner-test-token",
+  } as NodeJS.ProcessEnv;
+  const managedUpload = await secureChatAttachmentUpload(safeImage, "image/jpeg", managedEnv);
+  assert.equal(managedUpload.scan.status, "clean");
+  const managedHealth = await checkManagedAttachmentScanner(managedEnv);
+  assert.equal(managedHealth.ok, true);
+  assert.equal(managedHealth.engine, "test-managed-scanner");
+  assert.equal(scannerCalls, 2);
+} finally {
+  globalThis.fetch = originalFetch;
+}
+
 assert.equal(inferChatCategory("D-4 비자 연장 방법"), "visa");
 assert.equal(inferChatCategory("입학허가서와 재정 증빙 서류"), "documents");
 assert.equal(inferChatCategory("어학당과 대학교를 비교해 주세요"), "school");
 assert.equal(inferChatCategory("학비와 수수료가 얼마예요?"), "cost");
+assert.equal(inferChatCategory("D-2 유학비자 준비 서류를 알려주세요."), "documents");
 assert.equal(inferChatCategory("D-2 서류", "school"), "school");
-assert.equal(inferChatCategory("D-2 서류", "{{category}}"), "visa");
+assert.equal(inferChatCategory("D-2 서류", "{{category}}"), "documents");
+assert.equal(inferChatCategory("D-2 visa tuition and living costs"), "cost");
+assert.equal(inferChatCategory("Can I use a fake bank statement for the student visa?"), "documents");
+assert.equal(inferChatCategory("If I enter a degree program at a Korean university, should I prepare for D-2 status?"), "visa");
+assert.equal(inferChatCategory("My permitted stay has already expired."), "visa");
+assert.equal(inferChatCategory("My D-4 stay period is expiring. When can I apply for an extension and what are the basic documents?"), "visa");
+assert.equal(inferChatCategory("Hồ sơ và chứng minh tài chính cho visa D-4"), "documents");
+assert.equal(inferChatCategory("Gia hạn thời hạn lưu trú D-2 như thế nào?"), "visa");
+assert.equal(inferChatCategory("Sau khi tốt nghiệp, trường hợp nào nên xem xét tư cách D-10 để tìm việc ở Hàn Quốc?"), "visa");
+assert.equal(inferChatCategory("Có thể dùng sổ tiết kiệm giả để xin visa không?"), "documents");
+assert.equal(inferChatCategory("Chi phí ký túc xá và học phí là bao nhiêu?"), "cost");
+assert.equal(inferChatCategory("Солонгост сурахад нийт ямар зардал гарах вэ?"), "cost");
+assert.equal(inferChatCategory("Солонгост сурахад нийт ямар зардлууд гарах вэ?"), "cost");
+assert.equal(inferChatCategory("Солонгост сурах зардлын төрлүүдийг тайлбарлана уу."), "cost");
+assert.equal(inferChatCategory("D-4 визний бичиг баримт юу хэрэгтэй вэ?"), "documents");
+assert.equal(inferChatCategory("Оршин суух хугацааг хэрхэн сунгах вэ?"), "visa");
+assert.equal(inferChatCategory("Ямар их сургууль сонгох вэ?"), "school");
 
 const guardrailBase = {
   answer: "upstream answer",
@@ -199,6 +274,64 @@ assert.deepEqual(weather.sources, []);
 assert.equal((weather.searchMeta as { noContext?: boolean }).noContext, true);
 assert.match(weather.answer || "", /only answers study-in-Korea and visa questions/i);
 
+const lowConfidence = applyChatResponseGuardrail({
+  ...guardrailBase,
+  searchMeta: {
+    category: "visa",
+    locale: "ko",
+    topScore: 0.42,
+    secondScore: 0.4,
+    top1Top2Margin: 0.02,
+    tokenCoverage: 0.1,
+    similarityThreshold: "category-default",
+    reranker: "deterministic-locale-v2",
+  },
+}, "D-4 비자 조건을 알려주세요.", "ko");
+assert.equal(lowConfidence.needsHuman, true);
+assert.equal(lowConfidence.riskLevel, "medium");
+assert.deepEqual(lowConfidence.sources, []);
+assert.equal((lowConfidence.searchMeta as { noContext?: boolean }).noContext, true);
+assert.equal((lowConfidence.searchMeta as { similarityThreshold?: number }).similarityThreshold, 0.62);
+assert.equal(
+  (lowConfidence.searchMeta as { confidencePolicy?: string }).confidencePolicy,
+  "locale-category-margin-v2",
+);
+
+const confident = applyChatResponseGuardrail({
+  ...guardrailBase,
+  searchMeta: {
+    category: "visa",
+    locale: "ko",
+    topScore: 1.1,
+    secondScore: 0.8,
+    top1Top2Margin: 0.3,
+    tokenCoverage: 0.4,
+    similarityThreshold: "category-default",
+    reranker: "deterministic-locale-v2",
+  },
+}, "D-4 비자 조건을 알려주세요.", "ko");
+assert.equal(confident.answer, guardrailBase.answer);
+assert.equal(confident.needsHuman, false);
+
+const ambiguousTopResults = applyChatResponseGuardrail({
+  ...guardrailBase,
+  searchMeta: {
+    category: "visa",
+    locale: "vi",
+    topScore: 0.7,
+    secondScore: 0.69,
+    top1Top2Margin: 0.01,
+    tokenCoverage: 0.3,
+    similarityThreshold: "category-default",
+    reranker: "deterministic-locale-v2",
+  },
+}, "Điều kiện visa D-4 là gì?", "vi");
+assert.equal(ambiguousTopResults.needsHuman, true);
+assert.equal(
+  (ambiguousTopResults.searchMeta as { similarityThreshold?: number }).similarityThreshold,
+  0.54,
+);
+
 const typebotEnv = {
   NODE_ENV: "test",
   TYPEBOT_GATEWAY_SECRET: "typebot-gateway-test-secret-that-is-longer-than-thirty-two-characters",
@@ -220,6 +353,19 @@ assert.equal(
   true,
 );
 assert.equal(verifyTypebotGatewayHeaders(new Headers({ [TYPEBOT_GATEWAY_HEADER]: "wrong" }), typebotEnv), false);
+const rotatedTypebotEnv = {
+  ...typebotEnv,
+  TYPEBOT_GATEWAY_SECRET: "rotated-typebot-gateway-secret-that-is-longer-than-thirty-two-characters",
+  TYPEBOT_GATEWAY_SECRET_PREVIOUS: typebotEnv.TYPEBOT_GATEWAY_SECRET,
+} as NodeJS.ProcessEnv;
+assert.equal(
+  verifyTypebotGatewayHeaders(
+    new Headers({ [TYPEBOT_GATEWAY_HEADER]: typebotEnv.TYPEBOT_GATEWAY_SECRET || "" }),
+    rotatedTypebotEnv,
+  ),
+  true,
+  "Typebot should accept the previous gateway secret during rotation",
+);
 
 const externalRequestId = "86d859c4-fb4d-4c74-b5c9-15e35c331ad4";
 const firstIdentity = createChatRequestIdentity({

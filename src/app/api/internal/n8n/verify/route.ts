@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseLimit, rateLimit } from "@/lib/api/security";
 import { JsonBodyError, readJsonBody } from "@/lib/api/json-body";
 import {
+  createN8nVerificationReceipt,
   verifyAndConsumeN8nSignature,
   type N8nSignatureEnvelope,
   type N8nWebhookPurpose,
@@ -38,7 +39,8 @@ export async function POST(req: NextRequest) {
     const result = await verifyAndConsumeN8nSignature(envelope);
     if (!result.ok) return NextResponse.json({ ok: false }, { status: 401 });
 
-    return NextResponse.json({ ok: true, purpose });
+    const verificationToken = createN8nVerificationReceipt(purpose, envelope.payload, envelope.nonce);
+    return NextResponse.json({ ok: true, purpose, verificationToken });
   } catch (error) {
     if (error instanceof JsonBodyError) {
       return NextResponse.json({ ok: false }, { status: error.status });

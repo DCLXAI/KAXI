@@ -52,6 +52,12 @@ async function main() {
   }
   if (summary.failedDocIds.length > 0) {
     console.log(`[official-source-harvest] failedDocIds=${summary.failedDocIds.join(",")}`);
+    for (const failure of summary.failedSourceErrors) {
+      console.log(
+        `[official-source-harvest] failedSource=${failure.docId} ` +
+          `url=${failure.sourceUrl} error=${failure.error}`
+      );
+    }
   }
 
   if (!summary.meetsChunkTarget) {

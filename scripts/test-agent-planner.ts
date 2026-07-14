@@ -107,6 +107,17 @@ function testVisaDocumentIntent() {
   expectNoMissingSlots(result.missingSlots, ["visa_type", "nationality"], result);
 }
 
+function testD10DocumentIntentUsesOfficialKnowledgeOnly() {
+  const result = analyzeAgentIntent("D-10 비자 변경에 필요한 핵심 서류를 출처와 함께 알려줘", "ko");
+  const tools = result.plan.map((item) => item.tool);
+
+  assert(result.visaType === "D-10", `D-10 code should be preserved: ${JSON.stringify(result)}`);
+  assert(result.documents && result.knowledge, `D-10 document intent should require knowledge: ${JSON.stringify(result)}`);
+  assert(!tools.includes("get_documents"), `D-10 must not use the D-2/D-4 document matrix: ${JSON.stringify(result)}`);
+  assert(tools.includes("search_knowledge"), `D-10 should use official RAG search: ${JSON.stringify(result)}`);
+  expectNoMissingSlots(result.missingSlots, ["visa_type", "nationality"], result);
+}
+
 function testPartnerAndSafetyIntent() {
   const partner = analyzeAgentIntent("D-2 거절 이력이 있어서 행정사 상담 연결해줘", "ko");
   const partnerSlots = extractAgentSlots("D-2 거절 이력이 있어서 행정사 상담 연결해줘");
@@ -199,19 +210,14 @@ function testStructuredSlotRequirements() {
       (slot) =>
         slot.slot === "visaType" &&
         slot.status === "missing" &&
-        slot.value === "D-4" &&
+        slot.value === undefined &&
         slot.requiredFor.includes("get_documents")
     ),
-    `structured visa requirement should preserve default value while marking missing: ${JSON.stringify(vague.structuredSlots)}`
+    `structured visa requirement should remain empty instead of defaulting to D-4: ${JSON.stringify(vague.structuredSlots)}`
   );
   assert(
-    vague.slotRequirements.some(
-      (requirement) =>
-        requirement.slot === "nationality" &&
-        requirement.requiredFor.includes("get_documents") &&
-        requirement.reason === "visa_or_diagnosis_request_without_nationality"
-    ),
-    `slot requirements should explain why nationality is needed: ${JSON.stringify(vague.slotRequirements)}`
+    !vague.plan.some((item) => item.tool === "get_documents"),
+    `generic visa documents must not default to a D-4 checklist: ${JSON.stringify(vague.plan)}`
   );
   assert(
     vague.evidence.slotRequirements.length === vague.slotRequirements.length &&
@@ -268,6 +274,7 @@ testBudgetParsing();
 testSchoolAndCostIntent();
 testGenericSchoolConditionsAreNotSchoolNames();
 testVisaDocumentIntent();
+testD10DocumentIntentUsesOfficialKnowledgeOnly();
 testPartnerAndSafetyIntent();
 testDiagnosisSlotFilling();
 testExactSchoolRefinement();

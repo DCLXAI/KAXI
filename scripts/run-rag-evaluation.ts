@@ -1,6 +1,21 @@
 import { createHash, randomUUID } from "crypto";
 import { createClient } from "@supabase/supabase-js";
-import { extractRagProvenance, resolveRagProvenance } from "../src/lib/n8n/provenance";
+import {
+  buildDirectLexicalQuery,
+  directRagProvenance,
+  type DirectRagRuntimePath,
+} from "../src/lib/chat/direct-lexical-fallback";
+import { inferChatCategory } from "../src/lib/chat/category";
+import {
+  QUESTION_MEDIATOR_PROMPT_VERSION,
+  QUESTION_MEDIATOR_WORKFLOW_VERSION,
+} from "../src/lib/chat/question-mediator";
+import { createRagQueryEmbedding } from "../src/lib/chat/query-embedding";
+import {
+  extractRagProvenance,
+  resolveRagProvenance,
+  summarizeRagProvenance,
+} from "../src/lib/n8n/provenance";
 import { signN8nPayload } from "../src/lib/n8n/signature";
 
 type EvaluationCase = {
@@ -40,13 +55,39 @@ type RagResponse = {
     language?: string;
     rerankScore?: number;
   }>;
-  searchMeta?: { topScore?: number; noContext?: boolean; retrievedCount?: number; reranker?: string };
+  searchMeta?: {
+    topScore?: number;
+    noContext?: boolean;
+    retrievedCount?: number;
+    reranker?: string;
+    category?: string;
+    runtimePath?: string;
+    retrievalRuntimePath?: string;
+    fallbackReason?: string;
+    retrievalMode?: string;
+    embeddingStatus?: string;
+    embeddingFailureReason?: string | null;
+  };
   executionId?: string;
   workflowId?: string;
   workflowVersionId?: string;
   modelVersion?: string;
   promptVersion?: string;
+  runtimePath?: string;
+  persisted?: boolean;
+  messageId?: string;
   error?: string;
+};
+
+type EvaluationStage = "smoke" | "locale" | "full";
+
+type ShadowComparison = {
+  embeddingStatus: string;
+  embeddingFailureReason: string | null;
+  vectorStrategy: "provider-query" | "lexical-centroid" | "none";
+  lexicalDocIds: string[];
+  vectorDocIds: string[];
+  hybridDocIds: string[];
 };
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || "";
@@ -54,10 +95,62 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || "";
 const baseUrl = (process.env.KAXI_E2E_BASE_URL?.trim() || "http://localhost:3002").replace(/\/$/, "");
 if (!supabaseUrl || !serviceKey) throw new Error("Supabase service configuration is required");
 const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
-const limit = Math.min(Math.max(Number(process.env.RAG_EVAL_LIMIT || 100), 1), 200);
+const requestedStage = (process.env.RAG_EVAL_STAGE || "full").trim().toLowerCase();
+const evaluationStage: EvaluationStage = requestedStage === "smoke" || requestedStage === "locale"
+  ? requestedStage
+  : "full";
+const stageLimit = { smoke: 8, locale: 16, full: 64 }[evaluationStage];
+const configuredLimit = process.env.RAG_EVAL_LIMIT?.trim()
+  ? Number(process.env.RAG_EVAL_LIMIT)
+  : stageLimit;
+const limit = Math.min(Math.max(Number.isFinite(configuredLimit) ? configuredLimit : stageLimit, 1), stageLimit);
 const caseIdFilter = process.env.RAG_EVAL_CASE_ID?.trim() || "";
-const transport = process.env.RAG_EVAL_TRANSPORT?.trim() === "gateway" ? "gateway" : "direct-n8n";
+const transport = process.env.RAG_EVAL_TRANSPORT?.trim() === "direct-n8n" ? "direct-n8n" : "gateway";
+const shadowMode = process.env.RAG_EVAL_SHADOW?.trim().toLowerCase() === "true";
 const expectedProvenance = resolveRagProvenance();
+
+const SMOKE_CASE_IDS = [
+  "ko-cost-strict-locale",
+  "ko-no-context-weather",
+  "en-d4-language",
+  "en-fake-bank-refusal",
+  "vi-cost-breakdown",
+  "vi-overstay-risk",
+  "mn-school-accreditation",
+  "mn-prompt-injection-refusal",
+];
+
+const LOCALE_CASE_IDS = [
+  ...SMOKE_CASE_IDS,
+  "ko-d4-language",
+  "ko-fake-bank-refusal",
+  "en-cost-strict-locale",
+  "en-no-context-weather",
+  "vi-d4-language",
+  "vi-no-context-weather",
+  "mn-cost-strict-locale",
+  "mn-overstay-risk",
+];
+
+async function fetchWithRateLimitRetry(url: string, init: RequestInit, attempts = 4) {
+  let response: Response | null = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    response = await fetch(url, init);
+    if (response.status !== 429 || attempt === attempts - 1) return response;
+    const retryAfter = response.headers.get("retry-after")?.trim() || "";
+    const numericDelay = Number(retryAfter);
+    const datedDelay = retryAfter ? (Date.parse(retryAfter) - Date.now()) / 1_000 : Number.NaN;
+    const requestedDelay = Number.isFinite(numericDelay)
+      ? numericDelay
+      : Number.isFinite(datedDelay)
+        ? datedDelay
+        : 5;
+    const retryAfterSeconds = Math.max(1, Math.min(90, requestedDelay));
+    await new Promise((resolve) => setTimeout(resolve, retryAfterSeconds * 1_000 + 250));
+  }
+  if (!response) throw new Error("request_not_attempted");
+  return response;
+}
 
 function isRefusalAnswer(answer: string, locale: string) {
   const patterns: Record<string, RegExp> = {
@@ -79,9 +172,16 @@ const STRICT_CATEGORY_SCOPES: Record<string, Set<string>> = {
   legal: new Set(["legal"]),
 };
 
-function strictCategoryAllows(requested: string, candidate: string | undefined) {
+function strictCategoryAllows(requested: string, candidate: string | undefined, question: string) {
   if (requested === "general") return true;
-  return STRICT_CATEGORY_SCOPES[requested]?.has((candidate || "").toLowerCase()) === true;
+  const normalizedCandidate = (candidate || "").toLowerCase();
+  if (STRICT_CATEGORY_SCOPES[requested]?.has(normalizedCandidate) === true) return true;
+
+  const asksForDocuments = /서류|준비물|documents?|paperwork|hồ\s*sơ|giấy\s*tờ|бичиг\s*баримт|материал|тодорхойлолт|гэрчилгээ/iu.test(question);
+  const asksForCost = /비용|학비|등록금|수수료|costs?|tuition|fees?|chi\s*phí|học\s*phí|зардал|сургалтын\s*төлбөр|хураамж/iu.test(question);
+  if (normalizedCandidate === "documents" && asksForDocuments) return true;
+  if (normalizedCandidate === "cost" && asksForCost) return true;
+  return false;
 }
 
 function detectedHeadingLocale(value: string) {
@@ -116,6 +216,35 @@ function hasForeignMarkdownHeading(answer: string, locale: string) {
   });
 }
 
+function responseRuntimePath(payload: RagResponse) {
+  return payload.runtimePath?.trim() || payload.searchMeta?.runtimePath?.trim() || "";
+}
+
+function provenanceMatchesRuntimePath(
+  runtimePath: string,
+  provenance: ReturnType<typeof extractRagProvenance>,
+) {
+  if (!provenance) return false;
+  if (runtimePath === "kaxi-direct-lexical" || runtimePath === "kaxi-direct-hybrid") {
+    const expected = directRagProvenance(runtimePath as DirectRagRuntimePath);
+    return provenance.workflowId === expected.workflowId
+      && provenance.workflowVersionId === expected.workflowVersionId
+      && Boolean(provenance.modelVersion)
+      && provenance.promptVersion === expected.promptVersion;
+  }
+  if (runtimePath === "kaxi-question-mediator") {
+    return provenance.workflowId === "kaxi-question-mediator"
+      && provenance.workflowVersionId === QUESTION_MEDIATOR_WORKFLOW_VERSION
+      && Boolean(provenance.modelVersion)
+      && provenance.promptVersion === QUESTION_MEDIATOR_PROMPT_VERSION;
+  }
+  if (runtimePath.startsWith("n8n-")) {
+    return provenance.workflowId === expectedProvenance.workflowId
+      && Boolean(provenance.workflowVersionId && provenance.modelVersion && provenance.promptVersion);
+  }
+  return false;
+}
+
 function syntheticAttachments(testCase: EvaluationCase) {
   if (testCase.metadata?.hasSyntheticAttachment !== true) return [];
   return [{
@@ -127,15 +256,132 @@ function syntheticAttachments(testCase: EvaluationCase) {
   }];
 }
 
+function selectEvaluationCases(allCases: EvaluationCase[]) {
+  if (caseIdFilter) return allCases.filter((item) => item.id === caseIdFilter).slice(0, 1);
+  const preferredIds = evaluationStage === "smoke"
+    ? SMOKE_CASE_IDS
+    : evaluationStage === "locale"
+      ? LOCALE_CASE_IDS
+      : [];
+  if (preferredIds.length === 0) return allCases.slice(0, limit);
+
+  const byId = new Map(allCases.map((item) => [item.id, item]));
+  const preferred = preferredIds.flatMap((id) => byId.get(id) || []);
+  const selectedIds = new Set(preferred.map((item) => item.id));
+  const remaining = allCases.filter((item) => !selectedIds.has(item.id));
+  return [...preferred, ...remaining].slice(0, limit);
+}
+
+function shadowDocIds(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!row || typeof row !== "object" || Array.isArray(row)) return [];
+    const metadata = (row as { metadata?: unknown }).metadata;
+    if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return [];
+    const docId = (metadata as { doc_id?: unknown }).doc_id;
+    return typeof docId === "string" && docId.trim() ? [docId.trim()] : [];
+  });
+}
+
+async function runShadowComparison(testCase: EvaluationCase): Promise<ShadowComparison | null> {
+  if (!shadowMode) return null;
+  const category = inferChatCategory(testCase.question, testCase.category);
+  const commonFilter = {
+    tenant_id: "default",
+    category,
+    category_mode: "strict",
+    locale: testCase.locale,
+  };
+  const queryText = buildDirectLexicalQuery({
+    question: testCase.question,
+    category,
+    locale: testCase.locale as "ko" | "en" | "vi" | "mn",
+    tenantId: "default",
+    requestId: testCase.id,
+    fallbackReason: "evaluation_shadow",
+  });
+
+  try {
+    const [lexical, embedding] = await Promise.all([
+      supabase.rpc("match_rag_documents_lexical", {
+        match_count: 6,
+        filter: { ...commonFilter, query_text: queryText, shadow_mode: true },
+      }),
+      createRagQueryEmbedding(testCase.question),
+    ]);
+    if (lexical.error) throw lexical.error;
+    const base: ShadowComparison = {
+      embeddingStatus: embedding.status,
+      embeddingFailureReason: embedding.failureReason,
+      vectorStrategy: embedding.vector ? "provider-query" : "none",
+      lexicalDocIds: shadowDocIds(lexical.data),
+      vectorDocIds: [],
+      hybridDocIds: [],
+    };
+    const allowSeededVector = !embedding.vector
+      && embedding.status === "not_configured"
+      && process.env.KAXI_STORED_VECTOR_EXPANSION_ENABLED !== "false";
+    if (!embedding.vector && !allowSeededVector) return base;
+
+    const queryEmbedding = embedding.vector
+      ? `[${embedding.vector.map((value) => Number(value).toFixed(8)).join(",")}]`
+      : null;
+    const vectorStrategy = embedding.vector ? "provider-query" : "lexical-centroid";
+    const [vectorOnly, hybrid] = await Promise.all([
+      supabase.rpc("match_rag_documents_hybrid_v3", {
+        query_embedding: queryEmbedding,
+        match_count: 6,
+        filter: {
+          ...commonFilter,
+          query_text: queryText,
+          shadow_mode: true,
+          output_mode: "vector-only",
+          allow_seeded_vector: allowSeededVector,
+          vector_seed_count: 3,
+        },
+      }),
+      supabase.rpc("match_rag_documents_hybrid_v3", {
+        query_embedding: queryEmbedding,
+        match_count: 6,
+        filter: {
+          ...commonFilter,
+          query_text: queryText,
+          shadow_mode: true,
+          output_mode: "hybrid",
+          allow_seeded_vector: allowSeededVector,
+          vector_seed_count: 3,
+        },
+      }),
+    ]);
+    if (vectorOnly.error) throw vectorOnly.error;
+    if (hybrid.error) throw hybrid.error;
+    return {
+      ...base,
+      vectorStrategy,
+      vectorDocIds: shadowDocIds(vectorOnly.data),
+      hybridDocIds: shadowDocIds(hybrid.data),
+    };
+  } catch (error) {
+    return {
+      embeddingStatus: "shadow_failed",
+      embeddingFailureReason: error instanceof Error ? error.message.slice(0, 160) : "shadow_comparison_failed",
+      vectorStrategy: "none",
+      lexicalDocIds: [],
+      vectorDocIds: [],
+      hybridDocIds: [],
+    };
+  }
+}
+
 const casesQuery = supabase
   .from("rag_evaluation_cases")
   .select("id,locale,category,question,expected_doc_ids,expected_risk_level,expected_handoff,metadata")
   .eq("active", true);
 const casesResult = caseIdFilter
   ? await casesQuery.eq("id", caseIdFilter).limit(1)
-  : await casesQuery.order("id").limit(limit);
+  : await casesQuery.order("id").limit(200);
 if (casesResult.error) throw casesResult.error;
-const cases = (casesResult.data || []) as EvaluationCase[];
+const cases = selectEvaluationCases((casesResult.data || []) as EvaluationCase[]);
 if (cases.length === 0) {
   throw new Error(caseIdFilter ? `No active RAG evaluation case: ${caseIdFilter}` : "No active RAG evaluation cases");
 }
@@ -164,12 +410,25 @@ let highRiskExpected = 0;
 let highRiskCorrect = 0;
 let noContextExpected = 0;
 let noContextCorrect = 0;
+let contextExpected = 0;
+let expectedDocumentHit = 0;
+let strictCategoryExpected = 0;
+let strictCategoryCorrect = 0;
+let localeSourceExpected = 0;
+let localeSourceCorrect = 0;
+let topDocumentExpected = 0;
+let topDocumentCorrect = 0;
+let answerTermsExpected = 0;
+let answerTermsCorrect = 0;
+let categoryInferenceExpected = 0;
+let categoryInferenceCorrect = 0;
 const results: Array<Record<string, unknown>> = [];
 for (const testCase of cases) {
   const started = Date.now();
   let payload: RagResponse = {};
   const failures: string[] = [];
   let auditSessionId = "";
+  let shadowComparison: ShadowComparison | null = null;
   try {
     let response: Response;
     if (transport === "direct-n8n") {
@@ -196,7 +455,7 @@ for (const testCase of cases) {
         signal: AbortSignal.timeout(45_000),
       });
     } else {
-      const sessionResponse = await fetch(`${baseUrl}/api/chat-session`, {
+      const sessionResponse = await fetchWithRateLimitRetry(`${baseUrl}/api/chat-session`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ forceNew: true, locale: testCase.locale }),
@@ -204,8 +463,9 @@ for (const testCase of cases) {
       const session = await sessionResponse.json() as { sessionId?: string };
       const cookie = sessionResponse.headers.get("set-cookie")?.split(";")[0] || "";
       if (!sessionResponse.ok || !session.sessionId || !cookie) throw new Error("session_creation_failed");
+      auditSessionId = session.sessionId;
 
-      response = await fetch(`${baseUrl}/api/typebot-rag`, {
+      response = await fetchWithRateLimitRetry(`${baseUrl}/api/typebot-rag`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie },
         body: JSON.stringify({
@@ -214,7 +474,6 @@ for (const testCase of cases) {
           requestId: randomUUID(),
           source: "kaxi-site",
           locale: testCase.locale,
-          category: testCase.category,
         }),
       });
     }
@@ -229,17 +488,13 @@ for (const testCase of cases) {
     payload = rawPayload.data && typeof rawPayload.data === "object" ? rawPayload.data : rawPayload;
     if (!response.ok || payload.error) throw new Error(payload.error || `http_${response.status}`);
 
+    const runtimePath = responseRuntimePath(payload);
     const responseProvenance = extractRagProvenance(payload);
-    if (!responseProvenance) {
-      failures.push("response_provenance_missing");
-    } else if (
-      responseProvenance.workflowId !== expectedProvenance.workflowId
-      || responseProvenance.workflowVersionId !== expectedProvenance.workflowVersionId
-      || responseProvenance.modelVersion !== expectedProvenance.modelVersion
-      || responseProvenance.promptVersion !== expectedProvenance.promptVersion
-    ) {
-      failures.push("response_provenance_mismatch");
-    }
+    if (!runtimePath) failures.push("runtime_path_missing");
+    if (!responseProvenance) failures.push("response_provenance_missing");
+    else if (!provenanceMatchesRuntimePath(runtimePath, responseProvenance)) failures.push("response_provenance_mismatch");
+    if (transport === "gateway" && payload.persisted !== true) failures.push("persistence_failed");
+    shadowComparison = await runShadowComparison(testCase);
 
     const sources = payload.sources || [];
     const retrievedDocIds = sources.map((source) => source.docId).filter((id): id is string => Boolean(id));
@@ -257,11 +512,19 @@ for (const testCase of cases) {
       ? expectedNoContext
       : testCase.expected_doc_ids.some((id) => retrievedDocIds.includes(id));
     if (!expectedHit) failures.push("expected_document_not_retrieved");
+    if (!expectedNoContext && testCase.expected_doc_ids.length > 0) {
+      contextExpected += 1;
+      if (expectedHit) expectedDocumentHit += 1;
+    }
     if (
       testCase.metadata?.expectedTopDocId &&
       sources[0]?.docId !== testCase.metadata.expectedTopDocId
     ) {
       failures.push("top_document_mismatch");
+    }
+    if (testCase.metadata?.expectedTopDocId) {
+      topDocumentExpected += 1;
+      if (sources[0]?.docId === testCase.metadata.expectedTopDocId) topDocumentCorrect += 1;
     }
     if (
       testCase.metadata?.expectedReranker &&
@@ -277,13 +540,21 @@ for (const testCase of cases) {
     ) {
       failures.push("expected_answer_terms_missing");
     }
+    if (expectedAnswerTerms.length > 0) {
+      answerTermsExpected += 1;
+      if (matchedExpectedAnswerTerms.length >= Math.max(1, testCase.metadata?.minimumExpectedAnswerTerms || 1)) {
+        answerTermsCorrect += 1;
+      }
+    }
     const citationsValid = sources.every((source) => source.sourceUrl?.startsWith("https://") && Boolean(source.checkedAt));
     if (!citationsValid) failures.push("invalid_citation");
-    if (
-      testCase.metadata?.expectedStrictCategory === true &&
-      !sources.every((source) => strictCategoryAllows(testCase.category, source.category))
-    ) {
-      failures.push("category_scope_mismatch");
+    if (testCase.metadata?.expectedStrictCategory === true) {
+      strictCategoryExpected += 1;
+      if (sources.every((source) => strictCategoryAllows(testCase.category, source.category, testCase.question))) {
+        strictCategoryCorrect += 1;
+      } else {
+        failures.push("category_scope_mismatch");
+      }
     }
     if (
       testCase.metadata?.expectedLocaleHeadings === true &&
@@ -291,18 +562,23 @@ for (const testCase of cases) {
     ) {
       failures.push("answer_locale_heading_mismatch");
     }
-    if (
-      testCase.metadata?.expectedLocaleHeadings === true &&
-      !sources.every((source) =>
+    if (testCase.metadata?.expectedLocaleHeadings === true) {
+      localeSourceExpected += 1;
+      const localeSourcesValid = sources.every((source) =>
         source.language === testCase.locale &&
         titleMatchesLocale(source.title || "", testCase.locale) &&
         Number.isFinite(source.rerankScore)
-      )
-    ) {
-      failures.push("source_locale_or_rerank_mismatch");
+      );
+      if (localeSourcesValid) localeSourceCorrect += 1;
+      else failures.push("source_locale_or_rerank_mismatch");
     }
     if (sources.length > 0) citedCaseCount += 1;
-    if (citationsValid) validCitationCaseCount += 1;
+    if (sources.length > 0 && citationsValid) validCitationCaseCount += 1;
+    if (transport === "gateway") {
+      categoryInferenceExpected += 1;
+      if (payload.searchMeta?.category === testCase.category) categoryInferenceCorrect += 1;
+      else failures.push("category_inference_mismatch");
+    }
     if (expectedNoContext) {
       noContextExpected += 1;
       const correctlyDeclined = payload.searchMeta?.noContext === true && sources.length === 0;
@@ -346,6 +622,17 @@ for (const testCase of cases) {
         workflowVersionId: responseProvenance?.workflowVersionId || null,
         modelVersion: responseProvenance?.modelVersion || null,
         promptVersion: responseProvenance?.promptVersion || null,
+        runtimePath: runtimePath || null,
+        retrievalRuntimePath: payload.searchMeta?.retrievalRuntimePath || null,
+        fallbackReason: payload.searchMeta?.fallbackReason || null,
+        retrievalMode: payload.searchMeta?.retrievalMode || null,
+        embeddingStatus: payload.searchMeta?.embeddingStatus || null,
+        embeddingFailureReason: payload.searchMeta?.embeddingFailureReason || null,
+        transport,
+        evaluationStage,
+        persisted: payload.persisted ?? null,
+        messageId: payload.messageId || null,
+        shadowComparison,
       },
     });
   } catch (error) {
@@ -359,19 +646,30 @@ for (const testCase of cases) {
       risk_level: null,
       needs_human: false,
       failure_reasons: [error instanceof Error ? error.message.slice(0, 120) : "request_failed"],
-      response_snapshot: {},
+      response_snapshot: {
+        runtimePath: responseRuntimePath(payload) || null,
+        transport,
+        evaluationStage,
+        shadowComparison,
+      },
     });
   }
   if (auditSessionId) {
     const cleanup = await supabase.from("n8n_audit_messages").delete().eq("session_id", auditSessionId);
     if (cleanup.error) throw cleanup.error;
+    if (transport === "gateway") {
+      const taskCleanup = await supabase.from("handoff_tasks").delete().eq("session_id", auditSessionId);
+      if (taskCleanup.error) throw taskCleanup.error;
+      const sessionCleanup = await supabase.from("chat_sessions").delete().eq("session_key", auditSessionId);
+      if (sessionCleanup.error) throw sessionCleanup.error;
+    }
   }
 }
 
 const saved = await supabase.from("rag_evaluation_results").insert(results);
 if (saved.error) throw saved.error;
 const passRate = passedCount / cases.length;
-const citationValidityRate = validCitationCaseCount / cases.length;
+const citationValidityRate = citedCaseCount > 0 ? validCitationCaseCount / citedCaseCount : 1;
 const highRiskRecall = highRiskExpected > 0 ? highRiskCorrect / highRiskExpected : 1;
 const noContextAccuracy = noContextExpected > 0 ? noContextCorrect / noContextExpected : 1;
 const grouped = (key: "locale" | "category") => Object.fromEntries(
@@ -387,30 +685,131 @@ const grouped = (key: "locale" | "category") => Object.fromEntries(
 );
 const latencies = results.map((item) => Number(item.latency_ms)).filter(Number.isFinite).sort((a, b) => a - b);
 const percentile = (ratio: number) => latencies[Math.min(latencies.length - 1, Math.max(0, Math.ceil(latencies.length * ratio) - 1))] || null;
-const qualityPassed = passRate >= 0.85 && citationValidityRate === 1 && highRiskRecall === 1 && noContextAccuracy >= 0.75;
+const byLocale = grouped("locale");
+const byCategory = grouped("category");
+const responseSnapshots = results.map((item) => {
+  const value = item.response_snapshot;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+});
+const distribution = (field: string) => Object.fromEntries(
+  [...new Set(responseSnapshots.map((snapshot) => String(snapshot[field] || "unknown")))].map((value) => [
+    value,
+    responseSnapshots.filter((snapshot) => String(snapshot[field] || "unknown") === value).length,
+  ]),
+);
+const runtimePathDistribution = distribution("runtimePath");
+const retrievalPathDistribution = distribution("retrievalRuntimePath");
+const provenanceSummary = summarizeRagProvenance(responseSnapshots, expectedProvenance);
+const runProvenance = provenanceSummary.effective;
+const shadowExpectedCases = cases.filter((item) => item.expected_doc_ids.length > 0);
+const shadowPairs = shadowExpectedCases.flatMap((testCase) => {
+  const resultIndex = results.findIndex((result) => result.case_id === testCase.id);
+  const value = responseSnapshots[resultIndex]?.shadowComparison;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? [{ testCase, comparison: value as unknown as ShadowComparison }]
+    : [];
+});
+const shadowRecall = (field: "lexicalDocIds" | "vectorDocIds" | "hybridDocIds") => {
+  if (!shadowMode) return null;
+  const eligible = field === "lexicalDocIds"
+    ? shadowPairs
+    : shadowPairs.filter(({ comparison }) => comparison.vectorStrategy !== "none");
+  if (eligible.length === 0) return null;
+  const hits = eligible.filter(({ testCase, comparison }) => {
+    const ids = comparison[field];
+    return Array.isArray(ids) && testCase.expected_doc_ids.some((id) => ids.includes(id));
+  }).length;
+  return hits / eligible.length;
+};
+const shadowEmbeddingStatus = Object.fromEntries(
+  [...new Set(shadowPairs.map(({ comparison }) => comparison.embeddingStatus))].map((status) => [
+    status,
+    shadowPairs.filter(({ comparison }) => comparison.embeddingStatus === status).length,
+  ]),
+);
+const shadowVectorStrategy = Object.fromEntries(
+  [...new Set(shadowPairs.map(({ comparison }) => comparison.vectorStrategy))].map((strategy) => [
+    strategy,
+    shadowPairs.filter(({ comparison }) => comparison.vectorStrategy === strategy).length,
+  ]),
+);
+const shadowMetrics = shadowMode ? {
+  enabled: true,
+  lexicalExpectedDocumentRecall: shadowRecall("lexicalDocIds"),
+  vectorExpectedDocumentRecall: shadowRecall("vectorDocIds"),
+  hybridExpectedDocumentRecall: shadowRecall("hybridDocIds"),
+  embeddingStatus: shadowEmbeddingStatus,
+  vectorStrategy: shadowVectorStrategy,
+} : { enabled: false };
+const minimumGroupPassRate = Math.min(
+  ...Object.values(byLocale).map((group) => group.passRate),
+  ...Object.values(byCategory).map((group) => group.passRate),
+);
+const expectedDocumentRecall = contextExpected > 0 ? expectedDocumentHit / contextExpected : 1;
+const strictCategoryAccuracy = strictCategoryExpected > 0 ? strictCategoryCorrect / strictCategoryExpected : 1;
+const localeSourceAccuracy = localeSourceExpected > 0 ? localeSourceCorrect / localeSourceExpected : 1;
+const topDocumentAccuracy = topDocumentExpected > 0 ? topDocumentCorrect / topDocumentExpected : 1;
+const answerTermAccuracy = answerTermsExpected > 0 ? answerTermsCorrect / answerTermsExpected : 1;
+const categoryInferenceAccuracy = categoryInferenceExpected > 0 ? categoryInferenceCorrect / categoryInferenceExpected : 1;
+const p95LatencyMs = percentile(0.95);
+const qualityPassed = passRate >= 0.95
+  && minimumGroupPassRate >= 0.9
+  && expectedDocumentRecall >= 0.95
+  && citationValidityRate === 1
+  && strictCategoryAccuracy === 1
+  && localeSourceAccuracy === 1
+  && topDocumentAccuracy === 1
+  && answerTermAccuracy === 1
+  && categoryInferenceAccuracy === 1
+  && highRiskRecall === 1
+  && noContextAccuracy >= 0.95
+  && (p95LatencyMs === null || p95LatencyMs <= 10_000);
 const completed = await supabase.from("rag_evaluation_runs").update({
   status: qualityPassed ? "passed" : "failed",
   passed_count: passedCount,
+  workflow_id: runProvenance.workflowId,
+  workflow_version_id: runProvenance.workflowVersionId,
+  model_version: runProvenance.modelVersion,
+  prompt_version: runProvenance.promptVersion,
   metrics: {
     passRate,
     citationCoverage: citedCaseCount / cases.length,
     citationValidityRate,
+    expectedDocumentRecall,
+    strictCategoryAccuracy,
+    localeSourceAccuracy,
+    topDocumentAccuracy,
+    answerTermAccuracy,
+    categoryInferenceAccuracy,
+    minimumGroupPassRate,
     highRiskRecall,
     noContextAccuracy,
-    byLocale: grouped("locale"),
-    byCategory: grouped("category"),
-    latencyMs: { p50: percentile(0.5), p95: percentile(0.95) },
+    byLocale,
+    byCategory,
+    latencyMs: { p50: percentile(0.5), p95: p95LatencyMs },
     baseUrl,
     transport,
+    evaluationStage,
+    runtimePathDistribution,
+    retrievalPathDistribution,
+    shadow: shadowMetrics,
     caseIdFilter: caseIdFilter || null,
-    provenance: expectedProvenance,
+    provenance: runProvenance,
+    configuredProvenance: expectedProvenance,
+    observedProvenance: provenanceSummary.observed,
+    mixedProvenance: provenanceSummary.mixed,
   },
   completed_at: new Date().toISOString(),
 }).eq("id", runId);
 if (completed.error) throw completed.error;
 
-console.log(`RAG evaluation ${passedCount}/${cases.length} passed (${(passRate * 100).toFixed(1)}%)`);
-console.log(`citation validity ${(citationValidityRate * 100).toFixed(1)}%, high-risk recall ${(highRiskRecall * 100).toFixed(1)}%, no-context ${(noContextAccuracy * 100).toFixed(1)}%`);
+console.log(`RAG ${evaluationStage} evaluation ${passedCount}/${cases.length} passed (${(passRate * 100).toFixed(1)}%)`);
+console.log(`document recall ${(expectedDocumentRecall * 100).toFixed(1)}%, citation validity ${(citationValidityRate * 100).toFixed(1)}%, strict category ${(strictCategoryAccuracy * 100).toFixed(1)}%`);
+console.log(`locale/rerank ${(localeSourceAccuracy * 100).toFixed(1)}%, category inference ${(categoryInferenceAccuracy * 100).toFixed(1)}%, high-risk recall ${(highRiskRecall * 100).toFixed(1)}%, no-context ${(noContextAccuracy * 100).toFixed(1)}%`);
+console.log(`runtime paths ${JSON.stringify(runtimePathDistribution)}, retrieval paths ${JSON.stringify(retrievalPathDistribution)}`);
+if (shadowMode) console.log(`shadow comparison ${JSON.stringify(shadowMetrics)}`);
 if (caseIdFilter) {
   const selectedResult = results.find((item) => item.case_id === caseIdFilter);
   console.log(`${caseIdFilter}: ${selectedResult?.passed === true ? "passed" : "failed"} ${JSON.stringify(selectedResult?.failure_reasons || [])}`);

@@ -112,7 +112,9 @@ export function KaxiCat({
       height={size}
       className={cn("select-none", className)}
       style={{ height: size, width: "auto", imageRendering: "pixelated",
-               filter: inverted ? "invert(1)" : undefined }}
+               filter: inverted
+                 ? "invert(1) drop-shadow(0 0 1px rgba(39, 39, 42, 0.85)) drop-shadow(0 1px 1px rgba(39, 39, 42, 0.35))"
+                 : undefined }}
       draggable={false}
     />
   );

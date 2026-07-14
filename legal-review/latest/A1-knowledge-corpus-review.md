@@ -15,7 +15,7 @@
 | A1-003 | visa-documents | 비자 신청 필수 서류 | documents | APPROVED | 2026-07-01 | Study in Korea |
 | A1-004 | tuberculosis-test | 결핵진단서 안내 | documents | APPROVED | 2026-07-01 | 법무부 출입국외국인정책본부 |
 | A1-005 | accredited-university | 교육국제화역량 인증대학 제도 | school | APPROVED | 2026-07-03 | Study in Korea · 교육국제화역량 인증대학 |
-| A1-006 | visa-portal-visa-types | Korea Visa Portal 비자 유형 목록 | visa | APPROVED | 2026-07-03 | Korea Visa Portal · Visa Types |
+| A1-006 | visa-portal-visa-types | 대한민국 비자포털 비자 유형 목록 | visa | APPROVED | 2026-07-03 | Korea Visa Portal · Visa Types |
 | A1-007 | cost-breakdown | 유학 총비용 항목 분해 | cost | APPROVED | 2026-07-01 | KAXI internal analysis |
 | A1-008 | topik-requirement | TOPIK 요구 등급 | documents | APPROVED | 2026-07-01 | 국립국제교육원/TOPIK |
 | A1-009 | standard-admission | 표준입학허가서 제도 | documents | APPROVED | 2026-07-01 | 법무부 출입국외국인정책본부 |
@@ -416,7 +416,7 @@ The Korea Visa Portal visa-type list is operational guidance run by the Ministry
 Danh mục loại visa trên Korea Visa Portal là căn cứ nghiệp vụ bổ trợ do Bộ Tư pháp vận hành. Kiểm tra ngày 2026-07-03: nhóm Study·Language Training gồm D-2-1, D-2-2, D-2-3, D-2-4, D-2-5, D-2-6, D-4-1, D-4-3, D-4-7; nhóm Professional gồm D-10-1, D-10-2 và E-7-1. Việc xác định tư cách lưu trú vẫn ưu tiên Luật Quản lý xuất nhập cảnh, Nghị định và Quy tắc thi hành; cổng visa dùng để kiểm tra tên, phân loại và đường nộp.
 ```
 
-### MN — Korea Visa Portal визийн төрлийн жагсаалт
+### MN — БНСУ-ын визийн порталын визийн төрлийн жагсаалт
 
 ```
 Korea Visa Portal-ийн визийн төрөл нь Хууль зүйн яамны ажиллагааны туслах эх сурвалж. 2026-07-03-ны шалгалтаар Study·Language Training бүлэгт D-2-1, D-2-2, D-2-3, D-2-4, D-2-5, D-2-6, D-4-1, D-4-3, D-4-7; Professional бүлэгт D-10-1, D-10-2, E-7-1 зэрэг байна. Оршин суух эрхийн дүгнэлтэд хууль, журам, дүрмийг түрүүлж үзэж, визийн портал нь нэршил, ангилал, өргөдлийн замыг шалгахад хэрэглэгдэнэ.
@@ -5032,4 +5032,3 @@ Dấu hiệu môi giới rủi ro: 1) Chỉ báo tổng, không rõ từng mục
 ```
 Зуучлагчийн эрсдэлийн дохио: 1) Зөвхөн нийт дүн, задлахгүй. 2) Виз 100% баталгаа. 3) Хуурамч баримт санал. 4) Хууль бус ажил. 5) Бэлэн мөнгө, гэрээгүй. 6) Сургуулийн ажилтан дүр эсвэл албадах. 7) Бодит зардал 30%+ өндөр. 8) Зөвхөн SNS-ээр холбоо. → Харьцуулж, зөвлөгөө авна.
 ```
-

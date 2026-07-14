@@ -47,6 +47,14 @@ export interface KnowledgeImpactSummary {
   users: KnowledgeImpactUser[];
 }
 
+export interface KnowledgeImpactInput {
+  docId: string;
+  title?: string;
+  sourceUrl?: string;
+  topic?: string;
+  supersedes?: unknown;
+}
+
 export interface KnowledgeDiffSummary {
   changed: boolean;
   addedChunks: number;
@@ -467,53 +475,113 @@ function matchesAnyToken(value: unknown, tokens: string[]): boolean {
   return tokens.some((token) => text.includes(token.toLowerCase()));
 }
 
-export async function calculateKnowledgeImpact(input: {
-  docId: string;
-  title?: string;
-  sourceUrl?: string;
-  topic?: string;
-  supersedes?: unknown;
-}): Promise<KnowledgeImpactSummary> {
-  const sourceDocIds = sourceDocIdsForImpact(input);
-  const tokens = impactTokens(input);
-  if (tokens.length === 0) return { sourceDocIds, ruleCount: 0, userCount: 0, rules: [], users: [] };
+type KnowledgeImpactChatLogRow = {
+  item_key: string;
+  chat_log_id: string;
+  created_at: Date;
+  lang: string;
+  source: string;
+};
 
-  const [versions, chatLogs] = await Promise.all([
-    db.complianceRuleVersion.findMany({ include: { rule: true }, orderBy: [{ createdAt: "desc" }] }),
-    db.chatLog.findMany({
-      where: {
-        OR: tokens.map((token) => ({ retrievedDocs: { contains: token } })),
-      },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    }),
-  ]);
+export async function calculateKnowledgeImpacts(
+  inputs: KnowledgeImpactInput[],
+): Promise<Map<string, KnowledgeImpactSummary>> {
+  const uniqueInputs = Array.from(
+    new Map(inputs.filter((input) => input.docId.trim()).map((input) => [input.docId, input])).values(),
+  );
+  if (uniqueInputs.length === 0) return new Map();
 
-  const rules = versions
-    .filter((version) => matchesAnyToken(version.sourceRefs, tokens))
-    .slice(0, 50)
-    .map((version) => ({
-      id: version.id,
-      ruleId: version.ruleId,
-      code: version.rule.code,
-      version: version.version,
-      reviewStatus: version.reviewStatus,
-      sourceRefs: sourceRefsFor(version),
-    }));
-
-  const users = chatLogs.map((log) => ({
-    chatLogId: log.id,
-    createdAt: log.createdAt.toISOString(),
-    lang: log.lang,
-    source: log.source,
+  const prepared = uniqueInputs.map((input) => ({
+    input,
+    sourceDocIds: sourceDocIdsForImpact(input),
+    tokens: impactTokens(input),
   }));
+  const tokenRows = prepared.flatMap(({ input, tokens }) =>
+    tokens.map((token) => ({ itemKey: input.docId, token })),
+  );
 
-  return {
-    sourceDocIds,
-    ruleCount: rules.length,
-    userCount: users.length,
-    rules,
-    users,
+  const chatLogQuery = tokenRows.length === 0
+    ? Promise.resolve([] as KnowledgeImpactChatLogRow[])
+    : db.$queryRaw<KnowledgeImpactChatLogRow[]>(Prisma.sql`
+        WITH impact_tokens(item_key, token) AS (
+          VALUES ${Prisma.join(
+            tokenRows.map(({ itemKey, token }) => Prisma.sql`(${itemKey}::text, ${token}::text)`),
+          )}
+        ),
+        matched_logs AS (
+          SELECT DISTINCT
+            tokens.item_key,
+            logs.id AS chat_log_id,
+            logs."createdAt" AS created_at,
+            logs.lang,
+            logs.source
+          FROM impact_tokens tokens
+          JOIN "ChatLog" logs
+            ON logs."retrievedDocs" IS NOT NULL
+           AND strpos(logs."retrievedDocs", tokens.token) > 0
+        ),
+        ranked_logs AS (
+          SELECT
+            matched_logs.*,
+            row_number() OVER (
+              PARTITION BY item_key
+              ORDER BY created_at DESC, chat_log_id DESC
+            ) AS row_number
+          FROM matched_logs
+        )
+        SELECT item_key, chat_log_id, created_at, lang, source
+        FROM ranked_logs
+        WHERE row_number <= 50
+        ORDER BY item_key ASC, created_at DESC, chat_log_id DESC
+      `);
+
+  const [versions, chatLogRows] = await Promise.all([
+    db.complianceRuleVersion.findMany({ include: { rule: true }, orderBy: [{ createdAt: "desc" }] }),
+    chatLogQuery,
+  ]);
+  const usersByDocId = new Map<string, KnowledgeImpactUser[]>();
+  for (const row of chatLogRows) {
+    const users = usersByDocId.get(row.item_key) || [];
+    users.push({
+      chatLogId: row.chat_log_id,
+      createdAt: row.created_at.toISOString(),
+      lang: row.lang,
+      source: row.source,
+    });
+    usersByDocId.set(row.item_key, users);
+  }
+
+  return new Map(prepared.map(({ input, sourceDocIds, tokens }) => {
+    const rules = versions
+      .filter((version) => matchesAnyToken(version.sourceRefs, tokens))
+      .slice(0, 50)
+      .map((version) => ({
+        id: version.id,
+        ruleId: version.ruleId,
+        code: version.rule.code,
+        version: version.version,
+        reviewStatus: version.reviewStatus,
+        sourceRefs: sourceRefsFor(version),
+      }));
+    const users = usersByDocId.get(input.docId) || [];
+    return [input.docId, {
+      sourceDocIds,
+      ruleCount: rules.length,
+      userCount: users.length,
+      rules,
+      users,
+    }];
+  }));
+}
+
+export async function calculateKnowledgeImpact(input: KnowledgeImpactInput): Promise<KnowledgeImpactSummary> {
+  const impacts = await calculateKnowledgeImpacts([input]);
+  return impacts.get(input.docId) || {
+    sourceDocIds: sourceDocIdsForImpact(input),
+    ruleCount: 0,
+    userCount: 0,
+    rules: [],
+    users: [],
   };
 }
 

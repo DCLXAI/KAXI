@@ -1,18 +1,21 @@
 "use client";
 
 import { motion, useReducedMotion } from "framer-motion";
-import { Loader2 } from "lucide-react";
 import { AgentToolSteps } from "./AgentToolSteps";
+import { AgentProgressCard } from "./AgentProgressCard";
 import { AgentResponseCard } from "./AgentResponseCard";
-import type { AgentLocale, AgentMessage, ClarifyDraft } from "./types";
+import type { AgentLocale, AgentMessage, AgentProgress, ClarifyDraft } from "./types";
 
 interface AgentMessageListProps {
+  compact?: boolean;
   clarifyDrafts: Record<number, ClarifyDraft>;
   endRef: React.RefObject<HTMLDivElement | null>;
   loading: boolean;
   locale: AgentLocale;
   messages: AgentMessage[];
+  progress: AgentProgress | null;
   onDraftChange: (messageIndex: number, patch: Partial<ClarifyDraft>) => void;
+  onRetry: (messageIndex: number) => void;
   onSend: (text: string) => void;
   onSendDraft: (messageIndex: number, originalRequest: string) => void;
 }
@@ -25,22 +28,26 @@ function originalRequestFor(messages: AgentMessage[], messageIndex: number): str
 }
 
 export function AgentMessageList({
+  compact = false,
   clarifyDrafts,
   endRef,
   loading,
   locale,
   messages,
+  progress,
   onDraftChange,
+  onRetry,
   onSend,
   onSendDraft,
 }: AgentMessageListProps) {
   const shouldReduceMotion = useReducedMotion();
+  const hasStreamingAnswer = messages.some((message) => message.state === "streaming");
 
   return (
-    <div className="space-y-6 mb-32">
+    <div className={compact ? "space-y-6 mb-4" : "space-y-6 mb-32"} aria-live="polite">
       {messages.map((message, index) => (
         <motion.div
-          key={index}
+          key={message.requestId || index}
           initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, transform: "translateY(10px)" }}
           animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, transform: "translateY(0px)" }}
           transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
@@ -64,6 +71,7 @@ export function AgentMessageList({
                   messageIndex={index}
                   originalRequest={originalRequestFor(messages, index)}
                   onDraftChange={onDraftChange}
+                  onRetry={onRetry}
                   onSend={onSend}
                   onSendDraft={onSendDraft}
                 />
@@ -73,25 +81,17 @@ export function AgentMessageList({
         </motion.div>
       ))}
 
-      {loading && (
+      {loading && !hasStreamingAnswer && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
           className="flex justify-start"
         >
-          <div className="bg-card border rounded-2xl rounded-bl-md p-4 max-w-[95%] w-full">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>{locale === "ko" ? "에이전트 추론 중..." : "Agent thinking..."}</span>
-            </div>
-            <div className="text-xs text-muted-foreground pl-6">
-              {locale === "ko" ? "자료 검색, 비용/서류 계산, 출처 정리까지 순서대로 처리합니다" : "Checking tools, sources, and next actions"}
-            </div>
-          </div>
+          <AgentProgressCard locale={locale} progress={progress} />
         </motion.div>
       )}
-      <div ref={endRef} className="h-44" />
+      <div ref={endRef} className={compact ? "h-4" : "h-44"} />
     </div>
   );
 }

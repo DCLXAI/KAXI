@@ -6,10 +6,10 @@ export type RagProvenance = {
 };
 
 export const DEFAULT_RAG_PROVENANCE: RagProvenance = {
-  workflowId: "EqX3C5c2WNWoKkSR",
-  workflowVersionId: "kaxi-rag-runtime@2026-07-11.provenance-v1",
-  modelVersion: "openai/text-embedding-3-small@1536",
-  promptVersion: "kaxi-grounded-context-answer@2026-07-11.reranker-v2",
+  workflowId: "bHHyeC1DCUSvi7Px",
+  workflowVersionId: "kaxi-rag-runtime@2026-07-14.railway-mcp-v2",
+  modelVersion: "retrieval/hybrid-rrf-v3@2026-07-14",
+  promptVersion: "kaxi-grounded-extractive@2026-07-13.p0-v1",
 };
 
 export const RAG_PROVENANCE_HEADERS = {
@@ -39,6 +39,28 @@ export function extractRagProvenance(value: unknown): RagProvenance | null {
   const promptVersion = versionText(candidate.promptVersion);
   if (!workflowId || !workflowVersionId || !modelVersion || !promptVersion) return null;
   return { workflowId, workflowVersionId, modelVersion, promptVersion };
+}
+
+export function summarizeRagProvenance(
+  values: unknown[],
+  fallback: RagProvenance = DEFAULT_RAG_PROVENANCE,
+) {
+  const counts = new Map<string, { provenance: RagProvenance; count: number }>();
+  for (const value of values) {
+    const provenance = extractRagProvenance(value);
+    if (!provenance) continue;
+    const key = JSON.stringify(provenance);
+    const existing = counts.get(key);
+    if (existing) existing.count += 1;
+    else counts.set(key, { provenance, count: 1 });
+  }
+
+  const observed = [...counts.values()].sort((left, right) => right.count - left.count);
+  return {
+    effective: observed.length === 1 ? observed[0].provenance : fallback,
+    observed,
+    mixed: observed.length > 1,
+  };
 }
 
 export function resolveRagProvenance(

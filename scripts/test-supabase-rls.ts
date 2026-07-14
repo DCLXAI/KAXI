@@ -64,10 +64,33 @@ const funnelNotificationMigration = readFileSync(
   join(root, "prisma", "postgres", "migrations", "20260711110000_partner_request_assignment_notifications", "migration.sql"),
   "utf8",
 );
+const operatorReviewMigration = readFileSync(
+  join(root, "prisma", "postgres", "migrations", "20260712233000_operator_review_loop", "migration.sql"),
+  "utf8",
+);
+const productAnalyticsMigration = readFileSync(
+  join(root, "prisma", "postgres", "migrations", "20260713090000_product_analytics", "migration.sql"),
+  "utf8",
+);
+const ragQualityGateMigration = readFileSync(
+  join(root, "prisma", "postgres", "migrations", "20260713120000_rag_quality_gate", "migration.sql"),
+  "utf8",
+);
 
 assert(
   /authUserId\s+String\?\s+@unique\s+@db\.Uuid/.test(schema),
   "User model must include nullable unique authUserId @db.Uuid for Supabase auth.users.id"
+);
+assert(
+  ragQualityGateMigration.includes("below_calibrated_threshold") &&
+    ragQualityGateMigration.indexOf("v_reason := 'low_confidence'") < ragQualityGateMigration.indexOf("v_reason := 'no_context'"),
+  "calibrated low-confidence retrievals must retain their review-queue reason",
+);
+assert(
+  productAnalyticsMigration.includes("public.product_events ENABLE ROW LEVEL SECURITY") &&
+    productAnalyticsMigration.includes("public.product_events FROM PUBLIC") &&
+    productAnalyticsMigration.includes("Never store question, answer, contact, or raw document URL"),
+  "product analytics must be server-owned and explicitly privacy-minimized",
 );
 assert(
   chatTurnMigration.includes("public.retrieval_runs ENABLE ROW LEVEL SECURITY;"),
@@ -111,6 +134,13 @@ for (const table of ["ops_events", "system_health_runs", "rag_evaluation_cases",
     `ops observability RLS loop must include ${table}`,
   );
 }
+assert(
+  operatorReviewMigration.includes("public.rag_review_feedback ENABLE ROW LEVEL SECURITY") &&
+    operatorReviewMigration.includes("public.rag_review_feedback FROM PUBLIC") &&
+    operatorReviewMigration.includes("kaxi_resolve_handoff_review") &&
+    operatorReviewMigration.includes("retrieval_runs_queue_review"),
+  "operator review feedback must be server-only and atomically connected to the retrieval queue",
+);
 assert(
   legacyRagQuarantineMigration.includes("public.legacy_rag_chunks_quarantine ENABLE ROW LEVEL SECURITY;") &&
     legacyRagQuarantineMigration.includes("public.legacy_rag_chunks_quarantine FROM PUBLIC;"),

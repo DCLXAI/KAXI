@@ -13,6 +13,7 @@ import {
   UnsafeChatAttachmentError,
 } from "@/lib/chat/attachment-security";
 import { CHAT_SESSION_COOKIE, isKaxiSessionId, verifyChatSessionToken } from "@/lib/chat/session-token";
+import { recordOpsEvent } from "@/lib/ops/events";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -30,6 +31,27 @@ function configured(value: string | undefined) {
   const text = value?.trim() || "";
   if (!text || /^replace-with-/i.test(text)) return "";
   return text;
+}
+
+function reportAttachmentSecurityEvent(
+  eventType: string,
+  severity: "warning" | "error" | "critical",
+  message: string,
+  code: string,
+) {
+  const minuteBucket = Math.floor(Date.now() / 60_000);
+  after(async () => {
+    await recordOpsEvent({
+      source: "kaxi-attachment-security",
+      severity,
+      eventType,
+      message,
+      executionId: `${eventType}:${minuteBucket}`,
+      payload: { code },
+    }).catch((alertError) => {
+      console.error("[POST /api/chat-attachments] operations alert failed", alertError);
+    });
+  });
 }
 
 async function createSupabaseStorageClient() {
@@ -186,9 +208,23 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     if (error instanceof UnsafeChatAttachmentError) {
+      if (error.code === "malware_detected" || error.code === "malware_scan_rejected") {
+        reportAttachmentSecurityEvent(
+          "attachment_malware_rejected",
+          "critical",
+          "The attachment scanner rejected a potentially malicious upload.",
+          error.code,
+        );
+      }
       return NextResponse.json({ error: "unsafe attachment rejected", code: error.code }, { status: 422 });
     }
     if (error instanceof ChatAttachmentScannerUnavailableError) {
+      reportAttachmentSecurityEvent(
+        "attachment_scanner_unavailable",
+        "error",
+        "The managed attachment scanner is unavailable; uploads are failing closed.",
+        error.message,
+      );
       return NextResponse.json({ error: "attachment security scan unavailable", code: error.message }, { status: 503 });
     }
     if (error instanceof Error && error.message === "SUPABASE_STORAGE_NOT_CONFIGURED") {

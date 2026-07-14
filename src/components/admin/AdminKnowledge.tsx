@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, RefreshCw, RotateCcw, Satellite, Trash2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, RefreshCw, RotateCcw, Satellite, Trash2 } from "lucide-react";
 import { useAdminApi } from "@/components/admin/AdminShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,8 @@ interface MonitorResult {
   unchanged: number;
   failed: number;
   candidatesCreated: number;
+  candidateWritesEnabled?: boolean;
+  candidateWritePaused?: boolean;
   alert?: {
     attempted: boolean;
     sent: boolean;
@@ -33,6 +35,15 @@ interface MonitorResult {
     error?: string;
     diff?: NonNullable<AdminKnowledgeItem["diff"]>;
   }>;
+}
+
+interface KnowledgePagination {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  hasPrevious: boolean;
+  hasNext: boolean;
 }
 
 function formatDate(value: string | null) {
@@ -55,24 +66,42 @@ export function AdminKnowledge() {
   const [bulkAction, setBulkAction] = useState<"approve" | "discard" | null>(null);
   const [monitoringMode, setMonitoringMode] = useState<"preview" | "persist" | null>(null);
   const [monitorResult, setMonitorResult] = useState<MonitorResult | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [pagination, setPagination] = useState<KnowledgePagination>({
+    page: 1,
+    pageSize: 25,
+    total: 0,
+    totalPages: 0,
+    hasPrevious: false,
+    hasNext: false,
+  });
   const [error, setError] = useState<string | null>(null);
 
   const loadDocuments = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await adminFetch("/api/admin/knowledge");
+      const res = await adminFetch(`/api/admin/knowledge?page=${page}&pageSize=${pageSize}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "지식 문서를 불러오지 못했습니다.");
       setDocuments(data.documents || []);
       setSource(data.source || "db");
       setReadiness(data.readiness || null);
+      setPagination(data.pagination || {
+        page,
+        pageSize,
+        total: data.documents?.length || 0,
+        totalPages: data.documents?.length ? 1 : 0,
+        hasPrevious: false,
+        hasNext: false,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
-  }, [adminFetch]);
+  }, [adminFetch, page, pageSize]);
 
   useEffect(() => {
     loadDocuments();
@@ -137,14 +166,14 @@ export function AdminKnowledge() {
   };
 
   const bulkUpdateCandidates = async (action: "approve" | "discard") => {
-    const docIds = pendingCandidates.map((doc) => doc.docId);
-    if (docIds.length === 0) return;
+    const pendingCandidateCount = readiness?.candidateApproval.pendingCandidates || 0;
+    if (pendingCandidateCount === 0) return;
     const review = action === "approve" ? requestCandidateReview() : null;
     if (action === "approve" && !review) return;
     const candidateReadiness = readiness?.candidateApproval;
     const message = action === "approve"
       ? [
-          `검수 대기 후보 ${docIds.length}개를 production RAG에 승인 반영할까요?`,
+          `검수 대기 후보 ${pendingCandidateCount}개를 production RAG에 승인 반영할까요?`,
           "",
           `후보 청크: ${candidateReadiness?.pendingCandidateEmbeddedChunks ?? "?"}/${candidateReadiness?.pendingCandidateChunks ?? "?"} embedded`,
           `공식 후보 청크: ${candidateReadiness?.pendingOfficialCandidateEmbeddedChunks ?? "?"}/${candidateReadiness?.pendingOfficialCandidateChunks ?? "?"} embedded`,
@@ -152,7 +181,7 @@ export function AdminKnowledge() {
           "",
           "서버가 pending 후보 전체 포함, 실제 pgvector 임베딩, 500+ 공식 후보 청크 기준을 다시 검증합니다.",
         ].join("\n")
-      : `검수 대기 후보 ${docIds.length}개를 폐기할까요?`;
+      : `검수 대기 후보 ${pendingCandidateCount}개를 폐기할까요?`;
     if (!window.confirm(message)) return;
 
     setBulkAction(action);
@@ -162,14 +191,15 @@ export function AdminKnowledge() {
         method: "PATCH",
         body: JSON.stringify({
           action: action === "approve" ? "bulkApproveCandidates" : "bulkDiscardCandidates",
-          docIds,
+          allPendingCandidates: true,
           ...review,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "후보 문서를 일괄 처리하지 못했습니다.");
       if (data.failed > 0) throw new Error(`후보 ${data.failed}개 처리 실패`);
-      await loadDocuments();
+      if (page === 1) await loadDocuments();
+      else setPage(1);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -179,8 +209,9 @@ export function AdminKnowledge() {
 
   const changedResults = monitorResult?.results.filter((item) => item.status === "changed") || [];
   const failedResults = monitorResult?.results.filter((item) => item.status === "failed") || [];
-  const pendingCandidates = documents.filter((doc) => doc.reviewStatus === "PENDING" && doc.docId.includes("__candidate__"));
+  const pendingCandidatesOnPage = documents.filter((doc) => doc.reviewStatus === "PENDING" && doc.docId.includes("__candidate__"));
   const candidateReadiness = readiness?.candidateApproval;
+  const pendingCandidateCount = candidateReadiness?.pendingCandidates ?? pendingCandidatesOnPage.length;
   const corpusReadiness = readiness?.corpus;
   const candidateReadyForBulkApproval = Boolean(candidateReadiness?.ok);
   const productionCorpusReady = Boolean(corpusReadiness?.ok);
@@ -197,7 +228,13 @@ export function AdminKnowledge() {
             <Satellite className={`h-3.5 w-3.5 ${monitoringMode === "preview" ? "animate-pulse" : ""}`} />
             실시간 감시
           </Button>
-          <Button variant="outline" size="sm" onClick={() => runMonitor(true)} disabled={Boolean(monitoringMode)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => runMonitor(true)}
+            disabled={Boolean(monitoringMode) || monitorResult?.candidateWritesEnabled === false}
+            title={monitorResult?.candidateWritesEnabled === false ? "공식 출처 후보 저장이 일시 중단되었습니다." : undefined}
+          >
             <AlertTriangle className={`h-3.5 w-3.5 ${monitoringMode === "persist" ? "animate-pulse" : ""}`} />
             후보 생성
           </Button>
@@ -220,11 +257,11 @@ export function AdminKnowledge() {
         </div>
       )}
 
-      {pendingCandidates.length > 0 && (
+      {pendingCandidateCount > 0 && (
         <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="font-medium">검수 대기 공식 후보 {pendingCandidates.length}개</div>
+              <div className="font-medium">검수 대기 공식 후보 {pendingCandidateCount}개</div>
               <div className="mt-1 text-xs">승인하면 기존 문서를 supersede하고 production RAG에 반영됩니다. 폐기하면 검색 대상에서 제외됩니다.</div>
               {candidateReadiness && (
                 <div className="mt-2 grid gap-1 text-xs sm:grid-cols-2 lg:grid-cols-5">
@@ -296,6 +333,11 @@ export function AdminKnowledge() {
             </div>
             <div className="text-xs text-muted-foreground">{formatDate(monitorResult.checkedAt)}</div>
           </div>
+          {monitorResult.candidateWritePaused && (
+            <div className="mt-2 text-xs text-amber-700">
+              공식 출처 후보 저장은 일시 중단되어 변경 감지만 기록했습니다.
+            </div>
+          )}
           {monitorResult.alert && (
             <div className="mt-2 text-xs text-muted-foreground">
               운영 알림: {monitorResult.alert.sent
@@ -331,7 +373,49 @@ export function AdminKnowledge() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">문서 {documents.length}개</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="text-base">문서 {pagination.total}개</CardTitle>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <select
+                aria-label="페이지당 문서 수"
+                className="h-8 rounded-md border bg-background px-2 text-xs text-foreground"
+                value={pageSize}
+                onChange={(event) => {
+                  setPageSize(Number(event.target.value));
+                  setPage(1);
+                }}
+              >
+                <option value={25}>25개</option>
+                <option value={50}>50개</option>
+                <option value={100}>100개</option>
+              </select>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0"
+                aria-label="이전 페이지"
+                title="이전 페이지"
+                disabled={loading || !pagination.hasPrevious}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="min-w-16 text-center tabular-nums">
+                {pagination.totalPages === 0 ? 0 : pagination.page}/{pagination.totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0"
+                aria-label="다음 페이지"
+                title="다음 페이지"
+                disabled={loading || !pagination.hasNext}
+                onClick={() => setPage((current) => current + 1)}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (

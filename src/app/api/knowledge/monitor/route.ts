@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recordRequestAudit } from "@/lib/audit";
-import { getAdminContext, jsonError, requireAdmin } from "@/lib/api/security";
+import { getAdminContext, requireAdmin } from "@/lib/api/security";
 import { canWriteRuntimeDatabase } from "@/lib/db";
 import {
   getCronOfficialKnowledgeSources,
@@ -8,22 +8,11 @@ import {
   runOfficialKnowledgeSourceMonitor,
 } from "@/lib/knowledge/source-monitor";
 import { sendKnowledgeMonitorAlert } from "@/lib/knowledge/monitor-alerts";
+import { authorizeCronRequest } from "@/lib/security/cron-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
-
-function authorizeCron(req: NextRequest): NextResponse | null {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    return process.env.NODE_ENV === "production"
-      ? jsonError("CRON_SECRET is not configured", 503)
-      : null;
-  }
-
-  const auth = req.headers.get("authorization");
-  return auth === `Bearer ${secret}` ? null : jsonError("Unauthorized", 401);
-}
 
 function auditMetadata(result: Awaited<ReturnType<typeof runOfficialKnowledgeSourceMonitor>>) {
   return {
@@ -54,6 +43,10 @@ function positiveInt(value: string | undefined, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function candidateWritesEnabled() {
+  return process.env.KNOWLEDGE_MONITOR_PERSIST_CANDIDATES === "true";
+}
+
 export async function GET(req: NextRequest) {
   if (!canWriteRuntimeDatabase()) {
     return jsonNoStore({
@@ -62,15 +55,16 @@ export async function GET(req: NextRequest) {
     }, { status: 202 });
   }
 
-  const unauthorized = authorizeCron(req);
+  const unauthorized = authorizeCronRequest(req);
   if (unauthorized) return unauthorized;
 
+  const writesEnabled = candidateWritesEnabled();
   const result = await runOfficialKnowledgeSourceMonitor({
     actor: "vercel-cron",
-    persistCandidates: process.env.KNOWLEDGE_MONITOR_PERSIST_CANDIDATES !== "false",
+    persistCandidates: writesEnabled,
     sources: getCronOfficialKnowledgeSources(),
     timeoutMs: positiveInt(process.env.KNOWLEDGE_MONITOR_FETCH_TIMEOUT_MS, 8_000),
-    concurrency: positiveInt(process.env.KNOWLEDGE_MONITOR_CONCURRENCY, 4),
+    concurrency: positiveInt(process.env.KNOWLEDGE_MONITOR_CONCURRENCY, 2),
   });
   const alert = await sendKnowledgeMonitorAlert(result, {
     actor: "vercel-cron",
@@ -83,7 +77,12 @@ export async function GET(req: NextRequest) {
     targetType: "KnowledgeDocument",
     metadata: { ...auditMetadata(result), alert },
   });
-  return jsonNoStore({ ...result, alert });
+  return jsonNoStore({
+    ...result,
+    candidateWritesEnabled: writesEnabled,
+    candidateWritePaused: !writesEnabled,
+    alert,
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -95,6 +94,8 @@ export async function POST(req: NextRequest) {
     maxSources?: number;
     sourceIds?: string[];
   };
+  const writesEnabled = candidateWritesEnabled();
+  const persistCandidates = body.persistCandidates === true && writesEnabled;
 
   const actor = await getAdminContext(req);
   const requestedSourceIds = Array.isArray(body.sourceIds)
@@ -109,21 +110,32 @@ export async function POST(req: NextRequest) {
     : filteredSources;
   const result = await runOfficialKnowledgeSourceMonitor({
     actor: actor?.actor || "admin",
-    persistCandidates: body.persistCandidates === true,
+    persistCandidates,
     sources,
     timeoutMs: positiveInt(process.env.KNOWLEDGE_MONITOR_FETCH_TIMEOUT_MS, 8_000),
-    concurrency: positiveInt(process.env.KNOWLEDGE_MONITOR_CONCURRENCY, 4),
+    concurrency: positiveInt(process.env.KNOWLEDGE_MONITOR_CONCURRENCY, 2),
   });
   const alert = await sendKnowledgeMonitorAlert(result, {
     actor: actor?.actor || "admin",
-    trigger: body.persistCandidates === true ? "admin-persist" : "admin-preview",
+    trigger: persistCandidates ? "admin-persist" : "admin-preview",
   });
   await recordRequestAudit(req, {
     actor: actor?.actor || "unknown",
     actorRole: actor?.role || "admin",
-    action: body.persistCandidates === true ? "knowledge.monitor.persist" : "knowledge.monitor.preview",
+    action: persistCandidates ? "knowledge.monitor.persist" : "knowledge.monitor.preview",
     targetType: "KnowledgeDocument",
-    metadata: { ...auditMetadata(result), alert },
+    metadata: {
+      ...auditMetadata(result),
+      candidateWritesEnabled: writesEnabled,
+      candidateWriteRequested: body.persistCandidates === true,
+      candidateWritePaused: body.persistCandidates === true && !writesEnabled,
+      alert,
+    },
   });
-  return jsonNoStore({ ...result, alert });
+  return jsonNoStore({
+    ...result,
+    candidateWritesEnabled: writesEnabled,
+    candidateWritePaused: body.persistCandidates === true && !writesEnabled,
+    alert,
+  });
 }

@@ -6,7 +6,6 @@ import type { ViewKey } from "@/lib/kbridge/views";
 export const PUBLIC_VIEW_KEYS = [
   "home",
   "agent",
-  "consult",
   "diagnose",
   "schools",
   "cost",
@@ -19,7 +18,6 @@ export type PublicViewKey = (typeof PUBLIC_VIEW_KEYS)[number];
 export const PUBLIC_VIEW_PATHS: Record<PublicViewKey, string> = {
   home: "/",
   agent: "/agent",
-  consult: "/consult",
   diagnose: "/diagnose",
   schools: "/schools",
   cost: "/cost",
@@ -30,7 +28,6 @@ export const PUBLIC_VIEW_PATHS: Record<PublicViewKey, string> = {
 const PUBLIC_TITLE_KEYS: Record<PublicViewKey, TranslationKey | null> = {
   home: "hero_title",
   agent: null,
-  consult: null,
   diagnose: "diagnose_title",
   schools: "schools_title",
   cost: "cost_title",
@@ -41,7 +38,6 @@ const PUBLIC_TITLE_KEYS: Record<PublicViewKey, TranslationKey | null> = {
 const PUBLIC_DESCRIPTION_KEYS: Record<PublicViewKey, TranslationKey | null> = {
   home: "hero_subtitle",
   agent: "ai_disclaimer",
-  consult: "features_subtitle",
   diagnose: "diagnose_subtitle",
   schools: "schools_subtitle",
   cost: "cost_subtitle",
@@ -50,17 +46,10 @@ const PUBLIC_DESCRIPTION_KEYS: Record<PublicViewKey, TranslationKey | null> = {
 };
 
 const AGENT_TITLES: Record<Locale, string> = {
-  ko: "AI 에이전트",
-  vi: "AI Agent",
-  mn: "AI Agent",
-  en: "AI Agent",
-};
-
-const CONSULT_TITLES: Record<Locale, string> = {
-  ko: "전문 상담",
-  vi: "Tư vấn chuyên môn",
-  mn: "Мэргэжлийн зөвлөгөө",
-  en: "Expert consultation",
+  ko: "KAXI AI",
+  vi: "KAXI AI",
+  mn: "KAXI AI",
+  en: "KAXI AI",
 };
 
 export function isPublicViewKey(value: string): value is PublicViewKey {
@@ -85,14 +74,11 @@ export function publicRouteAlternates(view: PublicViewKey) {
 export function publicViewMetadata(view: PublicViewKey, locale: Locale): Metadata {
   const titleKey = PUBLIC_TITLE_KEYS[view];
   const descriptionKey = PUBLIC_DESCRIPTION_KEYS[view];
-  const rawTitle =
-    view === "agent"
-      ? AGENT_TITLES[locale]
-      : view === "consult"
-        ? CONSULT_TITLES[locale]
-        : titleKey
-          ? tr(titleKey, locale)
-          : "KAXI";
+  const rawTitle = view === "agent"
+    ? AGENT_TITLES[locale]
+    : titleKey
+      ? tr(titleKey, locale)
+      : "KAXI";
   const description = descriptionKey ? tr(descriptionKey, locale) : tr("hero_subtitle", locale);
   const path = publicViewPath(view, locale);
 

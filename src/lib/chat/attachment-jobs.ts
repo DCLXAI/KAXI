@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { processChatAttachment } from "@/lib/chat/attachment-processing";
 import { isTerminalChatAttachmentError } from "@/lib/chat/attachment-security";
+import { recordOpsEvent } from "@/lib/ops/events";
 
 type JobRow = {
   id: string;
@@ -135,6 +136,20 @@ export async function drainChatAttachmentJobs(options: { limit?: number; leaseSe
       if (terminal) failed += 1;
       else retried += 1;
     }
+  }
+
+  if (failed > 0) {
+    const minuteBucket = Math.floor(Date.now() / 60_000);
+    await recordOpsEvent({
+      source: "kaxi-attachment-worker",
+      severity: "error",
+      eventType: "attachment_processing_failed",
+      message: `${failed} attachment processing job(s) reached a terminal failure.`,
+      executionId: `attachment-drain:${minuteBucket}`,
+      payload: { claimed: jobs.length, completed, retried, failed },
+    }).catch((alertError) => {
+      console.error("[chat attachment worker] operations alert failed", alertError);
+    });
   }
 
   return { available: true, claimed: jobs.length, completed, retried, failed };

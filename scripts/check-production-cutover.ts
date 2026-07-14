@@ -2,8 +2,10 @@ import { execFileSync } from "child_process";
 import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import {
+  TYPEBOT_RUNTIME_LOCALES,
   TypebotRuntimeTurn,
   validatePublishedTypebotRuntime,
+  validatePublishedTypebotStart,
 } from "../src/lib/typebot/runtime-health";
 
 type CutoverStage = "source" | "backend" | "typebot";
@@ -238,15 +240,23 @@ async function runBackendGate() {
 async function runTypebotGate() {
   const publicUrl = safeBaseUrl(argument("public-url") || process.env.TYPEBOT_PUBLIC_URL || "https://typebot.co");
   const publicId = argument("public-id") || process.env.TYPEBOT_PUBLIC_ID || "kaxi-rag-typebot";
-  const startResult = await fetchJson(`${publicUrl}/api/v1/typebots/${encodeURIComponent(publicId)}/startChat`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: "{}",
-  });
-  const start = startResult.payload as TypebotRuntimeTurn;
-  if (!startResult.response.ok || !start?.sessionId) {
-    throw new Error(`Typebot startChat failed with HTTP ${startResult.response.status}`);
+  const starts = new Map<string, TypebotRuntimeTurn>();
+  for (const locale of TYPEBOT_RUNTIME_LOCALES) {
+    const startResult = await fetchJson(`${publicUrl}/api/v1/typebots/${encodeURIComponent(publicId)}/startChat`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prefilledVariables: { locale } }),
+    });
+    const start = startResult.payload as TypebotRuntimeTurn;
+    if (!startResult.response.ok || !start?.sessionId) {
+      throw new Error(`Typebot ${locale} startChat failed with HTTP ${startResult.response.status}`);
+    }
+    const startErrors = validatePublishedTypebotStart(start, locale);
+    if (startErrors.length) throw new Error(startErrors.join("; "));
+    starts.set(locale, start);
   }
+  const start = starts.get("ko");
+  if (!start?.sessionId) throw new Error("Typebot Korean startChat did not return a sessionId");
 
   const continuationResult = await fetchJson(
     `${publicUrl}/api/v1/sessions/${encodeURIComponent(start.sessionId)}/continueChat`,
@@ -266,6 +276,7 @@ async function runTypebotGate() {
     stage: "typebot",
     publicId,
     publishedAt: start.typebot?.publishedAt,
+    locales: TYPEBOT_RUNTIME_LOCALES,
     consentInput: continuation.input?.id,
   };
 }

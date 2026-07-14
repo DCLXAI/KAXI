@@ -1,0 +1,84 @@
+{
+  "name": "KAXI Shared Error Handler",
+  "nodes": [
+    {
+      "id": "8705a470-99da-45b4-a27b-5fe0f602ceb1",
+      "name": "Capture Workflow Failure",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "5c01269c-5584-405e-8cae-34f64d758480",
+      "name": "Persist Operational Failure",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "create",
+        "tableId": "ops_events",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "source",
+              "fieldValue": "n8n"
+            },
+            {
+              "fieldId": "severity",
+              "fieldValue": "error"
+            },
+            {
+              "fieldId": "event_type",
+              "fieldValue": "workflow_execution_failed"
+            },
+            {
+              "fieldId": "workflow_id",
+              "fieldValue": "={{ $json.workflow?.id || '' }}"
+            },
+            {
+              "fieldId": "execution_id",
+              "fieldValue": "={{ $json.execution?.id || '' }}"
+            },
+            {
+              "fieldId": "message",
+              "fieldValue": "={{ String($json.execution?.error?.message || $json.error?.message || 'n8n workflow failed').slice(0, 1000) }}"
+            },
+            {
+              "fieldId": "payload",
+              "fieldValue": "={{ JSON.stringify({ workflowName: $json.workflow?.name || null, lastNodeExecuted: $json.execution?.lastNodeExecuted || null, executionUrl: $json.execution?.url || null, mode: $json.execution?.mode || null }) }}"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Capture Workflow Failure": {
+      "main": [
+        [
+          {
+            "node": "Persist Operational Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "active": false,
+  "tags": []
+}
+

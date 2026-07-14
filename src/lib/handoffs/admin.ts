@@ -1,10 +1,15 @@
 import { createClient } from "@supabase/supabase-js";
+import { db } from "@/lib/db";
 import { preparePiiField, readPiiField } from "@/lib/privacy/pii";
+import { productLocale } from "@/lib/analytics/events";
+import { recordServerProductEvent } from "@/lib/analytics/server";
 
 const ACTIVE_STATUSES = new Set(["open", "review", "contact_requested", "contact_received", "assigned", "in_progress"]);
 const ACTIONS = new Set(["assign", "start", "contacted", "resolve", "close", "reopen"]);
+const RESOLUTION_CODES = new Set(["resolved", "inaccurate", "missing_document"]);
 
 export type HandoffAction = "assign" | "start" | "contacted" | "resolve" | "close" | "reopen";
+export type HandoffResolutionCode = "resolved" | "inaccurate" | "missing_document";
 
 export type AdminHandoffTask = {
   id: string;
@@ -14,6 +19,14 @@ export type AdminHandoffTask = {
   riskLevel: string;
   leadStage: string;
   assignee: string | null;
+  assigneeUserId: string | null;
+  organizationId: string | null;
+  assignedAt: string | null;
+  slaPolicy: string | null;
+  slaTier: string | null;
+  slaMinutes: number | null;
+  slaDueAt: string | null;
+  slaStatus: string | null;
   question: string;
   answer: string;
   notes: string | null;
@@ -33,6 +46,25 @@ export type AdminHandoffTask = {
   createdAt: string;
   updatedAt: string;
   closedAt: string | null;
+  queueReason: string;
+  resolutionCode: HandoffResolutionCode | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  evaluationCaseId: string | null;
+  evaluationActive: boolean | null;
+  retrievalRunId: string | null;
+  retrievalCategory: string | null;
+  topScore: number | null;
+  similarityThreshold: number | null;
+  noContext: boolean;
+  noContextReason: string | null;
+};
+
+export type AdminHandoffAssignee = {
+  id: string;
+  email: string | null;
+  organizationId: string;
+  organizationName: string;
 };
 
 type LeadRow = {
@@ -61,6 +93,19 @@ type ContactRow = {
 };
 
 type MessageRow = { id: string | number; sources_json?: string | null };
+type RetrievalRow = {
+  id: string;
+  message_id: string | number;
+  category?: string | null;
+  top_score?: number | null;
+  similarity_threshold?: number | null;
+  no_context?: boolean | null;
+  no_context_reason?: string | null;
+};
+type EvaluationCaseRow = {
+  id: string;
+  active?: boolean | null;
+};
 type ConsentRow = {
   session_id: string;
   accepted_at?: string | null;
@@ -86,6 +131,57 @@ function text(value: unknown) {
   return typeof value === "string" ? value : value == null ? null : String(value);
 }
 
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function finiteInteger(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
+}
+
+function assignmentMetadata(value: unknown) {
+  const metadata = record(value);
+  const assignment = record(metadata.assignment);
+  const sla = record(metadata.sla);
+  return {
+    assigneeUserId: text(assignment.assigneeUserId),
+    organizationId: text(assignment.organizationId),
+    assignedAt: text(assignment.assignedAt),
+    slaPolicy: text(sla.policyVersion),
+    slaTier: text(sla.tier),
+    slaMinutes: finiteInteger(sla.minutes),
+    slaDueAt: text(sla.dueAt),
+    slaStatus: text(sla.status),
+  };
+}
+
+function resolvedSlaStatus(taskStatus: string, dueAt: string | null, storedStatus: string | null) {
+  if (["resolved", "closed", "duplicate"].includes(taskStatus)) return storedStatus || "completed";
+  if (storedStatus && storedStatus !== "pending") return storedStatus;
+  if (dueAt && new Date(dueAt).getTime() < Date.now()) return "overdue";
+  return dueAt ? "pending" : null;
+}
+
+function markFirstResponse(value: unknown, respondedAt: Date) {
+  const metadata = record(value);
+  const sla = record(metadata.sla);
+  const dueAt = text(sla.dueAt);
+  if (!dueAt || text(sla.firstResponseAt)) return null;
+  const breached = respondedAt.getTime() > new Date(dueAt).getTime();
+  return {
+    ...metadata,
+    sla: {
+      ...sla,
+      status: breached ? "breached" : "met",
+      firstResponseAt: respondedAt.toISOString(),
+      ...(breached ? { breachedAt: respondedAt.toISOString() } : {}),
+    },
+  };
+}
+
 function parseSources(value: unknown): AdminHandoffTask["sources"] {
   if (typeof value !== "string" || !value.trim()) return [];
   try {
@@ -109,15 +205,36 @@ function readableField(
 
 export async function listAdminHandoffs(options: { revealPii: boolean; limit?: number }) {
   if (isolatedTestRuntime()) {
-    return { tasks: [] as AdminHandoffTask[], counts: { total: 0, active: 0, urgent: 0, unassigned: 0, contactReady: 0 } };
+    return {
+      tasks: [] as AdminHandoffTask[],
+      assignees: [] as AdminHandoffAssignee[],
+      counts: {
+        total: 0,
+        active: 0,
+        urgent: 0,
+        unassigned: 0,
+        contactReady: 0,
+        overdue: 0,
+        noContext: 0,
+        lowConfidence: 0,
+        pendingEvaluation: 0,
+      },
+    };
   }
 
   const supabase = serviceClient();
-  const tasksResult = await supabase
-    .from("handoff_tasks")
-    .select("id,source_chat_message_id,session_id,tenant_id,question,question_ciphertext,answer,answer_ciphertext,risk_level,lead_stage,status,assignee,notes,notes_ciphertext,lead_id,lead_contact_id,contact_received_at,created_at,updated_at,closed_at")
-    .order("created_at", { ascending: false })
-    .limit(Math.min(200, Math.max(1, Math.trunc(options.limit || 100))));
+  const [tasksResult, partnerUsers] = await Promise.all([
+    supabase
+      .from("handoff_tasks")
+      .select("id,source_chat_message_id,session_id,tenant_id,question,question_ciphertext,answer,answer_ciphertext,risk_level,lead_stage,status,assignee,notes,notes_ciphertext,lead_id,lead_contact_id,contact_received_at,handoff_metadata,queue_reason,resolution_code,resolved_by,resolved_at,evaluation_case_id,created_at,updated_at,closed_at")
+      .order("created_at", { ascending: false })
+      .limit(Math.min(200, Math.max(1, Math.trunc(options.limit || 100)))),
+    db.user.findMany({
+      where: { role: "PARTNER_AGENT", organization: { type: "PARTNER_AGENT_OFFICE" } },
+      select: { id: true, email: true, organizationId: true, organization: { select: { name: true } } },
+      orderBy: { email: "asc" },
+    }),
+  ]);
   if (tasksResult.error) throw tasksResult.error;
   const taskRows = tasksResult.data || [];
 
@@ -125,8 +242,9 @@ export async function listAdminHandoffs(options: { revealPii: boolean; limit?: n
   const contactIds = [...new Set(taskRows.map((row) => text(row.lead_contact_id)).filter(Boolean))] as string[];
   const messageIds = [...new Set(taskRows.map((row) => text(row.source_chat_message_id)).filter(Boolean))] as string[];
   const sessionIds = [...new Set(taskRows.map((row) => text(row.session_id)).filter(Boolean))] as string[];
+  const evaluationCaseIds = [...new Set(taskRows.map((row) => text(row.evaluation_case_id)).filter(Boolean))] as string[];
 
-  const [leadRows, contactRows, messageRows, consentRows] = await Promise.all([
+  const [leadRows, contactRows, messageRows, retrievalRows, consentRows, evaluationCaseRows] = await Promise.all([
     (async () => {
       if (leadIds.length === 0) return [] as LeadRow[];
       const result = await supabase.from("leads").select("id,locale,source,status,name,name_ciphertext,question,question_ciphertext,answer,answer_ciphertext,notes,notes_ciphertext").in("id", leadIds);
@@ -146,6 +264,15 @@ export async function listAdminHandoffs(options: { revealPii: boolean; limit?: n
       return (result.data || []) as MessageRow[];
     })(),
     (async () => {
+      if (messageIds.length === 0) return [] as RetrievalRow[];
+      const result = await supabase
+        .from("retrieval_runs")
+        .select("id,message_id,category,top_score,similarity_threshold,no_context,no_context_reason")
+        .in("message_id", messageIds);
+      if (result.error) throw result.error;
+      return (result.data || []) as RetrievalRow[];
+    })(),
+    (async () => {
       if (sessionIds.length === 0) return [] as ConsentRow[];
       const result = await supabase
         .from("handoff_consent_evidence")
@@ -159,11 +286,22 @@ export async function listAdminHandoffs(options: { revealPii: boolean; limit?: n
       }
       return (result.data || []) as ConsentRow[];
     })(),
+    (async () => {
+      if (evaluationCaseIds.length === 0) return [] as EvaluationCaseRow[];
+      const result = await supabase
+        .from("rag_evaluation_cases")
+        .select("id,active")
+        .in("id", evaluationCaseIds);
+      if (result.error) throw result.error;
+      return (result.data || []) as EvaluationCaseRow[];
+    })(),
   ]);
 
   const leads = new Map<string, LeadRow>(leadRows.map((row) => [String(row.id), row] as const));
   const contacts = new Map<string, ContactRow>(contactRows.map((row) => [String(row.id), row] as const));
   const messages = new Map<string, MessageRow>(messageRows.map((row) => [String(row.id), row] as const));
+  const retrievals = new Map<string, RetrievalRow>(retrievalRows.map((row) => [String(row.message_id), row] as const));
+  const evaluationCases = new Map<string, EvaluationCaseRow>(evaluationCaseRows.map((row) => [String(row.id), row] as const));
   const consents = new Map<string, ConsentRow>();
   for (const row of consentRows) {
     if (!consents.has(String(row.session_id))) consents.set(String(row.session_id), row);
@@ -173,6 +311,8 @@ export async function listAdminHandoffs(options: { revealPii: boolean; limit?: n
     const lead = row.lead_id ? leads.get(String(row.lead_id)) : undefined;
     const contact = row.lead_contact_id ? contacts.get(String(row.lead_contact_id)) : undefined;
     const message = row.source_chat_message_id ? messages.get(String(row.source_chat_message_id)) : undefined;
+    const retrieval = row.source_chat_message_id ? retrievals.get(String(row.source_chat_message_id)) : undefined;
+    const evaluationCase = row.evaluation_case_id ? evaluationCases.get(String(row.evaluation_case_id)) : undefined;
     const consent = consents.get(String(row.session_id));
     const question = readableField(options.revealPii, row.question, row.question_ciphertext)
       || readableField(options.revealPii, lead?.question, lead?.question_ciphertext)
@@ -184,15 +324,25 @@ export async function listAdminHandoffs(options: { revealPii: boolean; limit?: n
       || readableField(options.revealPii, lead?.notes, lead?.notes_ciphertext);
     const contactValue = readableField(options.revealPii, contact?.contact_value, contact?.contact_ciphertext);
     const contactName = readableField(options.revealPii, contact?.name || lead?.name, contact?.name_ciphertext || lead?.name_ciphertext);
+    const assignment = assignmentMetadata(row.handoff_metadata);
+    const status = String(row.status || "open");
 
     return {
       id: String(row.id),
       sessionId: String(row.session_id),
       tenantId: String(row.tenant_id || "default"),
-      status: String(row.status || "open"),
+      status,
       riskLevel: String(row.risk_level || "medium"),
       leadStage: String(row.lead_stage || "review"),
       assignee: text(row.assignee),
+      assigneeUserId: assignment.assigneeUserId,
+      organizationId: assignment.organizationId,
+      assignedAt: assignment.assignedAt,
+      slaPolicy: assignment.slaPolicy,
+      slaTier: assignment.slaTier,
+      slaMinutes: assignment.slaMinutes,
+      slaDueAt: assignment.slaDueAt,
+      slaStatus: resolvedSlaStatus(status, assignment.slaDueAt, assignment.slaStatus),
       question,
       answer,
       notes,
@@ -212,18 +362,44 @@ export async function listAdminHandoffs(options: { revealPii: boolean; limit?: n
       createdAt: String(row.created_at),
       updatedAt: String(row.updated_at),
       closedAt: text(row.closed_at),
+      queueReason: String(row.queue_reason || "needs_human"),
+      resolutionCode: RESOLUTION_CODES.has(String(row.resolution_code))
+        ? String(row.resolution_code) as HandoffResolutionCode
+        : null,
+      resolvedBy: text(row.resolved_by),
+      resolvedAt: text(row.resolved_at),
+      evaluationCaseId: text(row.evaluation_case_id),
+      evaluationActive: evaluationCase?.active == null ? null : evaluationCase.active,
+      retrievalRunId: text(retrieval?.id),
+      retrievalCategory: text(retrieval?.category),
+      topScore: retrieval?.top_score == null ? null : Number(retrieval.top_score),
+      similarityThreshold: retrieval?.similarity_threshold == null ? null : Number(retrieval.similarity_threshold),
+      noContext: retrieval?.no_context === true,
+      noContextReason: text(retrieval?.no_context_reason),
     };
   });
 
   const active = tasks.filter((task) => ACTIVE_STATUSES.has(task.status));
   return {
     tasks,
+    assignees: partnerUsers
+      .filter((user): user is typeof user & { organizationId: string } => Boolean(user.organizationId))
+      .map((user) => ({
+        id: user.id,
+        email: user.email,
+        organizationId: user.organizationId,
+        organizationName: user.organization?.name || user.organizationId,
+      })),
     counts: {
       total: tasks.length,
       active: active.length,
       urgent: active.filter((task) => task.riskLevel === "high" || task.leadStage === "urgent").length,
       unassigned: active.filter((task) => !task.assignee).length,
       contactReady: active.filter((task) => task.hasContact).length,
+      overdue: active.filter((task) => task.slaStatus === "overdue").length,
+      noContext: active.filter((task) => task.queueReason === "no_context").length,
+      lowConfidence: active.filter((task) => task.queueReason === "low_confidence").length,
+      pendingEvaluation: tasks.filter((task) => task.resolutionCode && task.evaluationActive === false).length,
     },
   };
 }
@@ -233,41 +409,143 @@ export async function updateAdminHandoff(input: {
   action: HandoffAction;
   actor: string;
   assignee?: string;
+  assigneeUserId?: string;
+  organizationId?: string;
+  slaMinutes?: number;
+  slaPolicy?: string;
   note?: string;
+  resolutionCode?: HandoffResolutionCode;
 }) {
   if (isolatedTestRuntime()) throw new Error("SUPABASE_HANDOFFS_DISABLED_IN_TEST");
   if (!ACTIONS.has(input.action)) throw new Error("HANDOFF_ACTION_INVALID");
   const supabase = serviceClient();
   const found = await supabase
     .from("handoff_tasks")
-    .select("id,status,assignee,lead_id,lead_contact_id,contact_received_at")
+    .select("id,session_id,status,risk_level,lead_stage,assignee,lead_id,lead_contact_id,contact_received_at,handoff_metadata,source_chat_message_id,queue_reason")
     .eq("id", input.id)
     .maybeSingle();
   if (found.error) throw found.error;
   if (!found.data) throw new Error("HANDOFF_NOT_FOUND");
+  const foundTask = found.data;
 
-  const now = new Date().toISOString();
+  const eventLocale = async () => {
+    if (!foundTask.source_chat_message_id) return "ko" as const;
+    const message = await supabase.from("chat_messages").select("locale").eq("id", foundTask.source_chat_message_id).maybeSingle();
+    return productLocale(message.data?.locale);
+  };
+
+  if (input.action === "resolve") {
+    if (!input.resolutionCode || !RESOLUTION_CODES.has(input.resolutionCode)) {
+      throw new Error("HANDOFF_RESOLUTION_INVALID");
+    }
+    if (input.note?.trim()) {
+      const protectedNote = preparePiiField(input.note, { kind: "text", maxPlainLength: 2_000 });
+      const noteResult = await supabase.from("handoff_tasks").update({
+        notes: protectedNote.plaintext,
+        notes_ciphertext: protectedNote.ciphertext,
+        notes_hash: protectedNote.hash,
+        notes_redacted: protectedNote.redacted,
+      }).eq("id", input.id);
+      if (noteResult.error) throw noteResult.error;
+    }
+
+    const resolved = await supabase.rpc("kaxi_resolve_handoff_review", {
+      p_handoff_task_id: input.id,
+      p_verdict: input.resolutionCode,
+      p_reviewer: input.actor.slice(0, 160),
+    });
+    if (resolved.error) throw resolved.error;
+    const resolution = Array.isArray(resolved.data) ? resolved.data[0] : resolved.data;
+
+    if (found.data.lead_id) {
+      const leadUpdate = await supabase.from("leads").update({ status: "resolved" }).eq("id", found.data.lead_id);
+      if (leadUpdate.error) throw leadUpdate.error;
+    }
+    if (found.data.lead_contact_id) {
+      const contactUpdate = await supabase.from("lead_contacts").update({ status: "handled" }).eq("id", found.data.lead_contact_id);
+      if (contactUpdate.error) throw contactUpdate.error;
+    }
+    await recordServerProductEvent({
+      eventName: "handoff_response_completed",
+      sessionId: String(found.data.session_id),
+      locale: await eventLocale(),
+      surface: "admin_handoff",
+      properties: { taskId: input.id, verdict: input.resolutionCode },
+    }).catch((error) => console.warn("[handoff analytics]", error instanceof Error ? error.message : error));
+
+    return {
+      id: input.id,
+      status: "resolved",
+      assignee: text(found.data.assignee),
+      closedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      resolutionCode: input.resolutionCode,
+      evaluationCaseId: text(record(resolution).evaluation_case_id),
+      evaluationActive: record(resolution).evaluation_active === true,
+    };
+  }
+
+  const now = new Date();
+  const nowIso = now.toISOString();
   const update: Record<string, unknown> = {};
-  const assignee = input.assignee?.trim().slice(0, 160);
+  let assignee = input.assignee?.trim().slice(0, 160);
   if (input.action === "assign") {
-    if (!assignee) throw new Error("HANDOFF_ASSIGNEE_REQUIRED");
+    const assigneeUserId = input.assigneeUserId?.trim();
+    if (!assigneeUserId) throw new Error("HANDOFF_ASSIGNEE_INVALID");
+    const user = await db.user.findUnique({
+      where: { id: assigneeUserId },
+      include: { organization: true },
+    });
+    if (
+      !user
+      || user.role !== "PARTNER_AGENT"
+      || !user.organizationId
+      || user.organization?.type !== "PARTNER_AGENT_OFFICE"
+      || (input.organizationId && input.organizationId !== user.organizationId)
+    ) {
+      throw new Error("HANDOFF_ASSIGNEE_INVALID");
+    }
+    assignee = user.email || user.id;
+    const requestedMinutes = finiteInteger(input.slaMinutes);
+    const defaultMinutes = found.data.risk_level === "high" || found.data.lead_stage === "urgent" ? 120 : 1440;
+    const slaMinutes = requestedMinutes ?? defaultMinutes;
+    if (slaMinutes < 15 || slaMinutes > 10_080) throw new Error("HANDOFF_SLA_INVALID");
+    const dueAt = new Date(now.getTime() + slaMinutes * 60_000);
+    update.handoff_metadata = {
+      ...record(found.data.handoff_metadata),
+      assignment: {
+        organizationId: user.organizationId,
+        assigneeUserId: user.id,
+        assignedAt: nowIso,
+        assignedBy: input.actor.slice(0, 160),
+      },
+      sla: {
+        policyVersion: input.slaPolicy?.trim().slice(0, 80) || "kaxi-handoff-v1",
+        tier: slaMinutes === 120 ? "urgent-2h" : slaMinutes === 1440 ? "standard-24h" : "custom",
+        minutes: slaMinutes,
+        startsAt: nowIso,
+        dueAt: dueAt.toISOString(),
+        status: "pending",
+      },
+    };
     update.assignee = assignee;
     update.status = found.data.status === "open" ? "review" : found.data.status;
   } else if (input.action === "start") {
     update.assignee = assignee || found.data.assignee || input.actor.slice(0, 160);
     update.status = "in_progress";
     update.closed_at = null;
+    const metadata = markFirstResponse(found.data.handoff_metadata, now);
+    if (metadata) update.handoff_metadata = metadata;
   } else if (input.action === "contacted") {
     if (!found.data.lead_contact_id) throw new Error("HANDOFF_CONTACT_REQUIRED");
     update.assignee = assignee || found.data.assignee || input.actor.slice(0, 160);
     update.status = "in_progress";
     update.closed_at = null;
-  } else if (input.action === "resolve") {
-    update.status = "resolved";
-    update.closed_at = now;
+    const metadata = markFirstResponse(found.data.handoff_metadata, now);
+    if (metadata) update.handoff_metadata = metadata;
   } else if (input.action === "close") {
     update.status = "closed";
-    update.closed_at = now;
+    update.closed_at = nowIso;
   } else if (input.action === "reopen") {
     update.status = found.data.contact_received_at ? "contact_received" : "open";
     update.closed_at = null;
@@ -291,9 +569,7 @@ export async function updateAdminHandoff(input: {
 
   const leadStatus = input.action === "contacted"
     ? "contacted"
-    : input.action === "resolve"
-      ? "resolved"
-      : input.action === "close"
+    : input.action === "close"
         ? "closed"
         : input.action === "reopen"
           ? "contact_received"
@@ -308,9 +584,28 @@ export async function updateAdminHandoff(input: {
     const contactUpdate = await supabase.from("lead_contacts").update({ status: "contacted" }).eq("id", found.data.lead_contact_id);
     if (contactUpdate.error) throw contactUpdate.error;
   }
-  if (found.data.lead_contact_id && (input.action === "resolve" || input.action === "close")) {
+  if (found.data.lead_contact_id && input.action === "close") {
     const contactUpdate = await supabase.from("lead_contacts").update({ status: "handled" }).eq("id", found.data.lead_contact_id);
     if (contactUpdate.error) throw contactUpdate.error;
+  }
+
+  if (input.action === "assign") {
+    await recordServerProductEvent({
+      eventName: "handoff_assigned",
+      sessionId: String(found.data.session_id),
+      locale: await eventLocale(),
+      surface: "admin_handoff",
+      properties: { taskId: input.id, slaMinutes: finiteInteger(input.slaMinutes) || 0 },
+    }).catch((error) => console.warn("[handoff analytics]", error instanceof Error ? error.message : error));
+  }
+  if (input.action === "start" || input.action === "contacted") {
+    await recordServerProductEvent({
+      eventName: "handoff_response_completed",
+      sessionId: String(found.data.session_id),
+      locale: await eventLocale(),
+      surface: "admin_handoff",
+      properties: { taskId: input.id, action: input.action },
+    }).catch((error) => console.warn("[handoff analytics]", error instanceof Error ? error.message : error));
   }
 
   return {

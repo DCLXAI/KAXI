@@ -31,7 +31,7 @@ export function AgentToolSteps({ iterations, locale, steps }: AgentToolStepsProp
             const Icon = TOOL_ICONS[step.toolCall.tool] || FALLBACK_TOOL_ICON;
             return (
               <div key={`${step.type}-${index}`} className="flex items-center gap-2 text-xs">
-                <Icon className="h-3 w-3 text-primary" />
+                <Icon className="h-3 w-3 text-icon-accent" />
                 <span className="font-medium">{TOOL_LABELS[step.toolCall.tool]?.[locale] || step.toolCall.tool}</span>
                 <span className="text-muted-foreground truncate">
                   {Object.entries(step.toolCall.args)

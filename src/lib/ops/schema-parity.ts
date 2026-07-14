@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 
-export const REQUIRED_PRODUCTION_MIGRATION = "20260712120000_diagnosis_lead_user";
+export const REQUIRED_PRODUCTION_MIGRATION = "20260714100000_localized_knowledge_titles";
 
 const REQUIRED_SCHEMA_OBJECTS = [
   "migration_ledger",
@@ -19,8 +19,15 @@ const REQUIRED_SCHEMA_OBJECTS = [
   "partner_request_assignment",
   "user_notifications",
   "rag_strict_locale_search",
+  "rag_lexical_fallback_function",
   "rag_provenance_columns",
   "legacy_cutover_function",
+  "operator_review_feedback",
+  "operator_review_function",
+  "retrieval_review_trigger",
+  "product_analytics_events",
+  "rag_confidence_policy",
+  "rag_provider_independent_hybrid",
 ] as const;
 
 type RequiredSchemaObject = (typeof REQUIRED_SCHEMA_OBJECTS)[number];
@@ -91,6 +98,12 @@ export async function checkProductionSchemaParity(): Promise<SchemaParityResult>
               to_regprocedure('public.match_rag_documents(vector,integer,jsonb)')
             )
           ) > 0 AS rag_strict_locale_search,
+        to_regprocedure('public.match_rag_documents_lexical(integer,jsonb)') IS NOT NULL
+          AND position(
+            'exact_doc_id_score' IN pg_get_functiondef(
+              to_regprocedure('public.match_rag_documents_lexical(integer,jsonb)')
+            )
+          ) > 0 AS rag_lexical_fallback_function,
         (
           SELECT count(*) = 24
           FROM information_schema.columns
@@ -108,7 +121,26 @@ export async function checkProductionSchemaParity(): Promise<SchemaParityResult>
             'USING public.legacy_rag_chunks_quarantine' IN pg_get_functiondef(
               to_regprocedure('public.kaxi_finalize_legacy_rag_cutover(integer)')
             )
-          ) > 0 AS legacy_cutover_function
+          ) > 0 AS legacy_cutover_function,
+        to_regclass('public.rag_review_feedback') IS NOT NULL AS operator_review_feedback,
+        to_regprocedure('public.kaxi_resolve_handoff_review(bigint,text,text)') IS NOT NULL AS operator_review_function,
+        EXISTS (
+          SELECT 1 FROM pg_trigger
+          WHERE tgname = 'retrieval_runs_queue_review'
+            AND NOT tgisinternal
+        ) AS retrieval_review_trigger,
+        to_regclass('public.product_events') IS NOT NULL AS product_analytics_events,
+        position(
+          'below_calibrated_threshold' IN pg_get_functiondef(
+            to_regprocedure('public.kaxi_queue_retrieval_review()')
+          )
+        ) > 0 AS rag_confidence_policy,
+        to_regprocedure('public.match_rag_documents_hybrid_v3(vector,integer,jsonb)') IS NOT NULL
+          AND position(
+            'lexical-centroid' IN pg_get_functiondef(
+              to_regprocedure('public.match_rag_documents_hybrid_v3(vector,integer,jsonb)')
+            )
+          ) > 0 AS rag_provider_independent_hybrid
     `;
     const row = rows[0];
     const missing = REQUIRED_SCHEMA_OBJECTS.filter((key) => row?.[key] !== true);

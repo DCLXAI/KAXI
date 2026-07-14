@@ -26,7 +26,9 @@ import {
 export type AgentEducation = "highschool" | "college" | "university" | "master";
 export type AgentKoreanLevel = "none" | "topik1" | "topik2" | "topik3";
 export type AgentGoal = "language" | "degree" | "transfer" | "career" | "unsure";
-export type AgentVisaType = "D-2" | "D-4";
+type AgentVisaLetter = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H";
+export type AgentVisaType = `${AgentVisaLetter}-${number}`;
+export type DocumentMatrixVisaType = "D-2" | "D-4";
 
 export interface AgentIntentSignals {
   smallTalk: boolean;
@@ -51,7 +53,7 @@ export interface AgentSlotExtraction {
   region: string;
   program: string;
   accreditation: string;
-  visaType: AgentVisaType;
+  visaType?: AgentVisaType;
   nationality: string;
   partnerType: string;
   education: AgentEducation;
@@ -125,12 +127,25 @@ export function detectAccreditation(text: string): string {
   return matchKeywordRule(text, ACCREDITATION_KEYWORDS, "all");
 }
 
-export function detectVisaType(text: string): AgentVisaType {
-  const explicitD2 = /\bd\s*-?\s*2\b/i.test(text);
-  const explicitD4 = /\bd\s*-?\s*4\b/i.test(text);
-  if (explicitD4 && !explicitD2) return "D-4";
-  if (explicitD2) return "D-2";
-  return includesAnyKeyword(text, D2_VISA_KEYWORDS) ? "D-2" : "D-4";
+export function detectExplicitVisaCode(text: string): AgentVisaType | undefined {
+  const match = text.match(/\b([a-h])\s*[-‐‑–—]?\s*(\d{1,2})(?:\s*[-‐‑–—]\s*\d+)?\b/i);
+  if (!match) return undefined;
+  const letter = match[1].toUpperCase() as AgentVisaLetter;
+  const number = Number(match[2]);
+  if (!Number.isInteger(number) || number <= 0) return undefined;
+  return `${letter}-${number}` as AgentVisaType;
+}
+
+export function detectVisaType(text: string): AgentVisaType | undefined {
+  const explicit = detectExplicitVisaCode(text);
+  if (explicit) return explicit;
+  if (includesAnyKeyword(text, D2_VISA_KEYWORDS)) return "D-2";
+  if (includesAnyKeyword(text, D4_VISA_KEYWORDS)) return "D-4";
+  return undefined;
+}
+
+export function isDocumentMatrixVisaType(value: AgentVisaType | undefined): value is DocumentMatrixVisaType {
+  return value === "D-2" || value === "D-4";
 }
 
 export function detectNationality(text: string): string {
@@ -156,7 +171,9 @@ export function detectGoal(text: string): AgentGoal {
 }
 
 export function hasExplicitVisaType(text: string): boolean {
-  return includesAnyKeyword(text, D2_VISA_KEYWORDS) || includesAnyKeyword(text, D4_VISA_KEYWORDS);
+  return Boolean(detectExplicitVisaCode(text))
+    || includesAnyKeyword(text, D2_VISA_KEYWORDS)
+    || includesAnyKeyword(text, D4_VISA_KEYWORDS);
 }
 
 export function hasBudgetSignal(text: string): boolean {

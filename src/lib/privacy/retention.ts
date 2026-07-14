@@ -17,6 +17,7 @@ export interface RetentionResult {
   canonicalChatSessionDeleteFailures: number;
   canonicalAuditRowsDeleted: number;
   canonicalHandoffRowsDeleted: number;
+  productEventsDeleted: number;
   typebotResults: TypebotResultRetentionResult;
 }
 
@@ -30,6 +31,7 @@ export function retentionConfig() {
     partnerRequestDays: parsePositiveInt(process.env.PRIVACY_PARTNER_REQUEST_RETENTION_DAYS, 180),
     leadDays: parsePositiveInt(process.env.PRIVACY_LEAD_RETENTION_DAYS, 365),
     chatAttachmentDays: parsePositiveInt(process.env.PRIVACY_CHAT_ATTACHMENT_RETENTION_DAYS, 30),
+    productAnalyticsDays: parsePositiveInt(process.env.PRIVACY_PRODUCT_ANALYTICS_RETENTION_DAYS, 180),
   };
 }
 
@@ -167,7 +169,7 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
   };
 
   if (dryRun) {
-    const [chatLogs, partnerRequests, leadsRedacted, leadsDeleted, redactLeads, deleteLeads, chatAttachmentsDeleted, canonicalChatSessionsDeleted, typebotResults] = await Promise.all([
+    const [chatLogs, partnerRequests, leadsRedacted, leadsDeleted, redactLeads, deleteLeads, chatAttachmentsDeleted, canonicalChatSessionsDeleted, productEventsDeleted, typebotResults] = await Promise.all([
       db.chatLog.count({ where: chatWhere }),
       db.partnerRequest.count({ where: partnerWhere }),
       db.diagnosisLead.count({ where: leadRedactWhere }),
@@ -181,6 +183,7 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
           OR: [{ deleteRequestedAt: { not: null } }, { retentionUntil: { lte: now } }],
         },
       }),
+      db.productEvent.count({ where: { occurredAt: { lt: daysAgo(config.productAnalyticsDays) } } }),
       enforceTypebotResultRetention({ dryRun: true, now }),
     ]);
     const leadIds = [...new Set([...redactLeads, ...deleteLeads].map((lead) => lead.id))];
@@ -211,6 +214,7 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
       canonicalChatSessionDeleteFailures: 0,
       canonicalAuditRowsDeleted: 0,
       canonicalHandoffRowsDeleted: 0,
+      productEventsDeleted,
       typebotResults,
     };
   }
@@ -266,6 +270,9 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
   const attachmentRetention = await deleteExpiredChatAttachments(now);
   const canonicalChatRetention = await deleteExpiredCanonicalChatSessions(now);
   const typebotResults = await enforceTypebotResultRetention({ now });
+  const productEvents = await db.productEvent.deleteMany({
+    where: { occurredAt: { lt: daysAgo(config.productAnalyticsDays) } },
+  });
 
   return {
     dryRun,
@@ -280,6 +287,7 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
     canonicalChatSessionDeleteFailures: canonicalChatRetention.failures,
     canonicalAuditRowsDeleted: canonicalChatRetention.auditRowsDeleted,
     canonicalHandoffRowsDeleted: canonicalChatRetention.handoffRowsDeleted,
+    productEventsDeleted: productEvents.count,
     typebotResults,
   };
 }
