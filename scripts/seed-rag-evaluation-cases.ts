@@ -56,7 +56,7 @@ const productionRegressionRows = [{
     expectedStrictCategory: true,
     expectedLocaleHeadings: true,
     expectedTopDocId: "cost-breakdown",
-    expectedReranker: "deterministic-locale-intent-v9",
+    expectedReranker: "deterministic-locale-intent-v10",
     expectedAnswerTerms: ["등록금", "기숙사", "서류비", "번역", "항공", "정착비"],
     minimumExpectedAnswerTerms: 2,
     forbiddenDocIds: [

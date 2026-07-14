@@ -31,15 +31,15 @@ export type DirectRagRuntimePath = typeof DIRECT_LEXICAL_RUNTIME_PATH | typeof D
 
 export const DIRECT_LEXICAL_PROVENANCE = {
   workflowId: DIRECT_LEXICAL_RUNTIME_PATH,
-  workflowVersionId: "kaxi-direct-lexical@2026-07-14.p4-v10",
-  modelVersion: "retrieval/lexical-v2+rerank-v9@2026-07-14",
+  workflowVersionId: "kaxi-direct-lexical@2026-07-14.p5-v11",
+  modelVersion: "retrieval/lexical-v2+rerank-v10@2026-07-14",
   promptVersion: GROUNDED_RAG_PROMPT_VERSION,
 } satisfies RagProvenance;
 
 export const DIRECT_HYBRID_PROVENANCE = {
   workflowId: DIRECT_HYBRID_RUNTIME_PATH,
-  workflowVersionId: "kaxi-direct-hybrid@2026-07-14.p6-v10",
-  modelVersion: "retrieval/hybrid-rrf-v3+rerank-v9@2026-07-14",
+  workflowVersionId: "kaxi-direct-hybrid@2026-07-14.p7-v11",
+  modelVersion: "retrieval/hybrid-rrf-v3+rerank-v10@2026-07-14",
   promptVersion: GROUNDED_RAG_PROMPT_VERSION,
 } satisfies RagProvenance;
 
@@ -441,10 +441,9 @@ function normalizedVisaCodes(value: string) {
 }
 
 function questionIntents(input: DirectLexicalFallbackInput) {
-  const plannedIntentIds = new Set<string>(input.mediation?.intents || []);
-  const intents = QUESTION_INTENTS.filter((intent) =>
-    intent.questionPattern.test(input.question) || plannedIntentIds.has(intent.id)
-  );
+  // Mediator intents are advisory. Only explicit question text may impose a
+  // hard evidence requirement, so a speculative router intent cannot erase a valid result.
+  const intents = QUESTION_INTENTS.filter((intent) => intent.questionPattern.test(input.question));
   const requiredByCategory = input.category === "documents"
     ? "required_documents"
     : input.category === "cost" ? "cost" : null;
@@ -1031,7 +1030,7 @@ export function buildDirectLexicalResponseFromRows(
     tenant_id: input.tenantId,
     locale: input.locale,
     similarityThreshold: "category-default",
-    reranker: "deterministic-locale-intent-v9",
+    reranker: "deterministic-locale-intent-v10",
     reranked: true,
     retrievalCategoryScopes: retrievalCategoryScopes(input),
     retrievedCount: hasContext ? selection.documents.length : 0,

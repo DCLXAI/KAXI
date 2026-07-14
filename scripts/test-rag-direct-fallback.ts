@@ -954,7 +954,7 @@ const d4LanguageInput: DirectLexicalFallbackInput = {
   mediation: {
     ...mediatedD10,
     category: "visa",
-    intents: ["eligibility"],
+    intents: ["eligibility", "status_change"],
     visaCodes: [],
     answerFocus: "the visa required for Korean language study",
   },
@@ -986,6 +986,10 @@ assert.equal(
 );
 assert.equal((groundedD4NoContext.searchMeta as Record<string, unknown>).noContext, false);
 assert.equal((groundedD4NoContext.searchMeta as Record<string, unknown>).modelNoContextOverridden, true);
+assert.deepEqual(
+  (groundedD4NoContext.searchMeta as Record<string, unknown>).questionIntents,
+  ["eligibility"],
+);
 assert.equal(
   (groundedD4NoContext.sources as Array<{ docId?: string }>)[0]?.docId,
   "d4-overview",
