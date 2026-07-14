@@ -400,6 +400,37 @@ const clarifiedQuestion = await mediateRagQuestion({
   }),
 });
 assert.equal(clarifiedQuestion.action, "clarify");
+
+const safetyRoutedQuestion = await mediateRagQuestion({
+  question: "Can I submit a fake bank statement for my visa application?",
+  locale: "en",
+  deterministicCategory: "documents",
+}, {
+  generate: async () => ({
+    text: JSON.stringify({
+      action: "clarify",
+      category: "general",
+      searchQuery: "",
+      answerFocus: "",
+      responseMode: "clarification",
+      clarificationQuestion: "Which document do you mean?",
+      intents: ["general_information"],
+      visaCodes: [],
+      needsHumanReview: false,
+      confidence: 0.8,
+    }),
+    backend: "kimi",
+    model: "kimi-question-router-test",
+    durationMs: 5,
+    inputChars: 80,
+    outputChars: 120,
+  }),
+});
+assert.equal(safetyRoutedQuestion.action, "retrieve");
+assert.equal(safetyRoutedQuestion.category, "documents");
+assert.equal(safetyRoutedQuestion.searchQuery, "Can I submit a fake bank statement for my visa application?");
+assert.equal(safetyRoutedQuestion.needsHumanReview, true);
+
 const guardedClarification = applyChatResponseGuardrail({
   answer: clarifiedQuestion.clarificationQuestion,
   nextStep: "D-10 전환 서류처럼 입력해 주세요.",

@@ -82,6 +82,13 @@ const RESPONSE_MODES = new Set<QuestionResponseMode>([
   "clarification",
 ]);
 
+const EVIDENCE_REQUIRED_RISK_PATTERNS = [
+  /위조|가짜|허위\s*(?:서류|신청|잔고)|심사.{0,16}(?:우회|피하)|시스템\s*(?:프롬프트|prompt)/iu,
+  /fake|forg(?:e|ed|ery|ing)?|false\s+(?:document|application|bank\s+statement)|bypass|evade|system\s+prompt|ignore.{0,24}(?:rules|instructions)/iu,
+  /giả(?:\s*mạo)?|hồ\s*sơ\s*giả|sao\s*kê\s*giả|bỏ\s*qua.{0,24}(?:quy\s*tắc|hướng\s*dẫn)/iu,
+  /хуурамч|хуурмаг|систем(?:ийн)?\s*(?:prompt|промпт)|дүрм(?:ийг|үүдийг).{0,24}үл\s*тоомсор|шалгалт.{0,24}тойрох/iu,
+];
+
 const LOCALE_NAMES: Record<GuardrailLocale, string> = {
   ko: "Korean",
   en: "English",
@@ -297,6 +304,31 @@ function deterministicMode(category: ChatCategory, intents: QuestionMediationInt
   return "concise_answer";
 }
 
+function enforceEvidenceRequiredRetrieval(
+  parsed: ModelOutput,
+  question: string,
+  deterministicCategory: ChatCategory,
+): ModelOutput {
+  if (
+    parsed.action !== "clarify"
+    || !EVIDENCE_REQUIRED_RISK_PATTERNS.some((pattern) => pattern.test(question))
+  ) return parsed;
+
+  const deterministic = deterministicIntents(question, deterministicCategory);
+  const intents = Array.from(new Set([...parsed.intents, ...deterministic])).slice(0, 5);
+  return {
+    ...parsed,
+    action: "retrieve",
+    category: deterministicCategory,
+    searchQuery: question.trim().slice(0, 800),
+    answerFocus: question.trim().slice(0, 500),
+    responseMode: deterministicMode(deterministicCategory, intents),
+    clarificationQuestion: "",
+    intents,
+    needsHumanReview: true,
+  };
+}
+
 function vagueQuestion(question: string, category: ChatCategory) {
   const normalized = question.normalize("NFKC").trim().toLowerCase();
   if (normalized.length < 4) return true;
@@ -415,6 +447,7 @@ Deterministic category hint: ${deterministicCategory}`;
         durationMs: totalDurationMs,
       };
     }
+    parsed = enforceEvidenceRequiredRetrieval(parsed, input.question, deterministicCategory);
     return {
       ...parsed,
       visaCodes: explicitVisaCodes(input.question),

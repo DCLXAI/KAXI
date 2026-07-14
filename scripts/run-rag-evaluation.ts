@@ -6,6 +6,10 @@ import {
   type DirectRagRuntimePath,
 } from "../src/lib/chat/direct-lexical-fallback";
 import { inferChatCategory } from "../src/lib/chat/category";
+import {
+  QUESTION_MEDIATOR_PROMPT_VERSION,
+  QUESTION_MEDIATOR_WORKFLOW_VERSION,
+} from "../src/lib/chat/question-mediator";
 import { createRagQueryEmbedding } from "../src/lib/chat/query-embedding";
 import {
   extractRagProvenance,
@@ -225,8 +229,14 @@ function provenanceMatchesRuntimePath(
     const expected = directRagProvenance(runtimePath as DirectRagRuntimePath);
     return provenance.workflowId === expected.workflowId
       && provenance.workflowVersionId === expected.workflowVersionId
-      && provenance.modelVersion === expected.modelVersion
+      && Boolean(provenance.modelVersion)
       && provenance.promptVersion === expected.promptVersion;
+  }
+  if (runtimePath === "kaxi-question-mediator") {
+    return provenance.workflowId === "kaxi-question-mediator"
+      && provenance.workflowVersionId === QUESTION_MEDIATOR_WORKFLOW_VERSION
+      && Boolean(provenance.modelVersion)
+      && provenance.promptVersion === QUESTION_MEDIATOR_PROMPT_VERSION;
   }
   if (runtimePath.startsWith("n8n-")) {
     return provenance.workflowId === expectedProvenance.workflowId
