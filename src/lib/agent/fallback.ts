@@ -39,19 +39,34 @@ async function runTool(
     timestamp: Date.now(),
   });
 
-  const { result, summary } = await tool.execute(args, ctx);
-  const toolResult: ToolResult = {
-    tool: toolName,
-    args: displayArgs,
-    result,
-    summary,
-    success: true,
-  };
+  let toolResult: ToolResult;
+  try {
+    const { result, summary } = await tool.execute(args, ctx);
+    toolResult = {
+      tool: toolName,
+      args: displayArgs,
+      result,
+      summary,
+      success: true,
+    };
+  } catch (error) {
+    const summary = ctx.lang === "ko"
+      ? `${toolName} 도구를 지금 사용할 수 없습니다.`
+      : `${toolName} is temporarily unavailable.`;
+    toolResult = {
+      tool: toolName,
+      args: displayArgs,
+      result: { status: "unavailable", reason: "tool_execution_failed" },
+      summary,
+      success: false,
+    };
+    console.warn(`[Fallback tool unavailable: ${toolName}]`, error instanceof Error ? error.message : error);
+  }
 
   toolResults.push(toolResult);
   steps.push({
     type: "tool_result",
-    content: summary,
+    content: toolResult.summary,
     toolResult,
     timestamp: Date.now(),
   });
@@ -119,6 +134,16 @@ function formatFallbackAnswer(
   );
 
   for (const item of toolResults) {
+    if (!item.success) {
+      lines.push("");
+      lines.push(
+        isKo
+          ? "공식 자료 검색을 지금 완료하지 못해 확인되지 않은 내용을 추측하지 않았습니다."
+          : "I could not complete the official-source search, so I did not guess at unverified details."
+      );
+      continue;
+    }
+
     if (item.tool === "search_schools" && Array.isArray(item.result)) {
       lines.push("");
       lines.push(isKo ? "추천 학교:" : "School matches:");

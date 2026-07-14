@@ -317,24 +317,37 @@ async function testPreflightCarriesPlannerContext() {
 }
 
 async function testFallbackPartnerRequestStaysDraft() {
+  const snapshot = { ...process.env };
   const { db } = await import("../src/lib/db");
-  const before = await db.partnerRequest.count();
-  const result = await runFallbackAgent(
-    "D-2 거절 상담을 행정사에게 연결해줘. user@example.com 으로 연락 가능해.",
-    "ko",
-    { lang: "ko", leadId: "local-agent-guard" }
-  );
-  const after = await db.partnerRequest.count();
-  const serialized = JSON.stringify(result);
+  try {
+    Object.assign(process.env, {
+      OPENAI_EMBEDDING_API_KEY: "",
+      KAXI_QUERY_EMBEDDINGS_USE_OPENAI_KEY: "false",
+      OPENAI_API_KEY: "",
+    });
+    const before = await db.partnerRequest.count();
+    const result = await runFallbackAgent(
+      "D-2 거절 상담을 행정사에게 연결해줘. user@example.com 으로 연락 가능해.",
+      "ko",
+      { lang: "ko", leadId: "local-agent-guard" }
+    );
+    const after = await db.partnerRequest.count();
+    const serialized = JSON.stringify(result);
 
-  if (after !== before) {
-    fail(`fallback persisted partner request: before=${before}, after=${after}`);
-  }
-  if (!result.toolResults.some((item) => item.tool === "request_partner" && resultHasStatus(item, "draft"))) {
-    fail(`fallback partner request should stay draft: ${serialized}`);
-  }
-  if (serialized.includes("user@example.com")) {
-    fail("fallback partner response leaked raw email");
+    if (after !== before) {
+      fail(`fallback persisted partner request: before=${before}, after=${after}`);
+    }
+    if (!result.toolResults.some((item) => item.tool === "search_knowledge" && !item.success)) {
+      fail(`fallback should record unavailable grounded search without aborting: ${serialized}`);
+    }
+    if (!result.toolResults.some((item) => item.tool === "request_partner" && resultHasStatus(item, "draft"))) {
+      fail(`fallback partner request should stay draft: ${serialized}`);
+    }
+    if (serialized.includes("user@example.com")) {
+      fail("fallback partner response leaked raw email");
+    }
+  } finally {
+    restoreEnv(snapshot);
   }
 }
 
