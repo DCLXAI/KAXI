@@ -31,15 +31,15 @@ export type DirectRagRuntimePath = typeof DIRECT_LEXICAL_RUNTIME_PATH | typeof D
 
 export const DIRECT_LEXICAL_PROVENANCE = {
   workflowId: DIRECT_LEXICAL_RUNTIME_PATH,
-  workflowVersionId: "kaxi-direct-lexical@2026-07-14.p3-v9",
-  modelVersion: "retrieval/lexical-v2+rerank-v8@2026-07-14",
+  workflowVersionId: "kaxi-direct-lexical@2026-07-14.p4-v10",
+  modelVersion: "retrieval/lexical-v2+rerank-v9@2026-07-14",
   promptVersion: GROUNDED_RAG_PROMPT_VERSION,
 } satisfies RagProvenance;
 
 export const DIRECT_HYBRID_PROVENANCE = {
   workflowId: DIRECT_HYBRID_RUNTIME_PATH,
-  workflowVersionId: "kaxi-direct-hybrid@2026-07-14.p5-v9",
-  modelVersion: "retrieval/hybrid-rrf-v3+rerank-v8@2026-07-14",
+  workflowVersionId: "kaxi-direct-hybrid@2026-07-14.p6-v10",
+  modelVersion: "retrieval/hybrid-rrf-v3+rerank-v9@2026-07-14",
   promptVersion: GROUNDED_RAG_PROMPT_VERSION,
 } satisfies RagProvenance;
 
@@ -275,8 +275,8 @@ const QUESTION_INTENTS: QuestionIntent[] = [
   },
   {
     id: "eligibility",
-    questionPattern: /자격\s*요건|신청\s*요건|조건|대상|가능한가|eligible|eligibility|qualif(?:y|ication)|requirements?|điều\s*kiện|đối\s*tượng|có\s*thể|шаардлага|нөхцөл|боломжтой/iu,
-    evidencePattern: /요건|조건|대상|해당|가능|자격|신청해야|필요(?:하|한)|eligible|eligibility|qualif|requirements?|must|điều\s*kiện|đối\s*tượng|có\s*thể|шаардлага|нөхцөл|эрхтэй|боломжтой/iu,
+    questionPattern: /자격\s*요건|신청\s*요건|조건|대상|가능한가|어떤\s*비자|eligible|eligibility|qualif(?:y|ication)|requirements?|what\s+visa|which\s+visa|visa\s+(?:do|should)\s+i|điều\s*kiện|đối\s*tượng|có\s*thể|visa\s+nào|шаардлага|нөхцөл|боломжтой|ямар\s+виз/iu,
+    evidencePattern: /요건|조건|대상|해당|가능|자격|신청해야|필요(?:하|한)|eligible|eligibility|qualif|requirements?|must|\bis\s+for\b|\bcovers?\b|điều\s*kiện|đối\s*tượng|có\s*thể|dành\s+cho|là\s+(?:loại\s+)?visa\s+cho|шаардлага|нөхцөл|эрхтэй|боломжтой|зориулсан|нь.{0,24}виз/iu,
   },
   {
     id: "refusal_or_reapplication",
@@ -1031,7 +1031,7 @@ export function buildDirectLexicalResponseFromRows(
     tenant_id: input.tenantId,
     locale: input.locale,
     similarityThreshold: "category-default",
-    reranker: "deterministic-locale-intent-v8",
+    reranker: "deterministic-locale-intent-v9",
     reranked: true,
     retrievalCategoryScopes: retrievalCategoryScopes(input),
     retrievedCount: hasContext ? selection.documents.length : 0,

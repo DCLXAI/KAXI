@@ -951,6 +951,13 @@ const d4LanguageInput: DirectLexicalFallbackInput = {
   question: "I want to study Korean language. What visa do I need?",
   locale: "en",
   category: "visa",
+  mediation: {
+    ...mediatedD10,
+    category: "visa",
+    intents: ["eligibility"],
+    visaCodes: [],
+    answerFocus: "the visa required for Korean language study",
+  },
 };
 const d4LanguageRow = {
   ...validRow,
