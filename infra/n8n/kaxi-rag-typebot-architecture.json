@@ -468,7 +468,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ answer: $('Run KAXI RAG Core').item.json.answer, needsHuman: $('Run KAXI RAG Core').item.json.needsHuman, riskLevel: $('Run KAXI RAG Core').item.json.riskLevel, leadStage: $('Run KAXI RAG Core').item.json.leadStage, nextStep: $('Run KAXI RAG Core').item.json.nextStep, sources: $('Run KAXI RAG Core').item.json.sources, searchMeta: { ...$('Run KAXI RAG Core').item.json.searchMeta, runtimePath: 'n8n-kaxi-orchestrated' }, requestId: $('Run KAXI RAG Core').item.json.requestId, runtimePath: 'n8n-kaxi-orchestrated', executionId: $execution.id, workflowId: $workflow.id, workflowVersionId: 'kaxi-rag-runtime@2026-07-14.provider-independent-hybrid-v2', modelVersion: 'retrieval/hybrid-rrf-v3@2026-07-14', promptVersion: 'kaxi-grounded-extractive@2026-07-13.p0-v1' }) }}",
+        "responseBody": "={{ JSON.stringify({ answer: $('Run KAXI RAG Core').item.json.answer, needsHuman: $('Run KAXI RAG Core').item.json.needsHuman, riskLevel: $('Run KAXI RAG Core').item.json.riskLevel, leadStage: $('Run KAXI RAG Core').item.json.leadStage, nextStep: $('Run KAXI RAG Core').item.json.nextStep, sources: $('Run KAXI RAG Core').item.json.sources, searchMeta: { ...$('Run KAXI RAG Core').item.json.searchMeta, runtimePath: 'n8n-kaxi-orchestrated', n8nExecutionId: $execution.id, n8nWorkflowId: $workflow.id, n8nWorkflowVersionId: 'kaxi-rag-runtime@2026-07-14.railway-mcp-v3' }, requestId: $('Run KAXI RAG Core').item.json.requestId, runtimePath: 'n8n-kaxi-orchestrated', executionId: $('Run KAXI RAG Core').item.json.executionId || $execution.id, workflowId: $('Run KAXI RAG Core').item.json.workflowId || 'kaxi-direct-hybrid', workflowVersionId: $('Run KAXI RAG Core').item.json.workflowVersionId || 'kaxi-rag-runtime@2026-07-14.railway-mcp-v3', modelVersion: $('Run KAXI RAG Core').item.json.modelVersion || 'retrieval/hybrid-rrf-v3+rerank-v11@2026-07-14', promptVersion: $('Run KAXI RAG Core').item.json.promptVersion || 'kaxi-grounded-answer@2026-07-14.p3-v3', n8nExecutionId: $execution.id, n8nWorkflowId: $workflow.id, n8nWorkflowVersionId: 'kaxi-rag-runtime@2026-07-14.railway-mcp-v3' }) }}",
         "options": {
           "responseCode": 200,
           "responseHeaders": {
@@ -493,7 +493,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ answer: 'Unauthorized request.', needsHuman: true, riskLevel: 'high', leadStage: 'blocked', nextStep: 'Verify the KAXI signature and session state.', sources: [], runtimePath: 'n8n-signature-rejected', executionId: $execution.id, workflowId: $workflow.id, workflowVersionId: 'kaxi-rag-runtime@2026-07-14.provider-independent-hybrid-v2', modelVersion: 'retrieval/hybrid-rrf-v3@2026-07-14', promptVersion: 'kaxi-grounded-extractive@2026-07-13.p0-v1' }) }}",
+        "responseBody": "={{ JSON.stringify({ answer: 'Unauthorized request.', needsHuman: true, riskLevel: 'high', leadStage: 'blocked', nextStep: 'Verify the KAXI signature and session state.', sources: [], runtimePath: 'n8n-signature-rejected', executionId: $execution.id, workflowId: $workflow.id, workflowVersionId: 'kaxi-rag-runtime@2026-07-14.railway-mcp-v3', modelVersion: 'retrieval/hybrid-rrf-v3+rerank-v11@2026-07-14', promptVersion: 'kaxi-grounded-answer@2026-07-14.p3-v3' }) }}",
         "options": {
           "responseCode": 401,
           "responseHeaders": {
@@ -518,7 +518,7 @@
     },
     {
       "parameters": {
-        "content": "## ① RAG 추가 / Knowledge Ingestion\n문서 입력 → 정규화 → 청크 분할 → 임베딩 → Supabase `knowledge_chunks` 저장",
+        "content": "## ① RAG 추가 / Knowledge Ingestion\n승인 문서 → 정규화 → 청크 분할 → 단일 언어 임베딩 → Supabase `rag_serving_chunks` 저장",
         "height": 560,
         "width": 1320,
         "color": 4
@@ -534,7 +534,7 @@
     },
     {
       "parameters": {
-        "content": "## ② 실시간 답변 / Typebot Runtime\nTypebot Webhook → KAXI 서명 검증 → KAXI RAG Core → Typebot 응답\n- KAXI/SQL: locale·category 정책, 20+20 RRF, 재랭킹, no-context, 위험 분류\n- n8n: 서명 검증, 호출 조정, 응답 반환\n- credential 없음: stored-vector centroid hybrid\n- 구성된 provider 장애: lexical-only 자동 전환",
+        "content": "## ② 실시간 답변 / Typebot Runtime\nTypebot Webhook → KAXI 서명 검증 → KAXI RAG Core → Typebot 응답\n- KAXI/SQL: locale·category 정책, OpenAI 1536d, 20+20 RRF, 재랭킹, no-context, 위험 분류\n- n8n: 서명 검증, 호출 조정, 응답 반환\n- 임베딩 credential 또는 provider 장애: fail-closed\n- E5·TF-IDF·stored-vector centroid 운영 fallback 비활성",
         "height": 520,
         "width": 2300,
         "color": 5
@@ -1103,7 +1103,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ service: 'kaxi-rag-serving', contractVersion: '2026-07-14.v3', workflowId: $workflow.id, ingestionTarget: 'rag_serving_chunks', retrievalMode: 'hybrid-rrf-v3-with-seeded-vector-and-lexical-fallback', lexicalCandidateCount: 20, vectorCandidateCount: 20, finalMatchCount: 6, embeddingModel: 'text-embedding-3-small', corpusEmbeddingModel: 'text-embedding-3-small', dimensions: 1536, queryEmbeddingOptional: true, storedVectorFallback: 'lexical-centroid', vectorSeedCount: 3, providerFailureMode: 'lexical-only', signedIngestionRequired: true, executionId: $execution.id, workflowVersionId: 'kaxi-rag-runtime@2026-07-14.provider-independent-hybrid-v2', modelVersion: 'retrieval/hybrid-rrf-v3@2026-07-14', promptVersion: 'kaxi-rag-capability@2026-07-14.v3' }) }}",
+        "responseBody": "={{ JSON.stringify({ service: 'kaxi-rag-serving', contractVersion: '2026-07-14.v4', workflowId: $workflow.id, ingestionTarget: 'rag_serving_chunks', retrievalMode: 'hybrid-rrf-v3-openai-required', lexicalCandidateCount: 20, vectorCandidateCount: 20, finalMatchCount: 6, embeddingModel: 'text-embedding-3-small', corpusEmbeddingModel: 'text-embedding-3-small', embeddingContentStrategy: 'single-locale-v1', dimensions: 1536, queryEmbeddingOptional: false, storedVectorFallback: 'disabled', vectorSeedCount: 0, providerFailureMode: 'fail-closed', signedIngestionRequired: true, executionId: $execution.id, workflowVersionId: 'kaxi-rag-runtime@2026-07-14.railway-mcp-v3', modelVersion: 'retrieval/hybrid-rrf-v3+rerank-v11@2026-07-14', promptVersion: 'kaxi-rag-capability@2026-07-14.v4' }) }}",
         "options": {
           "responseCode": 200,
           "responseHeaders": {
@@ -1409,8 +1409,9 @@
     "binaryMode": "separate",
     "timezone": "Asia/Seoul",
     "saveDataErrorExecution": "all",
-    "saveDataSuccessExecution": "none",
-    "executionTimeout": 40
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "executionTimeout": 60
   },
   "active": false,
   "tags": []

@@ -93,17 +93,23 @@ function attachmentState(status: string, processingStatus: string) {
 
 export async function loadChatSessionSnapshot(
   sessionKey: string,
-  options: { messageLimit?: number; attachmentLimit?: number } = {},
+  options: {
+    messageLimit?: number;
+    attachmentLimit?: number;
+    source?: "kaxi-site" | "typebot";
+  } = {},
 ): Promise<ChatSessionSnapshot | null> {
   const messageLimit = Math.min(50, Math.max(1, Math.trunc(options.messageLimit || 20)));
   const attachmentLimit = Math.min(3, Math.max(1, Math.trunc(options.attachmentLimit || 3)));
+  const source = options.source === "typebot" ? "typebot" : "kaxi-site";
+  const channel = source;
   const supabase = createSupabaseChatClient();
   const session = await supabase
     .from("chat_sessions")
     .select("id")
     .eq("session_key", sessionKey)
-    .eq("source", "kaxi-site")
-    .eq("channel", "kaxi-site")
+    .eq("source", source)
+    .eq("channel", channel)
     .is("deleted_at", null)
     .maybeSingle();
   if (session.error) throw session.error;
@@ -113,8 +119,8 @@ export async function loadChatSessionSnapshot(
     .from("chat_messages")
     .select("id,request_id,question,question_ciphertext,answer,answer_ciphertext,status,error_code,next_step,sources,sources_json,workflow_id,workflow_version_id,model_version,prompt_version,created_at")
     .eq("session_id", sessionKey)
-    .eq("source", "kaxi-site")
-    .eq("channel", "kaxi-site")
+    .eq("source", source)
+    .eq("channel", channel)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(messageLimit);

@@ -10,8 +10,7 @@ import type { Lang } from "@/lib/i18n/translations";
 import { db } from "@/lib/db";
 import { getConsultBackend, shouldRequireConsultLlm } from "@/lib/ai/backend-selector";
 import { generateLlmText, getLlmModel, isLlmNotConfiguredError, type LlmGatewayMessage } from "@/lib/ai/llm-gateway";
-import { hybridSearch, initVectorStore, getStoreStats, type ScoredDoc } from "@/lib/embeddings/vector-store";
-import { isEnvFalse } from "@/lib/env";
+import { searchSharedOpenAiRag } from "@/lib/chat/shared-openai-rag";
 import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
 import { withImmigrationLegalBasisDocs } from "@/lib/knowledge/legal-basis";
 import { ensureGroundedCitationAnswer } from "@/lib/knowledge/citations";
@@ -59,51 +58,6 @@ interface ExpertAnswerResult {
   needsHumanExpert: boolean;
   backend: string;
   durationMs?: number;
-}
-
-function shouldUseTransformerRag(value: string | undefined | null): boolean {
-  return !isEnvFalse(value);
-}
-
-function searchMetaFromResults(results: ScoredDoc[], lang: Lang) {
-  return results.map((r) => ({
-    id: r.doc.id,
-    title: pickLangText(r.doc.title, lang),
-    score: Number(r.score.toFixed(3)),
-    vectorScore: Number(r.vectorScore.toFixed(3)),
-    keywordScore: Number(r.keywordScore.toFixed(3)),
-    method: r.method,
-    category: r.doc.category,
-    docSource: r.doc.source,
-  }));
-}
-
-function retrievalDiagnostics(results: ScoredDoc[], requestedSemantic: boolean) {
-  const storeStats = getStoreStats();
-  const methods = Array.from(new Set(results.map((result) => result.method)));
-  const backend = methods.includes("pgvector")
-    ? "pgvector"
-    : methods.includes("transformer")
-      ? "transformer"
-      : methods.includes("tfidf")
-        ? "tfidf"
-        : "none";
-
-  return {
-    backend,
-    methods,
-    requestedSemantic,
-    pgvectorUsed: backend === "pgvector",
-    pgvectorConfigured: storeStats.pgvectorConfigured,
-    resultCount: results.length,
-    store: {
-      ready: storeStats.ready,
-      method: storeStats.method,
-      knowledgeSource: storeStats.knowledgeSource,
-      transformerAvailable: storeStats.transformerAvailable,
-      transformerCoverage: storeStats.transformerCoverage,
-    },
-  };
 }
 
 function consultDisclaimer(lang: Lang): string {
@@ -159,21 +113,31 @@ export async function POST(req: NextRequest) {
     const lang = parsed.value.lang as Lang;
     const mode = parsed.value.mode || "general"; // general | visa | documents | appeal | business
 
-    // 1. Vector Store 초기화
-    initVectorStore();
-
-    // 2. RAG 검색 (전문 상담은 더 많은 문서 검색)
-    const useTransformerRag = shouldUseTransformerRag(process.env.AI_CONSULT_USE_TRANSFORMER_RAG);
-    const searchResults = await hybridSearch(question, {
-      topK: 6,
-      useTransformer: useTransformerRag,
+    // 1. Typebot과 동일한 OpenAI 1536d + Supabase hybrid_v3 검색 코어 사용
+    const category = mode === "documents"
+      ? "documents"
+      : mode === "visa" || mode === "appeal" ? "visa" : undefined;
+    const sharedRag = await searchSharedOpenAiRag({
+      query: question,
+      locale: lang,
+      category,
+      maxDocuments: 6,
     });
-    const searchMeta = searchMetaFromResults(searchResults, lang);
-    const retrieval = retrievalDiagnostics(searchResults, useTransformerRag);
+    const searchMeta = sharedRag.search.documents.map((document) => ({
+      id: document.id,
+      title: document.title,
+      score: Number(document.rerankScore.toFixed(3)),
+      vectorScore: document.vectorScore === null ? null : Number(document.vectorScore.toFixed(3)),
+      keywordScore: document.keywordScore === null ? null : Number(document.keywordScore.toFixed(3)),
+      method: "openai-pgvector",
+      category: document.category,
+      docSource: document.source,
+    }));
+    const retrieval = sharedRag.retrieval;
     const docs: KnowledgeDoc[] = withImmigrationLegalBasisDocs(
       question,
-      searchResults.map((r) => r.doc),
-      { mode, maxDocs: 8 }
+      sharedRag.docs,
+      { mode, maxDocs: 8, minRetrievedDocs: Math.min(5, sharedRag.docs.length) }
     );
     const sourceNotice = buildRagBasisNotice(lang, docs);
 
@@ -268,6 +232,15 @@ export async function POST(req: NextRequest) {
     console.error("[POST /api/ai/consult]", e);
     if (e instanceof LlmBackendUnavailableError) {
       return llmUnavailableResponse(e.message);
+    }
+    if (e instanceof Error && (
+      e.message.startsWith("OPENAI_QUERY_EMBEDDING_REQUIRED")
+      || e.message.startsWith("DIRECT_RAG_RPC_FAILED")
+    )) {
+      return NextResponse.json({
+        error: "RAG retrieval unavailable",
+        message: "The shared OpenAI pgvector retrieval service is unavailable. A lower-quality fallback was not used.",
+      }, { status: 503 });
     }
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

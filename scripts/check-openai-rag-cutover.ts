@@ -25,9 +25,6 @@ async function main() {
   const status = await getRagServingProjectionStatus();
   const failures: string[] = [];
   if (!status.cutoverReady) failures.push("OpenAI serving projection is incomplete");
-  if (status.canonicalVectorReadyChunks < status.eligibleChunks) {
-    failures.push("E5 rollback index is incomplete");
-  }
 
   const embedding = await createRagQueryEmbedding("D-4 어학연수 비자 연장 준비 서류");
   if (!isOpenAiQueryEmbedding(embedding)) {

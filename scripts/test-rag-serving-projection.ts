@@ -11,6 +11,7 @@ function vectorLiteral(dim: number, hotIndex: number) {
 
 prepareTestDb("RAG serving projection");
 const { db } = await import("../src/lib/db");
+const { buildRagServingEmbeddingProjection } = await import("../src/lib/knowledge/serving-projection");
 
 try {
   const quarantineTable = await db.$queryRawUnsafe<Array<{ table_name: string | null }>>(
@@ -42,6 +43,19 @@ try {
     "D-4 хэлний сургалтын визэнд элсэлтийн зөвшөөрөл болон санхүүгийн нотолгоо бэлтгэнэ.",
   ].join("\n");
   const contentHash = createHash("sha256").update(content).digest("hex");
+  const embeddingProjection = buildRagServingEmbeddingProjection({
+    content,
+    documentLanguage: "ko",
+  });
+  assert(embeddingProjection.locale === "ko", "serving embeddings must use the canonical document locale");
+  assert(
+    embeddingProjection.strategy === "single-locale-v1",
+    "serving embeddings must record the single-locale projection strategy",
+  );
+  assert(embeddingProjection.content.includes("D-4 비자 신청 서류"), "Korean embedding input must preserve Korean context");
+  assert(!embeddingProjection.content.includes("visa application documents"), "embedding input must not mix English context");
+  assert(!embeddingProjection.content.includes("Hồ sơ"), "embedding input must not mix Vietnamese context");
+  assert(!embeddingProjection.content.includes("визийн"), "embedding input must not mix Mongolian context");
   const document = await db.knowledgeDocument.create({
     data: {
       docId: "serving-projection-d4",

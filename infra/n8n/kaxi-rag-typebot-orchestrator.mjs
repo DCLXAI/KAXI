@@ -1,8 +1,8 @@
 import { expr, ifElse, node, trigger, workflow } from "@n8n/workflow-sdk";
 
-const release = "kaxi-rag-runtime@2026-07-14.railway-mcp-v2";
-const retrievalModel = "retrieval/hybrid-rrf-v3@2026-07-14";
-const answerPrompt = "kaxi-grounded-extractive@2026-07-13.p0-v1";
+const release = "kaxi-rag-runtime@2026-07-14.railway-mcp-v3";
+const retrievalModel = "retrieval/hybrid-rrf-v3+rerank-v11@2026-07-14";
+const answerPrompt = "kaxi-grounded-answer@2026-07-14.p3-v3";
 const embeddingModel = "openai/text-embedding-3-small@1536";
 
 const runtimeWebhook = trigger({
@@ -93,7 +93,7 @@ const respondTypebot = node({
     position: [1160, 160],
     parameters: {
       respondWith: "json",
-      responseBody: expr("{{ JSON.stringify({ answer: $('Run KAXI RAG Core').item.json.body?.answer ?? '', needsHuman: $('Run KAXI RAG Core').item.json.body?.needsHuman ?? true, riskLevel: $('Run KAXI RAG Core').item.json.body?.riskLevel ?? 'high', leadStage: $('Run KAXI RAG Core').item.json.body?.leadStage ?? 'blocked', nextStep: $('Run KAXI RAG Core').item.json.body?.nextStep ?? '', sources: $('Run KAXI RAG Core').item.json.body?.sources ?? [], searchMeta: { ...($('Run KAXI RAG Core').item.json.body?.searchMeta ?? {}), runtimePath: 'n8n-kaxi-orchestrated' }, requestId: $('Run KAXI RAG Core').item.json.body?.requestId ?? '', handoffToken: $('Run KAXI RAG Core').item.json.body?.handoffToken ?? '', persisted: $('Run KAXI RAG Core').item.json.body?.persisted ?? false, messageId: $('Run KAXI RAG Core').item.json.body?.messageId ?? null, persistenceMode: $('Run KAXI RAG Core').item.json.body?.persistenceMode ?? '', runtimePath: 'n8n-kaxi-orchestrated', executionId: $execution.id, workflowId: $workflow.id, workflowVersionId: '" + release + "', modelVersion: '" + retrievalModel + "', promptVersion: '" + answerPrompt + "' }) }}"),
+      responseBody: expr("{{ JSON.stringify({ answer: $('Run KAXI RAG Core').item.json.body?.answer ?? '', needsHuman: $('Run KAXI RAG Core').item.json.body?.needsHuman ?? true, riskLevel: $('Run KAXI RAG Core').item.json.body?.riskLevel ?? 'high', leadStage: $('Run KAXI RAG Core').item.json.body?.leadStage ?? 'blocked', nextStep: $('Run KAXI RAG Core').item.json.body?.nextStep ?? '', sources: $('Run KAXI RAG Core').item.json.body?.sources ?? [], searchMeta: { ...($('Run KAXI RAG Core').item.json.body?.searchMeta ?? {}), runtimePath: 'n8n-kaxi-orchestrated', n8nExecutionId: $execution.id, n8nWorkflowId: $workflow.id, n8nWorkflowVersionId: '" + release + "' }, requestId: $('Run KAXI RAG Core').item.json.body?.requestId ?? '', handoffToken: $('Run KAXI RAG Core').item.json.body?.handoffToken ?? '', persisted: $('Run KAXI RAG Core').item.json.body?.persisted ?? false, persistenceAccepted: $('Run KAXI RAG Core').item.json.body?.persistenceAccepted ?? false, messageId: $('Run KAXI RAG Core').item.json.body?.messageId ?? null, persistenceMode: $('Run KAXI RAG Core').item.json.body?.persistenceMode ?? '', handoffTaskPersisted: $('Run KAXI RAG Core').item.json.body?.handoffTaskPersisted ?? false, runtimePath: 'n8n-kaxi-orchestrated', executionId: $('Run KAXI RAG Core').item.json.body?.executionId ?? $execution.id, workflowId: $('Run KAXI RAG Core').item.json.body?.workflowId ?? 'kaxi-direct-hybrid', workflowVersionId: $('Run KAXI RAG Core').item.json.body?.workflowVersionId ?? '" + release + "', modelVersion: $('Run KAXI RAG Core').item.json.body?.modelVersion ?? '" + retrievalModel + "', promptVersion: $('Run KAXI RAG Core').item.json.body?.promptVersion ?? '" + answerPrompt + "', n8nExecutionId: $execution.id, n8nWorkflowId: $workflow.id, n8nWorkflowVersionId: '" + release + "' }) }}"),
       options: {
         responseCode: expr("{{ $('Run KAXI RAG Core').item.json.statusCode ?? 502 }}"),
         responseHeaders: { entries: [{ name: "Content-Type", value: "application/json" }, { name: "Cache-Control", value: "no-store" }] },
@@ -364,14 +364,14 @@ const respondCapability = node({
     position: [440, 1480],
     parameters: {
       respondWith: "json",
-      responseBody: expr("{{ JSON.stringify({ service: 'kaxi-rag-serving', contractVersion: '2026-07-14.v3', workflowId: $workflow.id, ingestionTarget: 'rag_serving_chunks', retrievalMode: 'hybrid-rrf-v3-with-seeded-vector-and-lexical-fallback', lexicalCandidateCount: 20, vectorCandidateCount: 20, finalMatchCount: 6, embeddingModel: 'text-embedding-3-small', corpusEmbeddingModel: 'text-embedding-3-small', dimensions: 1536, queryEmbeddingOptional: true, storedVectorFallback: 'lexical-centroid', vectorSeedCount: 3, providerFailureMode: 'lexical-only', signedIngestionRequired: true, executionId: $execution.id, workflowVersionId: '" + release + "', modelVersion: '" + retrievalModel + "', promptVersion: 'kaxi-rag-capability@2026-07-14.v3' }) }}"),
+      responseBody: expr("{{ JSON.stringify({ service: 'kaxi-rag-serving', contractVersion: '2026-07-14.v4', workflowId: $workflow.id, ingestionTarget: 'rag_serving_chunks', retrievalMode: 'hybrid-rrf-v3-openai-required', lexicalCandidateCount: 20, vectorCandidateCount: 20, finalMatchCount: 6, embeddingModel: 'text-embedding-3-small', corpusEmbeddingModel: 'text-embedding-3-small', embeddingContentStrategy: 'single-locale-v1', dimensions: 1536, queryEmbeddingOptional: false, storedVectorFallback: 'disabled', vectorSeedCount: 0, providerFailureMode: 'fail-closed', signedIngestionRequired: true, executionId: $execution.id, workflowVersionId: '" + release + "', modelVersion: '" + retrievalModel + "', promptVersion: 'kaxi-rag-capability@2026-07-14.v4' }) }}"),
       options: {
         responseCode: 200,
         responseHeaders: { entries: [{ name: "Content-Type", value: "application/json" }, { name: "Cache-Control", value: "no-store" }] },
       },
     },
   },
-  output: [{ service: "kaxi-rag-serving", contractVersion: "2026-07-14.v3", dimensions: 1536 }],
+  output: [{ service: "kaxi-rag-serving", contractVersion: "2026-07-14.v4", embeddingContentStrategy: "single-locale-v1", dimensions: 1536 }],
 });
 
 export default workflow("kaxi-rag-typebot-railway", "KAXI RAG Typebot Orchestrator")

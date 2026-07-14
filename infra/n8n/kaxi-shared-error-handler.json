@@ -15,48 +15,36 @@
     {
       "id": "5c01269c-5584-405e-8cae-34f64d758480",
       "name": "Persist Operational Failure",
-      "type": "n8n-nodes-base.supabase",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
       "position": [
         224,
         0
       ],
       "parameters": {
-        "resource": "row",
-        "operation": "create",
-        "tableId": "ops_events",
-        "dataToSend": "defineBelow",
-        "fieldsUi": {
-          "fieldValues": [
+        "method": "POST",
+        "url": "https://kaxi.vercel.app/api/internal/n8n/error-report",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
             {
-              "fieldId": "source",
-              "fieldValue": "n8n"
-            },
-            {
-              "fieldId": "severity",
-              "fieldValue": "error"
-            },
-            {
-              "fieldId": "event_type",
-              "fieldValue": "workflow_execution_failed"
-            },
-            {
-              "fieldId": "workflow_id",
-              "fieldValue": "={{ $json.workflow?.id || '' }}"
-            },
-            {
-              "fieldId": "execution_id",
-              "fieldValue": "={{ $json.execution?.id || '' }}"
-            },
-            {
-              "fieldId": "message",
-              "fieldValue": "={{ String($json.execution?.error?.message || $json.error?.message || 'n8n workflow failed').slice(0, 1000) }}"
-            },
-            {
-              "fieldId": "payload",
-              "fieldValue": "={{ JSON.stringify({ workflowName: $json.workflow?.name || null, lastNodeExecuted: $json.execution?.lastNodeExecuted || null, executionUrl: $json.execution?.url || null, mode: $json.execution?.mode || null }) }}"
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.KAXI_N8N_ERROR_TOKEN }}"
             }
           ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { eventType: 'workflow_execution_failed', severity: 'error', workflowId: $json.workflow?.id || 'n8n-unidentified-workflow', workflowName: $json.workflow?.name || '', workflowVersionId: $json.workflow?.versionId || 'n8n-runtime', executionId: $json.execution?.id || '', message: String($json.execution?.error?.message || $json.error?.message || 'n8n workflow failed').slice(0, 1000), lastNodeExecuted: $json.execution?.lastNodeExecuted || '', executionUrl: $json.execution?.url || '', mode: $json.execution?.mode || '' } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
         }
       }
     }
@@ -76,9 +64,11 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "availableInMCP": true
+    "availableInMCP": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "timezone": "Asia/Seoul"
   },
   "active": false,
   "tags": []
 }
-

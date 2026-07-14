@@ -3,8 +3,8 @@ import { getAiBackendDiagnostics } from "@/lib/ai/backend-selector";
 import { getKnowledgeSourceAudit } from "@/lib/data/knowledge";
 import { getDocumentUploadSigningSecret } from "@/lib/documents/crypto";
 import { getDocumentStorageInfo } from "@/lib/documents/storage";
-import { getPgvectorStats } from "@/lib/embeddings/pgvector-rag";
-import { getStoreStats } from "@/lib/embeddings/vector-store";
+import { sharedOpenAiRagRuntimeInfo } from "@/lib/chat/shared-openai-rag";
+import { getRagServingProjectionStatus } from "@/lib/knowledge/serving-projection";
 import { getPrivacyRuntimeReadiness } from "@/lib/privacy/config";
 import { getSchoolSourceAudit } from "@/lib/schools/repository";
 import { isTypebotGatewayAuthConfigured } from "@/lib/typebot/gateway-auth";
@@ -112,8 +112,8 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
   const sourceAudit = getKnowledgeSourceAudit();
   const schoolAudit = await getSchoolSourceAudit();
   const privacyReadiness = getPrivacyRuntimeReadiness(env);
-  const embeddingStats = getStoreStats();
-  const pgvectorStats = await getPgvectorStats().catch((error) => ({
+  const sharedRagRuntime = sharedOpenAiRagRuntimeInfo(env);
+  const servingProjection = await getRagServingProjectionStatus().catch((error) => ({
     error: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
   }));
   const aiBackendDiagnostics = getAiBackendDiagnostics(env);
@@ -257,6 +257,19 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
       opsAlerts.required ? "required" : "warning",
     ),
     check(
+      "ops.n8n_error_workflow",
+      "n8n Error Workflow delivery",
+      strongSecret(env.N8N_ERROR_REPORTING_SECRET) && configured(env.N8N_ERROR_WORKFLOW_ID),
+      strongSecret(env.N8N_ERROR_REPORTING_SECRET) && configured(env.N8N_ERROR_WORKFLOW_ID)
+        ? "The published n8n Error Workflow is authenticated to KAXI operations alerts."
+        : "Publish KAXI Shared Error Handler, assign it to the RAG workflow, and configure matching N8N_ERROR_REPORTING_SECRET/KAXI_N8N_ERROR_TOKEN plus N8N_ERROR_WORKFLOW_ID.",
+      {
+        reportingSecretConfigured: strongSecret(env.N8N_ERROR_REPORTING_SECRET),
+        errorWorkflowIdConfigured: configured(env.N8N_ERROR_WORKFLOW_ID),
+      },
+      production ? "required" : "warning",
+    ),
+    check(
       "rag.review_after",
       "RAG review freshness",
       ragReviewReady,
@@ -387,37 +400,31 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
       }
     ),
     check(
-      "embeddings.cache",
-      "Embedding and vector index",
-      "approvedEmbeddedChunks" in pgvectorStats
-        ? pgvectorStats.approvedEmbeddedChunks > 0
-        : !production || embeddingStats.vectorCache.exists || embeddingStats.transformerRuntime.cache.exists,
-      "approvedEmbeddedChunks" in pgvectorStats && pgvectorStats.approvedEmbeddedChunks > 0
-        ? "pgvector knowledge embeddings are present."
-        : embeddingStats.vectorCache.exists
-          ? "Vector embedding cache artifact is present."
-          : production
-            ? "Production RAG should have pgvector embeddings before serving grounded answers."
-            : "Local development can rebuild pgvector/model cache artifacts on demand.",
+      "rag.openai_pgvector",
+      "OpenAI pgvector serving core",
+      sharedRagRuntime.ready
+        && "cutoverReady" in servingProjection
+        && servingProjection.cutoverReady,
+      sharedRagRuntime.ready
+        && "cutoverReady" in servingProjection
+        && servingProjection.cutoverReady
+        ? `${servingProjection.vectorReadyChunks}/${servingProjection.eligibleChunks} eligible chunks are citation-ready with text-embedding-3-small.`
+        : "Production chat requires the OpenAI embedding endpoint, Supabase service role, and complete 1536d serving projection. E5/TF-IDF is not an operational fallback.",
       {
-        pgvector: pgvectorStats,
-        storeReady: embeddingStats.ready,
-        method: embeddingStats.method,
-        knowledgeSource: embeddingStats.knowledgeSource,
-        transformerAvailable: embeddingStats.transformerAvailable,
-        transformerCoverage: embeddingStats.transformerCoverage,
-        vectorCache: embeddingStats.vectorCache,
-        transformerRuntime: embeddingStats.transformerRuntime,
+        runtime: sharedRagRuntime,
+        projection: servingProjection,
       },
-      "warning"
+      production ? "required" : "warning"
     ),
     check(
       "ai.backend_policy",
       "AI backend policy",
-      aiBackendDiagnostics.issues.length === 0,
-      aiBackendDiagnostics.issues.length === 0
-        ? "AI backend selection is observable and does not have strict blocking configuration issues."
-        : aiBackendDiagnostics.issues.join(" "),
+      aiBackendDiagnostics.issues.length === 0 && aiBackendDiagnostics.warnings.length === 0,
+      aiBackendDiagnostics.issues.length > 0
+        ? aiBackendDiagnostics.issues.join(" ")
+        : aiBackendDiagnostics.warnings.length > 0
+          ? aiBackendDiagnostics.warnings.join(" ")
+          : "AI backend selection is observable and both the primary and failover policies are ready.",
       {
         runtime: aiBackendDiagnostics.runtime,
         agent: aiBackendDiagnostics.agent,
@@ -429,7 +436,7 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
         warningCount: aiBackendDiagnostics.warnings.length,
         issueCount: aiBackendDiagnostics.issues.length,
       },
-      production && (aiBackendDiagnostics.agent.requireLlm || aiBackendDiagnostics.consult.requireLlm)
+      production && aiBackendDiagnostics.issues.length > 0
         ? "required"
         : "warning"
     ),

@@ -23,6 +23,77 @@ const { getTransformerRuntimeInfo, resolveModelCacheDir } = await import(
   "../src/lib/embeddings/transformer-embedder"
 );
 const { TOOL_MAP } = await import("../src/lib/agent/tools");
+const { getRagDocumentMetadata, pickLangText } = await import("../src/lib/data/knowledge");
+const { KNOWLEDGE_DOCS } = await import("../src/lib/data/knowledge-corpus");
+
+function deterministicQueryEmbedding(seedText: string): number[] {
+  let seed = 0;
+  for (let i = 0; i < seedText.length; i += 1) {
+    seed = (seed * 31 + seedText.charCodeAt(i)) >>> 0;
+  }
+  return Array.from({ length: 1536 }, () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return (seed / 0xffffffff) * 2 - 1;
+  });
+}
+
+type StubLang = "ko" | "en" | "vi" | "mn";
+
+function stubServingRows(filter: Record<string, unknown>, matchCount: number) {
+  const locale = (typeof filter.locale === "string" ? filter.locale : "ko") as StubLang;
+  const category = typeof filter.category === "string" ? filter.category : "general";
+  return KNOWLEDGE_DOCS
+    .filter((doc) => category === "general" || doc.category === category)
+    .slice(0, matchCount)
+    .map((doc) => ({
+      id: `${doc.id}-chunk-0`,
+      content: pickLangText(doc.content, locale),
+      metadata: {
+        ...getRagDocumentMetadata(doc, locale),
+        doc_id: doc.id,
+        title: pickLangText(doc.title, locale),
+        category: doc.category,
+        language: locale,
+        keywords: (doc.keywords || []).join(" "),
+        lexical_score: 0.4,
+        keyword_score: 0.4,
+        retrieval_mode: "hybrid-provider",
+      },
+    }));
+}
+
+// CI runs without OpenAI or Supabase credentials, and the shared OpenAI RAG
+// core fail-closes without them. Serve deterministic stub embeddings and
+// fixture-backed serving rows so retrieval-behavior tests stay hermetic in
+// every environment (this also keeps local runs off the production Supabase).
+// Outage tests blank OPENAI_EMBEDDING_API_KEY explicitly to exercise the
+// fail-close path, which short-circuits before any fetch happens.
+process.env.OPENAI_EMBEDDING_API_KEY ||= "agent-guard-embedding-key";
+process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://agent-guard-stub.supabase.co";
+process.env.SUPABASE_SERVICE_ROLE_KEY ||= "agent-guard-service-role";
+const realFetch = globalThis.fetch;
+globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  if (url.includes("api.openai.com") && url.includes("/embeddings")) {
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) as { input?: unknown } : {};
+    const seedText = typeof body.input === "string" ? body.input : "";
+    return new Response(
+      JSON.stringify({ data: [{ embedding: deterministicQueryEmbedding(seedText) }] }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  }
+  if (/\/rest\/v1\/rpc\/match_rag_documents_(hybrid_v3|lexical)\b/.test(url)) {
+    const body = typeof init?.body === "string"
+      ? JSON.parse(init.body) as { filter?: Record<string, unknown>; match_count?: number }
+      : {};
+    const rows = stubServingRows(body.filter || {}, body.match_count || 12);
+    return new Response(JSON.stringify(rows), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }
+  return realFetch(input, init);
+}) as typeof fetch;
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -317,24 +388,37 @@ async function testPreflightCarriesPlannerContext() {
 }
 
 async function testFallbackPartnerRequestStaysDraft() {
+  const snapshot = { ...process.env };
   const { db } = await import("../src/lib/db");
-  const before = await db.partnerRequest.count();
-  const result = await runFallbackAgent(
-    "D-2 거절 상담을 행정사에게 연결해줘. user@example.com 으로 연락 가능해.",
-    "ko",
-    { lang: "ko", leadId: "local-agent-guard" }
-  );
-  const after = await db.partnerRequest.count();
-  const serialized = JSON.stringify(result);
+  try {
+    Object.assign(process.env, {
+      OPENAI_EMBEDDING_API_KEY: "",
+      KAXI_QUERY_EMBEDDINGS_USE_OPENAI_KEY: "false",
+      OPENAI_API_KEY: "",
+    });
+    const before = await db.partnerRequest.count();
+    const result = await runFallbackAgent(
+      "D-2 거절 상담을 행정사에게 연결해줘. user@example.com 으로 연락 가능해.",
+      "ko",
+      { lang: "ko", leadId: "local-agent-guard" }
+    );
+    const after = await db.partnerRequest.count();
+    const serialized = JSON.stringify(result);
 
-  if (after !== before) {
-    fail(`fallback persisted partner request: before=${before}, after=${after}`);
-  }
-  if (!result.toolResults.some((item) => item.tool === "request_partner" && resultHasStatus(item, "draft"))) {
-    fail(`fallback partner request should stay draft: ${serialized}`);
-  }
-  if (serialized.includes("user@example.com")) {
-    fail("fallback partner response leaked raw email");
+    if (after !== before) {
+      fail(`fallback persisted partner request: before=${before}, after=${after}`);
+    }
+    if (!result.toolResults.some((item) => item.tool === "search_knowledge" && !item.success)) {
+      fail(`fallback should record unavailable grounded search without aborting: ${serialized}`);
+    }
+    if (!result.toolResults.some((item) => item.tool === "request_partner" && resultHasStatus(item, "draft"))) {
+      fail(`fallback partner request should stay draft: ${serialized}`);
+    }
+    if (serialized.includes("user@example.com")) {
+      fail("fallback partner response leaked raw email");
+    }
+  } finally {
+    restoreEnv(snapshot);
   }
 }
 

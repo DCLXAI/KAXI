@@ -27,4 +27,7 @@ export interface LlmGatewayResult {
   durationMs: number;
   inputChars: number;
   outputChars: number;
+  attempts?: number;
+  primaryBackend?: LlmBackend;
+  fallbackReason?: string | null;
 }

@@ -3,12 +3,12 @@
 Typebot never receives Supabase, OpenAI, or n8n signing secrets. The latency-optimized production request path is:
 
 ```txt
-Typebot -> KAXI deterministic router -> governed Supabase hybrid RAG -> optional grounded LLM answer
+Typebot -> KAXI contextual mediator -> OpenAI 1536d Supabase hybrid RAG -> grounded LLM answer
 ```
 
-KAXI owns request validation, UUID/idempotency normalization, canonical chat/retrieval persistence, encrypted handoff-task creation, attachment ownership, retrieval, confidence policy, grounded answer construction, and risk classification. Explicit questions are classified without an LLM call. Simple document, cost, and school-selection intents use a citation-backed extractive answer; complex or high-impact questions use one grounded LLM call after retrieval. Typebot persistence is accepted in the response and completed with Next.js `after()` so a cold database write does not block the user. Supabase owns the governed corpus and lexical/vector search functions.
+KAXI owns request validation, UUID/idempotency normalization, recent-session context resolution, canonical chat/retrieval persistence, encrypted handoff-task creation, attachment ownership, retrieval, confidence policy, grounded answer construction, and risk classification. Every grounded answer attempts concise LLM synthesis; extractive text is only a bounded generation-failure fallback. Multi-intent questions retain supported parts and identify unsupported parts instead of discarding the whole answer. Typebot receives `persisted=true` only after the canonical message and any required handoff task are written. Supabase owns the governed corpus and lexical/vector search functions.
 
-The default `KAXI_RAG_RUNTIME_PRIMARY=direct` keeps retrieval and answer generation in one Vercel invocation. Railway n8n remains the signed runtime backup and continues to own governed ingestion and handoff orchestration; setting the primary to `n8n` restores the previous routing without a code change. The Railway MCP workflow ID is `bHHyeC1DCUSvi7Px`. Its active semantic release is `kaxi-rag-runtime@2026-07-14.railway-mcp-v2`, using capability contract `2026-07-14.v3`. n8n holds no OpenAI or Supabase credential. KAXI retrieves 20 lexical and 20 vector candidates, then Reciprocal Rank Fusion selects the final six. A missing query-embedding provider uses the top three strict lexical hits to build a centroid from stored 1536-dimensional vectors; a configured provider that fails degrades to lexical-only retrieval. Only a simultaneous direct-runtime and n8n-backup failure returns the user-facing service failure.
+The default `KAXI_RAG_RUNTIME_PRIMARY=direct` keeps retrieval and answer generation in one Vercel invocation. Railway n8n remains the signed runtime backup and continues to own governed ingestion and handoff orchestration; setting the primary to `n8n` restores the previous routing without a code change. The workflow artifact release is `kaxi-rag-runtime@2026-07-14.railway-mcp-v3`, using capability contract `2026-07-14.v4`. n8n holds no OpenAI or Supabase credential. KAXI retrieves 20 lexical and 20 OpenAI-vector candidates, then Reciprocal Rank Fusion selects the final six. Missing or failed query embeddings fail closed; E5, TF-IDF, lexical-only, and stored-vector centroid are not production answer paths.
 
 ## Native KAXI Streaming UX
 
@@ -195,29 +195,30 @@ The three POST webhooks require KAXI HMAC verification. The capability endpoint 
 ```json
 {
   "service": "kaxi-rag-serving",
-  "contractVersion": "2026-07-14.v3",
+  "contractVersion": "2026-07-14.v4",
   "ingestionTarget": "rag_serving_chunks",
-  "retrievalMode": "hybrid-rrf-v3-with-seeded-vector-and-lexical-fallback",
+  "retrievalMode": "hybrid-rrf-v3-openai-required",
   "lexicalCandidateCount": 20,
   "vectorCandidateCount": 20,
   "finalMatchCount": 6,
   "embeddingModel": "text-embedding-3-small",
+  "embeddingContentStrategy": "single-locale-v1",
   "dimensions": 1536,
-  "queryEmbeddingOptional": true,
-  "storedVectorFallback": "lexical-centroid",
-  "vectorSeedCount": 3,
-  "providerFailureMode": "lexical-only",
+  "queryEmbeddingOptional": false,
+  "storedVectorFallback": "disabled",
+  "vectorSeedCount": 0,
+  "providerFailureMode": "fail-closed",
   "signedIngestionRequired": true
 }
 ```
 
 The n8n backup graph is intentionally small: `Typebot Runtime Webhook -> Verify Runtime Signature -> Input Guard -> Run KAXI RAG Core -> Respond to Typebot`. The verifier returns a short-lived HMAC receipt bound to the exact request payload; the RAG core rejects expired, reused-purpose, or payload-tampered receipts. n8n does not duplicate category inference, query expansion, reranking, confidence, answer, or risk logic.
 
-KAXI calls `match_rag_documents_lexical_v2`, `seed_rag_query_embedding_from_lexical`, and `match_rag_documents_hybrid_v3`. Retrieval always passes a strict locale and category scope. Each candidate must have a citation-valid HTTPS source, `checkedAt`, `checkedBy`, and locale-consistent title/body. Locale mismatch, category mismatch, weak token coverage, or an insufficient top-score margin produces bounded `noContext` rather than borrowing another language or category.
+KAXI calls `match_rag_documents_hybrid_v3` with a real `text-embedding-3-small` query vector. Retrieval always passes a strict locale and intent-aware category scope. Each candidate must have a citation-valid HTTPS source, `checkedAt`, `checkedBy`, and locale-consistent title/body. Locale mismatch, category mismatch, weak token coverage, or an insufficient top-score margin produces bounded `noContext` rather than borrowing another language or category.
 
-The lexical rank combines normalized query aliases, title/doc ID/keyword/body weights, trigram similarity, exact match, source authority, freshness, and operational intent hints. Hybrid mode retrieves 20 lexical and 20 vector candidates and uses RRF to select six. Query embeddings may use a dedicated optional provider credential. With no provider, a centroid of stored vectors keeps pgvector retrieval active; when an explicitly configured provider fails, retrieval intentionally switches to lexical-only. The selected strategy and failure reason are recorded in `searchMeta`.
+The lexical rank combines normalized query aliases, title/doc ID/keyword/body weights, trigram similarity, exact match, source authority, freshness, and operational intent hints. Hybrid mode retrieves 20 lexical and 20 vector candidates and uses RRF to select six. Stored embeddings use only one localized section (`single-locale-v1`) while the governed mixed-language source remains available for locale-safe output extraction. Embedding model, dimensions, provider, vector candidate count, strategy, and failures are recorded in `searchMeta`.
 
-Run the staged suite with `bun run rag:evaluation:staged`. It executes 8 smoke, 16 locale, and 64 full cases. Each result records `runtimePath`, `retrievalRuntimePath`, fallback reason, embedding status, workflow/model/prompt provenance, persistence status, and citation IDs. Set `RAG_EVAL_SHADOW=true` to compare lexical, vector-only, and hybrid candidate sets with either provider vectors or the stored-vector centroid strategy. The completed run header is reconciled from observed response provenance instead of trusting a stale local environment value.
+Run the staged suite with `bun run rag:evaluation:staged`. It executes 10 smoke, 16 locale, and up to 96 active full cases. The suite includes multi-intent partial answers, persisted follow-up context, typo tolerance, nationality-specific wording, handoff policy, and explicit OpenAI pgvector assertions. Each result records runtime path, provenance, persistence, citations, embedding model/dimensions/provider, vector candidate count, and intent coverage.
 
 ## Release Order
 
@@ -227,13 +228,13 @@ Do not change this order:
 2. Configure KAXI production secrets and webhook URLs.
 3. Deploy KAXI and verify `/api/internal/n8n/verify` exists.
 4. Publish the validated n8n draft and confirm the capability endpoint.
-5. Run `bun run rag:serving:sync --execute --confirm-contract 2026-07-14.v3` until all eligible chunks are ready.
+5. Run `bun run rag:serving:sync --execute --confirm-contract 2026-07-14.v4` until all eligible chunks use `single-locale-v1`.
 6. Run the RAG evaluation suite and require at least 95% overall, 90% in every locale/category, 95% expected-document recall and no-context accuracy, 100% citation validity/strict category/locale-rerank/high-risk checks, and p95 latency at or below 10 seconds. Gateway-mode evaluation must omit an explicit category so KAXI's multilingual intent classifier is exercised.
 7. Run `bun run rag:serving:cutover --execute --confirm CUTOVER_LEGACY_RAG --expected-ready 201`.
 8. Publish the Typebot draft.
 9. Test Typebot -> KAXI -> Supabase, the KAXI -> n8n backup, and the signed n8n handoff/ingestion branches.
 
-Current status on 2026-07-14: the KAXI production alias is `Ready`, with the direct runtime active and Railway workflow `bHHyeC1DCUSvi7Px` published as the signed backup plus ingestion/handoff orchestrator. Capability contract `2026-07-14.v3` reports signed ingestion and provider-backed hybrid retrieval. The serving projection is complete for 95 eligible documents and 204 eligible chunks: 204 vector-ready, 204 citation-ready, zero pending, zero quarantined, and zero legacy chunks. The published Typebot passed all four locale starts, the high-risk consent branch, and citation-valid hybrid retrieval. A 12-question production benchmark covering documents, cost, school selection, eligibility, extension, status change, no-context, and high-risk requests completed with an average latency of 4.154 seconds, p95 of 7.540 seconds, and 12/12 responses below 10 seconds. All clear questions used deterministic routing; three simple intents used extractive answers, seven complex intents used one grounded LLM call, and two terminated through the bounded no-context policy. Typebot writes completed in deferred mode, and all synthetic benchmark rows were removed after verification.
+Current local verification on 2026-07-14: the governed projection has 95 eligible documents and 204/204 citation-ready OpenAI vectors using `single-locale-v1`, with zero pending, outdated, quarantined, or legacy chunks. Real Korean, English, Vietnamese, and Mongolian probes returned `hybrid-provider` with 20 vector candidates. Production n8n publication, Typebot publication, and the expanded full evaluation must still be reverified after deploying this release; older benchmark claims do not certify the new runtime.
 
 The sync command refuses to write unless the active n8n capability contract matches. The cutover command refuses to remove legacy rows until every eligible chunk has a ready 1536-dimensional embedding and citation metadata.
 

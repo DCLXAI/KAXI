@@ -62,6 +62,7 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
       "chat.attachment_malware_scanner",
       "chat.external_malware_scanner",
       "ops.realtime_alerts",
+      "ops.n8n_error_workflow",
       "rag.review_after",
       "schools.source_metadata",
       "database.postgresql_operational",
@@ -72,7 +73,7 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
       "privacy.plaintext_override",
       "privacy.retention",
       "documents.upload_workspace",
-      "embeddings.cache",
+      "rag.openai_pgvector",
       "ai.backend_policy",
       "ai.abuse_controls",
       "rate_limit.shared",
@@ -102,8 +103,8 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
     }
     if (byKey.get("admin.supabase_auth")?.ok) fail("missing Supabase Auth should not pass admin auth check");
     if (byKey.get("admin.role_link")?.ok) fail("missing linked admin should not pass admin role check");
-    if (byKey.get("embeddings.cache")?.severity !== "warning") {
-      fail(`embedding cache readiness should be warning severity: ${JSON.stringify(byKey.get("embeddings.cache"))}`);
+    if (byKey.get("rag.openai_pgvector")?.ok || byKey.get("rag.openai_pgvector")?.severity !== "required") {
+      fail(`production OpenAI pgvector readiness should fail closed: ${JSON.stringify(byKey.get("rag.openai_pgvector"))}`);
     }
     if (!byKey.get("ai.backend_policy")?.metadata) {
       fail(`AI backend readiness should expose safe backend metadata: ${JSON.stringify(byKey.get("ai.backend_policy"))}`);
@@ -111,7 +112,7 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
     if (byKey.get("ai.abuse_controls")?.ok || byKey.get("ai.abuse_controls")?.severity !== "required") {
       fail(`disabled production AI limits should fail readiness: ${JSON.stringify(byKey.get("ai.abuse_controls"))}`);
     }
-    const embeddingSerialized = JSON.stringify(byKey.get("embeddings.cache"));
+    const embeddingSerialized = JSON.stringify(byKey.get("rag.openai_pgvector"));
     if (embeddingSerialized.includes(process.cwd()) || (process.env.HOME && embeddingSerialized.includes(process.env.HOME))) {
       fail(`embedding readiness metadata should not expose absolute local paths: ${embeddingSerialized}`);
     }
@@ -140,6 +141,17 @@ async function testImageOcrReadiness() {
     const check = payload.checks.find((item) => item.key === "chat.attachment_ocr_provider");
     if (!check?.ok || check.severity !== "required") {
       fail(`configured image OCR provider should pass production readiness: ${JSON.stringify(check)}`);
+    }
+    const backendPolicy = payload.checks.find((item) => item.key === "ai.backend_policy");
+    if (backendPolicy?.ok || backendPolicy?.severity !== "warning") {
+      fail(`single-provider production AI should expose the missing failover warning: ${JSON.stringify(backendPolicy)}`);
+    }
+
+    process.env.AI_REQUIRE_PROVIDER_FAILOVER = "true";
+    const strictPayload = await getReadinessPayload();
+    const strictBackendPolicy = strictPayload.checks.find((item) => item.key === "ai.backend_policy");
+    if (strictBackendPolicy?.ok || strictBackendPolicy?.severity !== "required" || strictPayload.status !== "degraded") {
+      fail(`required provider failover should fail closed in production: ${JSON.stringify(strictBackendPolicy)}`);
     }
   } finally {
     restoreEnv(snapshot);

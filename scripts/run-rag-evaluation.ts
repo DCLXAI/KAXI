@@ -39,6 +39,14 @@ type EvaluationCase = {
     forbiddenDocIds?: string[];
     forbiddenAnswerFragments?: string[];
     incident?: string;
+    conversationHistory?: Array<{ question: string; answer: string }>;
+    expectedPartialContext?: boolean;
+    expectedCoveredIntents?: string[];
+    expectedMissingIntents?: string[];
+    expectedContextResolved?: boolean;
+    expectedVisaCodes?: string[];
+    expectedOpenAiVector?: boolean;
+    expectedCategories?: string[];
   } | null;
 };
 
@@ -66,7 +74,17 @@ type RagResponse = {
     fallbackReason?: string;
     retrievalMode?: string;
     embeddingStatus?: string;
+    embeddingProvider?: string;
+    embeddingModel?: string | null;
+    embeddingDimensions?: number | null;
     embeddingFailureReason?: string | null;
+    vectorSearchAvailable?: boolean;
+    vectorCandidateCount?: number | null;
+    coveredIntents?: string[];
+    missingIntents?: string[];
+    partialContext?: boolean;
+    mediationContextResolved?: boolean;
+    mediationVisaCodes?: string[];
   };
   executionId?: string;
   workflowId?: string;
@@ -99,7 +117,7 @@ const requestedStage = (process.env.RAG_EVAL_STAGE || "full").trim().toLowerCase
 const evaluationStage: EvaluationStage = requestedStage === "smoke" || requestedStage === "locale"
   ? requestedStage
   : "full";
-const stageLimit = { smoke: 8, locale: 16, full: 64 }[evaluationStage];
+const stageLimit = { smoke: 10, locale: 16, full: 96 }[evaluationStage];
 const configuredLimit = process.env.RAG_EVAL_LIMIT?.trim()
   ? Number(process.env.RAG_EVAL_LIMIT)
   : stageLimit;
@@ -110,6 +128,8 @@ const shadowMode = process.env.RAG_EVAL_SHADOW?.trim().toLowerCase() === "true";
 const expectedProvenance = resolveRagProvenance();
 
 const SMOKE_CASE_IDS = [
+  "ko-d4-extension-multi-intent-partial",
+  "ko-d4-context-followup-documents",
   "ko-cost-strict-locale",
   "ko-no-context-weather",
   "en-d4-language",
@@ -119,6 +139,67 @@ const SMOKE_CASE_IDS = [
   "mn-school-accreditation",
   "mn-prompt-injection-refusal",
 ];
+
+function stringSet(value: unknown) {
+  return Array.isArray(value)
+    ? Array.from(new Set(value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).map((item) => item.trim().toLowerCase()))).sort()
+    : [];
+}
+
+function sameStringSet(left: unknown, right: unknown) {
+  return JSON.stringify(stringSet(left)) === JSON.stringify(stringSet(right));
+}
+
+function visaCodeSet(value: unknown) {
+  return Array.isArray(value)
+    ? Array.from(new Set(value.flatMap((item) => {
+        if (typeof item !== "string") return [];
+        const normalized = item.normalize("NFKC").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+        return normalized ? [normalized] : [];
+      }))).sort()
+    : [];
+}
+
+function sameVisaCodeSet(left: unknown, right: unknown) {
+  return JSON.stringify(visaCodeSet(left)) === JSON.stringify(visaCodeSet(right));
+}
+
+async function readRagPayload(response: Response, errorPrefix: string) {
+  const rawText = await response.text();
+  if (!rawText.trim()) throw new Error(`${errorPrefix}_empty_http_${response.status}`);
+  let rawPayload: RagResponse & { data?: RagResponse };
+  try {
+    rawPayload = JSON.parse(rawText) as RagResponse & { data?: RagResponse };
+  } catch {
+    throw new Error(`${errorPrefix}_invalid_json_http_${response.status}`);
+  }
+  const payload = rawPayload.data && typeof rawPayload.data === "object" ? rawPayload.data : rawPayload;
+  if (!response.ok || payload.error) throw new Error(payload.error || `${errorPrefix}_http_${response.status}`);
+  return payload;
+}
+
+async function persistConversationHistory(input: {
+  testCase: EvaluationCase;
+  sessionId: string;
+  cookie: string;
+}) {
+  const history = input.testCase.metadata?.conversationHistory || [];
+  for (const turn of history) {
+    const response = await fetchWithRateLimitRetry(`${baseUrl}/api/typebot-rag`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: input.cookie },
+      body: JSON.stringify({
+        question: turn.question,
+        sessionId: input.sessionId,
+        requestId: randomUUID(),
+        source: "kaxi-site",
+        locale: input.testCase.locale,
+      }),
+    });
+    const payload = await readRagPayload(response, "conversation_setup");
+    if (payload.persisted !== true) throw new Error("conversation_setup_persistence_failed");
+  }
+}
 
 const LOCALE_CASE_IDS = [
   ...SMOKE_CASE_IDS,
@@ -179,8 +260,10 @@ function strictCategoryAllows(requested: string, candidate: string | undefined, 
 
   const asksForDocuments = /서류|준비물|documents?|paperwork|hồ\s*sơ|giấy\s*tờ|бичиг\s*баримт|материал|тодорхойлолт|гэрчилгээ/iu.test(question);
   const asksForCost = /비용|학비|등록금|수수료|costs?|tuition|fees?|chi\s*phí|học\s*phí|зардал|сургалтын\s*төлбөр|хураамж/iu.test(question);
+  const asksForVisaSupport = /비자|체류|연장|전환|언제|시기|기한|visa|stay|extension|status|when|deadline|thị\s*thực|lưu\s*trú|gia\s*hạn|khi\s*nào|виз|оршин\s*суух|сунгалт|хэзээ/iu.test(question);
   if (normalizedCandidate === "documents" && asksForDocuments) return true;
   if (normalizedCandidate === "cost" && asksForCost) return true;
+  if (normalizedCandidate === "visa" && asksForVisaSupport) return true;
   return false;
 }
 
@@ -422,9 +505,16 @@ let answerTermsExpected = 0;
 let answerTermsCorrect = 0;
 let categoryInferenceExpected = 0;
 let categoryInferenceCorrect = 0;
+let partialContextExpected = 0;
+let partialContextCorrect = 0;
+let conversationContextExpected = 0;
+let conversationContextCorrect = 0;
+let openAiVectorExpected = 0;
+let openAiVectorCorrect = 0;
 const results: Array<Record<string, unknown>> = [];
 for (const testCase of cases) {
   const started = Date.now();
+  let responseStarted = started;
   let payload: RagResponse = {};
   const failures: string[] = [];
   let auditSessionId = "";
@@ -445,6 +535,7 @@ for (const testCase of cases) {
         locale: testCase.locale,
         category: testCase.category,
         attachments: syntheticAttachments(testCase),
+        conversationContext: testCase.metadata?.conversationHistory || [],
         healthCheck: true,
         evaluation: true,
       });
@@ -465,6 +556,13 @@ for (const testCase of cases) {
       if (!sessionResponse.ok || !session.sessionId || !cookie) throw new Error("session_creation_failed");
       auditSessionId = session.sessionId;
 
+      await persistConversationHistory({
+        testCase,
+        sessionId: session.sessionId,
+        cookie,
+      });
+
+      responseStarted = Date.now();
       response = await fetchWithRateLimitRetry(`${baseUrl}/api/typebot-rag`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie },
@@ -477,16 +575,7 @@ for (const testCase of cases) {
         }),
       });
     }
-    const rawText = await response.text();
-    if (!rawText.trim()) throw new Error(`empty_response_http_${response.status}`);
-    let rawPayload: RagResponse & { data?: RagResponse };
-    try {
-      rawPayload = JSON.parse(rawText) as RagResponse & { data?: RagResponse };
-    } catch {
-      throw new Error(`invalid_json_http_${response.status}`);
-    }
-    payload = rawPayload.data && typeof rawPayload.data === "object" ? rawPayload.data : rawPayload;
-    if (!response.ok || payload.error) throw new Error(payload.error || `http_${response.status}`);
+    payload = await readRagPayload(response, "evaluation");
 
     const runtimePath = responseRuntimePath(payload);
     const responseProvenance = extractRagProvenance(payload);
@@ -576,7 +665,10 @@ for (const testCase of cases) {
     if (sources.length > 0 && citationsValid) validCitationCaseCount += 1;
     if (transport === "gateway") {
       categoryInferenceExpected += 1;
-      if (payload.searchMeta?.category === testCase.category) categoryInferenceCorrect += 1;
+      const expectedCategories = testCase.metadata?.expectedCategories?.length
+        ? testCase.metadata.expectedCategories
+        : [testCase.category];
+      if (expectedCategories.includes(payload.searchMeta?.category || "")) categoryInferenceCorrect += 1;
       else failures.push("category_inference_mismatch");
     }
     if (expectedNoContext) {
@@ -584,6 +676,51 @@ for (const testCase of cases) {
       const correctlyDeclined = payload.searchMeta?.noContext === true && sources.length === 0;
       if (correctlyDeclined) noContextCorrect += 1;
       else failures.push("no_context_mismatch");
+    }
+    if (typeof testCase.metadata?.expectedPartialContext === "boolean") {
+      partialContextExpected += 1;
+      if (payload.searchMeta?.partialContext === testCase.metadata.expectedPartialContext) {
+        partialContextCorrect += 1;
+      } else {
+        failures.push("partial_context_mismatch");
+      }
+    }
+    if (
+      testCase.metadata?.expectedCoveredIntents &&
+      !sameStringSet(payload.searchMeta?.coveredIntents, testCase.metadata.expectedCoveredIntents)
+    ) {
+      failures.push("covered_intents_mismatch");
+    }
+    if (
+      testCase.metadata?.expectedMissingIntents &&
+      !sameStringSet(payload.searchMeta?.missingIntents, testCase.metadata.expectedMissingIntents)
+    ) {
+      failures.push("missing_intents_mismatch");
+    }
+    if (typeof testCase.metadata?.expectedContextResolved === "boolean") {
+      conversationContextExpected += 1;
+      const contextMatches = payload.searchMeta?.mediationContextResolved === testCase.metadata.expectedContextResolved;
+      const visaCodesMatch = !testCase.metadata.expectedVisaCodes
+        || sameVisaCodeSet(payload.searchMeta?.mediationVisaCodes, testCase.metadata.expectedVisaCodes);
+      if (contextMatches && visaCodesMatch) conversationContextCorrect += 1;
+      else failures.push("conversation_context_mismatch");
+    } else if (
+      testCase.metadata?.expectedVisaCodes &&
+      !sameVisaCodeSet(payload.searchMeta?.mediationVisaCodes, testCase.metadata.expectedVisaCodes)
+    ) {
+      failures.push("visa_code_scope_mismatch");
+    }
+    if (testCase.metadata?.expectedOpenAiVector === true) {
+      openAiVectorExpected += 1;
+      const openAiVectorUsed = payload.searchMeta?.embeddingStatus === "ready"
+        && payload.searchMeta?.embeddingProvider === "openai-compatible"
+        && payload.searchMeta?.embeddingModel === "text-embedding-3-small"
+        && payload.searchMeta?.embeddingDimensions === 1536
+        && payload.searchMeta?.vectorSearchAvailable === true
+        && payload.searchMeta?.retrievalMode === "hybrid-provider"
+        && Number(payload.searchMeta?.vectorCandidateCount) > 0;
+      if (openAiVectorUsed) openAiVectorCorrect += 1;
+      else failures.push("openai_pgvector_not_used");
     }
     if (testCase.expected_risk_level === "high") {
       highRiskExpected += 1;
@@ -601,7 +738,7 @@ for (const testCase of cases) {
       run_id: runId,
       case_id: testCase.id,
       passed,
-      latency_ms: Date.now() - started,
+      latency_ms: Date.now() - responseStarted,
       top_score: payload.searchMeta?.topScore ?? null,
       retrieved_doc_ids: retrievedDocIds,
       risk_level: payload.riskLevel || null,
@@ -627,7 +764,18 @@ for (const testCase of cases) {
         fallbackReason: payload.searchMeta?.fallbackReason || null,
         retrievalMode: payload.searchMeta?.retrievalMode || null,
         embeddingStatus: payload.searchMeta?.embeddingStatus || null,
+        embeddingProvider: payload.searchMeta?.embeddingProvider || null,
+        embeddingModel: payload.searchMeta?.embeddingModel || null,
+        embeddingDimensions: payload.searchMeta?.embeddingDimensions ?? null,
         embeddingFailureReason: payload.searchMeta?.embeddingFailureReason || null,
+        vectorSearchAvailable: payload.searchMeta?.vectorSearchAvailable ?? null,
+        vectorCandidateCount: payload.searchMeta?.vectorCandidateCount ?? null,
+        partialContext: payload.searchMeta?.partialContext ?? null,
+        coveredIntents: payload.searchMeta?.coveredIntents || [],
+        missingIntents: payload.searchMeta?.missingIntents || [],
+        mediationContextResolved: payload.searchMeta?.mediationContextResolved ?? null,
+        mediationVisaCodes: payload.searchMeta?.mediationVisaCodes || [],
+        conversationSetupTurns: testCase.metadata?.conversationHistory?.length || 0,
         transport,
         evaluationStage,
         persisted: payload.persisted ?? null,
@@ -640,7 +788,7 @@ for (const testCase of cases) {
       run_id: runId,
       case_id: testCase.id,
       passed: false,
-      latency_ms: Date.now() - started,
+      latency_ms: Date.now() - responseStarted,
       top_score: null,
       retrieved_doc_ids: [],
       risk_level: null,
@@ -753,6 +901,9 @@ const localeSourceAccuracy = localeSourceExpected > 0 ? localeSourceCorrect / lo
 const topDocumentAccuracy = topDocumentExpected > 0 ? topDocumentCorrect / topDocumentExpected : 1;
 const answerTermAccuracy = answerTermsExpected > 0 ? answerTermsCorrect / answerTermsExpected : 1;
 const categoryInferenceAccuracy = categoryInferenceExpected > 0 ? categoryInferenceCorrect / categoryInferenceExpected : 1;
+const partialContextAccuracy = partialContextExpected > 0 ? partialContextCorrect / partialContextExpected : 1;
+const conversationContextAccuracy = conversationContextExpected > 0 ? conversationContextCorrect / conversationContextExpected : 1;
+const openAiVectorAccuracy = openAiVectorExpected > 0 ? openAiVectorCorrect / openAiVectorExpected : 1;
 const p95LatencyMs = percentile(0.95);
 const qualityPassed = passRate >= 0.95
   && minimumGroupPassRate >= 0.9
@@ -763,6 +914,9 @@ const qualityPassed = passRate >= 0.95
   && topDocumentAccuracy === 1
   && answerTermAccuracy === 1
   && categoryInferenceAccuracy === 1
+  && partialContextAccuracy === 1
+  && conversationContextAccuracy === 1
+  && openAiVectorAccuracy === 1
   && highRiskRecall === 1
   && noContextAccuracy >= 0.95
   && (p95LatencyMs === null || p95LatencyMs <= 10_000);
@@ -783,6 +937,9 @@ const completed = await supabase.from("rag_evaluation_runs").update({
     topDocumentAccuracy,
     answerTermAccuracy,
     categoryInferenceAccuracy,
+    partialContextAccuracy,
+    conversationContextAccuracy,
+    openAiVectorAccuracy,
     minimumGroupPassRate,
     highRiskRecall,
     noContextAccuracy,
@@ -808,6 +965,7 @@ if (completed.error) throw completed.error;
 console.log(`RAG ${evaluationStage} evaluation ${passedCount}/${cases.length} passed (${(passRate * 100).toFixed(1)}%)`);
 console.log(`document recall ${(expectedDocumentRecall * 100).toFixed(1)}%, citation validity ${(citationValidityRate * 100).toFixed(1)}%, strict category ${(strictCategoryAccuracy * 100).toFixed(1)}%`);
 console.log(`locale/rerank ${(localeSourceAccuracy * 100).toFixed(1)}%, category inference ${(categoryInferenceAccuracy * 100).toFixed(1)}%, high-risk recall ${(highRiskRecall * 100).toFixed(1)}%, no-context ${(noContextAccuracy * 100).toFixed(1)}%`);
+console.log(`partial context ${(partialContextAccuracy * 100).toFixed(1)}%, conversation memory ${(conversationContextAccuracy * 100).toFixed(1)}%, OpenAI pgvector ${(openAiVectorAccuracy * 100).toFixed(1)}%`);
 console.log(`runtime paths ${JSON.stringify(runtimePathDistribution)}, retrieval paths ${JSON.stringify(retrievalPathDistribution)}`);
 if (shadowMode) console.log(`shadow comparison ${JSON.stringify(shadowMetrics)}`);
 if (caseIdFilter) {

@@ -6,7 +6,7 @@ import {
   DIRECT_LEXICAL_RUNTIME_PATH,
   runDirectRagFallback,
   runDirectLexicalFallback,
-  shouldUseDeterministicExtractiveAnswer,
+  searchServingRagDocuments,
   shouldUseDirectLexicalFallback,
   type DirectLexicalFallbackInput,
 } from "../src/lib/chat/direct-lexical-fallback";
@@ -38,6 +38,7 @@ import {
 } from "../src/lib/chat/question-mediator";
 import { retrievalRunHasNoContext } from "../src/lib/chat/persistence";
 import { groundedRagAnswerTimeoutMs } from "../src/lib/chat/grounded-rag-answer";
+import { LlmNotConfiguredError } from "../src/lib/ai/llm-gateway";
 
 const lexicalV2Migration = await Bun.file(new URL(
   "../prisma/postgres/migrations/20260713153000_rag_lexical_search_v2/migration.sql",
@@ -117,6 +118,8 @@ assert.match(response.answer, /D-4/);
 assert.match(response.answer, /https:\/\/www\.hikorea\.go\.kr/);
 assert.equal(Array.isArray(response.sources), true);
 assert.equal((response.sources as unknown[]).length, 1);
+assert.equal(response.needsHuman, false, "a grounded visa answer must not force handoff by category alone");
+assert.equal(response.riskLevel, "low");
 
 const searchMeta = response.searchMeta as Record<string, unknown>;
 assert.equal(searchMeta.runtimePath, DIRECT_LEXICAL_RUNTIME_PATH);
@@ -308,7 +311,6 @@ assert.equal(deterministicD4.needsHumanReview, false);
 assert.deepEqual(deterministicD4.visaCodes, ["D-4"]);
 assert.equal(deterministicD4.attempts, 0);
 assert.equal(fastPathGeneratorCalls, 0);
-assert.equal(shouldUseDeterministicExtractiveAnswer(deterministicD4), true);
 assert.equal(
   parseRuntimeQuestionMediation(
     questionMediationRuntimePayload(deterministicD4),
@@ -332,7 +334,6 @@ const deterministicHighImpact = planDeterministicRagQuestion({
 });
 assert.equal(deterministicHighImpact?.action, "retrieve");
 assert.equal(deterministicHighImpact?.needsHumanReview, true);
-assert.equal(shouldUseDeterministicExtractiveAnswer(deterministicHighImpact || undefined), false);
 
 let ambiguousGeneratorCalls = 0;
 const ambiguousCost = await mediateRagQuestion({
@@ -366,6 +367,102 @@ const ambiguousCost = await mediateRagQuestion({
 assert.equal(ambiguousGeneratorCalls, 1);
 assert.equal(ambiguousCost.status, "llm");
 assert.equal(ambiguousCost.action, "clarify");
+
+let contextualRouterPrompt = "";
+const contextualCost = await mediateRagQuestion({
+  question: "그럼 비용은?",
+  locale: "ko",
+  deterministicCategory: "cost",
+  conversationHistory: [{
+    question: "D-4 비자 연장은 언제 신청해야 하나요?",
+    answer: "현재 체류기간이 끝나기 전에 신청해야 합니다.",
+  }],
+}, {
+  generate: async (options) => {
+    contextualRouterPrompt = options.messages.map((message) => message.content).join("\n");
+    return {
+      text: JSON.stringify({
+        action: "retrieve",
+        category: "cost",
+        searchQuery: "D-4 비자 연장 수수료 비용",
+        answerFocus: "D-4 비자 연장 비용",
+        responseMode: "estimate",
+        clarificationQuestion: "",
+        intents: ["cost"],
+        visaCodes: ["D-4"],
+        needsHumanReview: false,
+        confidence: 0.94,
+      }),
+      backend: "kimi",
+      model: "kimi-question-router-test",
+      durationMs: 6,
+      inputChars: 120,
+      outputChars: 180,
+    };
+  },
+});
+assert.equal(contextualCost.action, "retrieve");
+assert.equal(contextualCost.searchQuery, "D-4 비자 연장 수수료 비용");
+assert.deepEqual(contextualCost.visaCodes, ["D-4"]);
+assert.equal(contextualCost.contextTurns, 1);
+assert.equal(contextualCost.contextResolved, true);
+assert.match(contextualRouterPrompt, /D-4 비자 연장은 언제 신청해야 하나요/);
+assert.equal(questionMediationMetadata(contextualCost).mediationContextResolved, true);
+
+const contextualProviderFallback = await mediateRagQuestion({
+  question: "그럼 필요한 서류는 무엇인가요?",
+  locale: "ko",
+  deterministicCategory: "documents",
+  conversationHistory: [{
+    question: "D-4 비자로 어학당에 다니고 있는데 체류기간 연장을 준비하고 있어요.",
+    answer: "체류기간이 끝나기 전에 연장을 준비하세요.",
+  }],
+}, {
+  forceLlm: true,
+  generate: async () => {
+    throw new LlmNotConfiguredError("kimi", "Kimi is not configured");
+  },
+});
+assert.equal(contextualProviderFallback.status, "fallback");
+assert.equal(contextualProviderFallback.action, "retrieve");
+assert.equal(contextualProviderFallback.contextResolved, true);
+assert.deepEqual(contextualProviderFallback.visaCodes, ["D-4"]);
+assert.equal(
+  contextualProviderFallback.needsHumanReview,
+  false,
+  "an unavailable routing LLM must not turn a grounded ordinary follow-up into a handoff",
+);
+
+const explicitCodeOverridesHistory = await mediateRagQuestion({
+  question: "그럼 D-10 비용은?",
+  locale: "ko",
+  deterministicCategory: "cost",
+  conversationHistory: [{
+    question: "D-4 비자 연장은 언제 신청해야 하나요?",
+    answer: "현재 체류기간이 끝나기 전에 신청해야 합니다.",
+  }],
+}, {
+  generate: async () => ({
+    text: JSON.stringify({
+      action: "retrieve",
+      category: "cost",
+      searchQuery: "D-10 신청 수수료 비용",
+      answerFocus: "D-10 신청 비용",
+      responseMode: "estimate",
+      clarificationQuestion: "",
+      intents: ["cost"],
+      visaCodes: ["D-4", "D-10"],
+      needsHumanReview: false,
+      confidence: 0.94,
+    }),
+    backend: "kimi",
+    model: "kimi-question-router-test",
+    durationMs: 6,
+    inputChars: 120,
+    outputChars: 180,
+  }),
+});
+assert.deepEqual(explicitCodeOverridesHistory.visaCodes, ["D-10"]);
 
 const routingEvaluationCases = await Bun.file(new URL(
   "../quality/multilingual-eval-cases.json",
@@ -430,7 +527,6 @@ const mediatedD10 = await mediateRagQuestion({
   },
 });
 assert.equal(mediatedD10.status, "llm");
-assert.equal(shouldUseDeterministicExtractiveAnswer(mediatedD10), false);
 assert.equal(mediatedD10.action, "retrieve");
 assert.equal(mediatedD10.category, "documents");
 assert.equal(mediatedD10.searchQuery, "D-10 구직 체류자격 변경 신청 기본 서류");
@@ -739,6 +835,51 @@ assert.equal((hybridResponse.searchMeta as Record<string, unknown>).retrievalMod
 assert.equal((hybridResponse.searchMeta as Record<string, unknown>).vectorStrategy, "provider-query");
 assert.equal((hybridResponse.searchMeta as Record<string, unknown>).vectorCandidateCount, 20);
 
+const sharedServingSearch = await searchServingRagDocuments({
+  ...input,
+  requireOpenAiEmbedding: true,
+  maxDocuments: 6,
+}, {
+  createEmbedding: async (question) => {
+    assert.equal(question, input.question);
+    return readyEmbedding;
+  },
+  rpc: async ({ queryEmbedding }) => {
+    assert.equal(Boolean(queryEmbedding), true);
+    return { data: [{
+      ...validRow,
+      metadata: {
+        ...validRow.metadata,
+        retrieval_type: "hybrid-rrf-v3",
+        retrieval_mode: "hybrid-provider",
+        score_version: "rrf-k60-provider-v3",
+        embedding_source: "provider-query",
+        vector_search_available: true,
+        vector_score: 0.91,
+        keyword_score: 0.72,
+      },
+    }] };
+  },
+});
+assert.equal(sharedServingSearch.documents.length, 1);
+assert.equal(sharedServingSearch.documents[0]?.id, "VISA-D4-EXTENSION");
+assert.equal(sharedServingSearch.runtimePath, DIRECT_HYBRID_RUNTIME_PATH);
+assert.equal(sharedServingSearch.searchMeta.embeddingModel, "text-embedding-3-small");
+assert.equal(sharedServingSearch.searchMeta.embeddingDimensions, RAG_QUERY_EMBEDDING_DIMENSIONS);
+
+await assert.rejects(
+  () => searchServingRagDocuments({
+    ...input,
+    requireOpenAiEmbedding: true,
+  }, {
+    createEmbedding: async () => missingEmbeddingProvider,
+    rpc: async () => {
+      throw new Error("RPC must not run without the OpenAI embedding");
+    },
+  }),
+  /OPENAI_QUERY_EMBEDDING_REQUIRED/,
+);
+
 const canonicalEmbedding = {
   vector: Array.from({ length: CANONICAL_QUERY_EMBEDDING_DIMENSIONS }, (_, index) => index === 0 ? 1 : 0),
   status: "ready" as const,
@@ -996,6 +1137,67 @@ assert.deepEqual(mixedD10SearchMeta.allowedCategories, ["visa", "legal", "proces
 assert.deepEqual(mixedD10SearchMeta.retrievalCategoryScopes, ["visa", "documents"]);
 assert.match(mixedD10Response.answer, /D-10/);
 
+const partialMultiIntentInput: DirectLexicalFallbackInput = {
+  ...input,
+  question: "D-4 비자 연장은 언제 신청해야 하고 필요한 서류와 비용은 얼마인가요?",
+  category: "visa",
+  mediation: {
+    ...deterministicD4,
+    category: "visa",
+    searchQuery: "D-4 체류기간 연장 신청 시기 필요 서류 비용",
+    answerFocus: "D-4 연장 신청 시기, 필요 서류와 비용",
+    responseMode: "concise_answer",
+    intents: ["deadline_or_timing", "required_documents", "cost"],
+  },
+};
+const partialMultiIntentResponse = buildDirectLexicalResponseFromRows(
+  [validRow],
+  partialMultiIntentInput,
+);
+const partialMultiIntentMeta = partialMultiIntentResponse.searchMeta as Record<string, unknown>;
+assert.equal(partialMultiIntentMeta.noContext, false);
+assert.equal(partialMultiIntentMeta.partialContext, true);
+assert.deepEqual(partialMultiIntentMeta.coveredIntents, ["required_documents", "deadline_or_timing"]);
+assert.deepEqual(partialMultiIntentMeta.missingIntents, ["cost"]);
+assert.equal(partialMultiIntentMeta.answerMode, "extractive-partial-fallback");
+assert.match(partialMultiIntentResponse.answer, /비용.*확인하지 못했어요/);
+assert.equal(partialMultiIntentResponse.needsHuman, false);
+
+let partialGenerationCalls = 0;
+const generatedPartialMultiIntent = await runDirectRagFallback(partialMultiIntentInput, {
+  createEmbedding: async () => missingEmbeddingProvider,
+  rpc: async () => ({ data: [validRow] }),
+  generateAnswer: async (request) => {
+    partialGenerationCalls += 1;
+    assert.deepEqual(request.coveredIntents, ["required_documents", "deadline_or_timing"]);
+    assert.deepEqual(request.missingIntents, ["cost"]);
+    return {
+      status: "answered",
+      answer: "D-4 연장은 체류기간이 끝나기 전에 신청하고, 여권·외국인등록증·재학증명서 등을 준비해야 합니다. [1] 승인 문서에서는 비용을 확인할 수 없습니다.",
+      nextStep: "관할 출입국기관에서 최신 수수료를 확인해 주세요.",
+      usedSourceIndexes: [1],
+      backend: "kimi",
+      model: "grounded-test-model",
+      durationMs: 10,
+    };
+  },
+});
+assert.equal(partialGenerationCalls, 1, "grounded evidence must always pass through answer synthesis");
+assert.equal(
+  (generatedPartialMultiIntent.searchMeta as Record<string, unknown>).answerMode,
+  "grounded-llm-partial",
+);
+assert.equal(generatedPartialMultiIntent.needsHuman, false);
+assert.match(generatedPartialMultiIntent.answer, /비용을 확인할 수 없습니다/);
+
+const explicitHumanReview = buildDirectLexicalResponseFromRows([validRow], {
+  ...input,
+  question: "D-4 비자 연장 서류를 알려주고 상담원 연결해 주세요.",
+  category: "documents",
+});
+assert.equal(explicitHumanReview.needsHuman, true);
+assert.equal(explicitHumanReview.riskLevel, "medium");
+
 const lexicalCategoryCalls: string[] = [];
 const scopedLexicalD10 = await runDirectLexicalFallback(mixedD10Input, {
   rpc: async ({ filter }) => {
@@ -1053,6 +1255,23 @@ const extractiveD10 = buildDirectLexicalResponseFromRows(
 );
 assert.match(extractiveD10.answer, /통합신청서, 여권, 외국인등록증과 구직활동계획서/);
 assert.doesNotMatch(extractiveD10.answer, /- D-10 구직 체류자격 변경 서류\s*(?:\n|$)/);
+
+const internalEditorialRow = {
+  ...validRow,
+  id: 29,
+  content: [
+    "## D-4 체류기간 연장 안내",
+    "따라서 KAXI는 단순히 서류만 답하지 말고 상담 전환을 안내해야 합니다.",
+    "D-4 체류기간 연장 신청에는 여권, 외국인등록증, 재학증명서와 체류지 증빙이 필요합니다.",
+  ].join("\n"),
+};
+const editorialFiltered = buildDirectLexicalResponseFromRows([internalEditorialRow], {
+  ...input,
+  question: "D-4 체류기간 연장에 필요한 서류를 알려주세요.",
+  category: "documents",
+});
+assert.doesNotMatch(editorialFiltered.answer, /KAXI는/);
+assert.match(editorialFiltered.answer, /여권, 외국인등록증, 재학증명서/);
 let groundedRequestDocumentTitle = "";
 const groundedD10 = await runDirectRagFallback(wrongD10DocumentInput, {
   createEmbedding: async () => missingEmbeddingProvider,
