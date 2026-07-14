@@ -1,6 +1,6 @@
 import { expr, ifElse, node, trigger, workflow } from "@n8n/workflow-sdk";
 
-const release = "kaxi-rag-runtime@2026-07-14.railway-mcp-v1";
+const release = "kaxi-rag-runtime@2026-07-14.railway-mcp-v2";
 const retrievalModel = "retrieval/hybrid-rrf-v3@2026-07-14";
 const answerPrompt = "kaxi-grounded-extractive@2026-07-13.p0-v1";
 const embeddingModel = "openai/text-embedding-3-small@1536";
@@ -67,9 +67,7 @@ const runRagCore = node({
   config: {
     name: "Run KAXI RAG Core",
     position: [880, 160],
-    retryOnFail: true,
-    maxTries: 2,
-    waitBetweenTries: 500,
+    retryOnFail: false,
     parameters: {
       method: "POST",
       url: "https://kaxi.vercel.app/api/internal/n8n/rag-runtime",
@@ -80,7 +78,7 @@ const runRagCore = node({
       jsonBody: expr("{{ { verificationToken: $('Verify Runtime Signature').item.json.verificationToken ?? '', payload: $('Typebot Runtime Webhook').item.json.body ?? {} } }}"),
       options: {
         response: { response: { fullResponse: true, neverError: true, responseFormat: "json" } },
-        timeout: 14000,
+        timeout: 25000,
       },
     },
   },

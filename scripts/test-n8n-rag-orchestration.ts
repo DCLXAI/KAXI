@@ -38,6 +38,20 @@ assert(
     && railwayWorkflow.includes("Verify Handoff Signature"),
   "every Railway write/runtime branch must verify the KAXI signature first",
 );
+assert(
+  railwayWorkflow.includes('const release = "kaxi-rag-runtime@2026-07-14.railway-mcp-v2"'),
+  "Railway runtime semantic release must match the production provenance contract",
+);
+const railwayRuntimeSource = railwayWorkflow.slice(
+  railwayWorkflow.indexOf("const runRagCore"),
+  railwayWorkflow.indexOf("const respondTypebot"),
+);
+assert(
+  railwayRuntimeSource.includes("retryOnFail: false")
+    && railwayRuntimeSource.includes("timeout: 25000")
+    && !railwayRuntimeSource.includes("maxTries"),
+  "Railway runtime must use one 25-second attempt inside the KAXI gateway budget",
+);
 
 const obsoleteRuntimeNodes = [
   "Normalize Typebot Input",
