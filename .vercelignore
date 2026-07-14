@@ -11,4 +11,5 @@ tests
 playwright.config.ts
 tsconfig.e2e.json
 data/model-cache
+runtime-artifacts/model-cache
 db/*.db
