@@ -68,7 +68,7 @@ jobs:
           [ -z "$PRISMA_DATABASE_URL" ] || echo "::add-mask::$PRISMA_DATABASE_URL"
           echo "::add-mask::$CODEX_REMOTE_BRIDGE_TOKEN"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
