@@ -11,6 +11,34 @@ const workflow = JSON.parse(
   connections: Record<string, { main?: Array<Array<{ node: string }> | null> }>;
 };
 
+const railwayWorkflow = readFileSync(
+  "infra/n8n/kaxi-rag-typebot-orchestrator.mjs",
+  "utf8",
+);
+for (const required of [
+  "api/internal/n8n/verify",
+  "api/internal/n8n/rag-runtime",
+  "api/internal/n8n/rag-ingestion",
+  "api/internal/n8n/handoff-update",
+  "rag-serving-capabilities",
+  "text-embedding-3-small",
+  "dimensions: 1536",
+]) {
+  assert(railwayWorkflow.includes(required), `Railway MCP workflow is missing: ${required}`);
+}
+assert(
+  !railwayWorkflow.includes("newCredential(")
+    && !railwayWorkflow.includes("vectorStoreSupabase")
+    && !railwayWorkflow.includes("embeddingsOpenAi"),
+  "Railway n8n must delegate secret-bearing embedding and persistence to KAXI",
+);
+assert(
+  railwayWorkflow.includes("Verify Runtime Signature")
+    && railwayWorkflow.includes("Verify Ingestion Signature")
+    && railwayWorkflow.includes("Verify Handoff Signature"),
+  "every Railway write/runtime branch must verify the KAXI signature first",
+);
+
 const obsoleteRuntimeNodes = [
   "Normalize Typebot Input",
   "Search Governed Serving Chunks Lexical",

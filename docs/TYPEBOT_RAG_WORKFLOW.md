@@ -8,7 +8,7 @@ Typebot -> KAXI API -> signed n8n webhook -> KAXI RAG core -> governed Supabase 
 
 KAXI owns request validation, UUID/idempotency normalization, HMAC signing, canonical chat/retrieval persistence, encrypted handoff-task creation, attachment ownership, retrieval, confidence policy, grounded answer construction, and risk classification. n8n verifies the signed request, obtains a short-lived payload-bound verification receipt, invokes the KAXI RAG core, and returns the response. Supabase owns the governed corpus and lexical/vector search functions.
 
-The Promete workflow ID is `rB3nfjvCyTODP803`. The active semantic release is `kaxi-rag-runtime@2026-07-14.provider-independent-hybrid-v2`, using capability contract `2026-07-14.v3`. KAXI retrieves 20 lexical and 20 stored-vector candidates, then Reciprocal Rank Fusion selects the final six. A missing query-embedding provider uses the top three strict lexical hits to build a centroid from stored 1536-dimensional vectors; a configured provider that fails degrades to lexical-only retrieval. An n8n transport, quota, timeout, empty-body, 5xx, or response-contract failure falls back to the same KAXI/Supabase policy with `runtimePath=kaxi-direct-lexical`. Only a simultaneous n8n and Supabase failure returns the user-facing service failure.
+The Railway MCP workflow ID is `bHHyeC1DCUSvi7Px`. The active semantic release is `kaxi-rag-runtime@2026-07-14.railway-mcp-v1`, using capability contract `2026-07-14.v3`. n8n holds no OpenAI or Supabase credential: it verifies signed KAXI requests and calls KAXI internal cores for runtime retrieval, governed ingestion, and handoff persistence. KAXI retrieves 20 lexical and 20 stored-vector candidates, then Reciprocal Rank Fusion selects the final six. A missing query-embedding provider uses the top three strict lexical hits to build a centroid from stored 1536-dimensional vectors; a configured provider that fails degrades to lexical-only retrieval. An n8n transport, quota, timeout, empty-body, 5xx, or response-contract failure falls back to the same KAXI/Supabase policy with `runtimePath=kaxi-direct-lexical`. Only a simultaneous n8n and Supabase failure returns the user-facing service failure.
 
 ## Typebot Runtime Request
 
@@ -90,8 +90,8 @@ The Typebot flow uses these exact mapping expressions. A typical response is:
   },
   "requestId": "uuid",
   "executionId": "n8n-execution-id",
-  "workflowId": "rB3nfjvCyTODP803",
-  "workflowVersionId": "kaxi-rag-runtime@2026-07-14.provider-independent-hybrid-v2",
+  "workflowId": "bHHyeC1DCUSvi7Px",
+  "workflowVersionId": "kaxi-rag-runtime@2026-07-14.railway-mcp-v1",
   "modelVersion": "retrieval/hybrid-rrf-v3@2026-07-14",
   "promptVersion": "kaxi-grounded-extractive@2026-07-13.p0-v1",
   "handoffToken": "short-lived-signed-token",
@@ -227,7 +227,7 @@ Do not change this order:
 8. Publish the Typebot draft.
 9. Test Typebot -> KAXI -> n8n -> Supabase, including no-context and handoff branches.
 
-Current status on 2026-07-14: the KAXI production alias is `Ready`, and Promete workflow `rB3nfjvCyTODP803` is published with 34 nodes at active version `43253aa9-3290-408b-9920-9dd214f6a818`. Capability contract `2026-07-14.v3` reports provider-independent hybrid retrieval. Production gateway evaluations passed 8/8 smoke, 16/16 locale, and 64/64 full cases through `n8n-kaxi-orchestrated` plus `kaxi-direct-hybrid`; full run `8361bddb-5817-4e2b-98d0-72d08e6ecee3` has p95 3783ms and actual response provenance on all 64 rows. Shadow run `4684c616-3589-4199-bb05-0fce85743121` recorded 100% expected-document recall for lexical, vector, and hybrid candidate sets using `lexical-centroid`. A forced n8n outage also passed 64/64 through `kaxi-direct-lexical` with no user-facing failure. The published Typebot passed all four locale starts, the high-risk consent branch, and a real low-risk turn persisted through Typebot, KAXI, n8n execution `367`, and Supabase.
+Current status on 2026-07-14: the KAXI production alias is `Ready`, and Railway workflow `bHHyeC1DCUSvi7Px` is published with 20 nodes at active version `a3241397-625f-4f50-8120-36f94cc8d892`. Capability contract `2026-07-14.v3` reports signed ingestion and provider-backed hybrid retrieval. A public Korean Typebot turn completed through KAXI, Railway n8n validation execution `7`, and Supabase with `runtimePath=n8n-kaxi-orchestrated`, `retrievalMode=hybrid-provider`, `vectorSearchAvailable=true`, and a ready `text-embedding-3-small` 1536-dimensional query embedding. It returned two citation-valid official sources with vector ranks and confirmation dates. The temporary successful-execution record was deleted after verification, and production is restored to `saveDataSuccessExecution=none`. A forced approved-chunk ingestion used the n8n writer with no direct-recovery fallback. The serving projection is complete for 95 eligible documents and 204 eligible chunks: 204 vector-ready, 204 citation-ready, zero pending, zero quarantined, and zero legacy chunks. The published Typebot also passed all four locale starts and the high-risk consent branch. A synthetic handoff traversed the signed n8n webhook and database triggers into `handoff_updates`, `leads`, `lead_contacts`, and `handoff_tasks`; ciphertext was present, display values were redacted, and the test rows were deleted immediately afterward. The previous production quality baseline remains 8/8 smoke, 16/16 locale, and 64/64 full cases with 100% expected-document recall in the recorded shadow run.
 
 The sync command refuses to write unless the active n8n capability contract matches. The cutover command refuses to remove legacy rows until every eligible chunk has a ready 1536-dimensional embedding and citation metadata.
 

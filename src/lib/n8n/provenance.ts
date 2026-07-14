@@ -6,8 +6,8 @@ export type RagProvenance = {
 };
 
 export const DEFAULT_RAG_PROVENANCE: RagProvenance = {
-  workflowId: "rB3nfjvCyTODP803",
-  workflowVersionId: "kaxi-rag-runtime@2026-07-14.provider-independent-hybrid-v2",
+  workflowId: "bHHyeC1DCUSvi7Px",
+  workflowVersionId: "kaxi-rag-runtime@2026-07-14.railway-mcp-v1",
   modelVersion: "retrieval/hybrid-rrf-v3@2026-07-14",
   promptVersion: "kaxi-grounded-extractive@2026-07-13.p0-v1",
 };

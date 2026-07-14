@@ -120,6 +120,7 @@ async function writeDirectRecoveryProjection(input: {
   document: CanonicalDocument;
   chunk: CanonicalChunk;
   payload: Record<string, unknown>;
+  writer?: "kaxi-direct-recovery" | "kaxi-n8n-orchestrated";
 }) {
   const embedding = await createRagQueryEmbedding(input.chunk.content);
   const vectorReady = isOpenAiQueryEmbedding(embedding);
@@ -130,7 +131,7 @@ async function writeDirectRecoveryProjection(input: {
   const metadata = {
     ...input.payload,
     language: input.document.language,
-    projection_writer: "kaxi-direct-recovery",
+    projection_writer: input.writer || "kaxi-direct-recovery",
     projected_at: new Date().toISOString(),
     embedding_provider: embedding.provider,
     embedding_status: "ready",
@@ -162,6 +163,94 @@ async function writeDirectRecoveryProjection(input: {
   const persisted = await findServingRow(input.supabase, input.chunk);
   if (persisted?.status !== "ready") throw new Error("direct_projection_not_persisted");
   return "ready" as const;
+}
+
+function payloadText(value: unknown, maxLength: number) {
+  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
+}
+
+export async function ingestRagServingPayload(payload: Record<string, unknown>) {
+  const canonicalChunkId = payloadText(payload.canonical_chunk_id, 160);
+  const canonicalDocumentId = payloadText(payload.canonical_document_id, 160);
+  const externalDocumentId = payloadText(payload.doc_id, 240);
+  const contentHash = payloadText(payload.content_hash, 128);
+  const tenantId = payloadText(payload.tenant_id, 120) || "default";
+  const reviewStatus = payloadText(payload.review_status, 40).toLowerCase();
+  const embeddingModel = payloadText(payload.embedding_model, 120);
+  if (
+    !canonicalChunkId
+    || !canonicalDocumentId
+    || !externalDocumentId
+    || !contentHash
+    || tenantId !== "default"
+    || reviewStatus !== "approved"
+    || embeddingModel !== RAG_QUERY_EMBEDDING_MODEL
+  ) {
+    throw new Error("RAG_INGESTION_PAYLOAD_INVALID");
+  }
+
+  const supabase = serviceClient();
+  const [documentResult, chunkResult] = await Promise.all([
+    supabase
+      .from("KnowledgeDocument")
+      .select("id,docId,title,sourceUrl,sourceType,language,topic,validFrom,validTo,lastCheckedAt,checkedBy,reviewStatus,supersededBy")
+      .eq("id", canonicalDocumentId)
+      .eq("docId", externalDocumentId)
+      .maybeSingle(),
+    supabase
+      .from("KnowledgeChunk")
+      .select("id,documentId,chunkIndex,content,contentHash,keywords,embedding")
+      .eq("id", canonicalChunkId)
+      .eq("documentId", canonicalDocumentId)
+      .eq("contentHash", contentHash)
+      .maybeSingle(),
+  ]);
+  if (documentResult.error) throw documentResult.error;
+  if (chunkResult.error) throw chunkResult.error;
+
+  const document = documentResult.data as CanonicalDocument | null;
+  const chunk = chunkResult.data as CanonicalChunk | null;
+  if (!document || !chunk || !eligibleDocument(document, new Date())) {
+    throw new Error("RAG_INGESTION_SOURCE_NOT_ELIGIBLE");
+  }
+
+  const governedPayload = {
+    title: document.title,
+    source: document.sourceType,
+    source_url: document.sourceUrl,
+    category: document.topic,
+    language: document.language,
+    tenant_id: "default",
+    last_checked_at: document.lastCheckedAt,
+    checked_by: document.checkedBy,
+    keywords: chunk.keywords,
+    content: chunk.content,
+    canonical_chunk_id: chunk.id,
+    canonical_document_id: document.id,
+    doc_id: document.docId,
+    content_hash: chunk.contentHash,
+    embedding_model: RAG_QUERY_EMBEDDING_MODEL,
+    review_status: "approved",
+  };
+  await writeDirectRecoveryProjection({
+    supabase,
+    document,
+    chunk,
+    payload: governedPayload,
+    writer: "kaxi-n8n-orchestrated",
+  });
+  const refresh = await supabase.rpc("kaxi_refresh_rag_serving_status");
+  if (refresh.error) throw refresh.error;
+
+  return {
+    ok: true,
+    status: "ready",
+    writer: "kaxi-n8n-orchestrated" as const,
+    canonicalChunkId: chunk.id,
+    canonicalDocumentId: document.id,
+    embeddingModel: RAG_QUERY_EMBEDDING_MODEL,
+    dimensions: RAG_QUERY_EMBEDDING_DIMENSIONS,
+  };
 }
 
 async function loadAllRows<T>(supabase: SupabaseClient, table: string, columns: string): Promise<T[]> {
