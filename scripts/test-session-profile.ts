@@ -144,4 +144,18 @@ const mediationExplicit = await mediateRagQuestion(
 );
 assert.equal(mediationExplicit.visaCodes.includes("D-10"), true);
 
+// Deterministic fast-path also inherits profile visa codes (no LLM involved).
+const mediationDeterministic = await mediateRagQuestion(
+  {
+    question: "어학연수 재정 증빙 서류 알려주세요",
+    locale: "ko",
+    deterministicCategory: "documents",
+    conversationHistory: [],
+    profile: { version: "session-profile-v1", currentVisa: "D-4" },
+  },
+  { forceLlm: false },
+);
+assert.equal(mediationDeterministic.status, "deterministic");
+assert.equal(mediationDeterministic.visaCodes.includes("D-4"), true);
+
 console.log("PASS session profile: extraction, whitelist merge, fail-closed parse");

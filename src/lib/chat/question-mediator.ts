@@ -564,6 +564,7 @@ export async function mediateRagQuestion(
     if (deterministic) {
       return {
         ...deterministic,
+        visaCodes: Array.from(new Set([...deterministic.visaCodes, ...profileCodes])),
         contextTurns: conversationHistory.length,
         contextResolved: false,
       };
