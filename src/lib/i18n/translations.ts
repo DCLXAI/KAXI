@@ -366,6 +366,15 @@ export const t = {
   case_request_docs: { ko: "보완 요청", vi: "Yêu cầu bổ sung", mn: "Нэмэлт хүсэх", en: "Request supplement" },
   case_close: { ko: "종결", vi: "Đóng hồ sơ", mn: "Хаах", en: "Close case" },
   empty_state: { ko: "표시할 항목이 없습니다.", vi: "Không có mục nào.", mn: "Харуулах зүйл алга.", en: "Nothing to show." },
+  partner_handoff_inbox: { ko: "배정된 상담전환", vi: "Yêu cầu chuyển tiếp được giao", mn: "Хуваарилсан зөвлөгөө", en: "Assigned handoffs" },
+  handoff_risk_level: { ko: "위험도", vi: "Mức rủi ro", mn: "Эрсдэлийн түвшин", en: "Risk level" },
+  handoff_sla_unset: { ko: "SLA 미지정", vi: "Chưa đặt SLA", mn: "SLA тохируулаагүй", en: "SLA not set" },
+  handoff_sla_overdue: { ko: "SLA 초과", vi: "Quá hạn SLA", mn: "SLA хугацаа хэтэрсэн", en: "SLA overdue" },
+  handoff_sla_met: { ko: "응답 완료", vi: "Đã phản hồi", mn: "Хариулсан", en: "First response sent" },
+  handoff_sla_due_by: { ko: "까지 응답", vi: "Hạn phản hồi", mn: "Хариулах хугацаа", en: "Due by" },
+  handoff_start: { ko: "처리 시작", vi: "Bắt đầu xử lý", mn: "Эхлүүлэх", en: "Start" },
+  handoff_contacted: { ko: "연락 완료", vi: "Đã liên hệ", mn: "Холбогдсон", en: "Mark contacted" },
+  handoff_no_contact_yet: { ko: "아직 연락처를 받지 않았습니다.", vi: "Chưa nhận được thông tin liên hệ.", mn: "Холбоо барих мэдээлэл ирээгүй байна.", en: "Contact details not received yet." },
 
   // 공통
   footer_disclaimer: {

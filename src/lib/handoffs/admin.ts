@@ -16,6 +16,12 @@ const ACTIVE_STATUSES = new Set(["open", "review", "contact_requested", "contact
 const ACTIONS = new Set(["assign", "start", "contacted", "resolve", "close", "reopen"]);
 const RESOLUTION_CODES = new Set(["resolved", "inaccurate", "missing_document"]);
 
+// Exported so src/lib/handoffs/partner.ts can filter to non-terminal tasks
+// without duplicating (and risking drift from) this status list.
+export function isActiveHandoffStatus(status: string): boolean {
+  return ACTIVE_STATUSES.has(status);
+}
+
 export type HandoffAction = "assign" | "start" | "contacted" | "resolve" | "close" | "reopen";
 export type HandoffResolutionCode = "resolved" | "inaccurate" | "missing_document";
 
@@ -120,7 +126,9 @@ type ConsentRow = {
   notice_version?: string | null;
 };
 
-function isolatedTestRuntime() {
+// Exported so src/lib/handoffs/partner.ts can reuse the exact same guard
+// instead of duplicating the loopback-detection logic.
+export function isolatedTestRuntime() {
   const runtimeDatabase = process.env.DATABASE_URL?.trim() || "";
   return Boolean(
     process.env.TEST_DATABASE_URL &&
@@ -128,7 +136,9 @@ function isolatedTestRuntime() {
   );
 }
 
-function serviceClient() {
+// Exported so src/lib/handoffs/partner.ts can look up a task's own
+// assignment metadata before delegating its mutation to updateAdminHandoff.
+export function serviceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || "";
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || "";
   if (!url || !key) throw new Error("SUPABASE_HANDOFFS_NOT_CONFIGURED");
@@ -150,7 +160,9 @@ function finiteInteger(value: unknown) {
   return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
 }
 
-function assignmentMetadata(value: unknown) {
+// Exported so src/lib/handoffs/partner.ts can read a task's
+// handoff_metadata.assignment.assigneeUserId for its ownership check.
+export function assignmentMetadata(value: unknown) {
   const metadata = record(value);
   const assignment = record(metadata.assignment);
   const sla = record(metadata.sla);
