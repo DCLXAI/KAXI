@@ -9,6 +9,7 @@ import {
   parseSessionProfile,
   profilePromptBlock,
   profileVisaCodes,
+  resolveSessionProfileMetadata,
   type SessionProfile,
 } from "../src/lib/chat/session-profile";
 
@@ -353,4 +354,83 @@ assert.equal(
   "rule 13 (profile usage rule) must be present in the actual system prompt",
 );
 
+// --- FOLLOWUP M1: resolveSessionProfileMetadata pure helper (route wiring) ---
+const m1ProfileWithFacts: SessionProfile = { version: "session-profile-v1", currentVisa: "D-4" };
+const m1EmptyProfile: SessionProfile = { version: "session-profile-v1" };
+assert.equal(
+  resolveSessionProfileMetadata({
+    snapshotLoaded: false,
+    priorMetadata: { profile: { stale: true } },
+    profile: m1ProfileWithFacts,
+  }),
+  undefined,
+  "snapshot load failure must never clobber metadata we failed to load",
+);
+assert.equal(
+  resolveSessionProfileMetadata({
+    snapshotLoaded: true,
+    priorMetadata: { other: 1 },
+    profile: m1EmptyProfile,
+  }),
+  undefined,
+  "no profile facts must leave existing metadata untouched",
+);
+assert.deepEqual(
+  resolveSessionProfileMetadata({
+    snapshotLoaded: true,
+    priorMetadata: { other: 1 },
+    profile: m1ProfileWithFacts,
+  }),
+  { other: 1, profile: m1ProfileWithFacts },
+  "prior metadata keys are preserved and profile is added",
+);
+
+// --- FOLLOWUP M2: an interposed common noun between the code and the source
+// postposition ("D-4 비자에서") must not block source detection ---
+const m2InterposedNoun = extractProfileSignals("D-4 비자에서 D-2로 변경", "ko");
+assert.equal(m2InterposedNoun.currentVisa, "D-4");
+assert.equal(m2InterposedNoun.targetVisa, "D-2");
+
+// non-regression: the adjacent case (no interposed noun) must still work
+const m2AdjacentStillWorks = extractProfileSignals("D-4에서 D-2로 변경하고 싶어요", "ko");
+assert.equal(m2AdjacentStillWorks.currentVisa, "D-4");
+assert.equal(m2AdjacentStillWorks.targetVisa, "D-2");
+
+// non-regression: a plain "D-4에서" with no from-to intent still marks D-4 as
+// currentVisa — 에서 legitimately marks a source even without a transition verb.
+const m2PlainSourceNoTransition = extractProfileSignals("D-4에서 뭐가 바뀌나요?", "ko");
+assert.equal(m2PlainSourceNoTransition.currentVisa, "D-4");
+
+// --- FOLLOWUP M3: the bare-fallback branch must not label an incidental
+// second code as target when the sentence has no change/goal verb ---
+const m3NoTransitionIntent = extractProfileSignals("D-4로 다니는데 D-2도 궁금해요", "ko");
+assert.equal(m3NoTransitionIntent.currentVisa, "D-4");
+assert.equal(m3NoTransitionIntent.targetVisa, undefined, "D-2 must NOT become target with no transition intent");
+
+// non-regression: a lone bare code with no currentVisa yet still defaults to target
+const m3LoneBareCode = extractProfileSignals("D-10 요건 알려주세요", "ko");
+assert.equal(m3LoneBareCode.targetVisa, "D-10");
+assert.equal(m3LoneBareCode.currentVisa, undefined);
+
+// non-regression: a real change verb (변경) still assigns target even though
+// currentVisa is already set
+const m3RealChangeVerb = extractProfileSignals("D-4에서 D-2로 변경하고 싶어요", "ko");
+assert.equal(m3RealChangeVerb.currentVisa, "D-4");
+assert.equal(m3RealChangeVerb.targetVisa, "D-2");
+
+// non-regression: works together with M2 (interposed noun + change verb)
+const m3WithInterposedNoun = extractProfileSignals("D-4 비자에서 D-2로 변경", "ko");
+assert.equal(m3WithInterposedNoun.currentVisa, "D-4");
+assert.equal(m3WithInterposedNoun.targetVisa, "D-2");
+
+// non-regression: the feature's canonical case
+const m3Canonical = extractProfileSignals(
+  "D-4로 어학당에 다니는데 D-2로 변경을 준비하고 있어요",
+  "ko",
+);
+assert.equal(m3Canonical.currentVisa, "D-4");
+assert.equal(m3Canonical.targetVisa, "D-2");
+assert.equal(m3Canonical.studyStage, "language");
+
 console.log("PASS session profile: mediation profile guard, persistence pin, grounded prompt");
+console.log("PASS session profile: followup M1/M2/M3 (route metadata helper, source-noun, bare-fallback guard)");
