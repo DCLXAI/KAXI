@@ -8,6 +8,13 @@ import {
 } from "@/lib/ai/llm-gateway";
 import { CHAT_CATEGORIES, inferChatCategory, type ChatCategory } from "@/lib/chat/category";
 import type { GuardrailLocale } from "@/lib/chat/response-guardrail";
+import {
+  normalizeVisaCode,
+  profilePromptBlock,
+  profileVisaCodes,
+  type SessionProfile,
+  type SessionProfileSignals,
+} from "@/lib/chat/session-profile";
 import type { RagProvenance } from "@/lib/n8n/provenance";
 
 export const QUESTION_MEDIATOR_PROMPT_VERSION = "kaxi-question-mediator@2026-07-14.p2-v2";
@@ -50,6 +57,7 @@ export type QuestionMediation = {
   promptVersion: typeof QUESTION_MEDIATOR_PROMPT_VERSION;
   contextTurns?: number;
   contextResolved?: boolean;
+  profileSignals?: SessionProfileSignals;
 };
 
 export type RuntimeQuestionMediationInput = {
@@ -69,6 +77,12 @@ type ModelOutput = {
   visaCodes: string[];
   needsHumanReview: boolean;
   confidence: number;
+  profile?: {
+    nationality: string | null;
+    currentVisa: string | null;
+    targetVisa: string | null;
+    studyStage: string | null;
+  };
 };
 
 type MediationGenerator = (options: LlmGatewayOptions) => Promise<LlmGatewayResult>;
@@ -159,6 +173,17 @@ const OUTPUT_SCHEMA = {
     visaCodes: { type: "array", items: { type: "string" }, maxItems: 4 },
     needsHumanReview: { type: "boolean" },
     confidence: { type: "number", minimum: 0, maximum: 1 },
+    profile: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        nationality: { type: ["string", "null"] },
+        currentVisa: { type: ["string", "null"] },
+        targetVisa: { type: ["string", "null"] },
+        studyStage: { type: ["string", "null"] },
+      },
+      required: ["nationality", "currentVisa", "targetVisa", "studyStage"],
+    },
   },
   required: [
     "action",
@@ -171,13 +196,9 @@ const OUTPUT_SCHEMA = {
     "visaCodes",
     "needsHumanReview",
     "confidence",
+    "profile",
   ],
 } satisfies Record<string, unknown>;
-
-function normalizeVisaCode(value: unknown) {
-  const match = String(value || "").trim().toUpperCase().match(/^([CDEF])[-\s]?(\d+)(?:[-\s]?(\d+))?$/);
-  return match ? `${match[1]}-${match[2]}${match[3] ? `-${match[3]}` : ""}` : "";
-}
 
 function explicitVisaCodes(question: string) {
   return Array.from(new Set(
@@ -325,6 +346,10 @@ export function parseQuestionMediationOutput(
     const rawVisaCodes = Array.isArray(visaCodeValue)
       ? visaCodeValue
       : typeof visaCodeValue === "string" ? visaCodeValue.split(/[,|]/u).map((code) => code.trim()) : [];
+    const profileValue = read("profile");
+    const profile = profileValue && typeof profileValue === "object" && !Array.isArray(profileValue)
+      ? (profileValue as Record<string, unknown>)
+      : undefined;
 
     return {
       action,
@@ -339,6 +364,14 @@ export function parseQuestionMediationOutput(
       visaCodes: Array.from(new Set(rawVisaCodes.map(normalizeVisaCode).filter(Boolean))).slice(0, 4),
       needsHumanReview,
       confidence: Number.isFinite(confidence) ? Math.min(Math.max(confidence, 0), 1) : 0.5,
+      profile: profile
+        ? {
+            nationality: typeof profile.nationality === "string" ? profile.nationality : null,
+            currentVisa: typeof profile.currentVisa === "string" ? profile.currentVisa : null,
+            targetVisa: typeof profile.targetVisa === "string" ? profile.targetVisa : null,
+            studyStage: typeof profile.studyStage === "string" ? profile.studyStage : null,
+          }
+        : undefined,
     };
   } catch {
     return null;
@@ -504,6 +537,7 @@ export async function mediateRagQuestion(
     locale: GuardrailLocale;
     deterministicCategory?: ChatCategory;
     conversationHistory?: QuestionConversationTurn[];
+    profile?: SessionProfile;
   },
   dependencies: { generate?: MediationGenerator; forceLlm?: boolean } = {},
 ): Promise<QuestionMediation> {
@@ -511,6 +545,8 @@ export async function mediateRagQuestion(
   const conversationHistory = normalizeConversationHistory(input.conversationHistory);
   const useConversationContext = contextualFollowUp(input.question, conversationHistory);
   const resolvedVisaCodes = inheritedVisaCodes(input.question, conversationHistory, useConversationContext);
+  const profileCodes = input.profile ? profileVisaCodes(input.profile) : [];
+  const visaCodesWithProfile = Array.from(new Set([...resolvedVisaCodes, ...profileCodes]));
   const fallbackQuestion = contextualFallbackQuestion(
     input.question,
     conversationHistory,
@@ -538,7 +574,7 @@ export async function mediateRagQuestion(
     return {
       ...deterministicMediation(fallbackQuestion, input.locale, deterministicCategory, "not_configured"),
       answerFocus: input.question.slice(0, 500),
-      visaCodes: resolvedVisaCodes,
+      visaCodes: visaCodesWithProfile,
       contextTurns: conversationHistory.length,
       contextResolved: useConversationContext,
     };
@@ -562,7 +598,9 @@ Rules:
 10. Return only one JSON object matching the schema. Do not include prose, Markdown, or a factual answer.
 
 Deterministic category hint: ${deterministicCategory}
-Current question is a contextual follow-up: ${useConversationContext}`;
+Current question is a contextual follow-up: ${useConversationContext}
+Stored user profile (trusted, session-scoped): ${input.profile ? profilePromptBlock(input.profile) : "none"}
+Also extract any newly stated nationality (ISO alpha-2), current visa, target visa, or study stage (language|undergraduate|graduate) into the profile field; use null when not stated.`;
 
   const userPrompt = `<recent_conversation_untrusted>${conversationBlock}</recent_conversation_untrusted>
 <current_user_question>${input.question}</current_user_question>`;
@@ -615,7 +653,7 @@ Current question is a contextual follow-up: ${useConversationContext}`;
       return {
         ...deterministicMediation(fallbackQuestion, input.locale, deterministicCategory, "invalid_generation"),
         answerFocus: input.question.slice(0, 500),
-        visaCodes: resolvedVisaCodes,
+        visaCodes: visaCodesWithProfile,
         contextTurns: conversationHistory.length,
         contextResolved: useConversationContext,
         attempts,
@@ -623,12 +661,21 @@ Current question is a contextual follow-up: ${useConversationContext}`;
       };
     }
     parsed = enforceEvidenceRequiredRetrieval(parsed, input.question, deterministicCategory);
+    const profileSignals: SessionProfileSignals | undefined = parsed.profile
+      ? {
+          nationality: parsed.profile.nationality ?? undefined,
+          currentVisa: parsed.profile.currentVisa ?? undefined,
+          targetVisa: parsed.profile.targetVisa ?? undefined,
+          studyStage: (parsed.profile.studyStage ?? undefined) as SessionProfileSignals["studyStage"],
+        }
+      : undefined;
     return {
       ...parsed,
       visaCodes: Array.from(new Set([
+        ...visaCodesWithProfile,
         ...parsed.visaCodes,
         ...explicitVisaCodes(parsed.searchQuery),
-      ])).filter((code) => resolvedVisaCodes.includes(code)),
+      ])).filter((code) => visaCodesWithProfile.includes(code)),
       status: "llm",
       backend: selectedCompletion.backend,
       model: selectedCompletion.model,
@@ -638,6 +685,7 @@ Current question is a contextual follow-up: ${useConversationContext}`;
       promptVersion: QUESTION_MEDIATOR_PROMPT_VERSION,
       contextTurns: conversationHistory.length,
       contextResolved: useConversationContext,
+      profileSignals,
     };
   } catch (error) {
     const reason = isLlmNotConfiguredError(error) ? "not_configured" : "generation_failed";
@@ -645,7 +693,7 @@ Current question is a contextual follow-up: ${useConversationContext}`;
     return {
       ...deterministicMediation(fallbackQuestion, input.locale, deterministicCategory, reason),
       answerFocus: input.question.slice(0, 500),
-      visaCodes: resolvedVisaCodes,
+      visaCodes: visaCodesWithProfile,
       contextTurns: conversationHistory.length,
       contextResolved: useConversationContext,
     };
