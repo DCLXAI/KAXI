@@ -12,6 +12,7 @@ import {
   hasProfileFacts,
   mergeSessionProfile,
   parseSessionProfile,
+  resolveSessionProfileMetadata,
 } from "@/lib/chat/session-profile";
 import {
   clarificationNextStep,
@@ -420,11 +421,14 @@ export async function POST(req: NextRequest) {
     }
     // If the snapshot load failed above, we never loaded the prior metadata to
     // merge onto, so persisting here would overwrite (not merge) the stored
-    // chat_sessions.metadata column. Passing sessionMetadata: undefined leaves
-    // the existing row's metadata untouched instead of clobbering it.
-    const sessionMetadataWithProfile = snapshotLoaded && hasProfileFacts(profile)
-      ? { ...sessionMetadata, profile }
-      : undefined;
+    // chat_sessions.metadata column. resolveSessionProfileMetadata returns
+    // undefined in that case, leaving the existing row's metadata untouched
+    // instead of clobbering it.
+    const sessionMetadataWithProfile = resolveSessionProfileMetadata({
+      snapshotLoaded,
+      priorMetadata: sessionMetadata,
+      profile,
+    });
     const category = mediation.category;
 
     const n8nRequest = {
@@ -440,6 +444,7 @@ export async function POST(req: NextRequest) {
       externalRequestId: identity.externalRequestId,
       attachments: verifiedAttachments,
       conversationContext: conversationHistory,
+      profile: hasProfileFacts(profile) ? profile : undefined,
     };
 
     const persistFailure = async (

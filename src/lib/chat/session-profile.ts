@@ -53,11 +53,11 @@ const NATIONALITY_CONTEXT = /(사람|국적|출신|에서\s?왔|입니다|이에
 const NATIONALITY_CONTEXT_RADIUS = 12;
 
 const CURRENT_VISA_CONTEXT = /(연장|갱신|현재|지금|소지|가지고\s?있|다니|체류\s?중|로\s?체류|gia\s?hạn|hiện\s?tại|đang\s?(?:có|học|ở)|сунгах|одоо|байгаа|extend|renew|currently|i\s?have|i'm\s?on|holding)/iu;
-const TARGET_VISA_CONTEXT = /(변경|바꾸|전환|목표|준비|취득|신청하려|받으려|chuyển|đổi\s?sang|mục\s?tiêu|chuẩn\s?bị|шилжих|солих|бэлтгэ|change\s?to|switch(?:ing)?\s?to|apply\s?for|planning|preparing|want\s?to\s?get)/iu;
+const TARGET_VISA_CONTEXT = /(변경|바꾸|전환|목표|준비|취득|신청하려|받으려|chuyển|đổi\s?sang|\bsang\b|mục\s?tiêu|chuẩn\s?bị|шилжих|солих|бэлтгэ|change\s?to|want\s?to\s?change|switch(?:ing)?\s?to|apply\s?for|planning|preparing|want\s?to\s?get)/iu;
 // A "source" marker (ko postposition 에서/부터, en "from", vi "từ") immediately
 // attached to a code means that code is where the user is coming FROM, i.e.
 // currentVisa — the highest-precedence signal, checked before current/target/bare.
-const SOURCE_VISA_SUFFIX_CONTEXT = /^\s?(에서부터|에서|부터)/iu;
+const SOURCE_VISA_SUFFIX_CONTEXT = /^\s?(비자|체류자격|자격|자격증)?\s?(에서부터|에서|부터)/iu;
 const SOURCE_VISA_PREFIX_CONTEXT = /(from|từ)\s*$/iu;
 const SOURCE_VISA_ADJACENCY_RADIUS = 8;
 
@@ -165,9 +165,12 @@ export function extractProfileSignals(
       signals.currentVisa = code;
     } else if (TARGET_VISA_CONTEXT.test(window) && !signals.targetVisa) {
       signals.targetVisa = code;
-    } else if (!signals.targetVisa) {
-      // Bare fallback: once currentVisa is already resolved (e.g. via a source
-      // marker), any other code in the sentence is the destination.
+    } else if (!signals.targetVisa && (!signals.currentVisa || TARGET_VISA_CONTEXT.test(text))) {
+      // Bare fallback: a lone code with no currentVisa yet legitimately
+      // defaults to target. Once currentVisa is already resolved, only treat
+      // another code as target when the sentence actually carries a
+      // change/goal verb — otherwise it's just an incidental second code
+      // mentioned in passing ("D-4로 다니는데 D-2도 궁금해요"), not a transition.
       signals.targetVisa = code;
     }
   }
@@ -266,6 +269,23 @@ export function profileVisaCodes(profile: SessionProfile): string[] {
 
 export function hasProfileFacts(profile: SessionProfile): boolean {
   return FIELD_KEYS.some((key) => Boolean(profile[key]));
+}
+
+// Pure computation of the metadata payload to persist alongside a chat
+// exchange. Extracted from the route so a regression in this wiring is
+// caught by a unit test instead of shipping green with no route coverage.
+export function resolveSessionProfileMetadata(input: {
+  snapshotLoaded: boolean;
+  priorMetadata: Record<string, unknown>;
+  profile: SessionProfile;
+}): Record<string, unknown> | undefined {
+  // If the snapshot load failed, we never loaded the prior metadata to merge
+  // onto, so persisting here would overwrite (not merge) the stored
+  // chat_sessions.metadata column. Returning undefined leaves the existing
+  // row's metadata untouched instead of clobbering it.
+  if (!input.snapshotLoaded) return undefined;
+  if (!hasProfileFacts(input.profile)) return undefined;
+  return { ...input.priorMetadata, profile: input.profile };
 }
 
 export function profilePromptBlock(profile: SessionProfile): string {

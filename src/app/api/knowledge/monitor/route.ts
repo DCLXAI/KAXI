@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { recordRequestAudit } from "@/lib/audit";
 import { getAdminContext, requireAdmin } from "@/lib/api/security";
 import { canWriteRuntimeDatabase } from "@/lib/db";
+import { isEnvTrue } from "@/lib/env";
 import {
   getCronOfficialKnowledgeSources,
   getOfficialKnowledgeSourceWatchlist,
@@ -44,7 +45,10 @@ function positiveInt(value: string | undefined, fallback: number) {
 }
 
 function candidateWritesEnabled() {
-  return process.env.KNOWLEDGE_MONITOR_PERSIST_CANDIDATES === "true";
+  // isEnvTrue trims: a trailing newline in the env value (a known Vercel
+  // env-registration artifact) must not silently disable the operator's
+  // explicit "true".
+  return isEnvTrue(process.env.KNOWLEDGE_MONITOR_PERSIST_CANDIDATES);
 }
 
 export async function GET(req: NextRequest) {
