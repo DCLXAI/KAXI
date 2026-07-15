@@ -42,4 +42,12 @@ assert.deepEqual(
 );
 assert.deepEqual(studentFieldsToSessionSignals({}), {});
 
+// The repository/link helpers must exist with the exact signatures the route relies on.
+const repo = await import("../src/lib/chat/account-profile-repository");
+assert.equal(typeof repo.loadStudentChatProfile, "function");
+assert.equal(typeof repo.fillStudentChatProfile, "function");
+assert.equal(typeof repo.resolveLoggedInStudentId, "function");
+// fillStudentChatProfile must be a no-op for empty fills (no DB call, resolves).
+await repo.fillStudentChatProfile("nonexistent-user", {});
+
 console.log("PASS account profile: fill-only write + read-back mapping");

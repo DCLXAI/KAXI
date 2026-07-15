@@ -14,6 +14,12 @@ import {
   parseSessionProfile,
   resolveSessionProfileMetadata,
 } from "@/lib/chat/session-profile";
+import { sessionProfileToStudentFills, studentFieldsToSessionSignals } from "@/lib/chat/account-profile";
+import {
+  fillStudentChatProfile,
+  loadStudentChatProfile,
+  resolveLoggedInStudentId,
+} from "@/lib/chat/account-profile-repository";
 import {
   clarificationNextStep,
   mediateRagQuestion,
@@ -383,6 +389,8 @@ export async function POST(req: NextRequest) {
     let sessionMetadata: Record<string, unknown> = {};
     let profile = parseSessionProfile(null);
     let snapshotLoaded = false;
+    let turnIndex = 1;
+    let studentId: string | null = null;
     try {
       const snapshot = await loadChatSessionSnapshot(sessionId, {
         source,
@@ -398,10 +406,19 @@ export async function POST(req: NextRequest) {
         .slice(-3)
         .map((message) => ({ question: message.question, answer: message.answer }));
       snapshotLoaded = true;
+      turnIndex = conversationHistory.length + 1;
+      studentId = await resolveLoggedInStudentId();
+      if (studentId) {
+        const accountRow = await loadStudentChatProfile(studentId);
+        if (accountRow) {
+          // Read-back is fill-only: account values seed the session only where the
+          // session profile has nothing yet; session-stated values keep priority.
+          profile = fillSessionProfile(profile, studentFieldsToSessionSignals(accountRow), turnIndex, "deterministic");
+        }
+      }
     } catch (historyError) {
       console.warn("[POST /api/typebot-rag] conversation history unavailable", historyError);
     }
-    const turnIndex = conversationHistory.length + 1;
     try {
       profile = mergeSessionProfile(profile, extractProfileSignals(question, locale), turnIndex, "deterministic");
     } catch (profileError) {
@@ -418,6 +435,12 @@ export async function POST(req: NextRequest) {
       // Fill-only: deterministic values (this turn or carried from a prior
       // turn) win ties; mediation only fills fields the patterns missed.
       profile = fillSessionProfile(profile, mediation.profileSignals, turnIndex, "mediation");
+    }
+    if (studentId) {
+      const accountRow = await loadStudentChatProfile(studentId);
+      if (accountRow) {
+        await fillStudentChatProfile(studentId, sessionProfileToStudentFills(profile, accountRow));
+      }
     }
     // If the snapshot load failed above, we never loaded the prior metadata to
     // merge onto, so persisting here would overwrite (not merge) the stored
