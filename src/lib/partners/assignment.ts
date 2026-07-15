@@ -1,6 +1,7 @@
 import { ConsentScope, ConsentStatus, OrgType } from "@prisma/client";
 import { db } from "@/lib/db";
 import { notifyUsers } from "@/lib/notifications/repository";
+import { slaDefaultMinutes, slaDueAt, slaTierForMinutes } from "@/lib/ops/sla-policy";
 
 export class PartnerRequestAssignmentError extends Error {
   readonly code: string;
@@ -84,6 +85,10 @@ export async function assignPartnerRequest(input: {
     }
 
     const now = new Date();
+    // PartnerRequest carries no risk/urgency column (see
+    // prisma/postgres/schema.prisma), so this always resolves to the
+    // standard-24h tier -- there is nothing risk-like to pass through.
+    const slaMinutes = slaDefaultMinutes({ riskLevel: null, leadStage: null });
     const updated = await tx.partnerRequest.update({
       where: { id: request.id },
       data: {
@@ -93,6 +98,8 @@ export async function assignPartnerRequest(input: {
         matchedAt: now,
         acceptedAt: null,
         closedAt: null,
+        slaTier: slaTierForMinutes(slaMinutes),
+        slaDueAt: slaDueAt(now, slaMinutes),
       },
       include: { lead: true, organization: true, assignedUser: true },
     });

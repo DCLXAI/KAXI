@@ -25,8 +25,10 @@ prepareTestDb("case pipeline");
 
 const { NextRequest } = await import("next/server");
 const { db } = await import("../src/lib/db");
+const { slaDefaultMinutes, slaTierForMinutes } = await import("../src/lib/ops/sla-policy");
 const actionRoute = await import("../src/app/api/admin/cases/[id]/actions/route");
 const detailRoute = await import("../src/app/api/admin/cases/[id]/route");
+const partnerRequestPatchRoute = await import("../src/app/api/partner-requests/[id]/route");
 const {
   acceptAssignedCase,
   addCaseComment,
@@ -177,6 +179,16 @@ try {
     actor: "test-admin",
   });
   assert(matchedRequest.status === "matched", "partner request assignment should set matched status");
+  const partnerRequestSlaMinutes = slaDefaultMinutes({ riskLevel: null, leadStage: null });
+  assert(
+    matchedRequest.slaTier === slaTierForMinutes(partnerRequestSlaMinutes),
+    "partner request assignment should set the SLA tier from the shared policy"
+  );
+  assert(matchedRequest.matchedAt !== null && matchedRequest.slaDueAt !== null, "assignment should set matchedAt and slaDueAt");
+  assert(
+    Math.abs(matchedRequest.slaDueAt!.getTime() - matchedRequest.matchedAt!.getTime() - partnerRequestSlaMinutes * 60_000) < 5_000,
+    "SLA due date should be ~ the policy minutes after matchedAt"
+  );
   const partnerInbox = await listPartnerRequestInbox(partnerA.organization.id);
   assert(partnerInbox.some((item) => item.id === partnerRequest.id), "assigned request should appear in partner inbox");
   const acceptedRequest = await updatePartnerRequestStatus({
@@ -202,6 +214,57 @@ try {
     action: "close",
   });
   assert(closedRequest.status === "closed" && closedRequest.closedAt, "partner should close accepted request");
+
+  // Admin "contacted" transition (distinct from the accept/close flow above,
+  // see src/app/api/partner-requests/[id]/route.ts) must set slaFirstResponseAt
+  // the first time, and never move it on any later write.
+  const contactRequest = await db.partnerRequest.create({
+    data: {
+      leadId: diagnosisLead.id,
+      partnerType: "admin",
+      question: "SLA 최초 응답 테스트",
+      status: "pending",
+    },
+  });
+  const contactedResult = await json(
+    await partnerRequestPatchRoute.PATCH(
+      adminRequest(`/api/partner-requests/${contactRequest.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "contacted" }),
+      }),
+      { params: Promise.resolve({ id: contactRequest.id }) }
+    )
+  );
+  assert(contactedResult.ok, `partner request contacted transition should succeed: ${JSON.stringify(contactedResult.body)}`);
+  assert(contactedResult.body.request.slaFirstResponseAt, "contacted transition should set slaFirstResponseAt");
+
+  const sentinelFirstResponse = new Date("2020-01-01T00:00:00.000Z");
+  const preRespondedRequest = await db.partnerRequest.create({
+    data: {
+      leadId: diagnosisLead.id,
+      partnerType: "admin",
+      question: "SLA 최초 응답 재기록 방지 테스트",
+      status: "pending",
+      slaFirstResponseAt: sentinelFirstResponse,
+    },
+  });
+  const secondContactedResult = await json(
+    await partnerRequestPatchRoute.PATCH(
+      adminRequest(`/api/partner-requests/${preRespondedRequest.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "contacted" }),
+      }),
+      { params: Promise.resolve({ id: preRespondedRequest.id }) }
+    )
+  );
+  assert(
+    secondContactedResult.ok,
+    `partner request contacted transition should succeed even with a pre-set slaFirstResponseAt: ${JSON.stringify(secondContactedResult.body)}`
+  );
+  assert(
+    new Date(secondContactedResult.body.request.slaFirstResponseAt).getTime() === sentinelFirstResponse.getTime(),
+    "contacted transition must never overwrite an existing slaFirstResponseAt"
+  );
 
   const hookCase = await maybeCreateHighRiskEscalationCase({
     studentProfileId: consented.profile.id,
@@ -237,6 +300,20 @@ try {
   assert(assign.ok, `assign_partner should succeed: ${JSON.stringify(assign.body)}`);
   assert(assign.body.case.organizationId === partnerA.organization.id, "case should be assigned to partner A");
   assert(assign.body.case.matchedAt, "assignment should set matchedAt");
+  const escalationCaseSlaMinutes = slaDefaultMinutes({ riskLevel: "high" });
+  assert(
+    assign.body.case.slaTier === slaTierForMinutes(escalationCaseSlaMinutes),
+    "high-risk case assignment should set the urgent-2h SLA tier via the shared policy"
+  );
+  assert(assign.body.case.slaDueAt, "case assignment should set an SLA due date");
+  assert(
+    Math.abs(
+      new Date(assign.body.case.slaDueAt).getTime()
+        - new Date(assign.body.case.matchedAt).getTime()
+        - escalationCaseSlaMinutes * 60_000
+    ) < 5_000,
+    "case SLA due date should be ~ the urgent policy minutes after matchedAt"
+  );
 
   const partnerAVisible = await listPartnerCases(partnerA.organization.id);
   assert(partnerAVisible.some((item) => item.id === hookCase.id), "consented assigned case should be visible to partner A");
@@ -260,6 +337,8 @@ try {
   assert(accept.ok, `accept_case should succeed: ${JSON.stringify(accept.body)}`);
   assert(accept.body.case.status === "APPROVED", "accepted case should use APPROVED status");
   assert(accept.body.case.acceptedAt, "acceptance should set acceptedAt");
+  assert(accept.body.case.slaFirstResponseAt, "accepting a case should set slaFirstResponseAt");
+  const firstResponseAtFirstAccept = accept.body.case.slaFirstResponseAt as string;
 
   const supplement = await json(
     await actionRoute.POST(
@@ -300,6 +379,10 @@ try {
     note: "보완 후 재수임 상태 확인",
   });
   assert(reaccept.case.status === "APPROVED", "case can be returned to accepted state after supplement");
+  assert(
+    reaccept.case.slaFirstResponseAt?.toISOString() === firstResponseAtFirstAccept,
+    "reaccepting a case must never overwrite an existing slaFirstResponseAt"
+  );
 
   const closed = await json(
     await actionRoute.POST(
