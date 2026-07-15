@@ -46,6 +46,7 @@
 - `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`: Server-side chat, RAG serving projection, handoff, health, and private attachment persistence. Never expose the service role key to Typebot or browser code.
 - `SUPABASE_CHAT_ATTACHMENTS_BUCKET`: Private chat attachment bucket. Falls back to `SUPABASE_STORAGE_BUCKET` and then `kaxi-documents`.
 - `CHAT_SESSION_SIGNING_SECRET`: Signs the HttpOnly KAXI chat-session cookie used to prove attachment and conversation ownership.
+- `chat_sessions.metadata.profile` (`session-profile-v1`): session-scoped user profile limited by whitelist to nationality (ISO alpha-2), current visa, target visa, and study stage. Extracted deterministically each turn and enriched by the question-mediation LLM. Never stores names or contact details; inherits chat-session retention and deletion.
 - The selected managed LLM key is required by the image attachment worker for JPEG, PNG, and WebP OCR. PDFs with extractable text use the local PDF parser.
 - `ATTACHMENT_MALWARE_SCAN_MODE`: `structural` performs local image re-encoding and active-PDF rejection; `http` additionally requires an external scanner verdict before storage. Structural mode is defense in depth, not a managed malware-scanning service.
 - `ATTACHMENT_MALWARE_SCAN_URL`, `ATTACHMENT_MALWARE_SCAN_TOKEN`, `ATTACHMENT_MALWARE_SCAN_TIMEOUT_MS`: HTTPS scanner endpoint, bearer token, and timeout used when scan mode is `http`. The endpoint receives the file bytes and must return JSON containing `{ "clean": true }` to accept the upload.
