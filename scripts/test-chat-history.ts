@@ -38,7 +38,15 @@ const server = Bun.serve({
 
     const table = url.pathname.slice("/rest/v1/".length);
     observedQueries.push({ table, sessionKey: url.searchParams.get("session_key") || undefined });
-    if (table === "chat_sessions") return json({ id: "history-session" });
+    if (table === "chat_sessions") {
+      return json({
+        id: "history-session",
+        metadata: {
+          ownership: "signed-http-only-cookie",
+          profile: { version: "session-profile-v1", targetVisa: "D-2" },
+        },
+      });
+    }
     if (table === "chat_messages") {
       return json([
         {
@@ -184,6 +192,11 @@ try {
   assert.equal(snapshot.attachments.find((item) => item.id === "history-processing")?.status, "processing");
   assert.equal(snapshot.attachments.find((item) => item.id === "history-failed")?.status, "error");
   assert.equal(snapshot.attachments.some((item) => item.id === "history-completed-linked"), false);
+  assert.equal(
+    (snapshot.metadata as { profile?: { targetVisa?: string } } | null)?.profile?.targetVisa,
+    "D-2",
+    "the snapshot must expose stored session metadata for the runtime",
+  );
 
   const snakeCaseSources = normalizeChatHistorySources([
     { title: "법무부", source_url: "https://www.moj.go.kr/", checked_at: "2026-07-10" },
@@ -204,6 +217,11 @@ try {
   assert.equal(responseBody.sessionId, sessionKey);
   assert.equal(responseBody.messages?.[0]?.question, "D-4 비자 준비 서류를 알려주세요.");
   assert.equal(responseBody.attachments?.length, 3);
+  assert.equal(
+    "metadata" in (responseBody as Record<string, unknown>),
+    false,
+    "the chat-session response must never expose raw session metadata (stored profile) to the client",
+  );
 
   const unauthorized = await sessionRoute.GET(new NextRequest("http://localhost/api/chat-session"));
   assert.equal(unauthorized.status, 401);

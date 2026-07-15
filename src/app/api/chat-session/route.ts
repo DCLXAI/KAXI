@@ -42,7 +42,10 @@ export async function GET(req: NextRequest) {
   try {
     const snapshot = await loadChatSessionSnapshot(current.sessionId);
     if (!snapshot) return privateJson({ error: "Chat session not found" }, { status: 404 });
-    return privateJson({ sessionId: current.sessionId, ...snapshot });
+    // Session metadata (e.g. the stored user profile) is internal runtime
+    // context and must never be exposed through the client response.
+    const { metadata: _sessionMetadata, ...clientSnapshot } = snapshot;
+    return privateJson({ sessionId: current.sessionId, ...clientSnapshot });
   } catch (error) {
     console.error("[GET /api/chat-session]", error);
     return privateJson({ error: "Unable to restore chat session" }, { status: 503 });
