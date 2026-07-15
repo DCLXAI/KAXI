@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { preparePiiField, readPiiField } from "@/lib/privacy/pii";
 import { productLocale } from "@/lib/analytics/events";
 import { recordServerProductEvent } from "@/lib/analytics/server";
+import { notifyUsers } from "@/lib/notifications/repository";
 import {
   SLA_POLICY_VERSION,
   assertSlaMinutes,
@@ -411,6 +412,34 @@ export async function listAdminHandoffs(options: { revealPii: boolean; limit?: n
   };
 }
 
+// Best-effort notification for a handoff assignment. Exported so it can be
+// exercised directly against a real database in tests: the `assign` action's
+// own persistence goes through the Supabase service client, which is hard
+// -disabled in the isolated test runtime (see isolatedTestRuntime above) to
+// guarantee tests can never mutate production Supabase data. This function
+// only touches Prisma's `UserNotification` table, so it stays real and
+// testable while that guard remains in place.
+export async function notifyHandoffAssignee(taskId: string, assignee: { id: string; locale?: string | null }) {
+  try {
+    await notifyUsers({
+      users: [{ id: assignee.id, locale: assignee.locale }],
+      eventKey: `handoff:${taskId}:assigned:${assignee.id}`,
+      copy: {
+        ko: { title: "새 상담 배정", message: "새로운 상담 건이 배정되었습니다." },
+        vi: { title: "Yêu cầu tư vấn mới được giao", message: "Một yêu cầu tư vấn mới đã được giao cho bạn." },
+        mn: { title: "Шинэ зөвлөгөө хуваарилагдлаа", message: "Танд шинэ зөвлөгөөний хүсэлт хуваарилагдлаа." },
+        en: { title: "New consultation assigned", message: "A new consultation task was assigned to you." },
+      },
+      href: "/partner",
+      metadata: { handoffTaskId: taskId },
+    });
+  } catch (notifyError) {
+    // Best-effort: the assignment itself must never fail because the
+    // assignee could not be notified.
+    console.warn("[handoffs] assignee notification failed", notifyError);
+  }
+}
+
 export async function updateAdminHandoff(input: {
   id: string;
   action: HandoffAction;
@@ -496,6 +525,7 @@ export async function updateAdminHandoff(input: {
   const nowIso = now.toISOString();
   const update: Record<string, unknown> = {};
   let assignee = input.assignee?.trim().slice(0, 160);
+  let assignedUser: { id: string; locale: string } | null = null;
   if (input.action === "assign") {
     const assigneeUserId = input.assigneeUserId?.trim();
     if (!assigneeUserId) throw new Error("HANDOFF_ASSIGNEE_INVALID");
@@ -513,6 +543,7 @@ export async function updateAdminHandoff(input: {
       throw new Error("HANDOFF_ASSIGNEE_INVALID");
     }
     assignee = user.email || user.id;
+    assignedUser = { id: user.id, locale: user.locale };
     const requestedMinutes = finiteInteger(input.slaMinutes);
     const slaMinutes = requestedMinutes ?? slaDefaultMinutes({
       riskLevel: found.data.risk_level,
@@ -606,6 +637,12 @@ export async function updateAdminHandoff(input: {
       surface: "admin_handoff",
       properties: { taskId: input.id, slaMinutes: finiteInteger(input.slaMinutes) || 0 },
     }).catch((error) => console.warn("[handoff analytics]", error instanceof Error ? error.message : error));
+    // Persistence above has already succeeded (updated.error was checked), so
+    // it is now safe to notify the assignee. This call is best-effort on its
+    // own (see notifyHandoffAssignee) and never throws.
+    if (assignedUser) {
+      await notifyHandoffAssignee(input.id, assignedUser);
+    }
   }
   if (input.action === "start" || input.action === "contacted") {
     await recordServerProductEvent({

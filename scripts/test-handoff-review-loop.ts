@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { db } from "../src/lib/db";
+import { notifyHandoffAssignee } from "../src/lib/handoffs/admin";
 import { prepareTestDb } from "./prepare-test-db";
 
 prepareTestDb("handoff review loop");
@@ -136,6 +137,50 @@ try {
   assert(feedback.some((item) => item.verdict === "missing_document"), "missing-document verdict audit is missing");
 
   console.log("PASS handoff review loop: auto-queue, SLA-ready task, verdict, evaluation case");
+
+  // --- Task 5: notify the assignee when a handoff task is assigned ---
+  // `updateAdminHandoff({ action: "assign" })` cannot be exercised end to
+  // end against this loopback test database: its persistence step goes
+  // through the Supabase service client, which `isolatedTestRuntime()` in
+  // admin.ts hard-disables whenever TEST_DATABASE_URL is set, specifically
+  // so a test run can never mutate production Supabase data. That guard
+  // applies to every action, not just "assign". `notifyHandoffAssignee` is
+  // the exact function the assign branch calls once its own Supabase write
+  // has already succeeded, and it only touches Prisma's UserNotification
+  // table, so we call the real function directly against a real assignee.
+  const assigneeUser = await db.user.create({
+    data: {
+      id: "handoff-assignee-test-user",
+      role: "PARTNER_AGENT",
+      email: "handoff-assignee-test@example.com",
+      locale: "ko",
+    },
+  });
+  const handoffTaskId = "handoff-task-notify-test-1";
+
+  await notifyHandoffAssignee(handoffTaskId, { id: assigneeUser.id, locale: assigneeUser.locale });
+  const firstNotifications = await db.userNotification.findMany({ where: { userId: assigneeUser.id } });
+  assert(firstNotifications.length === 1, "assignee must receive exactly one notification after assignment");
+  assert(
+    firstNotifications[0].eventKey === `handoff:${handoffTaskId}:assigned:${assigneeUser.id}`,
+    "notification eventKey must be per-task-per-assignee"
+  );
+  assert(firstNotifications[0].title === "새 상담 배정", "notification must use the ko copy for a ko-locale assignee");
+
+  // A second identical assign (e.g. a retry, or the operator re-submitting
+  // the same assignment) must not create a duplicate row -- notifyUsers
+  // upserts on the (userId, eventKey) unique constraint.
+  await notifyHandoffAssignee(handoffTaskId, { id: assigneeUser.id, locale: assigneeUser.locale });
+  const secondNotifications = await db.userNotification.findMany({ where: { userId: assigneeUser.id } });
+  assert(secondNotifications.length === 1, "a second identical assign must not duplicate the assignee notification");
+
+  // Best-effort: a notification failure (FK violation for a non-existent
+  // user id) must never throw out of notifyHandoffAssignee -- the caller
+  // (updateAdminHandoff's assign branch) must never fail an already
+  // -persisted assignment because the notification could not be delivered.
+  await notifyHandoffAssignee("handoff-task-notify-test-missing-user", { id: "does-not-exist-user-id", locale: "ko" });
+
+  console.log("PASS handoff assignee notification: real row created, per-task-per-assignee dedupe, best-effort on failure");
 } finally {
   await db.$disconnect();
 }
