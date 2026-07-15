@@ -204,7 +204,7 @@ const respondIngestion = node({
     position: [1160, 600],
     parameters: {
       respondWith: "json",
-      responseBody: expr("{{ JSON.stringify({ ...($('Run KAXI RAG Ingestion Core').item.json.body ?? {}), executionId: $execution.id, workflowId: $workflow.id, workflowVersionId: '" + release + "', modelVersion: '" + embeddingModel + "', promptVersion: 'kaxi-rag-ingestion@2026-07-14.mcp-v1' }) }}"),
+      responseBody: expr("{{ JSON.stringify({ ...($('Run KAXI RAG Ingestion Core').item.json.body ?? {}), executionId: $('Run KAXI RAG Ingestion Core').item.json.body?.executionId ?? $execution.id, workflowId: $('Run KAXI RAG Ingestion Core').item.json.body?.workflowId ?? $workflow.id, workflowVersionId: $('Run KAXI RAG Ingestion Core').item.json.body?.workflowVersionId ?? '" + release + "', modelVersion: $('Run KAXI RAG Ingestion Core').item.json.body?.modelVersion ?? '" + embeddingModel + "', promptVersion: $('Run KAXI RAG Ingestion Core').item.json.body?.promptVersion ?? 'kaxi-rag-ingestion@2026-07-14.mcp-v1', n8nExecutionId: $execution.id, n8nWorkflowId: $workflow.id, n8nWorkflowVersionId: '" + release + "' }) }}"),
       options: {
         responseCode: expr("{{ $('Run KAXI RAG Ingestion Core').item.json.statusCode ?? 502 }}"),
         responseHeaders: { entries: [{ name: "Content-Type", value: "application/json" }, { name: "Cache-Control", value: "no-store" }] },
@@ -315,7 +315,7 @@ const respondHandoff = node({
     position: [1160, 1040],
     parameters: {
       respondWith: "json",
-      responseBody: expr("{{ JSON.stringify({ ...($('Run KAXI Handoff Core').item.json.body ?? {}), executionId: $execution.id, workflowId: $workflow.id, workflowVersionId: '" + release + "', modelVersion: '" + embeddingModel + "', promptVersion: 'kaxi-handoff-update@2026-07-14.mcp-v1' }) }}"),
+      responseBody: expr("{{ JSON.stringify({ ...($('Run KAXI Handoff Core').item.json.body ?? {}), executionId: $('Run KAXI Handoff Core').item.json.body?.executionId ?? $execution.id, workflowId: $('Run KAXI Handoff Core').item.json.body?.workflowId ?? $workflow.id, workflowVersionId: $('Run KAXI Handoff Core').item.json.body?.workflowVersionId ?? '" + release + "', modelVersion: $('Run KAXI Handoff Core').item.json.body?.modelVersion ?? '" + embeddingModel + "', promptVersion: $('Run KAXI Handoff Core').item.json.body?.promptVersion ?? 'kaxi-handoff-update@2026-07-14.mcp-v1', n8nExecutionId: $execution.id, n8nWorkflowId: $workflow.id, n8nWorkflowVersionId: '" + release + "' }) }}"),
       options: {
         responseCode: expr("{{ $('Run KAXI Handoff Core').item.json.statusCode ?? 502 }}"),
         responseHeaders: { entries: [{ name: "Content-Type", value: "application/json" }, { name: "Cache-Control", value: "no-store" }] },
