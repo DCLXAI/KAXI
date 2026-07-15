@@ -16,7 +16,8 @@
 - `OPENAI_MODEL`: Kimi model override. Defaults to `kimi-k2.6`.
 - Kimi Code membership keys are a separate credential realm. They require `OPENAI_BASE_URL=https://api.kimi.com/coding/v1` and `OPENAI_MODEL=kimi-for-coding`. Kimi documents this endpoint for interactive coding agents and recommends Kimi Platform for product integrations; record any production exception and migrate to a Platform key before broad public usage.
 - `KIMI_THINKING`: Optional `enabled` or `disabled` override for compatible Kimi models. Omit it to retain the provider default.
-- `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`: Optional Claude fallback credentials used only when `AI_PROVIDER=claude` or automatic selection resolves to Claude.
+- `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`: Optional Claude fallback credentials used only when `AI_PROVIDER=claude` or automatic selection resolves to Claude. The Anthropic SDK also honors `ANTHROPIC_BASE_URL` for Anthropic-compatible endpoints.
+- Recorded production exception (2026-07-15): the managed-provider failover slot currently uses a Kimi Code membership key through the Anthropic-compatible endpoint (`ANTHROPIC_BASE_URL=https://api.kimi.com/anthropic`, `ANTHROPIC_MODEL=kimi-for-coding`). Both primary and failover are Moonshot-operated, so this is not vendor-level redundancy; replace it with a real Anthropic key or another provider before broad public usage.
 - `AI_LLM_PROVIDER_FAILOVER_ENABLED`: Defaults to `true`. When both providers are configured, retry a failed, timed-out, empty, truncated, or invalid-JSON primary response once on the secondary provider.
 - `AI_REQUIRE_PROVIDER_FAILOVER`: Set `true` in production to make missing secondary-provider credentials a readiness issue.
 - `AI_REQUIRE_LLM`, `AI_ALLOW_LLM_FALLBACK`: Global LLM strictness policy. Keep fallback allowed in CI and local development without an API key.

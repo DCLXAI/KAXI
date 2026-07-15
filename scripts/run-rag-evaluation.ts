@@ -919,7 +919,7 @@ const qualityPassed = passRate >= 0.95
   && openAiVectorAccuracy === 1
   && highRiskRecall === 1
   && noContextAccuracy >= 0.95
-  && (p95LatencyMs === null || p95LatencyMs <= 10_000);
+  && (p95LatencyMs === null || p95LatencyMs <= 8_000);
 const completed = await supabase.from("rag_evaluation_runs").update({
   status: qualityPassed ? "passed" : "failed",
   passed_count: passedCount,

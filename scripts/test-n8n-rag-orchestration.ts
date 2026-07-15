@@ -49,6 +49,13 @@ assert(
   railwayWorkflow.includes('const release = "kaxi-rag-runtime@2026-07-14.railway-mcp-v3"'),
   "Railway runtime semantic release must match the production provenance contract",
 );
+assert(
+  railwayWorkflow.includes("$('Run KAXI RAG Ingestion Core').item.json.body?.workflowVersionId ??")
+    && railwayWorkflow.includes("$('Run KAXI Handoff Core').item.json.body?.workflowVersionId ??")
+    && railwayWorkflow.includes("$('Run KAXI RAG Ingestion Core').item.json.body?.promptVersion ??")
+    && railwayWorkflow.includes("$('Run KAXI Handoff Core').item.json.body?.promptVersion ??"),
+  "ingestion and handoff responses must prefer the KAXI Core provenance over n8n-hardcoded values",
+);
 const railwayRuntimeSource = railwayWorkflow.slice(
   railwayWorkflow.indexOf("const runRagCore"),
   railwayWorkflow.indexOf("const respondTypebot"),
