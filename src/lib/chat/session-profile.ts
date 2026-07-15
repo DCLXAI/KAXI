@@ -1,6 +1,6 @@
 export type SessionProfileLocale = "ko" | "en" | "vi" | "mn";
 export type SessionProfileStudyStage = "language" | "undergraduate" | "graduate";
-export type SessionProfileSource = "deterministic" | "mediation";
+export type SessionProfileSource = "deterministic" | "mediation" | "account";
 export type SessionProfileFieldKey = "nationality" | "currentVisa" | "targetVisa" | "studyStage";
 
 export type SessionProfile = {
@@ -195,12 +195,20 @@ function cleanSignal(key: SessionProfileFieldKey, value: unknown): string | unde
 
 const FIELD_KEYS: SessionProfileFieldKey[] = ["nationality", "currentVisa", "targetVisa", "studyStage"];
 
+// "merge": newest-wins, always overwrites when a signal is present.
+// "fill": never overwrites a field that already has a truthy value.
+// "fillOverAccount": like "fill", except a field whose existing provenance is
+// source "account" (an unconfirmed read-back seed, not something stated this
+// session) may still be overwritten. A genuinely session-stated value — any
+// source other than "account" — is still never overwritten.
+type ApplyMode = "merge" | "fill" | "fillOverAccount";
+
 function applySessionProfileSignals(
   prev: SessionProfile,
   signals: SessionProfileSignals,
   turn: number,
   source: SessionProfileSource,
-  fillOnly: boolean,
+  mode: ApplyMode,
 ): SessionProfile {
   const next: SessionProfile = {
     version: PROFILE_VERSION,
@@ -211,7 +219,11 @@ function applySessionProfileSignals(
     fields: { ...(prev.fields || {}) },
   };
   for (const key of FIELD_KEYS) {
-    if (fillOnly && next[key]) continue;
+    if (next[key]) {
+      const isAccountSeeded = next.fields?.[key]?.source === "account";
+      if (mode === "fill") continue;
+      if (mode === "fillOverAccount" && !isAccountSeeded) continue;
+    }
     const value = cleanSignal(key, (signals as Record<string, unknown>)[key]);
     if (!value) continue;
     if (key === "studyStage") next.studyStage = value as SessionProfileStudyStage;
@@ -227,7 +239,7 @@ export function mergeSessionProfile(
   turn: number,
   source: SessionProfileSource,
 ): SessionProfile {
-  return applySessionProfileSignals(prev, signals, turn, source, false);
+  return applySessionProfileSignals(prev, signals, turn, source, "merge");
 }
 
 // Like mergeSessionProfile, but never overwrites a field prev already has a
@@ -239,7 +251,21 @@ export function fillSessionProfile(
   turn: number,
   source: SessionProfileSource,
 ): SessionProfile {
-  return applySessionProfileSignals(prev, signals, turn, source, true);
+  return applySessionProfileSignals(prev, signals, turn, source, "fill");
+}
+
+// Like fillSessionProfile, but a field seeded from the account read-back
+// (source "account") is still eligible to be overwritten. This lets a value
+// the student states or the mediator resolves THIS session beat a stale
+// account seed, while a value actually established during the session
+// (deterministic or mediation, this turn or a prior one) is never overwritten.
+export function fillSessionProfileOverAccount(
+  prev: SessionProfile,
+  signals: SessionProfileSignals,
+  turn: number,
+  source: SessionProfileSource,
+): SessionProfile {
+  return applySessionProfileSignals(prev, signals, turn, source, "fillOverAccount");
 }
 
 export function parseSessionProfile(value: unknown): SessionProfile {

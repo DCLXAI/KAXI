@@ -9,12 +9,14 @@ import { loadChatSessionSnapshot } from "@/lib/chat/history";
 import {
   extractProfileSignals,
   fillSessionProfile,
+  fillSessionProfileOverAccount,
   hasProfileFacts,
   mergeSessionProfile,
   parseSessionProfile,
   resolveSessionProfileMetadata,
 } from "@/lib/chat/session-profile";
 import {
+  accountEligibleSignals,
   sessionProfileToStudentFills,
   studentFieldsToSessionSignals,
   type StudentChatProfileFields,
@@ -427,7 +429,11 @@ export async function POST(req: NextRequest) {
         if (accountRow) {
           // Read-back is fill-only: account values seed the session only where the
           // session profile has nothing yet; session-stated values keep priority.
-          profile = fillSessionProfile(profile, studentFieldsToSessionSignals(accountRow), turnIndex, "deterministic");
+          // Stamped source "account" (not "deterministic") so a value the
+          // student states or the mediator resolves THIS turn can still
+          // overwrite a stale account seed (see fillSessionProfileOverAccount
+          // below) instead of being permanently blocked by it.
+          profile = fillSessionProfile(profile, studentFieldsToSessionSignals(accountRow), turnIndex, "account");
         }
       }
     } catch (linkError) {
@@ -448,20 +454,31 @@ export async function POST(req: NextRequest) {
       profile,
     });
     if (mediation.profileSignals) {
-      // Fill-only: deterministic values (this turn or carried from a prior
-      // turn) win ties; mediation only fills fields the patterns missed.
-      profile = fillSessionProfile(profile, mediation.profileSignals, turnIndex, "mediation");
+      // Fill-over-account: a genuine session-stated value (deterministic or
+      // mediation, this turn or a prior one) always wins ties; only a stale
+      // account read-back seed may be overwritten by what the mediator
+      // resolves this turn.
+      profile = fillSessionProfileOverAccount(profile, mediation.profileSignals, turnIndex, "mediation");
     }
     // Account-linkage write-time link, in its own guard (same "never 500 from
     // linkage" contract as the read-back). Reuses the `accountRow` fetched at
-    // read-back rather than re-querying the row.
-    try {
-      if (studentId && accountRow) {
-        await fillStudentChatProfile(studentId, sessionProfileToStudentFills(profile, accountRow));
+    // read-back rather than re-querying the row. Deferred via after() so the
+    // account UPDATE runs post-response and can never add latency to the
+    // turn; only accountEligibleSignals() (this-turn, deterministic facts)
+    // ever reaches the account, so a prior visitor's session state or an
+    // LLM-mediated guess can never be written here.
+    after(async () => {
+      try {
+        if (studentId && accountRow) {
+          await fillStudentChatProfile(
+            studentId,
+            sessionProfileToStudentFills(accountEligibleSignals(profile, turnIndex), accountRow),
+          );
+        }
+      } catch (linkError) {
+        console.warn("[POST /api/typebot-rag] account-linkage write-time failed", linkError);
       }
-    } catch (linkError) {
-      console.warn("[POST /api/typebot-rag] account-linkage write-time failed", linkError);
-    }
+    });
     // If the snapshot load failed above, we never loaded the prior metadata to
     // merge onto, so persisting here would overwrite (not merge) the stored
     // chat_sessions.metadata column. resolveSessionProfileMetadata returns

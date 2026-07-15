@@ -20,21 +20,44 @@ function isEmpty(value: string | null | undefined): boolean {
   return !value || !value.trim();
 }
 
-// Session profile -> the StudentProfile columns to fill. Only returns columns
-// that the session has AND the account currently leaves empty (fill-only).
+// Session signals -> the StudentProfile columns to fill. Only returns columns
+// that the signals have AND the account currently leaves empty (fill-only).
 // Nationality is never included (see spec: default-"VN" ambiguity).
+//
+// Takes SIGNALS, not a whole SessionProfile: callers must first narrow to
+// accountEligibleSignals() so only this-turn, deterministically-established
+// facts ever reach the account (see accountEligibleSignals below for why).
 export function sessionProfileToStudentFills(
-  profile: SessionProfile,
+  signals: SessionProfileSignals,
   existing: StudentChatProfileFields,
 ): Partial<{ visaType: string; targetVisa: string; chatStudyStage: string }> {
   const fills: Partial<{ visaType: string; targetVisa: string; chatStudyStage: string }> = {};
-  const visaType = cleanCode(profile.currentVisa);
+  const visaType = cleanCode(signals.currentVisa);
   if (visaType && isEmpty(existing.visaType)) fills.visaType = visaType;
-  const targetVisa = cleanCode(profile.targetVisa);
+  const targetVisa = cleanCode(signals.targetVisa);
   if (targetVisa && isEmpty(existing.targetVisa)) fills.targetVisa = targetVisa;
-  const chatStudyStage = cleanStage(profile.studyStage);
+  const chatStudyStage = cleanStage(signals.studyStage);
   if (chatStudyStage && isEmpty(existing.chatStudyStage)) fills.chatStudyStage = chatStudyStage;
   return fills;
+}
+
+// The account may only receive facts the authenticated student stated on THIS
+// turn, established by the deterministic extractor. Older facts may belong to a
+// different visitor sharing the browser's chat-session cookie, and mediation
+// (LLM) values are guesses that fill-only would make permanent.
+export function accountEligibleSignals(
+  profile: SessionProfile,
+  turn: number,
+): SessionProfileSignals {
+  const eligible: SessionProfileSignals = {};
+  const fields = profile.fields || {};
+  for (const key of ["currentVisa", "targetVisa", "studyStage"] as const) {
+    const meta = fields[key];
+    if (!meta || meta.turn !== turn || meta.source !== "deterministic") continue;
+    const value = profile[key];
+    if (value) (eligible as Record<string, unknown>)[key] = value;
+  }
+  return eligible;
 }
 
 // StudentProfile columns -> session signals for read-back seeding. Empty

@@ -33,13 +33,20 @@ export async function loadStudentChatProfile(userId: string): Promise<StudentCha
   }
 }
 
+type StudentProfileFillArgs = {
+  where: { userId: string };
+  data: Partial<{ visaType: string; targetVisa: string; chatStudyStage: string }>;
+};
+
 export async function fillStudentChatProfile(
   userId: string,
   fills: Partial<{ visaType: string; targetVisa: string; chatStudyStage: string }>,
+  deps: { update?: (args: StudentProfileFillArgs) => Promise<unknown> } = {},
 ): Promise<void> {
   if (Object.keys(fills).length === 0) return;
+  const update = deps.update ?? ((args: StudentProfileFillArgs) => db.studentProfile.update(args));
   try {
-    await db.studentProfile.update({ where: { userId }, data: fills });
+    await update({ where: { userId }, data: fills });
   } catch (error) {
     console.warn("[account-profile] StudentProfile fill failed", error);
   }
