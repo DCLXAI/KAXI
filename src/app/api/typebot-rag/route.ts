@@ -14,7 +14,11 @@ import {
   parseSessionProfile,
   resolveSessionProfileMetadata,
 } from "@/lib/chat/session-profile";
-import { sessionProfileToStudentFills, studentFieldsToSessionSignals } from "@/lib/chat/account-profile";
+import {
+  sessionProfileToStudentFills,
+  studentFieldsToSessionSignals,
+  type StudentChatProfileFields,
+} from "@/lib/chat/account-profile";
 import {
   fillStudentChatProfile,
   loadStudentChatProfile,
@@ -391,6 +395,7 @@ export async function POST(req: NextRequest) {
     let snapshotLoaded = false;
     let turnIndex = 1;
     let studentId: string | null = null;
+    let accountRow: StudentChatProfileFields | null = null;
     try {
       const snapshot = await loadChatSessionSnapshot(sessionId, {
         source,
@@ -406,18 +411,29 @@ export async function POST(req: NextRequest) {
         .slice(-3)
         .map((message) => ({ question: message.question, answer: message.answer }));
       snapshotLoaded = true;
-      turnIndex = conversationHistory.length + 1;
+    } catch (historyError) {
+      console.warn("[POST /api/typebot-rag] conversation history unavailable", historyError);
+    }
+    turnIndex = conversationHistory.length + 1;
+    // Account-linkage read-back lives in its own guard, independent of the
+    // history try above: linking a logged-in student's account must NEVER
+    // escalate to the outer 500 handler (the feature's core promise is that
+    // account linkage never blocks or fails the chat). The `accountRow` fetched
+    // here is reused by the write-time link below — one fetch per turn.
+    try {
       studentId = await resolveLoggedInStudentId();
       if (studentId) {
-        const accountRow = await loadStudentChatProfile(studentId);
+        accountRow = await loadStudentChatProfile(studentId);
         if (accountRow) {
           // Read-back is fill-only: account values seed the session only where the
           // session profile has nothing yet; session-stated values keep priority.
           profile = fillSessionProfile(profile, studentFieldsToSessionSignals(accountRow), turnIndex, "deterministic");
         }
       }
-    } catch (historyError) {
-      console.warn("[POST /api/typebot-rag] conversation history unavailable", historyError);
+    } catch (linkError) {
+      console.warn("[POST /api/typebot-rag] account-linkage read-back failed", linkError);
+      studentId = null;
+      accountRow = null;
     }
     try {
       profile = mergeSessionProfile(profile, extractProfileSignals(question, locale), turnIndex, "deterministic");
@@ -436,11 +452,15 @@ export async function POST(req: NextRequest) {
       // turn) win ties; mediation only fills fields the patterns missed.
       profile = fillSessionProfile(profile, mediation.profileSignals, turnIndex, "mediation");
     }
-    if (studentId) {
-      const accountRow = await loadStudentChatProfile(studentId);
-      if (accountRow) {
+    // Account-linkage write-time link, in its own guard (same "never 500 from
+    // linkage" contract as the read-back). Reuses the `accountRow` fetched at
+    // read-back rather than re-querying the row.
+    try {
+      if (studentId && accountRow) {
         await fillStudentChatProfile(studentId, sessionProfileToStudentFills(profile, accountRow));
       }
+    } catch (linkError) {
+      console.warn("[POST /api/typebot-rag] account-linkage write-time failed", linkError);
     }
     // If the snapshot load failed above, we never loaded the prior metadata to
     // merge onto, so persisting here would overwrite (not merge) the stored
