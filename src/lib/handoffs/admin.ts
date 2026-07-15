@@ -3,6 +3,13 @@ import { db } from "@/lib/db";
 import { preparePiiField, readPiiField } from "@/lib/privacy/pii";
 import { productLocale } from "@/lib/analytics/events";
 import { recordServerProductEvent } from "@/lib/analytics/server";
+import {
+  SLA_POLICY_VERSION,
+  assertSlaMinutes,
+  slaDefaultMinutes,
+  slaDueAt,
+  slaTierForMinutes,
+} from "@/lib/ops/sla-policy";
 
 const ACTIVE_STATUSES = new Set(["open", "review", "contact_requested", "contact_received", "assigned", "in_progress"]);
 const ACTIONS = new Set(["assign", "start", "contacted", "resolve", "close", "reopen"]);
@@ -507,10 +514,12 @@ export async function updateAdminHandoff(input: {
     }
     assignee = user.email || user.id;
     const requestedMinutes = finiteInteger(input.slaMinutes);
-    const defaultMinutes = found.data.risk_level === "high" || found.data.lead_stage === "urgent" ? 120 : 1440;
-    const slaMinutes = requestedMinutes ?? defaultMinutes;
-    if (slaMinutes < 15 || slaMinutes > 10_080) throw new Error("HANDOFF_SLA_INVALID");
-    const dueAt = new Date(now.getTime() + slaMinutes * 60_000);
+    const slaMinutes = requestedMinutes ?? slaDefaultMinutes({
+      riskLevel: found.data.risk_level,
+      leadStage: found.data.lead_stage,
+    });
+    assertSlaMinutes(slaMinutes);
+    const dueAt = slaDueAt(now, slaMinutes);
     update.handoff_metadata = {
       ...record(found.data.handoff_metadata),
       assignment: {
@@ -520,8 +529,8 @@ export async function updateAdminHandoff(input: {
         assignedBy: input.actor.slice(0, 160),
       },
       sla: {
-        policyVersion: input.slaPolicy?.trim().slice(0, 80) || "kaxi-handoff-v1",
-        tier: slaMinutes === 120 ? "urgent-2h" : slaMinutes === 1440 ? "standard-24h" : "custom",
+        policyVersion: input.slaPolicy?.trim().slice(0, 80) || SLA_POLICY_VERSION,
+        tier: slaTierForMinutes(slaMinutes),
         minutes: slaMinutes,
         startsAt: nowIso,
         dueAt: dueAt.toISOString(),
