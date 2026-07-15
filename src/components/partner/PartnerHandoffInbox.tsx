@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Mail, MessageSquareText, Phone, PlayCircle, RefreshCw } from "lucide-react";
+import { Loader2, MessageSquareText, PlayCircle, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +9,11 @@ import type { Lang } from "@/lib/i18n/translations";
 import { tr } from "@/lib/i18n/translations";
 import { workspaceCopy, workspaceDateLocale } from "@/lib/i18n/workspace";
 
+// This is the whitelisted partner-safe shape returned by
+// GET /api/partner/handoffs (see serializePartnerHandoffTask in
+// src/lib/handoffs/partner.ts) -- it deliberately has no contact value/name
+// and no RAG verdict/retrieval internals. hasContact is a plain boolean, not
+// a PII value, so the "mark contacted" action can still be gated on it.
 interface PartnerHandoffTask {
   id: string;
   question: string;
@@ -17,21 +22,11 @@ interface PartnerHandoffTask {
   slaDueAt: string | null;
   slaStatus: string | null;
   hasContact: boolean;
-  contactType: string | null;
-  contactValue: string | null;
-  contactName: string | null;
   createdAt: string;
 }
 
 function riskVariant(risk: string) {
   return risk === "high" ? ("destructive" as const) : risk === "medium" ? ("outline" as const) : ("secondary" as const);
-}
-
-function contactHref(task: PartnerHandoffTask) {
-  if (!task.contactValue || task.contactValue.includes("***")) return undefined;
-  if (task.contactType === "email" || task.contactValue.includes("@")) return `mailto:${task.contactValue}`;
-  if (task.contactType === "phone") return `tel:${task.contactValue.replace(/[^+\d]/g, "")}`;
-  return undefined;
 }
 
 export function PartnerHandoffInbox({ locale }: { locale: Lang }) {
@@ -118,21 +113,9 @@ export function PartnerHandoffInbox({ locale }: { locale: Lang }) {
               <p className="mt-2 text-xs text-muted-foreground">
                 {new Intl.DateTimeFormat(workspaceDateLocale[locale]).format(new Date(task.createdAt))}
               </p>
-              {task.hasContact ? (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {copy.contact}: {task.contactName ? `${task.contactName} · ` : ""}
-                  {contactHref(task) ? (
-                    <a href={contactHref(task)} className="inline-flex items-center gap-1 text-primary underline underline-offset-2">
-                      {task.contactType === "email" ? <Mail className="h-3.5 w-3.5" /> : <Phone className="h-3.5 w-3.5" />}
-                      {task.contactValue}
-                    </a>
-                  ) : (
-                    task.contactValue
-                  )}
-                </p>
-              ) : (
-                <p className="mt-2 text-xs text-muted-foreground">{tr("handoff_no_contact_yet", locale)}</p>
-              )}
+              <p className="mt-2 text-xs text-muted-foreground">
+                {task.hasContact ? tr("handoff_contact_on_file", locale) : tr("handoff_no_contact_yet", locale)}
+              </p>
             </div>
             <div className="flex items-start gap-2">
               <Button size="sm" variant="outline" onClick={() => void act(task.id, "start")} disabled={actionId === task.id}>

@@ -375,6 +375,7 @@ export const t = {
   handoff_start: { ko: "처리 시작", vi: "Bắt đầu xử lý", mn: "Эхлүүлэх", en: "Start" },
   handoff_contacted: { ko: "연락 완료", vi: "Đã liên hệ", mn: "Холбогдсон", en: "Mark contacted" },
   handoff_no_contact_yet: { ko: "아직 연락처를 받지 않았습니다.", vi: "Chưa nhận được thông tin liên hệ.", mn: "Холбоо барих мэдээлэл ирээгүй байна.", en: "Contact details not received yet." },
+  handoff_contact_on_file: { ko: "연락처가 접수되었습니다 (관리자 화면에서 확인).", vi: "Đã nhận thông tin liên hệ (xem trong trang quản trị).", mn: "Холбоо барих мэдээлэл ирсэн (админ дэлгэцээс харна уу).", en: "Contact details received (view in admin)." },
 
   // 공통
   footer_disclaimer: {

@@ -198,6 +198,13 @@ try {
     action: "accept",
   });
   assert(acceptedRequest.status === "accepted" && acceptedRequest.acceptedAt, "partner should accept assigned request");
+  // FIX 1 regression: slaFirstResponseAt is unreachable for an assigned
+  // PartnerRequest unless the partner's own "accept" stamps it (matched ->
+  // contacted is not an allowed admin transition, so the admin-PATCH stamp
+  // below can never fire for this row) -- every SLA-bearing assigned request
+  // would otherwise be guaranteed to breach.
+  assert(acceptedRequest.slaFirstResponseAt !== null, "accepting an assigned partner request must stamp slaFirstResponseAt");
+  const firstResponseAtFirstPartnerAccept = acceptedRequest.slaFirstResponseAt!.getTime();
   await expectCaseError(
     updatePartnerRequestStatus({
       requestId: partnerRequest.id,
@@ -207,6 +214,11 @@ try {
     }),
     "request_transition_conflict",
   );
+  const requestAfterConflict = await db.partnerRequest.findUniqueOrThrow({ where: { id: partnerRequest.id } });
+  assert(
+    requestAfterConflict.slaFirstResponseAt?.getTime() === firstResponseAtFirstPartnerAccept,
+    "slaFirstResponseAt must never move once written (write-once within the assignment window)"
+  );
   const closedRequest = await updatePartnerRequestStatus({
     requestId: partnerRequest.id,
     organizationId: partnerA.organization.id,
@@ -214,6 +226,87 @@ try {
     action: "close",
   });
   assert(closedRequest.status === "closed" && closedRequest.closedAt, "partner should close accepted request");
+
+  // FIX 2 regression: reassigning a PartnerRequest to a different office must
+  // reset the whole SLA window (slaFirstResponseAt + slaBreachAlertedAt), not
+  // just slaDueAt -- otherwise classifySlaItem short-circuits on the stale
+  // firstResponseAt from the previous office and a stale slaBreachAlertedAt
+  // permanently suppresses the new window's alert.
+  const reassignmentLead = await db.diagnosisLead.create({
+    data: {
+      nickname: "재배정 테스트",
+      nationality: "vn",
+      age: 23,
+      education: "university",
+      koreanLevel: "topik2",
+      goal: "degree",
+      budget: 15_000_000,
+      region: "seoul",
+      pathKey: "goal_degree",
+      estimatedCost: 12_000_000,
+      prepTime: "6 months",
+      requiredDocs: "[]",
+      warningsJson: "[]",
+      nextActionsJson: "[]",
+    },
+  });
+  const reassignmentConsentUser = await db.user.create({
+    data: {
+      role: "STUDENT",
+      email: "reassignment-consent@consent.kaxi.local",
+      zaloUid: `lead:${reassignmentLead.id}`,
+      locale: "vi",
+    },
+  });
+  await db.consent.createMany({
+    data: ["THIRD_PARTY_PROVISION", "PROCESSING_CONSIGNMENT", "OVERSEAS_TRANSFER"].map((scope) => ({
+      userId: reassignmentConsentUser.id,
+      scope: scope as "THIRD_PARTY_PROVISION" | "PROCESSING_CONSIGNMENT" | "OVERSEAS_TRANSFER",
+      status: "GRANTED" as const,
+      version: "reassignment-test",
+      locale: "vi",
+    })),
+  });
+  const reassignmentRequest = await db.partnerRequest.create({
+    data: {
+      leadId: reassignmentLead.id,
+      partnerType: "admin",
+      question: "재배정 SLA 초기화 테스트",
+      status: "pending",
+    },
+  });
+  const firstAssignment = await assignPartnerRequest({
+    requestId: reassignmentRequest.id,
+    organizationId: partnerA.organization.id,
+    assignedUserId: partnerA.user.id,
+    actor: "test-admin",
+  });
+  const acceptedBeforeReassignment = await updatePartnerRequestStatus({
+    requestId: reassignmentRequest.id,
+    organizationId: partnerA.organization.id,
+    userId: partnerA.user.id,
+    action: "accept",
+  });
+  assert(
+    acceptedBeforeReassignment.slaFirstResponseAt !== null,
+    "request must have a stamped first response before the reassignment regression check is meaningful"
+  );
+  await db.partnerRequest.update({
+    where: { id: reassignmentRequest.id },
+    data: { slaBreachAlertedAt: new Date("2020-01-01T00:00:00.000Z") },
+  });
+  const reassignment = await assignPartnerRequest({
+    requestId: reassignmentRequest.id,
+    organizationId: partnerB.organization.id,
+    assignedUserId: partnerB.user.id,
+    actor: "test-admin",
+  });
+  assert(reassignment.slaFirstResponseAt === null, "reassigning a partner request must reset slaFirstResponseAt to null for the new window");
+  assert(reassignment.slaBreachAlertedAt === null, "reassigning a partner request must reset slaBreachAlertedAt to null for the new window");
+  assert(
+    reassignment.slaDueAt !== null && reassignment.slaDueAt.getTime() > firstAssignment.slaDueAt!.getTime(),
+    "reassignment should move slaDueAt forward to a fresh window"
+  );
 
   // Admin "contacted" transition (distinct from the accept/close flow above,
   // see src/app/api/partner-requests/[id]/route.ts) must set slaFirstResponseAt
@@ -502,6 +595,38 @@ try {
   });
   const scopedTimeline = await db.caseTimelineEvent.findMany({ where: { escalationCaseId: scopedCase.case.id } });
   assert(scopedTimeline.length >= 4, "repository transitions should write timeline events");
+
+  // FIX 2 regression: reassigning an EscalationCase to a different partner
+  // office must reset the whole SLA window (slaFirstResponseAt +
+  // slaBreachAlertedAt), not just slaDueAt -- otherwise classifySlaItem
+  // short-circuits on the stale firstResponseAt from the previous office and
+  // a stale slaBreachAlertedAt permanently suppresses the new window's alert.
+  const acceptedScopedCase = await acceptAssignedCase({
+    caseId: scopedCase.case.id,
+    organizationId: partnerA.organization.id,
+    reviewerUserId: partnerA.user.id,
+    note: "재배정 전 수임",
+  });
+  assert(
+    acceptedScopedCase.case.slaFirstResponseAt !== null,
+    "case must have a stamped first response before the reassignment regression check is meaningful"
+  );
+  const slaDueAtBeforeReassignment = acceptedScopedCase.case.slaDueAt!;
+  await db.escalationCase.update({
+    where: { id: scopedCase.case.id },
+    data: { slaBreachAlertedAt: new Date("2020-01-01T00:00:00.000Z") },
+  });
+  const reassignedCase = await assignCaseToPartnerOffice({
+    caseId: scopedCase.case.id,
+    organizationId: partnerB.organization.id,
+    assignedUserId: partnerB.user.id,
+  });
+  assert(reassignedCase.case.slaFirstResponseAt === null, "reassigning a case must reset slaFirstResponseAt to null for the new window");
+  assert(reassignedCase.case.slaBreachAlertedAt === null, "reassigning a case must reset slaBreachAlertedAt to null for the new window");
+  assert(
+    reassignedCase.case.slaDueAt !== null && reassignedCase.case.slaDueAt.getTime() > slaDueAtBeforeReassignment.getTime(),
+    "reassignment should move slaDueAt forward to a fresh window"
+  );
 
   console.log("PASS case pipeline: lifecycle, lead routing, notifications, consent gating, organization scope, document links, and audits verified");
 } finally {

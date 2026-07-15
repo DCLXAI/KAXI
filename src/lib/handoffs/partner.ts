@@ -59,17 +59,89 @@ export function filterHandoffsAssignedTo(tasks: AdminHandoffTask[], userId: stri
   return tasks.filter((task) => task.assigneeUserId === userId && isActiveHandoffStatus(task.status));
 }
 
-// List only the caller's own assigned, non-terminal handoff tasks. Reuses
-// listAdminHandoffs verbatim -- including its PII redaction/join logic --
-// then narrows the result to this caller's scope. revealPii is true because a
-// partner is trusted with contact details for cases assigned specifically to
-// them (the same trust level admin owner/admin roles get for the full
-// queue), matching how GET /api/partner/requests already reveals PII for a
-// partner's own matched requests.
-export async function listPartnerHandoffs(userId: string): Promise<AdminHandoffTask[]> {
-  const { tasks } = await listAdminHandoffs({ revealPii: true });
-  return filterHandoffsAssignedTo(tasks, userId);
+// Pure guard: a partner may only ever `start`/`contacted` a task that is
+// still non-terminal. Without this, updatePartnerHandoff has no check that
+// stops a partner from calling `start` on their own already-resolved/closed/
+// duplicate task -- which is an admin-only reopen capability, not a
+// legitimate partner action. isActiveHandoffStatus's active set is exactly
+// the complement of {resolved, closed, duplicate} across every status this
+// queue uses, so "not active" and "terminal" are the same check here.
+// Exported so the guard is unit-testable without a database.
+export function assertHandoffNotTerminal(status: string): void {
+  if (!isActiveHandoffStatus(status)) {
+    throw new PartnerHandoffAssignmentError(
+      "handoff_terminal",
+      "This handoff task has already been finalized and cannot be reopened",
+      409,
+    );
+  }
 }
+
+// Partner-safe projection of AdminHandoffTask. Strips contact PII (contact
+// value/name/type, and the raw session/lead/message ids they hang off of)
+// and every RAG verdict/retrieval internal (resolutionCode, evaluationCaseId,
+// evaluationActive, retrievalRunId/Category, topScore, similarityThreshold,
+// noContext[Reason]) per docs/OPERATIONS.md: "Do not expose question or
+// contact details in a partner workspace unless the applicable third-party
+// and handoff-consent requirements are satisfied." hasContact is kept as a
+// plain boolean (not a PII value) so the "mark contacted" action can still be
+// gated in the partner UI.
+export type PartnerHandoffTask = {
+  id: string;
+  status: string;
+  riskLevel: string;
+  slaTier: string | null;
+  slaMinutes: number | null;
+  slaDueAt: string | null;
+  slaStatus: string | null;
+  question: string;
+  hasContact: boolean;
+  createdAt: string;
+  updatedAt: string;
+  closedAt: string | null;
+};
+
+export function serializePartnerHandoffTask(task: AdminHandoffTask): PartnerHandoffTask {
+  return {
+    id: task.id,
+    status: task.status,
+    riskLevel: task.riskLevel,
+    slaTier: task.slaTier,
+    slaMinutes: task.slaMinutes,
+    slaDueAt: task.slaDueAt,
+    slaStatus: task.slaStatus,
+    question: task.question,
+    hasContact: task.hasContact,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+    closedAt: task.closedAt,
+  };
+}
+
+// List only the caller's own assigned, non-terminal handoff tasks, scoped at
+// the QUERY level (see listAdminHandoffs' assigneeUserId filter) so a
+// partner's own task cannot silently drop off a global newest-100 window.
+// filterHandoffsAssignedTo still runs as a defense-in-depth second pass for
+// the active-status narrowing. revealPii is false: no per-task
+// handoff-consent check exists yet to gate PII reveal the way
+// assignPartnerRequest gates on consent scopes (src/lib/partners/
+// assignment.ts:65-78), so this defaults to the safe side -- no PII --
+// rather than ever defaulting to reveal. The result is the whitelisted
+// PartnerHandoffTask shape, not the raw AdminHandoffTask (which carries RAG
+// verdict/retrieval internals no partner may see).
+export async function listPartnerHandoffs(userId: string): Promise<PartnerHandoffTask[]> {
+  const { tasks } = await listAdminHandoffs({ revealPii: false, assigneeUserId: userId });
+  return filterHandoffsAssignedTo(tasks, userId).map(serializePartnerHandoffTask);
+}
+
+// Known updateAdminHandoff failure codes that are reachable from a partner's
+// allowed actions (start/contacted) and represent an ordinary precondition
+// failure, not a genuinely unexpected error. updateAdminHandoff throws plain
+// Errors (not PartnerHandoffAssignmentError) for these, so without this map
+// they fall through to a generic 500 in the route instead of a 4xx.
+const KNOWN_ADMIN_HANDOFF_ERROR_STATUS: Record<string, number> = {
+  HANDOFF_CONTACT_REQUIRED: 409,
+};
 
 // Update a handoff task on the partner's behalf. Ordering is the whole
 // security contract here:
@@ -77,7 +149,10 @@ export async function listPartnerHandoffs(userId: string): Promise<AdminHandoffT
 //      skipped by any runtime state, and rejects the RAG verdict outright;
 //   2) ownership is verified with a read-only lookup BEFORE any mutation is
 //      attempted;
-//   3) only once both checks pass is the mutation delegated to
+//   3) the task must be non-terminal -- otherwise "start" is a reopen
+//      primitive a partner could use on their own resolved/closed/duplicate
+//      task, which is an admin-only capability;
+//   4) only once all three checks pass is the mutation delegated to
 //      updateAdminHandoff, so first-response SLA bookkeeping
 //      (markFirstResponse) is recorded through the exact same path the admin
 //      route uses.
@@ -101,7 +176,7 @@ export async function updatePartnerHandoff(input: {
   const supabase = serviceClient();
   const found = await supabase
     .from("handoff_tasks")
-    .select("id,handoff_metadata")
+    .select("id,status,handoff_metadata")
     .eq("id", input.id)
     .maybeSingle();
   if (found.error) throw found.error;
@@ -111,6 +186,17 @@ export async function updatePartnerHandoff(input: {
 
   const assignment = assignmentMetadata(found.data.handoff_metadata);
   assertHandoffAssignedToCaller(assignment.assigneeUserId, input.userId);
+  assertHandoffNotTerminal(String(found.data.status));
 
-  return updateAdminHandoff({ id: input.id, action: input.action, actor: input.userId });
+  try {
+    return await updateAdminHandoff({ id: input.id, action: input.action, actor: input.userId });
+  } catch (error) {
+    if (error instanceof PartnerHandoffAssignmentError) throw error;
+    const code = error instanceof Error ? error.message : "";
+    const status = KNOWN_ADMIN_HANDOFF_ERROR_STATUS[code];
+    if (status) {
+      throw new PartnerHandoffAssignmentError(code.toLowerCase(), error instanceof Error ? error.message : "Request could not be completed", status);
+    }
+    throw error;
+  }
 }

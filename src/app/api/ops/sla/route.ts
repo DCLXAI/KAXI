@@ -10,11 +10,13 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const unauthorized = authorizeCronRequest(req);
   if (unauthorized) return unauthorized;
-  return NextResponse.json(await runSlaWatchdog("daily-cron"));
+  const result = await runSlaWatchdog("daily-cron");
+  return NextResponse.json(result, { status: result.ok ? 200 : 503 });
 }
 
 export async function POST(req: NextRequest) {
   const unauthorized = await requireAdmin(req, { roles: ["owner", "admin"] });
   if (unauthorized) return unauthorized;
-  return NextResponse.json(await runSlaWatchdog("admin-manual"));
+  const result = await runSlaWatchdog("admin-manual");
+  return NextResponse.json(result, { status: result.ok ? 200 : 503 });
 }

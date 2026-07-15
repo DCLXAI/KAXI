@@ -24,8 +24,10 @@ import {
   PartnerHandoffAssignmentError,
   isPartnerHandoffAction,
   assertHandoffAssignedToCaller,
+  assertHandoffNotTerminal,
   filterHandoffsAssignedTo,
   listPartnerHandoffs,
+  serializePartnerHandoffTask,
   updatePartnerHandoff,
 } from "../src/lib/handoffs/partner";
 
@@ -163,6 +165,23 @@ try {
   }
   console.log("PASS ownership guard (pure): mismatched/unassigned rejected, true owner allowed");
 
+  // --- 2b) FIX 6: `start` must not be a reopen primitive on a terminal task.
+  // A partner may act on their own task only while it is still active --
+  // otherwise `start` lets a partner reopen their own already-finalized task,
+  // which is an admin-only capability.
+  assertHandoffNotTerminal("in_progress"); // must not throw for a non-terminal status
+  assertHandoffNotTerminal("open");
+  for (const terminalStatus of ["resolved", "closed", "duplicate"]) {
+    try {
+      assertHandoffNotTerminal(terminalStatus);
+      throw new Error(`FAIL assertHandoffNotTerminal did not throw for terminal status "${terminalStatus}"`);
+    } catch (error) {
+      const code = error instanceof PartnerHandoffAssignmentError ? error.code : null;
+      assert(code === "handoff_terminal", `terminal-status rejection for "${terminalStatus}" must carry the correct code, got ${code}`);
+    }
+  }
+  console.log("PASS terminal-task guard (pure): non-terminal allowed, resolved/closed/duplicate rejected");
+
   // --- 3) Listing scope: only the caller's own, non-terminal tasks come back
   const fabricatedTasks = [
     fakeTask({ id: "own-active", assigneeUserId: "partner-a", status: "in_progress" }),
@@ -183,6 +202,49 @@ try {
     "listing must never include another partner's task",
   );
   console.log("PASS listing scope (pure): only the caller's assigned, non-terminal tasks are returned");
+
+  // --- 3b) FIX 7: the partner-facing serializer must whitelist safe fields
+  // only, stripping contact PII and every RAG verdict/retrieval internal.
+  const revealingTask = fakeTask({
+    id: "revealing",
+    assigneeUserId: "partner-a",
+    status: "in_progress",
+    riskLevel: "high",
+    slaTier: "urgent-2h",
+    slaMinutes: 120,
+    slaDueAt: "2026-07-16T12:00:00.000Z",
+    slaStatus: "overdue",
+    question: "test question",
+    hasContact: true,
+    contactType: "phone",
+    contactValue: "010-1234-5678",
+    contactName: "홍길동",
+    sessionId: "session-should-not-leak",
+    leadId: "lead-should-not-leak",
+    resolutionCode: "resolved",
+    resolvedBy: "admin@kaxi.local",
+    evaluationCaseId: "eval-case-should-not-leak",
+    evaluationActive: true,
+    retrievalRunId: "retrieval-run-should-not-leak",
+    retrievalCategory: "visa",
+    topScore: 0.93,
+    similarityThreshold: 0.7,
+    noContext: false,
+    noContextReason: null,
+  });
+  const serialized = serializePartnerHandoffTask(revealingTask);
+  for (const safeKey of ["id", "status", "riskLevel", "slaTier", "slaMinutes", "slaDueAt", "slaStatus", "question", "hasContact", "createdAt", "updatedAt", "closedAt"]) {
+    assert(safeKey in serialized, `serialized partner handoff task must include "${safeKey}"`);
+  }
+  assert(serialized.id === "revealing" && serialized.question === "test question" && serialized.hasContact === true, "serializer must carry through the whitelisted values unchanged");
+  for (const leakingKey of [
+    "contactType", "contactValue", "contactName", "sessionId", "leadId", "assigneeUserId", "organizationId", "notes",
+    "resolutionCode", "resolvedBy", "resolvedAt", "evaluationCaseId", "evaluationActive",
+    "retrievalRunId", "retrievalCategory", "topScore", "similarityThreshold", "noContext", "noContextReason",
+  ]) {
+    assert(!(leakingKey in serialized), `serialized partner handoff task must NOT expose "${leakingKey}" (PII or RAG verdict/retrieval internal)`);
+  }
+  console.log("PASS partner handoff serializer (pure): whitelists safe fields, strips contact PII and RAG verdict/retrieval internals");
 
   // The isolation guard: under TEST_DATABASE_URL, listPartnerHandoffs must
   // never reach production Supabase. This proves the guard engages -- it does

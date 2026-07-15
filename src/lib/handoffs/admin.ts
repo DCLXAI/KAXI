@@ -223,7 +223,7 @@ function readableField(
   return revealPii ? readPiiField(safePlaintext, text(ciphertext)) : safePlaintext;
 }
 
-export async function listAdminHandoffs(options: { revealPii: boolean; limit?: number }) {
+export async function listAdminHandoffs(options: { revealPii: boolean; limit?: number; assigneeUserId?: string }) {
   if (isolatedTestRuntime()) {
     return {
       tasks: [] as AdminHandoffTask[],
@@ -243,12 +243,24 @@ export async function listAdminHandoffs(options: { revealPii: boolean; limit?: n
   }
 
   const supabase = serviceClient();
+  // When scoped to a single assignee (the partner inbox, see
+  // src/lib/handoffs/partner.ts), filter at the QUERY level via the
+  // handoff_metadata.assignment.assigneeUserId JSONB path -- not the global
+  // newest-N-rows window used by the unscoped admin queue. Filtering only in
+  // JS after that global window means a partner's own task silently vanishes
+  // once 100 newer tasks exist anywhere in the queue (it already holds ~99).
+  // The limit below still applies, but AFTER this filter, to this caller's
+  // own rows only.
+  let taskQuery = supabase
+    .from("handoff_tasks")
+    .select("id,source_chat_message_id,session_id,tenant_id,question,question_ciphertext,answer,answer_ciphertext,risk_level,lead_stage,status,assignee,notes,notes_ciphertext,lead_id,lead_contact_id,contact_received_at,handoff_metadata,queue_reason,resolution_code,resolved_by,resolved_at,evaluation_case_id,created_at,updated_at,closed_at")
+    .order("created_at", { ascending: false });
+  if (options.assigneeUserId) {
+    taskQuery = taskQuery.filter("handoff_metadata->assignment->>assigneeUserId", "eq", options.assigneeUserId);
+  }
+
   const [tasksResult, partnerUsers] = await Promise.all([
-    supabase
-      .from("handoff_tasks")
-      .select("id,source_chat_message_id,session_id,tenant_id,question,question_ciphertext,answer,answer_ciphertext,risk_level,lead_stage,status,assignee,notes,notes_ciphertext,lead_id,lead_contact_id,contact_received_at,handoff_metadata,queue_reason,resolution_code,resolved_by,resolved_at,evaluation_case_id,created_at,updated_at,closed_at")
-      .order("created_at", { ascending: false })
-      .limit(Math.min(200, Math.max(1, Math.trunc(options.limit || 100)))),
+    taskQuery.limit(Math.min(200, Math.max(1, Math.trunc(options.limit || 100)))),
     db.user.findMany({
       where: { role: "PARTNER_AGENT", organization: { type: "PARTNER_AGENT_OFFICE" } },
       select: { id: true, email: true, organizationId: true, organization: { select: { name: true } } },
