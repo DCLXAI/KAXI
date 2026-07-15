@@ -239,6 +239,7 @@ const behaviorRegressionRows = [
       expectedNoContext: false,
       expectedStrictCategory: true,
       expectedLocaleHeadings: true,
+      expectedContextResolved: false,
       expectedVisaCodes: ["d2"],
       expectedOpenAiVector: true,
     },
