@@ -7,6 +7,13 @@ import { getReadyChatAttachmentsForRuntime } from "@/lib/chat/attachment-process
 import { inferChatCategory } from "@/lib/chat/category";
 import { loadChatSessionSnapshot } from "@/lib/chat/history";
 import {
+  extractProfileSignals,
+  fillSessionProfile,
+  hasProfileFacts,
+  mergeSessionProfile,
+  parseSessionProfile,
+} from "@/lib/chat/session-profile";
+import {
   clarificationNextStep,
   mediateRagQuestion,
   questionMediationMetadata,
@@ -372,25 +379,52 @@ export async function POST(req: NextRequest) {
     };
     trackTypebotProductEvent("chatbot_question_sent", { category: deterministicCategory });
     let conversationHistory: Array<{ question: string; answer: string }> = [];
+    let sessionMetadata: Record<string, unknown> = {};
+    let profile = parseSessionProfile(null);
+    let snapshotLoaded = false;
     try {
       const snapshot = await loadChatSessionSnapshot(sessionId, {
         source,
         messageLimit: 4,
         attachmentLimit: 1,
       });
+      sessionMetadata = (snapshot?.metadata && typeof snapshot.metadata === "object")
+        ? { ...snapshot.metadata }
+        : {};
+      profile = parseSessionProfile(sessionMetadata.profile);
       conversationHistory = (snapshot?.messages || [])
         .filter((message) => message.status === "completed" && message.question && message.answer)
         .slice(-3)
         .map((message) => ({ question: message.question, answer: message.answer }));
+      snapshotLoaded = true;
     } catch (historyError) {
       console.warn("[POST /api/typebot-rag] conversation history unavailable", historyError);
+    }
+    const turnIndex = conversationHistory.length + 1;
+    try {
+      profile = mergeSessionProfile(profile, extractProfileSignals(question, locale), turnIndex, "deterministic");
+    } catch (profileError) {
+      console.warn("[POST /api/typebot-rag] profile extraction failed", profileError);
     }
     const mediation = await mediateRagQuestion({
       question,
       locale,
       deterministicCategory,
       conversationHistory,
+      profile,
     });
+    if (mediation.profileSignals) {
+      // Fill-only: deterministic values (this turn or carried from a prior
+      // turn) win ties; mediation only fills fields the patterns missed.
+      profile = fillSessionProfile(profile, mediation.profileSignals, turnIndex, "mediation");
+    }
+    // If the snapshot load failed above, we never loaded the prior metadata to
+    // merge onto, so persisting here would overwrite (not merge) the stored
+    // chat_sessions.metadata column. Passing sessionMetadata: undefined leaves
+    // the existing row's metadata untouched instead of clobbering it.
+    const sessionMetadataWithProfile = snapshotLoaded && hasProfileFacts(profile)
+      ? { ...sessionMetadata, profile }
+      : undefined;
     const category = mediation.category;
 
     const n8nRequest = {
@@ -430,6 +464,7 @@ export async function POST(req: NextRequest) {
           latencyMs: Date.now() - startedAt,
           status: "failed",
           errorCode,
+          sessionMetadata: sessionMetadataWithProfile,
         });
       } catch (persistError) {
         console.error("[POST /api/typebot-rag] failure persistence failed", persistError);
@@ -512,6 +547,7 @@ export async function POST(req: NextRequest) {
           requireOpenAiEmbedding: true,
           mediation,
           conversationHistory,
+          profile,
         });
         provenance = resolveRagProvenance(upstreamPayload);
       } catch (directError) {
@@ -582,6 +618,7 @@ export async function POST(req: NextRequest) {
             requireOpenAiEmbedding: true,
             mediation,
             conversationHistory,
+            profile,
           });
           provenance = resolveRagProvenance(upstreamPayload);
           reportOpsEventAsync(
@@ -681,6 +718,7 @@ export async function POST(req: NextRequest) {
           sources: normalizedPayload.sources,
           searchMeta: normalizedPayload.searchMeta,
           latencyMs: Date.now() - startedAt,
+          sessionMetadata: sessionMetadataWithProfile,
         });
         storedMessageId = persisted.id.toString();
         persistenceMode = persisted.mode;
