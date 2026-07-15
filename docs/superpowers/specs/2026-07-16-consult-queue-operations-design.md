@@ -58,8 +58,12 @@ Privacy: the partner response must reuse the same redaction the admin list appli
 
 `src/lib/ops/sla-policy.ts`:
 ```ts
-export const SLA_POLICY_VERSION = "kaxi-sla-v1";
-export function slaTierFor(input: { riskLevel?: string | null; leadStage?: string | null }): { tier: "urgent-2h" | "standard-24h"; minutes: number };
+// The value the handoff queue already writes today. Kept verbatim (despite the
+// handoff-era name) because renaming it would change existing handoff records.
+export const SLA_POLICY_VERSION = "kaxi-handoff-v1";
+export function slaDefaultMinutes(input: { riskLevel?: string | null; leadStage?: string | null }): number; // 120 | 1440
+export function slaTierForMinutes(minutes: number): "urgent-2h" | "standard-24h" | "custom";
+export function assertSlaMinutes(minutes: number): void; // throws HANDOFF_SLA_INVALID outside 15..10080
 export function slaDueAt(from: Date, minutes: number): Date;
 ```
 `handoffs/admin.ts` is refactored to call it, so its current inline logic and the two new queues share one source of truth. Existing handoff behavior must not change (same tiers, same policy string) — this is a pure extraction.
@@ -73,7 +77,7 @@ export function slaDueAt(from: Date, minutes: number): Date;
 
 ## Testing
 
-1. Unit: `slaTierFor`/`slaDueAt` (high-risk→120, urgent stage→120, default→1440); extraction leaves handoff tiers byte-identical.
+1. Unit: `slaDefaultMinutes`/`slaTierForMinutes`/`assertSlaMinutes`/`slaDueAt` (high-risk→120, urgent stage→120, default→1440; custom tier; throw outside 15..10080); extraction leaves handoff behavior byte-identical.
 2. Unit: watchdog classification — breached vs approaching vs healthy vs terminal-skipped; already-alerted items are skipped (idempotency).
 3. `scripts/test-handoff-review-loop.ts` extended: assignment triggers a notification; the review loop still passes.
 4. Partner inbox authorization: a `PARTNER_AGENT` sees only their own assigned tasks; a non-partner is rejected; `PATCH` rejects `resolve`.
