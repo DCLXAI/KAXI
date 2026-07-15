@@ -56,6 +56,7 @@
     "test:official-source-harvest": "bun run scripts/test-official-source-harvest.ts",
     "test:readiness": "bun run scripts/test-readiness.ts",
     "test:n8n-signature": "bun run scripts/test-n8n-signature.ts",
+    "n8n:build:orchestrator": "bun run scripts/build-n8n-orchestrator.ts",
     "test:n8n-orchestration": "bun run scripts/test-n8n-rag-orchestration.ts",
     "test:rag-serving": "bun run scripts/test-rag-serving-projection.ts",
     "test:rag-fallback": "bun run scripts/test-rag-direct-fallback.ts",
@@ -205,6 +206,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@n8n/workflow-sdk": "^0.23.2",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4.3.2",
     "@types/node": "^24.13.3",
