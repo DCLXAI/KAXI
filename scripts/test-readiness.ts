@@ -12,6 +12,15 @@ const { canUseSchoolSeedFallback } = await import("../src/lib/schools/repository
 const { getOpsAlertDiagnostics, sendOpsAlert } = await import("../src/lib/ops/alerts");
 const { evaluateRagQualityRun, summarizeRagSystemHealth } = await import("../src/lib/ops/rag-system-health");
 
+// Prisma validates DATABASE_URL when its engine starts on the FIRST query, then
+// keeps that URL for the life of the process. Several tests below point
+// DATABASE_URL at a non-postgres URL to prove the runtime fails closed, and they
+// expect the resulting throw — so if one of those windows fires the first query,
+// the engine silently binds to the bad URL and every later DB-backed test dies
+// with a datasource error. Bind the engine to the real test URL up front so test
+// order cannot poison it.
+await db.$connect();
+
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
   process.exit(1);
