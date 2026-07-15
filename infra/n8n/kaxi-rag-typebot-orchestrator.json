@@ -1,0 +1,726 @@
+{
+  "id": "kaxi-rag-typebot-railway",
+  "name": "KAXI RAG Typebot Orchestrator",
+  "nodes": [
+    {
+      "id": "d06d18b2-3593-4995-9d49-27654311fc14",
+      "name": "Typebot Runtime Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        160,
+        240
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "typebot-rag-runtime",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://kaxi.vercel.app",
+          "ignoreBots": false
+        }
+      },
+      "webhookId": "2d19a1a8-4ac8-4849-a51c-c25e01e31d34"
+    },
+    {
+      "id": "ec8ed556-3b75-4e5f-bce0-98238d70355a",
+      "name": "Verify Runtime Signature",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        400,
+        240
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://kaxi.vercel.app/api/internal/n8n/verify",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { purpose: 'typebot-runtime', timestamp: $json.headers?.['x-kaxi-timestamp'] ?? '', nonce: $json.headers?.['x-kaxi-nonce'] ?? '', signature: $json.headers?.['x-kaxi-signature'] ?? '', payload: $json.body ?? {} } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      }
+    },
+    {
+      "id": "3ec06fb7-6e04-487f-893e-d9d133038362",
+      "name": "Runtime Signature Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        640,
+        240
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ok }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ca4e1aff-ef71-4418-b7f8-d0d29627a7e8",
+      "name": "Run KAXI RAG Core",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        880,
+        160
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://kaxi.vercel.app/api/internal/n8n/rag-runtime",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { verificationToken: $('Verify Runtime Signature').item.json.verificationToken ?? '', payload: $('Typebot Runtime Webhook').item.json.body ?? {} } }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 25000
+        }
+      }
+    },
+    {
+      "id": "5b4f91d9-6c96-4aca-8759-406792cf0d0e",
+      "name": "Respond to Typebot",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1160,
+        160
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ answer: $('Run KAXI RAG Core').item.json.body?.answer ?? '', needsHuman: $('Run KAXI RAG Core').item.json.body?.needsHuman ?? true, riskLevel: $('Run KAXI RAG Core').item.json.body?.riskLevel ?? 'high', leadStage: $('Run KAXI RAG Core').item.json.body?.leadStage ?? 'blocked', nextStep: $('Run KAXI RAG Core').item.json.body?.nextStep ?? '', sources: $('Run KAXI RAG Core').item.json.body?.sources ?? [], searchMeta: { ...($('Run KAXI RAG Core').item.json.body?.searchMeta ?? {}), runtimePath: 'n8n-kaxi-orchestrated', n8nExecutionId: $execution.id, n8nWorkflowId: $workflow.id, n8nWorkflowVersionId: 'kaxi-rag-runtime@2026-07-14.railway-mcp-v3' }, requestId: $('Run KAXI RAG Core').item.json.body?.requestId ?? '', handoffToken: $('Run KAXI RAG Core').item.json.body?.handoffToken ?? '', persisted: $('Run KAXI RAG Core').item.json.body?.persisted ?? false, persistenceAccepted: $('Run KAXI RAG Core').item.json.body?.persistenceAccepted ?? false, messageId: $('Run KAXI RAG Core').item.json.body?.messageId ?? null, persistenceMode: $('Run KAXI RAG Core').item.json.body?.persistenceMode ?? '', handoffTaskPersisted: $('Run KAXI RAG Core').item.json.body?.handoffTaskPersisted ?? false, runtimePath: 'n8n-kaxi-orchestrated', executionId: $('Run KAXI RAG Core').item.json.body?.executionId ?? $execution.id, workflowId: $('Run KAXI RAG Core').item.json.body?.workflowId ?? 'kaxi-direct-hybrid', workflowVersionId: $('Run KAXI RAG Core').item.json.body?.workflowVersionId ?? 'kaxi-rag-runtime@2026-07-14.railway-mcp-v3', modelVersion: $('Run KAXI RAG Core').item.json.body?.modelVersion ?? 'retrieval/hybrid-rrf-v3+rerank-v11@2026-07-14', promptVersion: $('Run KAXI RAG Core').item.json.body?.promptVersion ?? 'kaxi-grounded-answer@2026-07-14.p3-v3', n8nExecutionId: $execution.id, n8nWorkflowId: $workflow.id, n8nWorkflowVersionId: 'kaxi-rag-runtime@2026-07-14.railway-mcp-v3' }) }}",
+        "options": {
+          "responseCode": "={{ $('Run KAXI RAG Core').item.json.statusCode ?? 502 }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "f7a8c0ce-e8c2-414c-8efa-409013b89f26",
+      "name": "Respond Runtime Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        880,
+        360
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ answer: 'Unauthorized request.', needsHuman: true, riskLevel: 'high', leadStage: 'blocked', nextStep: 'Verify the KAXI signature and session state.', sources: [], runtimePath: 'n8n-signature-rejected', executionId: $execution.id, workflowId: $workflow.id, workflowVersionId: 'kaxi-rag-runtime@2026-07-14.railway-mcp-v3', modelVersion: 'retrieval/hybrid-rrf-v3+rerank-v11@2026-07-14', promptVersion: 'kaxi-grounded-answer@2026-07-14.p3-v3' }) }}",
+        "options": {
+          "responseCode": 401,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "1ed6c16c-51de-44d5-a413-bb60db4977ed",
+      "name": "RAG Knowledge Ingestion Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        160,
+        680
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rag-knowledge-ingest",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://kaxi.vercel.app",
+          "ignoreBots": false
+        }
+      },
+      "webhookId": "0c0f028b-2a37-4e51-8f64-62af940afa55"
+    },
+    {
+      "id": "20ae5c7e-3211-4118-8ab4-776b2c430143",
+      "name": "Verify Ingestion Signature",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        400,
+        680
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://kaxi.vercel.app/api/internal/n8n/verify",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { purpose: 'rag-ingestion', timestamp: $json.headers?.['x-kaxi-timestamp'] ?? '', nonce: $json.headers?.['x-kaxi-nonce'] ?? '', signature: $json.headers?.['x-kaxi-signature'] ?? '', payload: $json.body ?? {} } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      }
+    },
+    {
+      "id": "8889e2ae-6bfb-4160-ab99-47933ba3046e",
+      "name": "Ingestion Signature Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        640,
+        680
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ok }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "8e48492e-cd77-4d58-9e22-aaf20ec23b31",
+      "name": "Run KAXI RAG Ingestion Core",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        880,
+        600
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://kaxi.vercel.app/api/internal/n8n/rag-ingestion",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { verificationToken: $('Verify Ingestion Signature').item.json.verificationToken ?? '', payload: $('RAG Knowledge Ingestion Webhook').item.json.body ?? {} } }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 40000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 750
+    },
+    {
+      "id": "1fb87f03-f7f2-4306-a33b-42385f60b0ba",
+      "name": "Respond Ingestion",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1160,
+        600
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ...($('Run KAXI RAG Ingestion Core').item.json.body ?? {}), executionId: $('Run KAXI RAG Ingestion Core').item.json.body?.executionId ?? $execution.id, workflowId: $('Run KAXI RAG Ingestion Core').item.json.body?.workflowId ?? $workflow.id, workflowVersionId: $('Run KAXI RAG Ingestion Core').item.json.body?.workflowVersionId ?? 'kaxi-rag-runtime@2026-07-14.railway-mcp-v3', modelVersion: $('Run KAXI RAG Ingestion Core').item.json.body?.modelVersion ?? 'openai/text-embedding-3-small@1536', promptVersion: $('Run KAXI RAG Ingestion Core').item.json.body?.promptVersion ?? 'kaxi-rag-ingestion@2026-07-14.mcp-v1', n8nExecutionId: $execution.id, n8nWorkflowId: $workflow.id, n8nWorkflowVersionId: 'kaxi-rag-runtime@2026-07-14.railway-mcp-v3' }) }}",
+        "options": {
+          "responseCode": "={{ $('Run KAXI RAG Ingestion Core').item.json.statusCode ?? 502 }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "5ea47edb-bc34-44fb-a779-1c74b0dcf82c",
+      "name": "Respond Ingestion Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        880,
+        800
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, status: 'unauthorized', executionId: $execution.id, workflowId: $workflow.id, workflowVersionId: 'kaxi-rag-runtime@2026-07-14.railway-mcp-v3', modelVersion: 'openai/text-embedding-3-small@1536', promptVersion: 'kaxi-rag-ingestion@2026-07-14.mcp-v1' }) }}",
+        "options": {
+          "responseCode": 401,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "26b93755-2cc1-4a58-b53d-523389f916a6",
+      "name": "Typebot Handoff Update Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        160,
+        1120
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "typebot-handoff-update",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://kaxi.vercel.app",
+          "ignoreBots": false
+        }
+      },
+      "webhookId": "77f9eda8-c435-4e9f-9778-1725c802464f"
+    },
+    {
+      "id": "0008d74b-36b1-4f66-ae65-23e1efab569d",
+      "name": "Verify Handoff Signature",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        400,
+        1120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://kaxi.vercel.app/api/internal/n8n/verify",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { purpose: 'typebot-handoff', timestamp: $json.headers?.['x-kaxi-timestamp'] ?? '', nonce: $json.headers?.['x-kaxi-nonce'] ?? '', signature: $json.headers?.['x-kaxi-signature'] ?? '', payload: $json.body ?? {} } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      }
+    },
+    {
+      "id": "3e766bbb-3d52-43e2-b868-02ac202704ed",
+      "name": "Handoff Signature Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        640,
+        1120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ok }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ad2e1717-ac6d-453c-a9a0-cb34ea7fe523",
+      "name": "Run KAXI Handoff Core",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        880,
+        1040
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://kaxi.vercel.app/api/internal/n8n/handoff-update",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { verificationToken: $('Verify Handoff Signature').item.json.verificationToken ?? '', payload: $('Typebot Handoff Update Webhook').item.json.body ?? {} } }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 500
+    },
+    {
+      "id": "18861f67-e4eb-4ae7-bcd3-afd63172fff1",
+      "name": "Respond Handoff Update",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1160,
+        1040
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ...($('Run KAXI Handoff Core').item.json.body ?? {}), executionId: $('Run KAXI Handoff Core').item.json.body?.executionId ?? $execution.id, workflowId: $('Run KAXI Handoff Core').item.json.body?.workflowId ?? $workflow.id, workflowVersionId: $('Run KAXI Handoff Core').item.json.body?.workflowVersionId ?? 'kaxi-rag-runtime@2026-07-14.railway-mcp-v3', modelVersion: $('Run KAXI Handoff Core').item.json.body?.modelVersion ?? 'openai/text-embedding-3-small@1536', promptVersion: $('Run KAXI Handoff Core').item.json.body?.promptVersion ?? 'kaxi-handoff-update@2026-07-14.mcp-v1', n8nExecutionId: $execution.id, n8nWorkflowId: $workflow.id, n8nWorkflowVersionId: 'kaxi-rag-runtime@2026-07-14.railway-mcp-v3' }) }}",
+        "options": {
+          "responseCode": "={{ $('Run KAXI Handoff Core').item.json.statusCode ?? 502 }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "d87b8fea-ce70-49f7-accd-3e92f89e2e06",
+      "name": "Respond Handoff Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        880,
+        1240
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, status: 'unauthorized', executionId: $execution.id, workflowId: $workflow.id, workflowVersionId: 'kaxi-rag-runtime@2026-07-14.railway-mcp-v3', modelVersion: 'openai/text-embedding-3-small@1536', promptVersion: 'kaxi-handoff-update@2026-07-14.mcp-v1' }) }}",
+        "options": {
+          "responseCode": 401,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "1307a84d-cbb2-488a-a6aa-855a746d8a86",
+      "name": "RAG Serving Capability Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        160,
+        1480
+      ],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "rag-serving-capabilities",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://kaxi.vercel.app",
+          "ignoreBots": false
+        }
+      },
+      "webhookId": "4a1eee4a-4ab7-495c-8876-4d4e1d95bc3e"
+    },
+    {
+      "id": "d27f2bd2-8c3d-4247-8b1e-03b895fc8e33",
+      "name": "Respond RAG Serving Capability",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        440,
+        1480
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ service: 'kaxi-rag-serving', contractVersion: '2026-07-14.v4', workflowId: $workflow.id, ingestionTarget: 'rag_serving_chunks', retrievalMode: 'hybrid-rrf-v3-openai-required', lexicalCandidateCount: 20, vectorCandidateCount: 20, finalMatchCount: 6, embeddingModel: 'text-embedding-3-small', corpusEmbeddingModel: 'text-embedding-3-small', embeddingContentStrategy: 'single-locale-v1', dimensions: 1536, queryEmbeddingOptional: false, storedVectorFallback: 'disabled', vectorSeedCount: 0, providerFailureMode: 'fail-closed', signedIngestionRequired: true, executionId: $execution.id, workflowVersionId: 'kaxi-rag-runtime@2026-07-14.railway-mcp-v3', modelVersion: 'retrieval/hybrid-rrf-v3+rerank-v11@2026-07-14', promptVersion: 'kaxi-rag-capability@2026-07-14.v4' }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Typebot Runtime Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify Runtime Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Runtime Signature": {
+      "main": [
+        [
+          {
+            "node": "Runtime Signature Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Runtime Signature Valid": {
+      "main": [
+        [
+          {
+            "node": "Run KAXI RAG Core",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Runtime Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run KAXI RAG Core": {
+      "main": [
+        [
+          {
+            "node": "Respond to Typebot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG Knowledge Ingestion Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify Ingestion Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Ingestion Signature": {
+      "main": [
+        [
+          {
+            "node": "Ingestion Signature Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ingestion Signature Valid": {
+      "main": [
+        [
+          {
+            "node": "Run KAXI RAG Ingestion Core",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Ingestion Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run KAXI RAG Ingestion Core": {
+      "main": [
+        [
+          {
+            "node": "Respond Ingestion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Typebot Handoff Update Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify Handoff Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Handoff Signature": {
+      "main": [
+        [
+          {
+            "node": "Handoff Signature Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handoff Signature Valid": {
+      "main": [
+        [
+          {
+            "node": "Run KAXI Handoff Core",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Handoff Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run KAXI Handoff Core": {
+      "main": [
+        [
+          {
+            "node": "Respond Handoff Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG Serving Capability Webhook": {
+      "main": [
+        [
+          {
+            "node": "Respond RAG Serving Capability",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "binaryMode": "separate",
+    "timezone": "Asia/Seoul",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "executionTimeout": 60
+  }
+}

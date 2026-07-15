@@ -391,4 +391,21 @@ export default workflow("kaxi-rag-typebot-railway", "KAXI RAG Typebot Orchestrat
     .onTrue(runHandoffCore.to(respondHandoff))
     .onFalse(respondHandoffUnauthorized))
   .add(capabilityWebhook)
-  .to(respondCapability);
+  .to(respondCapability)
+  // Declared here so the compiled workflow JSON carries them: importing a
+  // settings-less workflow into the live n8n would wipe execution retention
+  // (which operations review depends on) and the timezone. The save* values
+  // are asserted by scripts/test-n8n-rag-orchestration.ts.
+  // The Error Workflow is deliberately NOT declared: it references a
+  // per-instance workflow id (N8N_ERROR_WORKFLOW_ID) and is assigned in the
+  // n8n UI, so it must be re-checked after any import.
+  .settings({
+    executionOrder: "v1",
+    availableInMCP: true,
+    binaryMode: "separate",
+    timezone: "Asia/Seoul",
+    saveDataErrorExecution: "all",
+    saveDataSuccessExecution: "all",
+    saveExecutionProgress: true,
+    executionTimeout: 60,
+  });
