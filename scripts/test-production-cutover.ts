@@ -18,7 +18,7 @@ import {
 } from "../src/lib/typebot/runtime-health";
 
 const expectedMigration = latestMigrationName();
-assert.equal(expectedMigration, "20260714100000_localized_knowledge_titles");
+assert.equal(expectedMigration, "20260716120000_student_profile_chat_fields");
 assert.equal(declaredRequiredMigration(), expectedMigration);
 
 const readyPayload = {
