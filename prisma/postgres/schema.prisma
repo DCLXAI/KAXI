@@ -139,6 +139,8 @@ model StudentProfile {
   userId                String    @unique
   nationality           String    @default("VN")
   visaType              String?
+  targetVisa            String?
+  chatStudyStage        String?
   visaExpiryDate        DateTime?
   alienRegistrationNo   String?
   alienRegistrationHash String?
