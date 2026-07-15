@@ -546,7 +546,11 @@ export async function mediateRagQuestion(
   const useConversationContext = contextualFollowUp(input.question, conversationHistory);
   const resolvedVisaCodes = inheritedVisaCodes(input.question, conversationHistory, useConversationContext);
   const profileCodes = input.profile ? profileVisaCodes(input.profile) : [];
-  const visaCodesWithProfile = Array.from(new Set([...resolvedVisaCodes, ...profileCodes]));
+  // Profile codes behave like the inheritedVisaCodes guard: they only fill in
+  // when the question (and resolved history) produced no visa code at all.
+  // A question with its own explicit code must never be widened by a stale
+  // profile visa.
+  const visaCodesWithProfile = resolvedVisaCodes.length > 0 ? resolvedVisaCodes : profileCodes;
   const fallbackQuestion = contextualFallbackQuestion(
     input.question,
     conversationHistory,
@@ -564,7 +568,7 @@ export async function mediateRagQuestion(
     if (deterministic) {
       return {
         ...deterministic,
-        visaCodes: Array.from(new Set([...deterministic.visaCodes, ...profileCodes])),
+        visaCodes: Array.from(new Set([...deterministic.visaCodes, ...visaCodesWithProfile])),
         contextTurns: conversationHistory.length,
         contextResolved: false,
       };
@@ -672,8 +676,14 @@ Also extract any newly stated nationality (ISO alpha-2), current visa, target vi
       : undefined;
     return {
       ...parsed,
+      // Only force-add profile codes here (and only under the same
+      // resolvedVisaCodes-empty guard as visaCodesWithProfile above); never
+      // force-add resolvedVisaCodes itself, so the model's own selection is
+      // preserved. The filter is the whitelist: it still discards anything —
+      // model output included — that isn't grounded in the resolved question
+      // or the (guarded) profile.
       visaCodes: Array.from(new Set([
-        ...visaCodesWithProfile,
+        ...(resolvedVisaCodes.length === 0 ? profileCodes : []),
         ...parsed.visaCodes,
         ...explicitVisaCodes(parsed.searchQuery),
       ])).filter((code) => visaCodesWithProfile.includes(code)),
