@@ -1,5 +1,7 @@
 {
-  "regions": ["hnd1"],
+  "regions": [
+    "hnd1"
+  ],
   "crons": [
     {
       "path": "/api/privacy/retention",
@@ -15,7 +17,7 @@
     },
     {
       "path": "/api/ops/sla",
-      "schedule": "45 * * * *"
+      "schedule": "45 18 * * *"
     }
   ]
 }
