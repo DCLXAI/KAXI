@@ -36,6 +36,7 @@ export type ChatHistoryAttachment = {
 export type ChatSessionSnapshot = {
   messages: ChatHistoryExchange[];
   attachments: ChatHistoryAttachment[];
+  metadata: Record<string, unknown> | null;
 };
 
 function record(value: unknown): Record<string, unknown> {
@@ -106,7 +107,7 @@ export async function loadChatSessionSnapshot(
   const supabase = createSupabaseChatClient();
   const session = await supabase
     .from("chat_sessions")
-    .select("id")
+    .select("id,metadata")
     .eq("session_key", sessionKey)
     .eq("source", source)
     .eq("channel", channel)
@@ -212,5 +213,9 @@ export async function loadChatSessionSnapshot(
     };
   });
 
-  return { messages, attachments };
+  return {
+    messages,
+    attachments,
+    metadata: (session.data as { metadata?: Record<string, unknown> | null }).metadata ?? null,
+  };
 }

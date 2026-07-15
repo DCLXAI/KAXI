@@ -7,6 +7,12 @@ import { getReadyChatAttachmentsForRuntime } from "@/lib/chat/attachment-process
 import { inferChatCategory } from "@/lib/chat/category";
 import { loadChatSessionSnapshot } from "@/lib/chat/history";
 import {
+  extractProfileSignals,
+  hasProfileFacts,
+  mergeSessionProfile,
+  parseSessionProfile,
+} from "@/lib/chat/session-profile";
+import {
   clarificationNextStep,
   mediateRagQuestion,
   questionMediationMetadata,
@@ -372,12 +378,18 @@ export async function POST(req: NextRequest) {
     };
     trackTypebotProductEvent("chatbot_question_sent", { category: deterministicCategory });
     let conversationHistory: Array<{ question: string; answer: string }> = [];
+    let sessionMetadata: Record<string, unknown> = {};
+    let profile = parseSessionProfile(null);
     try {
       const snapshot = await loadChatSessionSnapshot(sessionId, {
         source,
         messageLimit: 4,
         attachmentLimit: 1,
       });
+      sessionMetadata = (snapshot?.metadata && typeof snapshot.metadata === "object")
+        ? { ...snapshot.metadata }
+        : {};
+      profile = parseSessionProfile(sessionMetadata.profile);
       conversationHistory = (snapshot?.messages || [])
         .filter((message) => message.status === "completed" && message.question && message.answer)
         .slice(-3)
@@ -385,12 +397,25 @@ export async function POST(req: NextRequest) {
     } catch (historyError) {
       console.warn("[POST /api/typebot-rag] conversation history unavailable", historyError);
     }
+    const turnIndex = conversationHistory.length + 1;
+    try {
+      profile = mergeSessionProfile(profile, extractProfileSignals(question, locale), turnIndex, "deterministic");
+    } catch (profileError) {
+      console.warn("[POST /api/typebot-rag] profile extraction failed", profileError);
+    }
     const mediation = await mediateRagQuestion({
       question,
       locale,
       deterministicCategory,
       conversationHistory,
+      profile,
     });
+    if (mediation.profileSignals) {
+      profile = mergeSessionProfile(profile, mediation.profileSignals, turnIndex, "mediation");
+    }
+    const sessionMetadataWithProfile = hasProfileFacts(profile)
+      ? { ...sessionMetadata, profile }
+      : undefined;
     const category = mediation.category;
 
     const n8nRequest = {
@@ -430,6 +455,7 @@ export async function POST(req: NextRequest) {
           latencyMs: Date.now() - startedAt,
           status: "failed",
           errorCode,
+          sessionMetadata: sessionMetadataWithProfile,
         });
       } catch (persistError) {
         console.error("[POST /api/typebot-rag] failure persistence failed", persistError);
@@ -512,6 +538,7 @@ export async function POST(req: NextRequest) {
           requireOpenAiEmbedding: true,
           mediation,
           conversationHistory,
+          profile,
         });
         provenance = resolveRagProvenance(upstreamPayload);
       } catch (directError) {
@@ -582,6 +609,7 @@ export async function POST(req: NextRequest) {
             requireOpenAiEmbedding: true,
             mediation,
             conversationHistory,
+            profile,
           });
           provenance = resolveRagProvenance(upstreamPayload);
           reportOpsEventAsync(
@@ -681,6 +709,7 @@ export async function POST(req: NextRequest) {
           sources: normalizedPayload.sources,
           searchMeta: normalizedPayload.searchMeta,
           latencyMs: Date.now() - startedAt,
+          sessionMetadata: sessionMetadataWithProfile,
         });
         storedMessageId = persisted.id.toString();
         persistenceMode = persisted.mode;

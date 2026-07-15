@@ -1405,6 +1405,48 @@ assert.equal(
 );
 assert.match(groundedD4NoContext.answer, /D-4/);
 
+const profileTestInput: DirectLexicalFallbackInput = {
+  question: "제가 변경하려는 비자에 필요한 서류 알려주세요",
+  locale: "ko",
+  category: "documents",
+  tenantId: "default",
+  requestId: "profile-test",
+  fallbackReason: "test",
+  requireOpenAiEmbedding: false,
+  conversationHistory: [],
+  profile: {
+    version: "session-profile-v1",
+    nationality: "vn",
+    currentVisa: "D-4",
+    targetVisa: "D-2",
+  },
+};
+const profileTestRow = {
+  ...validRow,
+  id: 40,
+  content: [
+    "## 체류자격 변경 서류 안내",
+    "체류자격 변경을 신청할 때는 통합신청서, 여권, 외국인등록증과 관련 증빙서류를 제출합니다.",
+  ].join("\n"),
+  metadata: {
+    ...validRow.metadata,
+    doc_id: "VISA-CHANGE-DOCUMENTS",
+    title: "체류자격 변경 서류 안내",
+    category: "documents",
+  },
+};
+let observedProfileBlock = "";
+const profileResult = await runDirectRagFallback(profileTestInput, {
+  createEmbedding: async () => missingEmbeddingProvider,
+  rpc: async () => ({ data: [profileTestRow] }),
+  generateAnswer: async (request) => {
+    observedProfileBlock = JSON.stringify(request.profile || null);
+    return { status: "unavailable", reason: "not_configured" };
+  },
+});
+assert.equal(observedProfileBlock.includes("D-2"), true, "profile must reach the grounded generator");
+assert.ok(profileResult, "extractive degradation still answers");
+
 for (const status of [400, 401, 402, 404, 429, 500, 503]) {
   assert.equal(shouldUseDirectLexicalFallback({ status }), true, `HTTP ${status} should use direct fallback`);
 }

@@ -20,6 +20,7 @@ import {
   type QuestionMediation,
 } from "@/lib/chat/question-mediator";
 import type { RagProvenance } from "@/lib/n8n/provenance";
+import type { SessionProfile } from "@/lib/chat/session-profile";
 import { pickLangText } from "@/lib/data/knowledge";
 import {
   searchPgvectorKnowledgeWithEmbedding,
@@ -97,6 +98,7 @@ export type DirectLexicalFallbackInput = {
   embedding?: QueryEmbeddingResult;
   mediation?: QuestionMediation;
   conversationHistory?: QuestionConversationTurn[];
+  profile?: SessionProfile;
   requireOpenAiEmbedding?: boolean;
   maxDocuments?: number;
 };
@@ -1386,6 +1388,7 @@ export async function runDirectRagFallback(
     coveredIntents: selection.coveredIntentIds,
     missingIntents: selection.missingIntentIds,
     conversationHistory: input.conversationHistory,
+    profile: input.profile,
     documents: selection.documents.map((document) => ({
       title: document.title,
       content: document.content,

@@ -40,6 +40,7 @@ export interface PersistChatExchangeInput {
   latencyMs?: number;
   status?: "completed" | "failed";
   errorCode?: string;
+  sessionMetadata?: unknown;
 }
 
 function configured(value: string | undefined) {
@@ -516,6 +517,7 @@ export async function persistChatExchange(input: PersistChatExchangeInput) {
     locale: input.locale,
     source: input.source,
     typebotResultId: input.typebotResultId,
+    metadata: input.sessionMetadata,
   });
   const protectedQuestion = protectConversationText(input.question, 1_200);
   const protectedAnswer = protectConversationText(input.answer, 8_000);
