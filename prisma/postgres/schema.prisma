@@ -426,6 +426,11 @@ model PartnerRequest {
   acceptedAt         DateTime?
   closedAt           DateTime?
 
+  slaTier             String?
+  slaDueAt            DateTime?
+  slaFirstResponseAt  DateTime?
+  slaBreachAlertedAt  DateTime?
+
   @@index([leadId])
   @@index([organizationId])
   @@index([assignedUserId])
@@ -435,6 +440,7 @@ model PartnerRequest {
   @@index([questionHash])
   @@index([deleteRequestedAt])
   @@index([retentionUntil])
+  @@index([slaDueAt])
 }
 
 model UserNotification {
@@ -1145,6 +1151,11 @@ model EscalationCase {
   updatedAt           DateTime         @updatedAt
   closedAt            DateTime?
 
+  slaTier             String?
+  slaDueAt            DateTime?
+  slaFirstResponseAt  DateTime?
+  slaBreachAlertedAt  DateTime?
+
   organization   Organization?       @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   studentProfile StudentProfile      @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
   assignedUser   User?               @relation("AssignedCases", fields: [assignedUserId], references: [id], onDelete: SetNull)
@@ -1162,6 +1173,7 @@ model EscalationCase {
   @@index([acceptedAt])
   @@index([closedAt])
   @@index([createdAt])
+  @@index([slaDueAt])
 }
 
 model CaseTimelineEvent {
