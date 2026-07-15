@@ -4,6 +4,7 @@ import { parseLimit, rateLimit } from "@/lib/api/security";
 import { inferChatCategory } from "@/lib/chat/category";
 import { runDirectRagFallback } from "@/lib/chat/direct-lexical-fallback";
 import { parseRuntimeQuestionMediation } from "@/lib/chat/question-mediator";
+import { parseSessionProfile } from "@/lib/chat/session-profile";
 import {
   applyChatResponseGuardrail,
   type GuardrailLocale,
@@ -98,6 +99,7 @@ export async function POST(req: NextRequest) {
       requireOpenAiEmbedding: true,
       mediation,
       conversationHistory: conversationHistory(payload.conversationContext),
+      profile: parseSessionProfile(payload.profile),
     });
     const guarded = applyChatResponseGuardrail(direct, question, resolvedLocale);
     const currentSearchMeta = record(guarded.searchMeta) || {};

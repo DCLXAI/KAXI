@@ -39,6 +39,20 @@ assert(
     && !railwayWorkflow.includes("embeddingsOpenAi"),
   "Railway n8n must delegate secret-bearing embedding and persistence to KAXI",
 );
+
+// The session profile must reach the n8n rollback runtime too: typebot-rag
+// forwards it in the signed request, and the internal core applies it so the
+// grounded prompt carries the profile even when the direct path fell back.
+const typebotRagRouteSource = readFileSync("src/app/api/typebot-rag/route.ts", "utf8");
+const ragRuntimeRouteSource = readFileSync("src/app/api/internal/n8n/rag-runtime/route.ts", "utf8");
+assert(
+  typebotRagRouteSource.includes("profile: hasProfileFacts(profile) ? profile : undefined"),
+  "typebot-rag must forward the session profile in the signed n8n rollback request",
+);
+assert(
+  ragRuntimeRouteSource.includes("parseSessionProfile(payload.profile)"),
+  "the n8n rollback runtime must apply the forwarded session profile (whitelisted via parseSessionProfile)",
+);
 assert(
   railwayWorkflow.includes("Verify Runtime Signature")
     && railwayWorkflow.includes("Verify Ingestion Signature")

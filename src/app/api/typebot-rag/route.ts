@@ -9,6 +9,7 @@ import { loadChatSessionSnapshot } from "@/lib/chat/history";
 import {
   extractProfileSignals,
   fillSessionProfile,
+  hasProfileFacts,
   mergeSessionProfile,
   parseSessionProfile,
   resolveSessionProfileMetadata,
@@ -443,6 +444,7 @@ export async function POST(req: NextRequest) {
       externalRequestId: identity.externalRequestId,
       attachments: verifiedAttachments,
       conversationContext: conversationHistory,
+      profile: hasProfileFacts(profile) ? profile : undefined,
     };
 
     const persistFailure = async (
