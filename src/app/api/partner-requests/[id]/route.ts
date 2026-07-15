@@ -78,6 +78,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         data: {
           status: nextStatus,
           ...(nextStatus === "closed" ? { closedAt: now } : {}),
+          // First-response SLA marker: this admin "contacted" transition is
+          // the only place PartnerRequest.status ever becomes "contacted"
+          // (updatePartnerRequestStatus only handles accept/close). Fill
+          // once and never overwrite an existing value.
+          ...(nextStatus === "contacted" && !existing.slaFirstResponseAt
+            ? { slaFirstResponseAt: now }
+            : {}),
         },
       });
       if (transition.count !== 1) {

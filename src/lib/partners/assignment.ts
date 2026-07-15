@@ -1,6 +1,7 @@
 import { ConsentScope, ConsentStatus, OrgType } from "@prisma/client";
 import { db } from "@/lib/db";
 import { notifyUsers } from "@/lib/notifications/repository";
+import { slaDefaultMinutes, slaDueAt, slaTierForMinutes } from "@/lib/ops/sla-policy";
 
 export class PartnerRequestAssignmentError extends Error {
   readonly code: string;
@@ -84,6 +85,10 @@ export async function assignPartnerRequest(input: {
     }
 
     const now = new Date();
+    // PartnerRequest carries no risk/urgency column (see
+    // prisma/postgres/schema.prisma), so this always resolves to the
+    // standard-24h tier -- there is nothing risk-like to pass through.
+    const slaMinutes = slaDefaultMinutes({ riskLevel: null, leadStage: null });
     const updated = await tx.partnerRequest.update({
       where: { id: request.id },
       data: {
@@ -93,6 +98,16 @@ export async function assignPartnerRequest(input: {
         matchedAt: now,
         acceptedAt: null,
         closedAt: null,
+        slaTier: slaTierForMinutes(slaMinutes),
+        slaDueAt: slaDueAt(now, slaMinutes),
+        // A fresh slaTier/slaDueAt means a fresh SLA window. Reset the rest of
+        // the window in the same write -- otherwise a REassignment leaves the
+        // previous office's slaFirstResponseAt in place, which permanently
+        // short-circuits classifySlaItem into "skipped" for the new window,
+        // and a stale slaBreachAlertedAt would permanently suppress the new
+        // window's alert too.
+        slaFirstResponseAt: null,
+        slaBreachAlertedAt: null,
       },
       include: { lead: true, organization: true, assignedUser: true },
     });
@@ -180,7 +195,14 @@ export async function updatePartnerRequestStatus(input: {
         OR: [{ assignedUserId: null }, { assignedUserId: input.userId }],
       },
       data: input.action === "accept"
-        ? { status, assignedUserId: input.userId, acceptedAt: now }
+        // The partner accepting the request is the SLA-bearing row's actual
+        // first response -- matched/accepted are the only statuses an
+        // assigned PartnerRequest can reach, and canTransitionPartnerRequestStatus
+        // never allows matched/accepted -> contacted, so the admin "contacted"
+        // stamp below is otherwise unreachable for these rows. Write-once:
+        // never overwrite an existing slaFirstResponseAt (mirrors
+        // acceptAssignedCase in src/lib/cases/repository.ts).
+        ? { status, assignedUserId: input.userId, acceptedAt: now, slaFirstResponseAt: request.slaFirstResponseAt ?? now }
         : { status, assignedUserId: request.assignedUserId || input.userId, closedAt: now },
     });
     if (transition.count !== 1) {

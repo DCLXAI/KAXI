@@ -3,10 +3,24 @@ import { db } from "@/lib/db";
 import { preparePiiField, readPiiField } from "@/lib/privacy/pii";
 import { productLocale } from "@/lib/analytics/events";
 import { recordServerProductEvent } from "@/lib/analytics/server";
+import { notifyUsers } from "@/lib/notifications/repository";
+import {
+  SLA_POLICY_VERSION,
+  assertSlaMinutes,
+  slaDefaultMinutes,
+  slaDueAt,
+  slaTierForMinutes,
+} from "@/lib/ops/sla-policy";
 
 const ACTIVE_STATUSES = new Set(["open", "review", "contact_requested", "contact_received", "assigned", "in_progress"]);
 const ACTIONS = new Set(["assign", "start", "contacted", "resolve", "close", "reopen"]);
 const RESOLUTION_CODES = new Set(["resolved", "inaccurate", "missing_document"]);
+
+// Exported so src/lib/handoffs/partner.ts can filter to non-terminal tasks
+// without duplicating (and risking drift from) this status list.
+export function isActiveHandoffStatus(status: string): boolean {
+  return ACTIVE_STATUSES.has(status);
+}
 
 export type HandoffAction = "assign" | "start" | "contacted" | "resolve" | "close" | "reopen";
 export type HandoffResolutionCode = "resolved" | "inaccurate" | "missing_document";
@@ -112,7 +126,9 @@ type ConsentRow = {
   notice_version?: string | null;
 };
 
-function isolatedTestRuntime() {
+// Exported so src/lib/handoffs/partner.ts can reuse the exact same guard
+// instead of duplicating the loopback-detection logic.
+export function isolatedTestRuntime() {
   const runtimeDatabase = process.env.DATABASE_URL?.trim() || "";
   return Boolean(
     process.env.TEST_DATABASE_URL &&
@@ -120,7 +136,9 @@ function isolatedTestRuntime() {
   );
 }
 
-function serviceClient() {
+// Exported so src/lib/handoffs/partner.ts can look up a task's own
+// assignment metadata before delegating its mutation to updateAdminHandoff.
+export function serviceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || "";
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || "";
   if (!url || !key) throw new Error("SUPABASE_HANDOFFS_NOT_CONFIGURED");
@@ -142,7 +160,9 @@ function finiteInteger(value: unknown) {
   return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
 }
 
-function assignmentMetadata(value: unknown) {
+// Exported so src/lib/handoffs/partner.ts can read a task's
+// handoff_metadata.assignment.assigneeUserId for its ownership check.
+export function assignmentMetadata(value: unknown) {
   const metadata = record(value);
   const assignment = record(metadata.assignment);
   const sla = record(metadata.sla);
@@ -203,7 +223,7 @@ function readableField(
   return revealPii ? readPiiField(safePlaintext, text(ciphertext)) : safePlaintext;
 }
 
-export async function listAdminHandoffs(options: { revealPii: boolean; limit?: number }) {
+export async function listAdminHandoffs(options: { revealPii: boolean; limit?: number; assigneeUserId?: string }) {
   if (isolatedTestRuntime()) {
     return {
       tasks: [] as AdminHandoffTask[],
@@ -223,12 +243,24 @@ export async function listAdminHandoffs(options: { revealPii: boolean; limit?: n
   }
 
   const supabase = serviceClient();
+  // When scoped to a single assignee (the partner inbox, see
+  // src/lib/handoffs/partner.ts), filter at the QUERY level via the
+  // handoff_metadata.assignment.assigneeUserId JSONB path -- not the global
+  // newest-N-rows window used by the unscoped admin queue. Filtering only in
+  // JS after that global window means a partner's own task silently vanishes
+  // once 100 newer tasks exist anywhere in the queue (it already holds ~99).
+  // The limit below still applies, but AFTER this filter, to this caller's
+  // own rows only.
+  let taskQuery = supabase
+    .from("handoff_tasks")
+    .select("id,source_chat_message_id,session_id,tenant_id,question,question_ciphertext,answer,answer_ciphertext,risk_level,lead_stage,status,assignee,notes,notes_ciphertext,lead_id,lead_contact_id,contact_received_at,handoff_metadata,queue_reason,resolution_code,resolved_by,resolved_at,evaluation_case_id,created_at,updated_at,closed_at")
+    .order("created_at", { ascending: false });
+  if (options.assigneeUserId) {
+    taskQuery = taskQuery.filter("handoff_metadata->assignment->>assigneeUserId", "eq", options.assigneeUserId);
+  }
+
   const [tasksResult, partnerUsers] = await Promise.all([
-    supabase
-      .from("handoff_tasks")
-      .select("id,source_chat_message_id,session_id,tenant_id,question,question_ciphertext,answer,answer_ciphertext,risk_level,lead_stage,status,assignee,notes,notes_ciphertext,lead_id,lead_contact_id,contact_received_at,handoff_metadata,queue_reason,resolution_code,resolved_by,resolved_at,evaluation_case_id,created_at,updated_at,closed_at")
-      .order("created_at", { ascending: false })
-      .limit(Math.min(200, Math.max(1, Math.trunc(options.limit || 100)))),
+    taskQuery.limit(Math.min(200, Math.max(1, Math.trunc(options.limit || 100)))),
     db.user.findMany({
       where: { role: "PARTNER_AGENT", organization: { type: "PARTNER_AGENT_OFFICE" } },
       select: { id: true, email: true, organizationId: true, organization: { select: { name: true } } },
@@ -404,6 +436,34 @@ export async function listAdminHandoffs(options: { revealPii: boolean; limit?: n
   };
 }
 
+// Best-effort notification for a handoff assignment. Exported so it can be
+// exercised directly against a real database in tests: the `assign` action's
+// own persistence goes through the Supabase service client, which is hard
+// -disabled in the isolated test runtime (see isolatedTestRuntime above) to
+// guarantee tests can never mutate production Supabase data. This function
+// only touches Prisma's `UserNotification` table, so it stays real and
+// testable while that guard remains in place.
+export async function notifyHandoffAssignee(taskId: string, assignee: { id: string; locale?: string | null }) {
+  try {
+    await notifyUsers({
+      users: [{ id: assignee.id, locale: assignee.locale }],
+      eventKey: `handoff:${taskId}:assigned:${assignee.id}`,
+      copy: {
+        ko: { title: "새 상담 배정", message: "새로운 상담 건이 배정되었습니다." },
+        vi: { title: "Yêu cầu tư vấn mới được giao", message: "Một yêu cầu tư vấn mới đã được giao cho bạn." },
+        mn: { title: "Шинэ зөвлөгөө хуваарилагдлаа", message: "Танд шинэ зөвлөгөөний хүсэлт хуваарилагдлаа." },
+        en: { title: "New consultation assigned", message: "A new consultation task was assigned to you." },
+      },
+      href: "/partner",
+      metadata: { handoffTaskId: taskId },
+    });
+  } catch (notifyError) {
+    // Best-effort: the assignment itself must never fail because the
+    // assignee could not be notified.
+    console.warn("[handoffs] assignee notification failed", notifyError);
+  }
+}
+
 export async function updateAdminHandoff(input: {
   id: string;
   action: HandoffAction;
@@ -489,6 +549,7 @@ export async function updateAdminHandoff(input: {
   const nowIso = now.toISOString();
   const update: Record<string, unknown> = {};
   let assignee = input.assignee?.trim().slice(0, 160);
+  let assignedUser: { id: string; locale: string } | null = null;
   if (input.action === "assign") {
     const assigneeUserId = input.assigneeUserId?.trim();
     if (!assigneeUserId) throw new Error("HANDOFF_ASSIGNEE_INVALID");
@@ -506,11 +567,14 @@ export async function updateAdminHandoff(input: {
       throw new Error("HANDOFF_ASSIGNEE_INVALID");
     }
     assignee = user.email || user.id;
+    assignedUser = { id: user.id, locale: user.locale };
     const requestedMinutes = finiteInteger(input.slaMinutes);
-    const defaultMinutes = found.data.risk_level === "high" || found.data.lead_stage === "urgent" ? 120 : 1440;
-    const slaMinutes = requestedMinutes ?? defaultMinutes;
-    if (slaMinutes < 15 || slaMinutes > 10_080) throw new Error("HANDOFF_SLA_INVALID");
-    const dueAt = new Date(now.getTime() + slaMinutes * 60_000);
+    const slaMinutes = requestedMinutes ?? slaDefaultMinutes({
+      riskLevel: found.data.risk_level,
+      leadStage: found.data.lead_stage,
+    });
+    assertSlaMinutes(slaMinutes);
+    const dueAt = slaDueAt(now, slaMinutes);
     update.handoff_metadata = {
       ...record(found.data.handoff_metadata),
       assignment: {
@@ -520,8 +584,8 @@ export async function updateAdminHandoff(input: {
         assignedBy: input.actor.slice(0, 160),
       },
       sla: {
-        policyVersion: input.slaPolicy?.trim().slice(0, 80) || "kaxi-handoff-v1",
-        tier: slaMinutes === 120 ? "urgent-2h" : slaMinutes === 1440 ? "standard-24h" : "custom",
+        policyVersion: input.slaPolicy?.trim().slice(0, 80) || SLA_POLICY_VERSION,
+        tier: slaTierForMinutes(slaMinutes),
         minutes: slaMinutes,
         startsAt: nowIso,
         dueAt: dueAt.toISOString(),
@@ -597,6 +661,12 @@ export async function updateAdminHandoff(input: {
       surface: "admin_handoff",
       properties: { taskId: input.id, slaMinutes: finiteInteger(input.slaMinutes) || 0 },
     }).catch((error) => console.warn("[handoff analytics]", error instanceof Error ? error.message : error));
+    // Persistence above has already succeeded (updated.error was checked), so
+    // it is now safe to notify the assignee. This call is best-effort on its
+    // own (see notifyHandoffAssignee) and never throws.
+    if (assignedUser) {
+      await notifyHandoffAssignee(input.id, assignedUser);
+    }
   }
   if (input.action === "start" || input.action === "contacted") {
     await recordServerProductEvent({

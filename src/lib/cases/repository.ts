@@ -9,6 +9,7 @@ import {
 import { db } from "@/lib/db";
 import { CASE_NOTIFICATION_COPY, notifyCaseStudent } from "@/lib/notifications/domain";
 import { notifyUsers } from "@/lib/notifications/repository";
+import { slaDefaultMinutes, slaDueAt, slaTierForMinutes } from "@/lib/ops/sla-policy";
 
 type Tx = Prisma.TransactionClient;
 
@@ -252,6 +253,13 @@ export async function assignCaseToPartnerOffice(input: {
     }
 
     const now = new Date();
+    // EscalationCase.riskLevel is the Prisma enum (LOW/MEDIUM/HIGH/UNKNOWN);
+    // slaDefaultMinutes compares against the lowercase "high" string used by
+    // the shared policy, so it must be lowercased here. Use the risk level
+    // this assignment is about to write (UNKNOWN is promoted to HIGH below)
+    // so a previously-unknown-risk case correctly gets the urgent tier too.
+    const effectiveRiskLevel = caseItem.riskLevel === "UNKNOWN" ? "HIGH" : caseItem.riskLevel;
+    const slaMinutes = slaDefaultMinutes({ riskLevel: effectiveRiskLevel.toLowerCase() });
     const updated = await tx.escalationCase.update({
       where: { id: input.caseId },
       data: {
@@ -259,7 +267,17 @@ export async function assignCaseToPartnerOffice(input: {
         assignedUserId: input.assignedUserId || null,
         matchedAt: caseItem.matchedAt || now,
         status: caseItem.status === "NEW" ? "HIGH_RISK" : caseItem.status,
-        riskLevel: caseItem.riskLevel === "UNKNOWN" ? "HIGH" : caseItem.riskLevel,
+        riskLevel: effectiveRiskLevel,
+        slaTier: slaTierForMinutes(slaMinutes),
+        slaDueAt: slaDueAt(now, slaMinutes),
+        // A fresh slaTier/slaDueAt means a fresh SLA window -- reset the rest
+        // of it in the same write. Otherwise reassigning to a different
+        // office leaves the previous office's slaFirstResponseAt in place,
+        // which permanently short-circuits classifySlaItem into "skipped"
+        // for the new window, and a stale slaBreachAlertedAt would
+        // permanently suppress the new window's alert too.
+        slaFirstResponseAt: null,
+        slaBreachAlertedAt: null,
       },
     });
     const note = normalizeNote(input.note, `파트너 사무소 ${organization.name}에 배정`);
@@ -321,6 +339,7 @@ export async function acceptAssignedCase(input: {
         status: "APPROVED",
         acceptedAt: caseItem.acceptedAt || now,
         assignedUserId: input.reviewerUserId || caseItem.assignedUserId,
+        slaFirstResponseAt: caseItem.slaFirstResponseAt ?? now,
       },
     });
     await tx.agentReview.create({

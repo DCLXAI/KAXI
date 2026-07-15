@@ -1,0 +1,46 @@
+name: SLA Watchdog
+
+# Vercel Hobby only permits daily cron jobs, so vercel.json runs the watchdog
+# once a day as a backstop and this workflow supplements it hourly — the same
+# split the official source monitor already uses. Hourly matters: the
+# `urgent-2h` tier is meaningless if a breach can sit unreported for a day.
+
+on:
+  schedule:
+    - cron: "45 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sla-watchdog
+  cancel-in-progress: false
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      KAXI_SLA_URL: https://kaxi.vercel.app/api/ops/sla
+      KAXI_ADMIN_API_KEY: ${{ secrets.KAXI_ADMIN_API_KEY }}
+    steps:
+      - name: Require admin key
+        if: ${{ env.KAXI_ADMIN_API_KEY == '' }}
+        run: |
+          echo "KAXI_ADMIN_API_KEY secret is required for the scheduled SLA watchdog."
+          exit 1
+
+      - name: Scan consult queues for SLA breaches
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # The route answers 503 when any queue scan failed, so --fail-with-body
+          # turns a broken watchdog into a failed run instead of a silent pass.
+          response="$(curl --fail-with-body --silent --show-error --max-time 60 \
+            --request POST "$KAXI_SLA_URL" \
+            --header "authorization: Bearer $KAXI_ADMIN_API_KEY" \
+            --header "content-type: application/json")"
+
+          echo "$response" | jq '{ checkedAt, ok, queues }'

@@ -4,6 +4,7 @@ import { listPartnerCases } from "@/lib/cases/repository";
 import { requireKaxiPageUser } from "@/lib/supabase/auth";
 import { tr } from "@/lib/i18n/translations";
 import { workspaceCopy, workspaceDateLocale, workspaceLocale, workspaceStatusLabel } from "@/lib/i18n/workspace";
+import { PartnerHandoffInbox } from "@/components/partner/PartnerHandoffInbox";
 import { PartnerRequestInbox } from "@/components/partner/PartnerRequestInbox";
 import { WorkspaceLanguageSwitcher } from "@/components/workspace/WorkspaceLanguageSwitcher";
 import { WorkspaceNotifications } from "@/components/workspace/WorkspaceNotifications";
@@ -32,6 +33,7 @@ export default async function PartnerWorkspacePage() {
         </div>
         <WorkspaceNotifications locale={locale} />
         <PartnerRequestInbox locale={locale} />
+        <PartnerHandoffInbox locale={locale} />
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">

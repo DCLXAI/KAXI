@@ -2,6 +2,7 @@
 // Run: bun run scripts/test-partner-request-transitions.ts
 import assert from "node:assert";
 import { canTransitionPartnerRequestStatus } from "../src/lib/partners/status-transitions";
+import { slaDefaultMinutes, slaTierForMinutes } from "../src/lib/ops/sla-policy";
 
 // Allowed transitions
 assert.strictEqual(
@@ -69,6 +70,15 @@ assert.strictEqual(
   canTransitionPartnerRequestStatus("pending", "bogus"),
   false,
   "unknown target state must be rejected"
+);
+
+// PartnerRequest (see prisma/postgres/schema.prisma) carries no risk/urgency
+// column, so slaDefaultMinutes always falls through to the standard tier for
+// this queue -- assignPartnerRequest must resolve to this exact tier.
+assert.strictEqual(
+  slaTierForMinutes(slaDefaultMinutes({ riskLevel: null, leadStage: null })),
+  "standard-24h",
+  "PartnerRequest has no risk field, so assignment must resolve to the standard-24h tier"
 );
 
 console.log("PASS: canTransitionPartnerRequestStatus allow-map is correct");
