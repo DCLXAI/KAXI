@@ -15,6 +15,15 @@ assert.equal(slaDefaultMinutes({ riskLevel: "medium" }), 1440);
 assert.equal(slaDefaultMinutes({}), 1440);
 assert.equal(slaDefaultMinutes({ riskLevel: null, leadStage: null }), 1440);
 
+// Risk/stage casing is normalized: EscalationCase.riskLevel is the Prisma enum
+// ("HIGH") while handoff_tasks stores lowercase "high". Both must reach the
+// urgent tier — a case-sensitive compare would silently mis-tier high-risk work.
+assert.equal(slaDefaultMinutes({ riskLevel: "HIGH" }), 120);
+assert.equal(slaDefaultMinutes({ riskLevel: "High" }), 120);
+assert.equal(slaDefaultMinutes({ riskLevel: " high " }), 120);
+assert.equal(slaDefaultMinutes({ leadStage: "URGENT" }), 120);
+assert.equal(slaDefaultMinutes({ riskLevel: "MEDIUM" }), 1440);
+
 // Tier is derived from the resulting minutes, including the custom case.
 assert.equal(slaTierForMinutes(120), "urgent-2h");
 assert.equal(slaTierForMinutes(1440), "standard-24h");

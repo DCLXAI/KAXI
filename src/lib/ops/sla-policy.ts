@@ -16,9 +16,14 @@ const MAX_SLA_MINUTES = 10_080;
 export function slaDefaultMinutes(
   input: { riskLevel?: string | null; leadStage?: string | null },
 ): number {
-  return input.riskLevel === "high" || input.leadStage === "urgent"
-    ? URGENT_MINUTES
-    : STANDARD_MINUTES;
+  // Callers pass different casings for the same concept: handoff_tasks stores a
+  // lowercase "high" column, while EscalationCase.riskLevel is the Prisma enum
+  // ("HIGH"). Normalize here so no caller can silently fall through to the
+  // standard tier — a mis-tiered high-risk case is invisible until the SLA is
+  // already blown.
+  const risk = input.riskLevel?.trim().toLowerCase();
+  const stage = input.leadStage?.trim().toLowerCase();
+  return risk === "high" || stage === "urgent" ? URGENT_MINUTES : STANDARD_MINUTES;
 }
 
 export function slaTierForMinutes(minutes: number): SlaTier {
