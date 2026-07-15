@@ -32,6 +32,15 @@ export function slaTierForMinutes(minutes: number): SlaTier {
   return "custom";
 }
 
+// Inverse of slaTierForMinutes for callers (the SLA watchdog) that only have
+// the persisted tier string to work with — PartnerRequest/EscalationCase store
+// slaTier but not the source minutes. Unknown/custom tiers fall back to the
+// standard window rather than guessing; slaDefaultMinutes never produces a
+// "custom" tier today, so this only matters for defensive/future-proofing.
+export function slaMinutesForTier(tier: string | null | undefined): number {
+  return tier === "urgent-2h" ? URGENT_MINUTES : STANDARD_MINUTES;
+}
+
 // Validate-and-throw, mirroring the existing handoff guard exactly.
 export function assertSlaMinutes(minutes: number): void {
   if (minutes < MIN_SLA_MINUTES || minutes > MAX_SLA_MINUTES) {
