@@ -8,6 +8,7 @@ import { inferChatCategory } from "@/lib/chat/category";
 import { loadChatSessionSnapshot } from "@/lib/chat/history";
 import {
   extractProfileSignals,
+  fillSessionProfile,
   hasProfileFacts,
   mergeSessionProfile,
   parseSessionProfile,
@@ -380,6 +381,7 @@ export async function POST(req: NextRequest) {
     let conversationHistory: Array<{ question: string; answer: string }> = [];
     let sessionMetadata: Record<string, unknown> = {};
     let profile = parseSessionProfile(null);
+    let snapshotLoaded = false;
     try {
       const snapshot = await loadChatSessionSnapshot(sessionId, {
         source,
@@ -394,6 +396,7 @@ export async function POST(req: NextRequest) {
         .filter((message) => message.status === "completed" && message.question && message.answer)
         .slice(-3)
         .map((message) => ({ question: message.question, answer: message.answer }));
+      snapshotLoaded = true;
     } catch (historyError) {
       console.warn("[POST /api/typebot-rag] conversation history unavailable", historyError);
     }
@@ -411,9 +414,15 @@ export async function POST(req: NextRequest) {
       profile,
     });
     if (mediation.profileSignals) {
-      profile = mergeSessionProfile(profile, mediation.profileSignals, turnIndex, "mediation");
+      // Fill-only: deterministic values (this turn or carried from a prior
+      // turn) win ties; mediation only fills fields the patterns missed.
+      profile = fillSessionProfile(profile, mediation.profileSignals, turnIndex, "mediation");
     }
-    const sessionMetadataWithProfile = hasProfileFacts(profile)
+    // If the snapshot load failed above, we never loaded the prior metadata to
+    // merge onto, so persisting here would overwrite (not merge) the stored
+    // chat_sessions.metadata column. Passing sessionMetadata: undefined leaves
+    // the existing row's metadata untouched instead of clobbering it.
+    const sessionMetadataWithProfile = snapshotLoaded && hasProfileFacts(profile)
       ? { ...sessionMetadata, profile }
       : undefined;
     const category = mediation.category;
