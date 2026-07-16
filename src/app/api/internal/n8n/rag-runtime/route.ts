@@ -12,6 +12,7 @@ import {
 import { verifyN8nVerificationReceipt } from "@/lib/n8n/signature";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const ORCHESTRATED_RUNTIME_PATH = "n8n-kaxi-orchestrated";
 const SUPPORTED_LOCALES = new Set<GuardrailLocale>(["ko", "en", "vi", "mn"]);

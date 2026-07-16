@@ -59,6 +59,8 @@ import { recordOpsEvent } from "@/lib/ops/events";
 import { verifyTypebotGatewayHeaders } from "@/lib/typebot/gateway-auth";
 import { recordServerProductEvent } from "@/lib/analytics/server";
 
+export const maxDuration = 60;
+
 const SUPPORTED_LOCALES = new Set<GuardrailLocale>(["ko", "en", "vi", "mn"]);
 
 type ChatAttachment = {
