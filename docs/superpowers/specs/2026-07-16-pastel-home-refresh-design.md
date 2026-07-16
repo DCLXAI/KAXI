@@ -27,10 +27,12 @@ light pastel tone, plus an overall readability/design polish of the homepage.
 | `--primary` | `#718bff` | `#c7d2fe` | lavender pastel fill |
 | `--primary-foreground` | `#17191f` light / `#1f1e1d` dark | `#2c3577` | dark navy-lavender text on pastel fill; contrast ~8:1 (WCAG AA/AAA) |
 | `--sidebar-primary-foreground` | `#17191f` | `#2c3577` | matches `--primary-foreground` |
-| `--ring` | `#718bff` | `#a5b4fc` | one step deeper than the fill so focus rings stay visible on cream |
-| `--chart-1` | `#718bff` | `#a5b4fc` | pure `#c7d2fe` is too faint for chart marks on cream |
+| `--ring` | `#718bff` | `#6366f1` | measured: `#a5b4fc` is only 1.7:1 on cream — fails WCAG 1.4.11 (3:1). `#6366f1` measures 3.9:1 |
+| `--chart-1` | `#718bff` | `#818cf8` | chart marks need parity with the old 2.6:1, not the 1.7:1 a pastel would give |
 | `--sidebar-primary` | `#718bff` | `#c7d2fe` | consistency |
-| `--sidebar-ring` | `#718bff` | `#a5b4fc` | consistency with `--ring` |
+| `--sidebar-ring` | `#718bff` | `#6366f1` | consistency with `--ring` |
+| `--primary-strong` (NEW) | — | `#4f5db3` light / `#a5b4fc` dark | audit found ~30 `text-primary` usages (colored text/icons/borders on light surfaces) that drop to 1.2:1 once `--primary` goes pastel; they migrate to this token (5.6:1 on card light, 7.1:1 dark) |
+| `--muted-foreground` | `#6e6c66` | `#64625c` (light only) | measured 4.52:1 on cream — razor-thin AA; darkened to 5.25:1 per the readability pass |
 
 Dark mode (`.dark`, `.chat-surface`): same values — pastel fill with dark navy
 text stays legible on the dark background, matching the current pattern where
