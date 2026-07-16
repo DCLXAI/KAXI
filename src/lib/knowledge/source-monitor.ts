@@ -6,7 +6,11 @@ import {
   type KnowledgeDiffSummary,
 } from "./repository";
 import type { OfficialSourceExtractionMethod } from "./harvest-metadata";
-import { hasOfficialKnowledgeSourceType, hasOfficialKnowledgeSourceUrl } from "./official-source";
+import {
+  hasOfficialKnowledgeSourceType,
+  hasOfficialKnowledgeSourceUrl,
+  isOfficialProtocolDowngrade,
+} from "./official-source";
 import {
   VERIFIED_OFFICIAL_KNOWLEDGE_SOURCES,
   type VerifiedOfficialKnowledgeSource,
@@ -27,6 +31,7 @@ export interface OfficialKnowledgeMonitorResult {
   extractionMethod?: OfficialSourceExtractionMethod;
   extractedCharCount?: number;
   extractionError?: string;
+  transportDowngraded?: boolean;
   candidateDocId?: string;
   candidatePersisted?: boolean;
   candidateChunkCount?: number;
@@ -1128,6 +1133,7 @@ export async function fetchOfficialKnowledgeSource(
   extractionMethod: OfficialSourceExtractionMethod;
   extractedCharCount: number;
   extractionError?: string;
+  transportDowngraded: boolean;
 }> {
   if (!hasOfficialKnowledgeSourceType(source.sourceType)) {
     throw new Error(`Non-official source type rejected: ${source.sourceType}`);
@@ -1143,8 +1149,13 @@ export async function fetchOfficialKnowledgeSource(
   if (!response.ok) {
     throw new Error(`HTTP ${response.status} ${response.statusText}`.trim());
   }
+  let transportDowngraded = false;
   if (response.url && !hasOfficialKnowledgeSourceUrl(response.url)) {
-    throw new Error(`Official source redirected to non-official URL: ${response.url}`);
+    if (isOfficialProtocolDowngrade(source.sourceUrl, response.url)) {
+      transportDowngraded = true;
+    } else {
+      throw new Error(`Official source redirected to non-official URL: ${response.url}`);
+    }
   }
 
   const contentType = response.headers.get("content-type") || "";
@@ -1256,6 +1267,7 @@ export async function fetchOfficialKnowledgeSource(
     extractionMethod,
     extractedCharCount: normalized.length,
     extractionError,
+    transportDowngraded,
   };
 }
 
@@ -1431,6 +1443,7 @@ export async function runOfficialKnowledgeSourceMonitor(
         extractionMethod: fetched.extractionMethod,
         extractedCharCount: fetched.extractedCharCount,
         extractionError: fetched.extractionError,
+        transportDowngraded: fetched.transportDowngraded,
         candidateDocId: diff.changed ? candidateDocId : undefined,
         candidatePersisted,
         candidateChunkCount: diff.candidateChunkCount,

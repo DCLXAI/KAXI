@@ -4,6 +4,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { prepareTestDb } from "./prepare-test-db";
 import type { OfficialKnowledgeSource } from "../src/lib/knowledge/source-monitor";
+import { isOfficialProtocolDowngrade } from "../src/lib/knowledge/official-source";
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -349,6 +350,60 @@ try {
     }),
     /redirected to non-official URL/,
     "official sources must not escape to an untrusted host after redirects",
+  );
+
+  const protocolDowngradeSource: OfficialKnowledgeSource = {
+    docId: "monitor-protocol-downgrade-source",
+    title: "이민 e-arrival 카드 안내",
+    sourceUrl: "https://www.immigration.go.kr/immigration/3509/subview.do",
+    sourceType: "official_government",
+    topic: "process",
+  };
+  function withRedirectedUrl(url: string): Response {
+    const response = new Response(
+      "<html><body>충분히 긴 공식 안내 본문입니다. 반복해서 채워 넣습니다.</body></html>",
+      { headers: { "content-type": "text/html; charset=utf-8" } },
+    );
+    Object.defineProperty(response, "url", { value: url });
+    return response;
+  }
+  const downgradedFetch = await fetchOfficialKnowledgeSource(protocolDowngradeSource, {
+    fetchImpl: async () =>
+      withRedirectedUrl("http://www.immigration.go.kr/immigration/3509/subview.do"),
+  });
+  assert(
+    downgradedFetch.transportDowngraded === true,
+    "same-host protocol-downgrade redirect must be tolerated and flagged for provenance",
+  );
+  await assertRejects(
+    () => fetchOfficialKnowledgeSource(protocolDowngradeSource, {
+      fetchImpl: async () =>
+        withRedirectedUrl("https://evil.example/immigration/3509/subview.do"),
+    }),
+    /redirected to non-official URL/,
+    "redirect to a different host must still fail even though it is https",
+  );
+  await assertRejects(
+    () => fetchOfficialKnowledgeSource(protocolDowngradeSource, {
+      fetchImpl: async () =>
+        withRedirectedUrl("http://www.immigration.go.kr/immigration/9999/other.do"),
+    }),
+    /redirected to non-official URL/,
+    "protocol-downgrade redirect to a different path must still fail",
+  );
+  assert(
+    isOfficialProtocolDowngrade(
+      "https://www.immigration.go.kr/immigration/3509/subview.do",
+      "http://www.immigration.go.kr/immigration/3509/subview.do?",
+    ) === true,
+    "trailing '?' search should normalize as equal to no search",
+  );
+  assert(
+    isOfficialProtocolDowngrade(
+      "https://www.immigration.go.kr/immigration/3509/subview.do",
+      "http://www.immigration.go.kr:80/immigration/3509/subview.do",
+    ) === true,
+    "explicit :80 port should be tolerated",
   );
 
   const oldContent = "old immigration rule content";
