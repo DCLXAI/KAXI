@@ -314,7 +314,7 @@ export function HomeQuickDiagnosis({ lang, onNavigate }: { lang: Lang; onNavigat
                   <dt className="text-xs text-muted-foreground">{localized(COPY.difficulty, lang)}</dt>
                   <dd className="mt-1 text-sm font-bold">{localized(riskCopy, lang)}</dd>
                   <div className="mt-2 grid grid-cols-3 gap-1" aria-hidden="true">
-                    {[0, 1, 2].map((value) => <span key={value} className={`h-1.5 rounded-full ${value <= ["low", "medium", "high"].indexOf(result.riskLevel) ? "bg-primary" : "bg-muted"}`} />)}
+                    {[0, 1, 2].map((value) => <span key={value} className={`h-1.5 rounded-full ${value <= ["low", "medium", "high"].indexOf(result.riskLevel) ? "bg-primary-strong" : "bg-muted"}`} />)}
                   </div>
                 </div>
                 <div className="col-span-2 rounded-md border border-primary-strong/15 bg-background/65 p-3.5 lg:col-span-1">
