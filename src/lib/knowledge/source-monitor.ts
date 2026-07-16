@@ -1214,10 +1214,13 @@ export async function fetchOfficialKnowledgeSource(
   }
 
   const validationBody = extractionMethod === "binary_metadata" ? "" : stableBody;
+  // When validation fails because extraction degraded, the underlying
+  // extraction error is the actionable fact — carry it into the failure.
+  const extractionDetail = `extraction: ${extractionMethod}${extractionError ? `, error: ${extractionError.slice(0, 200)}` : ""}`;
   const minimumExtractedChars = source.minimumExtractedChars || 0;
   if (minimumExtractedChars > 0 && validationBody.length < minimumExtractedChars) {
     throw new Error(
-      `Official source body too short: ${validationBody.length} < ${minimumExtractedChars}`,
+      `Official source body too short: ${validationBody.length} < ${minimumExtractedChars} (${extractionDetail})`,
     );
   }
   const requiredContentSignals = (source.requiredContentSignals || [])
@@ -1230,7 +1233,7 @@ export async function fetchOfficialKnowledgeSource(
     )
   ) {
     throw new Error(
-      `Official source body missing required signals: ${requiredContentSignals.join(", ")}`,
+      `Official source body missing required signals: ${requiredContentSignals.join(", ")} (${extractionDetail})`,
     );
   }
 
