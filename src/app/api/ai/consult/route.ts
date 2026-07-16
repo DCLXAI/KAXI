@@ -24,6 +24,7 @@ import {
 } from "@/lib/api/security";
 import { maybeCreateHighRiskEscalationCase } from "@/lib/cases/high-risk-hook";
 import { currentAuthenticatedStudentProfileId } from "@/lib/cases/current-student";
+import { reportLlmFallback } from "@/lib/ops/llm-fallback-events";
 
 // POST /api/ai/consult - 행정사 전문 AI 에이전트 상담 채팅
 // 일반 AI 도우미보다 더 깊이 있는 법적/행정적 답변 제공
@@ -379,6 +380,11 @@ ${context}
     if (shouldRequireConsultLlm(consultBackend)) {
       throw new LlmBackendUnavailableError(message);
     }
+    void reportLlmFallback({
+      feature: "consult",
+      failureReason: configurationFallback ? "llm_not_configured_fallback" : "llm_backend_fallback",
+      detail: message,
+    });
     return buildOfficialSummaryExpertResult({
       question,
       docs,
