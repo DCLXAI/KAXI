@@ -1179,6 +1179,8 @@ const generatedPartialMultiIntent = await runDirectRagFallback(partialMultiInten
       backend: "kimi",
       model: "grounded-test-model",
       durationMs: 10,
+      attempts: 1 as const,
+      retryReason: null,
     };
   },
 });
@@ -1237,6 +1239,8 @@ const scopedHybridD10 = await runDirectRagFallback(mixedD10Input, {
       backend: "kimi",
       model: "grounded-test-model",
       durationMs: 12,
+      attempts: 1 as const,
+      retryReason: null,
     };
   },
 });
@@ -1286,6 +1290,8 @@ const groundedD10 = await runDirectRagFallback(wrongD10DocumentInput, {
       backend: "kimi",
       model: "grounded-test-model",
       durationMs: 12,
+      attempts: 1 as const,
+      retryReason: null,
     };
   },
 });
@@ -1305,6 +1311,8 @@ const generatedNoContext = await runDirectRagFallback(wrongD10DocumentInput, {
     backend: "kimi",
     model: "grounded-test-model",
     durationMs: 9,
+    attempts: 1 as const,
+    retryReason: null,
   }),
 });
 assert.equal(
@@ -1345,6 +1353,8 @@ const genericGeneratedNoContext = await runDirectRagFallback(genericDocumentInpu
     backend: "kimi",
     model: "grounded-test-model",
     durationMs: 9,
+    attempts: 1 as const,
+    retryReason: null,
   }),
 });
 assert.equal((genericGeneratedNoContext.searchMeta as Record<string, unknown>).answerMode, "no-context");
@@ -1387,6 +1397,8 @@ const groundedD4NoContext = await runDirectRagFallback(d4LanguageInput, {
     backend: "kimi",
     model: "grounded-test-model",
     durationMs: 9,
+    attempts: 1 as const,
+    retryReason: null,
   }),
 });
 assert.equal(

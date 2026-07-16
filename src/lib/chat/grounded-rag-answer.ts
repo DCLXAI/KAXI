@@ -40,6 +40,8 @@ type GenerationMetadata = {
   backend: LlmBackend;
   model: string;
   durationMs: number;
+  attempts: 1 | 2;
+  retryReason: "invalid_generation" | "generation_failed" | null;
 };
 
 export type GroundedAnswerResult =
@@ -56,6 +58,8 @@ export type GroundedAnswerResult =
   | {
     status: "unavailable";
     reason: "not_configured" | "generation_failed" | "invalid_generation";
+    attempts?: 1 | 2;
+    retryReason?: "invalid_generation" | "generation_failed" | null;
   };
 
 export type GroundedAnswerGenerator = (
@@ -104,25 +108,39 @@ const OUTPUT_SCHEMA = {
   required: ["supported", "answer", "nextStep", "usedSourceIndexes"],
 } satisfies Record<string, unknown>;
 
-function parseModelOutput(value: string): GroundedModelOutput | null {
+export function parseGroundedModelOutput(value: string): GroundedModelOutput | null {
   try {
     const unfenced = value.trim().startsWith("```")
       ? value.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "")
       : value.trim();
     const start = unfenced.indexOf("{");
     const end = unfenced.lastIndexOf("}");
-    const parsed = JSON.parse(start >= 0 && end > start ? unfenced.slice(start, end + 1) : unfenced) as Partial<GroundedModelOutput>;
-    if (typeof parsed.supported !== "boolean") return null;
-    if (typeof parsed.answer !== "string" || typeof parsed.nextStep !== "string") return null;
-    if (!Array.isArray(parsed.usedSourceIndexes)) return null;
-    return {
-      supported: parsed.supported,
-      answer: parsed.answer.trim(),
-      nextStep: parsed.nextStep.trim(),
-      usedSourceIndexes: parsed.usedSourceIndexes
-        .filter((index): index is number => Number.isInteger(index))
-        .map(Number),
-    };
+    const decoded = JSON.parse(start >= 0 && end > start ? unfenced.slice(start, end + 1) : unfenced) as unknown;
+    const rootCandidate = Array.isArray(decoded) ? decoded[0] : decoded;
+    if (!rootCandidate || typeof rootCandidate !== "object" || Array.isArray(rootCandidate)) return null;
+    const root = rootCandidate as Record<string, unknown>;
+    // Mirror the mediator parser's tolerance (question-mediator.ts:309-313):
+    // models sometimes wrap the payload in a result/output/data container.
+    const nested = [root.result, root.output, root.data].find(
+      (candidate): candidate is Record<string, unknown> =>
+        Boolean(candidate && typeof candidate === "object" && !Array.isArray(candidate)),
+    );
+    const parsed = nested || root;
+    const read = (...keys: string[]) => keys.map((key) => parsed[key]).find((candidate) => candidate !== undefined);
+    // supported is the grounding guarantee: coerce "true"/"false" strings, never default.
+    const supportedValue = read("supported", "is_supported", "grounded");
+    const supported = typeof supportedValue === "boolean"
+      ? supportedValue
+      : supportedValue === "true" ? true : supportedValue === "false" ? false : null;
+    if (supported === null) return null;
+    const answerValue = read("answer", "answer_text");
+    const nextStepValue = read("nextStep", "next_step");
+    if (typeof answerValue !== "string" || typeof nextStepValue !== "string") return null;
+    const indexesValue = read("usedSourceIndexes", "used_source_indexes", "usedSources", "used_sources");
+    const usedSourceIndexes = Array.isArray(indexesValue)
+      ? indexesValue.filter((index): index is number => Number.isInteger(index)).map(Number)
+      : [];
+    return { supported, answer: answerValue.trim(), nextStep: nextStepValue.trim(), usedSourceIndexes };
   } catch {
     return null;
   }
@@ -186,52 +204,85 @@ Stored user profile: ${request.profile ? profilePromptBlock(request.profile) : "
 Verified context:
 ${context}`;
 
-  try {
+  const retrySystemPrompt = `You write KAXI's grounded answer. Return ONLY one JSON object: {"supported": boolean, "answer": string, "nextStep": string, "usedSourceIndexes": number[]}. No prose, no code fences. Use only facts from the sources below; cite as [1], [2] and list every cited index in usedSourceIndexes. Write in ${language}. If the sources do not support the question, set supported=false with an empty answer and empty usedSourceIndexes.
+
+Question focus: ${request.answerFocus || request.question}
+
+Verified context:
+${context}`;
+
+  const attempt = async (attemptIndex: 1 | 2) => {
     const completion = await generateLlmText({
       feature: "structured",
       messages: [
-        { role: "system", content: systemPrompt },
+        { role: "system", content: attemptIndex === 1 ? systemPrompt : retrySystemPrompt },
         { role: "user", content: request.question },
       ],
       temperature: 0.1,
-      maxTokens: 420,
-      timeoutMs: groundedRagAnswerTimeoutMs(),
+      maxTokens: attemptIndex === 1 ? 420 : 320,
+      timeoutMs: attemptIndex === 1 ? groundedRagAnswerTimeoutMs() : Math.min(groundedRagAnswerTimeoutMs(), 6_000),
       jsonSchema: {
-        name: "kaxi_grounded_answer",
+        name: attemptIndex === 1 ? "kaxi_grounded_answer" : "kaxi_grounded_answer_retry",
         schema: OUTPUT_SCHEMA,
       },
     });
-    const output = parseModelOutput(completion.text);
-    if (!output) return { status: "unavailable", reason: "invalid_generation" };
+    return { completion, output: parseGroundedModelOutput(completion.text) };
+  };
 
-    const usedSourceIndexes = Array.from(new Set(output.usedSourceIndexes))
-      .filter((index) => index >= 1 && index <= Math.min(request.documents.length, 3))
-      .slice(0, 3);
-    const metadata: GenerationMetadata = {
-      backend: completion.backend,
-      model: completion.model,
-      durationMs: completion.durationMs,
-    };
-    if (!output.supported || !output.answer || usedSourceIndexes.length === 0) {
-      return {
-        ...metadata,
-        status: "no_context",
-        nextStep: output.nextStep || NO_CONTEXT_NEXT_STEP[request.locale],
-      };
-    }
-
-    return {
-      ...metadata,
-      status: "answered",
-      answer: output.answer.slice(0, 2_400),
-      nextStep: (output.nextStep || NO_CONTEXT_NEXT_STEP[request.locale]).slice(0, 500),
-      usedSourceIndexes,
-    };
+  let retryReason: "invalid_generation" | "generation_failed" | null = null;
+  let current: Awaited<ReturnType<typeof attempt>> | null = null;
+  try {
+    current = await attempt(1);
   } catch (error) {
     if (isLlmNotConfiguredError(error)) {
-      return { status: "unavailable", reason: "not_configured" };
+      return { status: "unavailable", reason: "not_configured", attempts: 1, retryReason: null };
     }
     console.error("[grounded RAG answer generation failed]", error);
-    return { status: "unavailable", reason: "generation_failed" };
+    retryReason = "generation_failed";
   }
+  if (current && !current.output) retryReason = "invalid_generation";
+
+  let attempts: 1 | 2 = 1;
+  if (retryReason) {
+    attempts = 2;
+    try {
+      current = await attempt(2);
+    } catch (error) {
+      if (isLlmNotConfiguredError(error)) {
+        return { status: "unavailable", reason: "not_configured", attempts, retryReason };
+      }
+      console.error("[grounded RAG answer retry failed]", error);
+      return { status: "unavailable", reason: "generation_failed", attempts, retryReason };
+    }
+    if (!current.output) {
+      return { status: "unavailable", reason: "invalid_generation", attempts, retryReason };
+    }
+  }
+
+  const output = current!.output!;
+  const completion = current!.completion;
+  const usedSourceIndexes = Array.from(new Set(output.usedSourceIndexes))
+    .filter((index) => index >= 1 && index <= Math.min(request.documents.length, 3))
+    .slice(0, 3);
+  const metadata: GenerationMetadata = {
+    backend: completion.backend,
+    model: completion.model,
+    durationMs: completion.durationMs,
+    attempts,
+    retryReason,
+  };
+  if (!output.supported || !output.answer || usedSourceIndexes.length === 0) {
+    return {
+      ...metadata,
+      status: "no_context",
+      nextStep: output.nextStep || NO_CONTEXT_NEXT_STEP[request.locale],
+    };
+  }
+  return {
+    ...metadata,
+    status: "answered",
+    answer: output.answer.slice(0, 2_400),
+    nextStep: (output.nextStep || NO_CONTEXT_NEXT_STEP[request.locale]).slice(0, 500),
+    usedSourceIndexes,
+  };
 };
