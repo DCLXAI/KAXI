@@ -28,12 +28,14 @@ import {
 } from "@/lib/chat/account-profile-repository";
 import {
   clarificationNextStep,
+  isTemplateClarification,
   mediateRagQuestion,
   questionMediationMetadata,
   questionMediationProvenance,
   questionMediationRuntimePayload,
   type QuestionMediation,
 } from "@/lib/chat/question-mediator";
+import { generateLlmClarification } from "@/lib/chat/clarification-writer";
 import {
   DIRECT_LEXICAL_PROVENANCE,
   DIRECT_LEXICAL_RUNTIME_PATH,
@@ -56,6 +58,8 @@ import { createTypebotHandoffToken, signN8nPayload } from "@/lib/n8n/signature";
 import { recordOpsEvent } from "@/lib/ops/events";
 import { verifyTypebotGatewayHeaders } from "@/lib/typebot/gateway-auth";
 import { recordServerProductEvent } from "@/lib/analytics/server";
+
+export const maxDuration = 60;
 
 const SUPPORTED_LOCALES = new Set<GuardrailLocale>(["ko", "en", "vi", "mn"]);
 
@@ -574,9 +578,29 @@ export async function POST(req: NextRequest) {
     let provenance: RagProvenance;
     if (mediation.action === "clarify") {
       provenance = questionMediationProvenance(mediation);
+      let clarificationAnswer = mediation.clarificationQuestion;
+      let clarificationStep = clarificationNextStep(locale);
+      let clarificationSource: "llm" | "template" =
+        mediation.status === "llm" && !isTemplateClarification(clarificationAnswer, locale)
+          ? "llm"
+          : "template";
+      let clarificationMeta: Record<string, unknown> = {};
+      if (clarificationSource === "template") {
+        const written = await generateLlmClarification({ question, locale, profile });
+        if (written) {
+          clarificationAnswer = written.question;
+          if (written.nextStep) clarificationStep = written.nextStep;
+          clarificationSource = "llm";
+          clarificationMeta = {
+            clarificationBackend: written.backend,
+            clarificationModel: written.model,
+            clarificationLatencyMs: written.durationMs,
+          };
+        }
+      }
       upstreamPayload = {
-        answer: mediation.clarificationQuestion,
-        nextStep: clarificationNextStep(locale),
+        answer: clarificationAnswer,
+        nextStep: clarificationStep,
         needsHuman: false,
         riskLevel: "low",
         leadStage: "none",
@@ -592,6 +616,8 @@ export async function POST(req: NextRequest) {
           noContextReason: null,
           category,
           locale,
+          clarificationSource,
+          ...clarificationMeta,
         },
         executionId: `mediator-${identity.requestId}`,
         runtimePath: "kaxi-question-mediator",

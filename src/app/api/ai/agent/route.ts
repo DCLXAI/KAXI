@@ -22,6 +22,7 @@ import { isPiiEncryptionConfigured } from "@/lib/privacy/pii";
 import { isEnvFalse, isEnvTrue } from "@/lib/env";
 import { maybeCreateHighRiskEscalationCase } from "@/lib/cases/high-risk-hook";
 import { currentAuthenticatedStudentProfileId } from "@/lib/cases/current-student";
+import { reportLlmFallback } from "@/lib/ops/llm-fallback-events";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -287,6 +288,7 @@ export async function POST(req: NextRequest) {
       backend = "tool-fallback";
       errorType = isLlmNotConfiguredError(agentErr) ? "llm_not_configured_fallback" : "llm_backend_fallback";
       errorMessage = agentErr instanceof Error ? agentErr.message : "Unknown LLM error";
+      void reportLlmFallback({ feature: "action", failureReason: errorType, detail: errorMessage });
       result = await runFallbackAgent(question, lang, ctx);
     }
 

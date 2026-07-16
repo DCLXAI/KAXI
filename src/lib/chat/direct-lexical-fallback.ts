@@ -1405,6 +1405,8 @@ export async function runDirectRagFallback(
         ...currentSearchMeta,
         answerGenerationStatus: "unavailable",
         answerGenerationFailureReason: generation.reason,
+        answerAttempts: generation.attempts ?? 1,
+        answerRetryReason: generation.retryReason ?? null,
         answerPromptVersion: GROUNDED_RAG_PROMPT_VERSION,
       },
     };
@@ -1416,6 +1418,8 @@ export async function runDirectRagFallback(
     answerModel: generation.model,
     answerLatencyMs: generation.durationMs,
     answerPromptVersion: GROUNDED_RAG_PROMPT_VERSION,
+    answerAttempts: generation.attempts,
+    answerRetryReason: generation.retryReason,
   };
   if (generation.status === "no_context") {
     const exactOperationalEvidence = selection.documents.some((document) =>

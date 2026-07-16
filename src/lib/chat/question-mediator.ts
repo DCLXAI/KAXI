@@ -804,3 +804,11 @@ export function questionMediationProvenance(mediation: QuestionMediation): RagPr
 export function clarificationNextStep(locale: GuardrailLocale) {
   return CLARIFICATION_COPY[locale].nextStep;
 }
+
+export function clarificationTemplateQuestion(locale: GuardrailLocale) {
+  return CLARIFICATION_COPY[locale].question;
+}
+
+export function isTemplateClarification(text: string, locale: GuardrailLocale): boolean {
+  return text.trim() === CLARIFICATION_COPY[locale].question;
+}
