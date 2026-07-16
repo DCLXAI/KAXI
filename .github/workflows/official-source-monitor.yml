@@ -119,7 +119,8 @@ jobs:
             candidatesCreated,
             alert,
             changedDocIds: [.results[] | select(.status == "changed") | .docId],
-            failedDocIds: [.results[] | select(.status == "failed") | .docId]
+            failedDocIds: [.results[] | select(.status == "failed") | .docId],
+            failedResults: [.results[] | select(.status == "failed") | {docId, error}]
           }'
 
           failed="$(echo "$response" | jq '.failed')"
