@@ -126,7 +126,7 @@ export function SourceAnnotations({
                 [{index + 1}]
               </span>
               <span className="max-w-[220px] truncate">{source.title}</span>
-              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">{kind}</span>
+              <span className="rounded bg-primary-strong/10 px-1.5 py-0.5 text-[10px] text-primary-strong">{kind}</span>
               <span className="text-muted-foreground">{hostFromUrl(url)}</span>
               {url && <ExternalLink className="h-3 w-3" />}
             </>
@@ -157,12 +157,12 @@ export function SourceAnnotations({
             <div
               key={`${source.id || source.title}-detail-${index}`}
               id={idPrefix ? sourceAnnotationDomId(idPrefix, index) : undefined}
-              className="scroll-mt-24 rounded-md border bg-muted/20 px-3 py-2 text-xs target:border-primary/60 target:bg-primary/5 target:ring-2 target:ring-primary/20"
+              className="scroll-mt-24 rounded-md border bg-muted/20 px-3 py-2 text-xs target:border-primary-strong/60 target:bg-primary-strong/5 target:ring-2 target:ring-primary-strong/20"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 font-medium">
-                    <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">[{index + 1}]</span>
+                    <span className="rounded bg-primary-strong/10 px-1.5 py-0.5 text-[10px] text-primary-strong">[{index + 1}]</span>
                     {url ? (
                       <a href={url} target="_blank" rel="noreferrer" className="truncate hover:underline">
                         {source.title}
@@ -193,7 +193,7 @@ export function SourceAnnotations({
               </div>
 
               {basis && (
-                <div className="mt-2 rounded border-l-2 border-primary/30 bg-background/70 px-2 py-1.5 leading-relaxed">
+                <div className="mt-2 rounded border-l-2 border-primary-strong/30 bg-background/70 px-2 py-1.5 leading-relaxed">
                   <span className="font-medium">{lang === "ko" ? "답변 근거: " : "Answer basis: "}</span>
                   {basis}
                 </div>

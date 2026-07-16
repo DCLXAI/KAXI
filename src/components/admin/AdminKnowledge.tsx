@@ -450,7 +450,7 @@ export function AdminKnowledge() {
                         </td>
                         <td className="max-w-xs py-3 pr-3">
                           <a
-                            className="break-all text-xs text-primary underline-offset-2 hover:underline"
+                            className="break-all text-xs text-primary-strong underline-offset-2 hover:underline"
                             href={doc.sourceUrl}
                             target="_blank"
                             rel="noreferrer"

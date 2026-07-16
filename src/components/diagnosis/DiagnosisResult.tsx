@@ -51,14 +51,14 @@ export function DiagnosisResult({
         </CardHeader>
         <CardContent className="grid md:grid-cols-2 gap-4">
           <div className="flex items-start gap-3 rounded-lg bg-muted/30 p-4">
-            <Clock className="h-5 w-5 text-primary mt-0.5" />
+            <Clock className="h-5 w-5 text-primary-strong mt-0.5" />
             <div>
               <div className="text-sm text-muted-foreground">{t("result_prep_time")}</div>
               <div className="font-medium mt-1">{pickLang(result.prepTime, locale)}</div>
             </div>
           </div>
           <div className="flex items-start gap-3 rounded-lg bg-muted/30 p-4">
-            <ArrowRight className="h-5 w-5 text-primary mt-0.5" />
+            <ArrowRight className="h-5 w-5 text-primary-strong mt-0.5" />
             <div>
               <div className="text-sm text-muted-foreground">{t("result_estimated_cost")}</div>
               <div className="font-medium mt-1">{result.estimatedCost.toLocaleString()} KRW</div>
@@ -124,7 +124,7 @@ export function DiagnosisResult({
           <ol className="space-y-2">
             {result.nextActions.map((action, index) => (
               <li key={index} className="flex items-start gap-3">
-                <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                <CheckCircle2 className="h-4 w-4 text-primary-strong mt-0.5 shrink-0" />
                 <span className="text-sm">{pickLang(action, locale)}</span>
               </li>
             ))}
@@ -145,11 +145,11 @@ export function DiagnosisResult({
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-            <LogIn className="h-3.5 w-3.5 shrink-0 text-primary" />
+            <LogIn className="h-3.5 w-3.5 shrink-0 text-primary-strong" />
             <span>{t("diagnose_login_nudge")}</span>
             <Link
               href={`/login?lang=${locale}`}
-              className="font-medium text-primary underline-offset-2 hover:underline"
+              className="font-medium text-primary-strong underline-offset-2 hover:underline"
             >
               {t("nav_login")} →
             </Link>
@@ -170,11 +170,11 @@ export function DiagnosisResult({
           {showSave && (
             <div
               role="status"
-              className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4 sm:flex-row sm:items-center"
+              className="flex flex-col gap-3 rounded-lg border border-primary-strong/30 bg-primary-strong/5 p-4 sm:flex-row sm:items-center"
             >
               <KaxiCat state="happy" size={40} className="shrink-0" />
               <p className="flex-1 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-primary-strong" />
                 {t("diagnose_save_success")}
               </p>
               <Button onClick={() => onNavigate("consult")} className="shrink-0 gap-2">

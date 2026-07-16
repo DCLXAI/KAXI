@@ -119,10 +119,10 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
             <ShieldCheck className="h-3.5 w-3.5" />
             {tr("hero_badge", lang)}
           </Badge>
-          <h1 className="font-serif text-4xl md:text-6xl font-extrabold tracking-tight leading-tight">
+          <h1 className="font-serif text-4xl md:text-6xl font-extrabold tracking-tight leading-tight text-balance">
             {tr("hero_title", lang)}
           </h1>
-          <p className="mt-6 text-base md:text-lg text-muted-foreground max-w-3xl mx-auto leading-relaxed">
+          <p className="mt-6 text-base md:text-lg text-muted-foreground max-w-3xl mx-auto leading-relaxed text-pretty">
             {tr("hero_subtitle", lang)}
           </p>
         </div>
@@ -181,7 +181,7 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
                 transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1], delay: i * 0.05 }}
               >
                 <Card
-                  className="cursor-pointer border-border/70 transition-[border-color,box-shadow,transform] duration-200 ease-snappy hover:border-primary/40 hover:shadow-md hover:-translate-y-0.5"
+                  className="cursor-pointer border-border/70 transition-[border-color,box-shadow,transform] duration-200 ease-snappy hover:border-primary-strong/40 hover:shadow-md hover:-translate-y-0.5"
                   onClick={() => onNavigate(f.action)}
                 >
                   <CardHeader>
@@ -218,7 +218,7 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
             <div className="grid grid-cols-3 gap-2 text-sm">
               <div className="font-medium text-muted-foreground"></div>
               <div className="font-medium text-destructive">Broker</div>
-              <div className="font-medium text-primary">KAXI</div>
+              <div className="font-medium text-primary-strong">KAXI</div>
               {brokerComparison.map((row, i) => (
                 <div key={i} className="contents">
                   <div className="py-2 border-t text-muted-foreground">
@@ -232,7 +232,7 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
                     }
                   </div>
                   <div className="py-2 border-t text-destructive">{row.broker[lang]}</div>
-                  <div className="py-2 border-t text-primary font-medium">{row.us[lang]}</div>
+                  <div className="py-2 border-t text-primary-strong font-medium">{row.us[lang]}</div>
                 </div>
               ))}
             </div>
@@ -244,11 +244,11 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
       <motion.section className="mx-auto max-w-4xl px-4 pb-16" {...sectionReveal}>
         <div className="rounded-2xl bg-primary p-8 md:p-12 text-primary-foreground text-center">
           <div className="mb-4 flex justify-center">
-            <KaxiCat state="happy" size={44} inverted />
+            <KaxiCat state="happy" size={44} />
           </div>
           <h2 className="font-serif text-2xl md:text-3xl font-bold mb-3">{tr("hero_title", lang)}</h2>
           <p className="text-primary-foreground/80 mb-6 max-w-2xl mx-auto">{tr("hero_subtitle", lang)}</p>
-          <Button size="lg" variant="secondary" className="gap-2" onClick={scrollToQuickDiagnosis}>
+          <Button size="lg" className="gap-2 bg-primary-foreground text-[#eef2ff] hover:bg-[#3b4690]" onClick={scrollToQuickDiagnosis}>
             {tr("quick_diagnosis_return", lang)}
             <ArrowRight className="h-4 w-4" />
           </Button>

@@ -470,7 +470,7 @@ export function Documents({ onNavigate }: { onNavigate: (view: string) => void }
               <TabsTrigger
                 key={stage.id}
                 value={stage.id}
-                className="h-auto min-w-0 justify-start whitespace-normal rounded-md border bg-background px-3 py-3 text-left shadow-none data-[state=active]:border-primary data-[state=active]:bg-primary/5 data-[state=active]:shadow-none"
+                className="h-auto min-w-0 justify-start whitespace-normal rounded-md border bg-background px-3 py-3 text-left shadow-none data-[state=active]:border-primary-strong data-[state=active]:bg-primary-strong/5 data-[state=active]:shadow-none"
               >
                 <span className={cn(
                   "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-muted text-muted-foreground",
@@ -492,7 +492,7 @@ export function Documents({ onNavigate }: { onNavigate: (view: string) => void }
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="max-w-3xl">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-primary">STEP {DOCUMENT_WORKFLOW_STAGES.indexOf(activeStage) + 1}</span>
+                <span className="text-xs font-semibold text-primary-strong">STEP {DOCUMENT_WORKFLOW_STAGES.indexOf(activeStage) + 1}</span>
                 <span className="text-xs text-muted-foreground">{activeStageDone}/{activeStageRequired.length} {copy.requiredReady}</span>
               </div>
               <h2 id={`stage-${activeStage.id}`} className="mt-1 font-serif text-xl font-bold sm:text-2xl">{tr(activeStage.titleKey, lang)}</h2>
@@ -502,7 +502,7 @@ export function Documents({ onNavigate }: { onNavigate: (view: string) => void }
               href={activeStage.sourceUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-primary-strong hover:underline"
             >
               {tr("docs_official_basis", lang)}
               <ArrowUpRight className="h-3.5 w-3.5" />

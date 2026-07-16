@@ -193,7 +193,7 @@ export function HomeQuickDiagnosis({ lang, onNavigate }: { lang: Lang; onNavigat
   return (
     <section id="quick-diagnosis" data-testid="home-quick-diagnosis" aria-labelledby="quick-diagnosis-title" className="mx-auto w-full max-w-5xl px-4">
       <div className="mb-5 text-center">
-        <div className="mb-2 flex items-center justify-center gap-1.5 text-sm font-semibold text-primary">
+        <div className="mb-2 flex items-center justify-center gap-1.5 text-sm font-semibold text-primary-strong">
           <KaxiPawMark className="h-4 w-4" />
           {tr("quick_diagnosis_eyebrow", lang)}
         </div>
@@ -206,7 +206,7 @@ export function HomeQuickDiagnosis({ lang, onNavigate }: { lang: Lang; onNavigat
           <div className="mb-2 flex items-center justify-between text-xs font-semibold text-muted-foreground">
             <span>{localized(COPY.step, lang)} {step} / 3</span>
             {step > 1 && (
-              <button type="button" onClick={goBack} className="inline-flex items-center gap-1 text-foreground hover:text-primary">
+              <button type="button" onClick={goBack} className="inline-flex items-center gap-1 text-foreground hover:text-primary-strong">
                 <ArrowLeft className="size-3.5" aria-hidden="true" />
                 {localized(COPY.back, lang)}
               </button>
@@ -285,7 +285,7 @@ export function HomeQuickDiagnosis({ lang, onNavigate }: { lang: Lang; onNavigat
 
       <div aria-live="polite" aria-atomic="true">
         {result && answers && (
-          <div data-testid="quick-diagnosis-result" className="rounded-lg border border-primary/25 bg-primary/5 p-5 sm:p-6">
+          <div data-testid="quick-diagnosis-result" className="rounded-lg border border-primary-strong/25 bg-primary-strong/5 p-5 sm:p-6">
             <div className="flex flex-wrap items-center gap-2">
               <Badge>{tr("quick_result_badge", lang)}</Badge>
               {[tr(OPTION_META[answers.goal].title, lang), localized(KOREAN_META[answers.korean].label, lang), localized(BUDGET_META[answers.budget].label, lang)].map((label) => (
@@ -299,32 +299,32 @@ export function HomeQuickDiagnosis({ lang, onNavigate }: { lang: Lang; onNavigat
               <div>
                 <h3 className="font-serif text-xl font-bold sm:text-2xl">{tr(translationKey(result.pathKey, "goal_unsure"), lang)}</h3>
                 <p className="mt-1 text-sm text-muted-foreground">{tr("quick_result_summary", lang).replace("{visa}", result.visaType)}</p>
-                <div className="mt-4 rounded-md border border-primary/15 bg-background/65 p-4">
+                <div className="mt-4 rounded-md border border-primary-strong/15 bg-background/65 p-4">
                   <p className="text-xs font-bold text-foreground">{localized(COPY.why, lang)}</p>
                   <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{resultReason(answers, result, lang)}</p>
                 </div>
               </div>
 
               <dl className="grid grid-cols-2 gap-3 lg:grid-cols-1">
-                <div className="rounded-md border border-primary/15 bg-background/65 p-3.5">
+                <div className="rounded-md border border-primary-strong/15 bg-background/65 p-3.5">
                   <dt className="text-xs text-muted-foreground">{localized(COPY.costRange, lang)}</dt>
                   <dd className="mt-1 text-sm font-bold">{costRange(result)}</dd>
                 </div>
-                <div className="rounded-md border border-primary/15 bg-background/65 p-3.5">
+                <div className="rounded-md border border-primary-strong/15 bg-background/65 p-3.5">
                   <dt className="text-xs text-muted-foreground">{localized(COPY.difficulty, lang)}</dt>
                   <dd className="mt-1 text-sm font-bold">{localized(riskCopy, lang)}</dd>
                   <div className="mt-2 grid grid-cols-3 gap-1" aria-hidden="true">
-                    {[0, 1, 2].map((value) => <span key={value} className={`h-1.5 rounded-full ${value <= ["low", "medium", "high"].indexOf(result.riskLevel) ? "bg-primary" : "bg-muted"}`} />)}
+                    {[0, 1, 2].map((value) => <span key={value} className={`h-1.5 rounded-full ${value <= ["low", "medium", "high"].indexOf(result.riskLevel) ? "bg-primary-strong" : "bg-muted"}`} />)}
                   </div>
                 </div>
-                <div className="col-span-2 rounded-md border border-primary/15 bg-background/65 p-3.5 lg:col-span-1">
+                <div className="col-span-2 rounded-md border border-primary-strong/15 bg-background/65 p-3.5 lg:col-span-1">
                   <dt className="text-xs text-muted-foreground">{tr("result_prep_time", lang)}</dt>
                   <dd className="mt-1 text-sm font-bold">{pickLang(result.prepTime, lang)}</dd>
                 </div>
               </dl>
             </div>
 
-            <div className="mt-5 border-t border-primary/15 pt-4">
+            <div className="mt-5 border-t border-primary-strong/15 pt-4">
               <p className="text-xs font-semibold text-foreground">{tr("quick_result_next", lang)}</p>
               <div className="mt-2 grid gap-1.5 text-sm text-muted-foreground sm:grid-cols-2">
                 {result.nextActions.slice(0, 2).map((action) => <p key={action.en}>{pickLang(action, lang)}</p>)}

@@ -95,7 +95,8 @@ assert.match(runningCat, /state="running"/, "both surfaces must use the running 
 assert.match(runningCat, /data-kaxi-running-cat="stationary"/, "Typebot cat must stay in place");
 assert.doesNotMatch(runningCat, /travel|white/, "the removed homepage travel variant must not remain");
 assert.match(pawMark, /data-kaxi-mark="paw"/, "the public AI brand must expose the KAXI paw mark");
-assert.match(globalTheme, /--primary: #718bff;/, "the main KAXI action color must match the capability-blue brand token");
+assert.match(globalTheme, /--primary: #c7d2fe;/, "the main KAXI action color must match the approved lavender pastel token");
+assert.match(globalTheme, /--primary-strong: #4f5db3;/, "the strong companion token must exist or 30+ text/border call sites silently lose contrast");
 assert.match(globalTheme, /--icon-accent: #e5a0b3;/, "public icons must use the light-pink accent");
 assert.match(button, /border-icon-accent/, "outline buttons must use the light-pink border accent");
 assert.match(header, /icon: KaxiPawMark/, "the public AI navigation must use the KAXI paw mark");

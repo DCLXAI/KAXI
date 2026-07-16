@@ -69,7 +69,7 @@ export function WorkspaceNotifications({ locale }: { locale: Lang }) {
       ) : (
         <div className="grid gap-2 lg:grid-cols-2">
           {notifications.slice(0, 8).map((notification) => (
-            <div key={notification.id} className={`flex items-start gap-3 border-l-2 px-3 py-2 ${notification.readAt ? "border-muted text-muted-foreground" : "border-primary bg-primary/5"}`}>
+            <div key={notification.id} className={`flex items-start gap-3 border-l-2 px-3 py-2 ${notification.readAt ? "border-muted text-muted-foreground" : "border-primary-strong bg-primary-strong/5"}`}>
               <div className="min-w-0 flex-1">
                 {notification.href ? <Link href={notification.href} className="text-sm font-medium hover:underline">{notification.title}</Link> : <p className="text-sm font-medium">{notification.title}</p>}
                 <p className="mt-0.5 text-xs leading-relaxed">{notification.message}</p>

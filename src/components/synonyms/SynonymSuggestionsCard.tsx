@@ -28,7 +28,7 @@ export function SynonymSuggestionsCard({
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="text-base flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" />
+              <Sparkles className="h-4 w-4 text-primary-strong" />
               {locale === "ko" ? "LLM 동의어 자동 추천" : "LLM Auto-Suggest"}
             </CardTitle>
             <CardDescription className="text-xs mt-1">
