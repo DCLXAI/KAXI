@@ -98,22 +98,30 @@ export async function acknowledgeOpsEvent(id: string, actor: string) {
   return result.data ? mapEvent(result.data) : null;
 }
 
+// ops_events.workflow_id / workflow_version_id / model_version /
+// prompt_version are NOT NULL since 20260711210000_rag_response_provenance.
+// Events without provenance (SLA watchdog, LLM-fallback telemetry) must
+// still insert, so absent values get explicit sentinels instead of null.
+export function buildOpsEventRow(input: RecordOpsEventInput) {
+  return {
+    source: input.source.slice(0, 120),
+    severity: input.severity,
+    event_type: input.eventType.slice(0, 160),
+    workflow_id: input.workflowId?.slice(0, 200) || "kaxi-app",
+    workflow_version_id: input.workflowVersionId?.slice(0, 240) || "unversioned",
+    model_version: input.modelVersion?.slice(0, 240) || "none",
+    prompt_version: input.promptVersion?.slice(0, 240) || "none",
+    execution_id: input.executionId?.slice(0, 240) || null,
+    message: input.message.slice(0, 500),
+    payload: input.payload || {},
+  };
+}
+
 export async function recordOpsEvent(input: RecordOpsEventInput): Promise<RecordOpsEventResult> {
   if (isolatedTestRuntime()) return { id: null, duplicate: false, alert: null };
 
   const occurredAt = new Date().toISOString();
-  const result = await serviceClient().from("ops_events").insert({
-    source: input.source.slice(0, 120),
-    severity: input.severity,
-    event_type: input.eventType.slice(0, 160),
-    workflow_id: input.workflowId?.slice(0, 200) || null,
-    workflow_version_id: input.workflowVersionId?.slice(0, 240) || null,
-    model_version: input.modelVersion?.slice(0, 240) || null,
-    prompt_version: input.promptVersion?.slice(0, 240) || null,
-    execution_id: input.executionId?.slice(0, 240) || null,
-    message: input.message.slice(0, 500),
-    payload: input.payload || {},
-  }).select("id").single();
+  const result = await serviceClient().from("ops_events").insert(buildOpsEventRow(input)).select("id").single();
 
   if (result.error?.code === "23505") {
     return { id: null, duplicate: true, alert: null };

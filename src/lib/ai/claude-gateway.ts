@@ -96,8 +96,10 @@ async function loadAnthropicClient(): Promise<AnthropicClient> {
   if (!key) throw new ClaudeNotConfiguredError();
 
   try {
-    const dynamicImport = new Function("specifier", "return import(specifier)") as (specifier: string) => Promise<AnthropicModule>;
-    const mod = await dynamicImport("@anthropic-ai/sdk");
+    // A statically-analyzable dynamic import: Next's file tracing must be able
+    // to see this specifier, or the SDK is dropped from the serverless bundle
+    // and every production call fails as "SDK unavailable".
+    const mod = (await import("@anthropic-ai/sdk")) as unknown as AnthropicModule;
     const Anthropic = mod.default;
     return new Anthropic({ apiKey: key });
   } catch (error) {

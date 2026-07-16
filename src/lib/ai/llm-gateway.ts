@@ -146,6 +146,10 @@ async function generateWithProviderFailover<T>(
         },
       };
     } catch (error) {
+      console.error(
+        `[llm-gateway] ${backend} attempt failed (${failureCode(error)}):`,
+        error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300),
+      );
       firstError ??= error;
       failures.push(`${backend}:${failureCode(error)}`);
     }
