@@ -59,7 +59,7 @@ function ChoiceButton({ icon: Icon, label, onSelect, selected }: ChoiceButtonPro
       className={cn(
         "relative flex min-h-14 w-full items-center gap-3 rounded-lg border border-border bg-background px-4 py-3.5 text-left text-sm font-medium text-foreground transition-[border-color,background-color,box-shadow,transform] duration-150 ease-snappy active:scale-[0.98] sm:min-h-16 sm:px-5",
         "hover:border-foreground/25 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-        selected && "border-primary bg-primary/[0.06] shadow-sm ring-1 ring-primary",
+        selected && "border-primary-strong bg-primary-strong/[0.06] shadow-sm ring-1 ring-primary-strong",
       )}
     >
       {Icon && (
@@ -69,7 +69,7 @@ function ChoiceButton({ icon: Icon, label, onSelect, selected }: ChoiceButtonPro
       )}
       <span className="min-w-0 flex-1 leading-snug">{label}</span>
       {selected && (
-        <CheckCircle2 className="h-4 w-4 shrink-0 animate-in zoom-in-75 text-primary duration-150 ease-snappy motion-reduce:animate-none" />
+        <CheckCircle2 className="h-4 w-4 shrink-0 animate-in zoom-in-75 text-primary-strong duration-150 ease-snappy motion-reduce:animate-none" />
       )}
     </button>
   );

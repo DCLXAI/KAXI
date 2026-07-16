@@ -23,7 +23,7 @@ export function SelectedSchoolsBanner({
   if (selectedSchools.length === 0) return null;
 
   return (
-    <Card className="border-primary/50">
+    <Card className="border-primary-strong/50">
       <CardHeader className="py-3">
         <div className="flex justify-between items-center">
           <CardTitle className="text-sm">
@@ -34,7 +34,7 @@ export function SelectedSchoolsBanner({
       </CardHeader>
       <CardContent className="pt-0 text-xs text-muted-foreground">
         {selectedSchools.map((school) => school.name[locale] || school.name.ko).join(", ")}
-        {hasCurrentDiagnosis && <span className="ml-2 text-primary">({t("readiness_auto_updates")})</span>}
+        {hasCurrentDiagnosis && <span className="ml-2 text-primary-strong">({t("readiness_auto_updates")})</span>}
       </CardContent>
     </Card>
   );

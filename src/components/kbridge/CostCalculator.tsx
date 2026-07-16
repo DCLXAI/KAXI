@@ -182,7 +182,7 @@ export function CostCalculator() {
           <div className="space-y-2">
             <div className="grid grid-cols-12 gap-2 text-xs font-medium text-muted-foreground pb-2 border-b">
               <div className="col-span-6">{lang === "ko" ? "항목" : lang === "vi" ? "Hạng mục" : lang === "mn" ? "Бичлэг" : "Item"}</div>
-              <div className="col-span-3 text-right text-primary">{tr("cost_platform", lang)}</div>
+              <div className="col-span-3 text-right text-primary-strong">{tr("cost_platform", lang)}</div>
               <div className="col-span-3 text-right text-destructive">{tr("cost_broker", lang)}</div>
             </div>
             {COST_ITEMS.map((item) => (
@@ -218,7 +218,7 @@ export function CostCalculator() {
             {/* 총액 */}
             <div className="grid grid-cols-12 gap-2 pt-3 mt-2 border-t-2 items-center">
               <div className="col-span-6 font-bold">{tr("cost_total", lang)}</div>
-              <div className="col-span-3 text-right font-mono font-bold text-primary">
+              <div className="col-span-3 text-right font-mono font-bold text-primary-strong">
                 {platformTotal.toLocaleString()}₩
               </div>
               <div className="col-span-3 text-right font-mono font-bold text-destructive">

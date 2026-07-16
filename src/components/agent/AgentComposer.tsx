@@ -28,7 +28,7 @@ export function AgentComposer({
   return (
     <div className={fixed ? "fixed bottom-0 left-0 right-0 bg-gradient-to-t from-background via-background to-transparent pt-6 pb-4" : "border-t bg-background pt-4 pb-1"}>
       <div className="mx-auto max-w-3xl px-4">
-        <Card className="p-3 shadow-lg border-2 focus-within:border-primary/50 transition-colors">
+        <Card className="p-3 shadow-lg border-2 focus-within:border-primary-strong/50 transition-colors">
           <Textarea
             ref={inputRef}
             aria-label={locale === "ko" ? "KAXI AI 후속 질문" : locale === "vi" ? "Câu hỏi tiếp theo cho KAXI AI" : locale === "mn" ? "KAXI AI-д дараагийн асуулт" : "Follow-up for KAXI AI"}

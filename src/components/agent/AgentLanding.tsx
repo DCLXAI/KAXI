@@ -50,7 +50,7 @@ export function AgentLanding({
         className="w-full max-w-3xl"
       >
         <div className={embedded ? "text-center mb-5" : "text-center mb-10"}>
-          <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
+          <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full bg-primary-strong/10 text-primary-strong text-xs font-medium">
             <KaxiPawMark className="h-3.5 w-3.5" />
             {locale === "ko" ? "KAXI AI · 실행과 상담을 한곳에서" : locale === "vi" ? "KAXI AI · Thực hiện và tư vấn" : locale === "mn" ? "KAXI AI · Гүйцэтгэл ба зөвлөгөө" : "KAXI AI · Actions and guidance"}
             <span className={`h-1.5 w-1.5 rounded-full ${statusDotClass(agentStatus)}`} />
@@ -88,7 +88,7 @@ export function AgentLanding({
           </div>
         )}
 
-        <Card className="p-4 shadow-lg border-2 focus-within:border-primary/50 transition-colors">
+        <Card className="p-4 shadow-lg border-2 focus-within:border-primary-strong/50 transition-colors">
           <Textarea
             ref={inputRef}
             aria-label={locale === "ko" ? "KAXI AI에 질문하기" : locale === "vi" ? "Hỏi KAXI AI" : locale === "mn" ? "KAXI AI-аас асуух" : "Ask KAXI AI"}

@@ -232,8 +232,8 @@ export function Partners() {
             <Card key={p.key}>
               <CardHeader>
                 <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                    <Icon className="h-5 w-5 text-primary" />
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-strong/10">
+                    <Icon className="h-5 w-5 text-primary-strong" />
                   </div>
                   <div className="flex-1">
                     <CardTitle className="text-base">{tr(p.titleKey, lang)}</CardTitle>
@@ -304,7 +304,7 @@ export function Partners() {
                   </div>
                   <div className="rounded-md border bg-muted/20 p-3">
                     <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-                      <ShieldCheck className="h-4 w-4 text-primary" />
+                      <ShieldCheck className="h-4 w-4 text-primary-strong" />
                       {lang === "ko" ? "개인정보 제공 동의" : lang === "vi" ? "Đồng ý dữ liệu cá nhân" : lang === "mn" ? "Хувийн мэдээллийн зөвшөөрөл" : "Personal data consent"}
                     </div>
                     <div className="space-y-3">

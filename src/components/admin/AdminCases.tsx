@@ -91,7 +91,7 @@ export function AdminCases() {
               type="button"
               onClick={() => setBucket(key)}
               className={`rounded-md border px-3 py-3 text-left transition-colors ${
-                active ? "border-primary bg-primary/10" : "bg-card hover:bg-muted/60"
+                active ? "border-primary-strong bg-primary-strong/10" : "bg-card hover:bg-muted/60"
               }`}
             >
               <div className="flex items-center gap-2 text-xs text-muted-foreground">

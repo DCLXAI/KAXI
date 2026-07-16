@@ -181,7 +181,7 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
                 transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1], delay: i * 0.05 }}
               >
                 <Card
-                  className="cursor-pointer border-border/70 transition-[border-color,box-shadow,transform] duration-200 ease-snappy hover:border-primary/40 hover:shadow-md hover:-translate-y-0.5"
+                  className="cursor-pointer border-border/70 transition-[border-color,box-shadow,transform] duration-200 ease-snappy hover:border-primary-strong/40 hover:shadow-md hover:-translate-y-0.5"
                   onClick={() => onNavigate(f.action)}
                 >
                   <CardHeader>
@@ -218,7 +218,7 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
             <div className="grid grid-cols-3 gap-2 text-sm">
               <div className="font-medium text-muted-foreground"></div>
               <div className="font-medium text-destructive">Broker</div>
-              <div className="font-medium text-primary">KAXI</div>
+              <div className="font-medium text-primary-strong">KAXI</div>
               {brokerComparison.map((row, i) => (
                 <div key={i} className="contents">
                   <div className="py-2 border-t text-muted-foreground">
@@ -232,7 +232,7 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
                     }
                   </div>
                   <div className="py-2 border-t text-destructive">{row.broker[lang]}</div>
-                  <div className="py-2 border-t text-primary font-medium">{row.us[lang]}</div>
+                  <div className="py-2 border-t text-primary-strong font-medium">{row.us[lang]}</div>
                 </div>
               ))}
             </div>
