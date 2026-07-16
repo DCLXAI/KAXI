@@ -248,7 +248,7 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
           </div>
           <h2 className="font-serif text-2xl md:text-3xl font-bold mb-3">{tr("hero_title", lang)}</h2>
           <p className="text-primary-foreground/80 mb-6 max-w-2xl mx-auto">{tr("hero_subtitle", lang)}</p>
-          <Button size="lg" className="gap-2 bg-[#2c3577] text-[#eef2ff] hover:bg-[#3b4690]" onClick={scrollToQuickDiagnosis}>
+          <Button size="lg" className="gap-2 bg-primary-foreground text-[#eef2ff] hover:bg-[#3b4690]" onClick={scrollToQuickDiagnosis}>
             {tr("quick_diagnosis_return", lang)}
             <ArrowRight className="h-4 w-4" />
           </Button>
