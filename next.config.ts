@@ -10,6 +10,22 @@ const onnxRuntimeNodeTrace = [
   "./node_modules/onnxruntime-node/bin/napi-v3/linux/arm64/**/*",
 ];
 
+// pdf-parse drives pdfjs-dist, which loads CJK CMap tables and standard font
+// data from package-relative paths at runtime. Path-based asset loads are
+// invisible to output file tracing, so without these includes Korean court
+// PDFs extract to 0 chars in production ("Official source body too short").
+// @napi-rs/canvas is pdf-parse's native peer; include the linux builds the
+// Vercel runtime needs (same pattern as onnxruntime-node above).
+const pdfExtractionTrace = [
+  "./node_modules/pdfjs-dist/cmaps/**/*",
+  "./node_modules/pdfjs-dist/standard_fonts/**/*",
+  "./node_modules/@napi-rs/canvas/**/*",
+  "./node_modules/@napi-rs/canvas-linux-x64-gnu/**/*",
+  "./node_modules/@napi-rs/canvas-linux-x64-musl/**/*",
+  "./node_modules/@napi-rs/canvas-linux-arm64-gnu/**/*",
+  "./node_modules/@napi-rs/canvas-linux-arm64-musl/**/*",
+];
+
 const deploymentCacheTraceExcludes = [
   ".env",
   ".env.*",
@@ -29,6 +45,7 @@ const nextConfig: NextConfig = {
     "/api/ai/chat": onnxRuntimeNodeTrace,
     "/api/ai/consult": onnxRuntimeNodeTrace,
     "/api/codex/exec": codexCliTrace,
+    "/api/knowledge/monitor": pdfExtractionTrace,
     "/api/synonyms/suggest": onnxRuntimeNodeTrace,
   },
   turbopack: {
