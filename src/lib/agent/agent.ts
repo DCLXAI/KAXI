@@ -100,6 +100,12 @@ export async function runAgent(
     : `1. 정보가 필요하면 반드시 도구 호출 (추측 금지)
 2. 학교 정보 → search_schools 먼저 호출
 3. 비용 질문 → search_schools → calculate_cost 순서`;
+  // Grounded rule 4 drops the "search_knowledge로 공식 문서 검색" tool directive
+  // (preflight already retrieved the official docs into the context) but keeps
+  // the legal-ordering clause verbatim. Non-grounded rule 4 is byte-identical.
+  const rule4 = options.grounded
+    ? "4. 비자/체류/출입국/서류 절차 답변은 출입국관리법 → 시행령 체류자격 별표 → 시행규칙 첨부서류·수수료 → 하이코리아/매뉴얼 순서로 근거를 제시"
+    : "4. 비자/체류/출입국/서류 절차 → search_knowledge로 공식 문서 검색. 최종 답변은 출입국관리법 → 시행령 체류자격 별표 → 시행규칙 첨부서류·수수료 → 하이코리아/매뉴얼 순서로 근거를 제시";
   const diagnoseRule = options.grounded ? "" : "\n5. 개인 진단 → diagnose_path 호출";
 
   const systemPrompt = `당신은 KAXI의 AI 에이전트입니다. 한국 유학 준비생을 도와 학교 검색, 비용 계산, 서류 확인, 비자 정보 등을 제공합니다.
@@ -121,7 +127,7 @@ ${getToolsDescription()}
 
 ## 규칙
 ${toolMandateRules}
-4. 비자/체류/출입국/서류 절차 → search_knowledge로 공식 문서 검색. 최종 답변은 출입국관리법 → 시행령 체류자격 별표 → 시행규칙 첨부서류·수수료 → 하이코리아/매뉴얼 순서로 근거를 제시${diagnoseRule}
+${rule4}${diagnoseRule}
 6. 전문가 연결 → 사용자가 명시적으로 상담 접수/연결을 요청한 경우에만 request_partner 호출
 7. 위험 신호 (허위서류, 불법취업, 비자보장) 감지시 경고
 8. 최종 답변은 간결하고 실용적으로 (마크다운 사용)

@@ -652,10 +652,25 @@ async function testGroundedPromptPreservesSafetyRules() {
     fail(`grounded prompt must add the authoritative-context instruction`);
   }
 
+  // Rule 4: the legal-ordering clause is a safety invariant on BOTH paths, but
+  // the grounded variant drops the "search_knowledge로 공식 문서 검색" tool
+  // directive (preflight already retrieved the docs). Non-grounded rule 4 stays
+  // byte-identical to the original.
+  const legalOrdering = "출입국관리법 → 시행령 체류자격 별표 → 시행규칙 첨부서류·수수료 → 하이코리아/매뉴얼 순서로 근거를 제시";
+  if (!nonGroundedPrompt.includes(`4. 비자/체류/출입국/서류 절차 → search_knowledge로 공식 문서 검색. 최종 답변은 ${legalOrdering}`)) {
+    fail(`non-grounded rule 4 must stay byte-identical (tool directive + legal ordering)`);
+  }
+  if (!groundedPrompt.includes(`4. 비자/체류/출입국/서류 절차 답변은 ${legalOrdering}`)) {
+    fail(`grounded rule 4 must keep the legal-ordering clause without the tool directive`);
+  }
+  if (groundedPrompt.includes("search_knowledge로 공식 문서 검색")) {
+    fail(`grounded rule 4 must drop the search_knowledge tool directive`);
+  }
+
   // Safety / citation / legal-ordering / partner / length invariants must stay
   // byte-identical on BOTH paths.
   const safetyInvariants = [
-    "4. 비자/체류/출입국/서류 절차 → search_knowledge로 공식 문서 검색. 최종 답변은 출입국관리법 → 시행령 체류자격 별표 → 시행규칙 첨부서류·수수료 → 하이코리아/매뉴얼 순서로 근거를 제시",
+    legalOrdering,
     "6. 전문가 연결 → 사용자가 명시적으로 상담 접수/연결을 요청한 경우에만 request_partner 호출",
     "7. 위험 신호 (허위서류, 불법취업, 비자보장) 감지시 경고",
     "9. 사실·법령·요건·절차·학교 정보 문장 뒤에는 도구 결과의 citation 번호([1], [2]...)를 붙이고, 출처 표기 (📚 출처: ...)를 포함",
