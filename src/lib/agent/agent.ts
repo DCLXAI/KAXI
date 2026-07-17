@@ -148,7 +148,11 @@ ${getToolsDescription()}
         feature: "agent",
         messages,
         temperature: 0.2,
-        maxTokens: 1200,
+        // Kimi-family models spend output tokens on reasoning_content before
+        // the visible answer; 1200 intermittently hit finish_reason "length"
+        // in production (gateway failure code "output_budget") and dropped
+        // the turn to the deterministic tool fallback.
+        maxTokens: 2400,
       });
       const content = completion.text || "";
 
