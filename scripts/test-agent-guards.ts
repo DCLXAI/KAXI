@@ -542,6 +542,59 @@ async function testGroundedGapFillCapsIterations() {
   }
 }
 
+async function testGroundedForcesFinalOnLastIteration() {
+  const forcing = "(시스템) 이번 응답은 도구 호출 없이 반드시 최종 답변으로 작성하세요.";
+  const toolJson = '```json\n{"tool":"search_knowledge","args":{"query":"D-10 구직 체류자격 요건"}}\n```';
+
+  // Grounded: call 1 returns a tool call, call 2 must see the forcing message
+  // and returns a plain final answer.
+  const grForce: boolean[] = [];
+  let grCalls = 0;
+  const grounded = await runAgent(
+    "D-10 구직 체류자격 변경 요건",
+    "ko",
+    [],
+    { lang: "ko", leadId: "local-agent-guard" },
+    {
+      generateText: async (opts) => {
+        grForce.push(opts.messages.some((m) => typeof m.content === "string" && m.content.includes(forcing)));
+        grCalls += 1;
+        return {
+          text: grCalls === 1 ? toolJson : "출입국관리법에 따른 최종 답변입니다[1].\n📚 출처: 하이코리아",
+          model: "stub",
+          backend: "kimi" as const,
+          durationMs: 1,
+          inputChars: 0,
+          outputChars: 0,
+        };
+      },
+    },
+    { grounded: true },
+  );
+  if (grCalls !== 2) fail(`grounded forced-final should synthesize in exactly 2 calls, got ${grCalls}`);
+  if (grForce[1] !== true) fail(`grounded forced-final must inject the forcing message on the last iteration`);
+  if (grForce[0] !== false) fail(`grounded forced-final must not inject the forcing message on the first iteration`);
+  if (!grounded.answer.includes("최종 답변")) fail(`grounded forced-final should return the synthesized answer: ${grounded.answer}`);
+  if (grounded.answer.includes("최대 처리 횟수")) fail(`grounded forced-final must not fall back to the canned max-iterations message`);
+
+  // Non-grounded ReAct must never receive the forcing message.
+  const ngForce: boolean[] = [];
+  await runAgent(
+    "D-10 구직 체류자격 변경 요건",
+    "ko",
+    [],
+    { lang: "ko", leadId: "local-agent-guard" },
+    {
+      generateText: async (opts) => {
+        ngForce.push(opts.messages.some((m) => typeof m.content === "string" && m.content.includes(forcing)));
+        return { text: toolJson, model: "stub", backend: "kimi" as const, durationMs: 1, inputChars: 0, outputChars: 0 };
+      },
+    },
+    { grounded: false },
+  );
+  if (ngForce.some((seen) => seen)) fail(`non-grounded ReAct must never receive the grounded forcing message`);
+}
+
 async function testNonGroundedKeepsReasoningOn() {
   const captured: CapturedAgentOptions[] = [];
   await runAgent(
@@ -967,6 +1020,7 @@ await testFallbackAnswerIncludesCitationMarkers();
 await testAgentEscalatesTransientLlmFailure();
 await testGroundedShortCircuitOneShot();
 await testGroundedGapFillCapsIterations();
+await testGroundedForcesFinalOnLastIteration();
 await testNonGroundedKeepsReasoningOn();
 await testGroundedPromptPreservesSafetyRules();
 await testD10KnowledgeKeepsQuestionSpecificDocuments();

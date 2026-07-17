@@ -158,6 +158,16 @@ ${toolMandateRules}
   while (iteration < iterationCap) {
     iteration++;
 
+    // On the last allowed grounded iteration, force a final answer instead of
+    // another tool call — this kills the exhaustion path that would otherwise
+    // return the canned "최대 처리 횟수" message with no synthesis.
+    if (options.grounded && iteration === iterationCap && iteration > 1) {
+      messages.push({
+        role: "user",
+        content: "(시스템) 이번 응답은 도구 호출 없이 반드시 최종 답변으로 작성하세요. 지금까지 제공된 컨텍스트와 도구 결과만 사용해 답하세요.",
+      });
+    }
+
     try {
       const completion = await (dependencies.generateText || generateLlmText)({
         feature: "agent",
