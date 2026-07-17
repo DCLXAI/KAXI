@@ -13,6 +13,7 @@ export interface LlmGatewayOptions {
   maxTokens?: number;
   timeoutMs?: number;
   temperature?: number;
+  thinking?: "enabled" | "disabled";
   expectLongResponse?: boolean;
   jsonSchema?: {
     name: string;
