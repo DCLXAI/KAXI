@@ -267,7 +267,7 @@ export async function POST(req: NextRequest) {
 
     try {
       result = await withTimeout(
-        runAgent(preflight.groundedQuestion, lang, history, ctx),
+        runAgent(preflight.groundedQuestion, lang, history, ctx, {}, { grounded: Boolean(preflight.groundingContext) }),
         parsePositiveInt(process.env.AI_AGENT_TIMEOUT_MS, 18_000),
         "LLM Agent execution"
       );
