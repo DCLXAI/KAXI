@@ -16,6 +16,11 @@ const railwayWorkflow = readFileSync(
   "infra/n8n/kaxi-rag-typebot-orchestrator.mjs",
   "utf8",
 );
+const compiledOrchestrator = JSON.parse(
+  readFileSync("infra/n8n/kaxi-rag-typebot-orchestrator.json", "utf8"),
+) as {
+  nodes: Array<{ name: string; type: string; parameters?: Record<string, unknown> }>;
+};
 const errorWorkflow = JSON.parse(
   readFileSync("infra/n8n/kaxi-shared-error-handler.json", "utf8"),
 ) as {
@@ -141,6 +146,23 @@ assert(
   String(core.parameters?.jsonBody || "").includes("verificationToken")
     && String(core.parameters?.jsonBody || "").includes("Typebot Runtime Webhook"),
   "KAXI RAG core request must include the verification receipt and exact payload",
+);
+
+// Regression pin: Compute Query Embedding must read the ORIGINAL webhook body via a
+// cross-node reference, not $json at its own position (which is Verify Runtime
+// Signature's response — {ok, purpose, verificationToken} — and has no body/payload).
+const computeQueryEmbedding = compiledOrchestrator.nodes.find(
+  (node) => node.name === "Compute Query Embedding",
+);
+assert(computeQueryEmbedding, "compiled orchestrator is missing the Compute Query Embedding node");
+const computeQueryEmbeddingBody = String(computeQueryEmbedding.parameters?.jsonBody || "");
+assert(
+  computeQueryEmbeddingBody.includes("$('Typebot Runtime Webhook')"),
+  "Compute Query Embedding must source its input from the original webhook payload, not the verify response",
+);
+assert(
+  !computeQueryEmbeddingBody.includes("$json.body?.payload"),
+  "Compute Query Embedding must not read $json.body?.payload — at this node's position $json is Verify Runtime Signature's response, which has no body/payload",
 );
 assert(
   String(respond?.parameters?.responseBody || "").includes("n8n-kaxi-orchestrated")

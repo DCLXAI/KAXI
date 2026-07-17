@@ -10,6 +10,7 @@ import {
   type GuardrailLocale,
 } from "@/lib/chat/response-guardrail";
 import { verifyN8nVerificationReceipt } from "@/lib/n8n/signature";
+import { resolveProvidedEmbedding } from "@/lib/n8n/provided-query-embedding";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -87,6 +88,10 @@ export async function POST(req: NextRequest) {
     const retrievalQuery = text(payload.retrievalQuery, 800)
       || mediation?.searchQuery
       || question;
+    // Top-level on purpose: the verification receipt binds payloadHash, so the
+    // signed payload n8n forwards must stay byte-identical; the vector rides
+    // outside it and is treated as untrusted data (validated below).
+    const providedEmbedding = resolveProvidedEmbedding(body?.queryEmbedding);
     const direct = await runDirectRagFallback({
       question,
       retrievalQuery,
@@ -101,7 +106,7 @@ export async function POST(req: NextRequest) {
       mediation,
       conversationHistory: conversationHistory(payload.conversationContext),
       profile: parseSessionProfile(payload.profile),
-    });
+    }, providedEmbedding.dependencies);
     const guarded = applyChatResponseGuardrail(direct, question, resolvedLocale);
     const currentSearchMeta = record(guarded.searchMeta) || {};
 
@@ -118,6 +123,8 @@ export async function POST(req: NextRequest) {
           modelVersion: direct.modelVersion,
           promptVersion: direct.promptVersion,
         },
+        embeddingSource: providedEmbedding.embeddingSource,
+        providedEmbeddingRejected: providedEmbedding.rejectedReason,
       },
       requestId,
       sessionId,

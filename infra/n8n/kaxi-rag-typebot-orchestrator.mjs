@@ -61,12 +61,33 @@ const runtimeAllowed = ifElse({
   },
 });
 
+const computeQueryEmbedding = node({
+  type: "n8n-nodes-base.httpRequest",
+  version: 4.2,
+  config: {
+    name: "Compute Query Embedding",
+    position: [880, 160],
+    onError: "continueRegularOutput",
+    parameters: {
+      method: "POST",
+      url: "https://api.openai.com/v1/embeddings",
+      authentication: "predefinedCredentialType",
+      nodeCredentialType: "openAiApi",
+      sendBody: true,
+      specifyBody: "json",
+      jsonBody: expr("{{ JSON.stringify({ model: 'text-embedding-3-small', input: String($('Typebot Runtime Webhook').item.json.body?.retrievalQuery || $('Typebot Runtime Webhook').item.json.body?.question || '').slice(0, 4000), dimensions: 1536, encoding_format: 'float' }) }}"),
+      options: { timeout: 4000 },
+    },
+  },
+  output: [{ data: [{ embedding: [0.001, 0.002] }] }],
+});
+
 const runRagCore = node({
   type: "n8n-nodes-base.httpRequest",
   version: 4.4,
   config: {
     name: "Run KAXI RAG Core",
-    position: [880, 160],
+    position: [1120, 160],
     retryOnFail: false,
     parameters: {
       method: "POST",
@@ -75,7 +96,7 @@ const runRagCore = node({
       sendBody: true,
       contentType: "json",
       specifyBody: "json",
-      jsonBody: expr("{{ { verificationToken: $('Verify Runtime Signature').item.json.verificationToken ?? '', payload: $('Typebot Runtime Webhook').item.json.body ?? {} } }}"),
+      jsonBody: expr("{{ { verificationToken: $('Verify Runtime Signature').item.json.verificationToken ?? '', payload: $('Typebot Runtime Webhook').item.json.body ?? {}, queryEmbedding: Array.isArray($json.data) && Array.isArray($json.data[0]?.embedding) ? $json.data[0].embedding : undefined } }}"),
       options: {
         response: { response: { fullResponse: true, neverError: true, responseFormat: "json" } },
         timeout: 25000,
@@ -90,7 +111,7 @@ const respondTypebot = node({
   version: 1.5,
   config: {
     name: "Respond to Typebot",
-    position: [1160, 160],
+    position: [1400, 160],
     parameters: {
       respondWith: "json",
       responseBody: expr("{{ JSON.stringify({ answer: $('Run KAXI RAG Core').item.json.body?.answer ?? '', needsHuman: $('Run KAXI RAG Core').item.json.body?.needsHuman ?? true, riskLevel: $('Run KAXI RAG Core').item.json.body?.riskLevel ?? 'high', leadStage: $('Run KAXI RAG Core').item.json.body?.leadStage ?? 'blocked', nextStep: $('Run KAXI RAG Core').item.json.body?.nextStep ?? '', sources: $('Run KAXI RAG Core').item.json.body?.sources ?? [], searchMeta: { ...($('Run KAXI RAG Core').item.json.body?.searchMeta ?? {}), runtimePath: 'n8n-kaxi-orchestrated', n8nExecutionId: $execution.id, n8nWorkflowId: $workflow.id, n8nWorkflowVersionId: '" + release + "' }, requestId: $('Run KAXI RAG Core').item.json.body?.requestId ?? '', handoffToken: $('Run KAXI RAG Core').item.json.body?.handoffToken ?? '', persisted: $('Run KAXI RAG Core').item.json.body?.persisted ?? false, persistenceAccepted: $('Run KAXI RAG Core').item.json.body?.persistenceAccepted ?? false, messageId: $('Run KAXI RAG Core').item.json.body?.messageId ?? null, persistenceMode: $('Run KAXI RAG Core').item.json.body?.persistenceMode ?? '', handoffTaskPersisted: $('Run KAXI RAG Core').item.json.body?.handoffTaskPersisted ?? false, runtimePath: 'n8n-kaxi-orchestrated', executionId: $('Run KAXI RAG Core').item.json.body?.executionId ?? $execution.id, workflowId: $('Run KAXI RAG Core').item.json.body?.workflowId ?? 'kaxi-direct-hybrid', workflowVersionId: $('Run KAXI RAG Core').item.json.body?.workflowVersionId ?? '" + release + "', modelVersion: $('Run KAXI RAG Core').item.json.body?.modelVersion ?? '" + retrievalModel + "', promptVersion: $('Run KAXI RAG Core').item.json.body?.promptVersion ?? '" + answerPrompt + "', n8nExecutionId: $execution.id, n8nWorkflowId: $workflow.id, n8nWorkflowVersionId: '" + release + "' }) }}"),
@@ -378,7 +399,7 @@ export default workflow("kaxi-rag-typebot-railway", "KAXI RAG Typebot Orchestrat
   .add(runtimeWebhook)
   .to(verifyRuntime)
   .to(runtimeAllowed
-    .onTrue(runRagCore.to(respondTypebot))
+    .onTrue(computeQueryEmbedding.to(runRagCore.to(respondTypebot)))
     .onFalse(respondRuntimeUnauthorized))
   .add(ingestionWebhook)
   .to(verifyIngestion)
