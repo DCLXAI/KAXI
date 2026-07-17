@@ -25,10 +25,11 @@ import { currentAuthenticatedStudentProfileId } from "@/lib/cases/current-studen
 import { reportLlmFallback } from "@/lib/ops/llm-fallback-events";
 
 export const runtime = "nodejs";
-// Kimi-family turns spend 30-50s each on reasoning; a multi-iteration tool
-// turn regularly exceeds the old 60s window. The wall-clock guard below
-// (default 90s) plus the deterministic tool fallback (~5-8s) must both fit.
-export const maxDuration = 120;
+// The client (useAgentChat.ts CLIENT_STREAM_TIMEOUT_MS) aborts at 25s, so a
+// server guard above that is dead weight — the browser has already given up.
+// The guard (default 18s) plus the deterministic tool fallback (~5s) must
+// finish INSIDE the client's 25s so a slow turn still returns something.
+export const maxDuration = 60;
 
 function llmUnavailableResponse(message: string) {
   return NextResponse.json(
@@ -200,7 +201,7 @@ export async function GET() {
       rateLimit: parseLimit(process.env.AI_AGENT_RATE_LIMIT, 6),
       dailyQuota: parseLimit(process.env.AI_AGENT_DAILY_QUOTA, 30),
       maxQuestionChars: parsePositiveInt(process.env.AI_AGENT_MAX_CHARS, 2000),
-      timeoutMs: parsePositiveInt(process.env.AI_AGENT_TIMEOUT_MS, 90_000),
+      timeoutMs: parsePositiveInt(process.env.AI_AGENT_TIMEOUT_MS, 18_000),
     },
     persistence: {
       writableDatabase: canWriteRuntimeDatabase(),
@@ -267,7 +268,7 @@ export async function POST(req: NextRequest) {
     try {
       result = await withTimeout(
         runAgent(preflight.groundedQuestion, lang, history, ctx),
-        parsePositiveInt(process.env.AI_AGENT_TIMEOUT_MS, 90_000),
+        parsePositiveInt(process.env.AI_AGENT_TIMEOUT_MS, 18_000),
         "LLM Agent execution"
       );
     } catch (agentErr) {
