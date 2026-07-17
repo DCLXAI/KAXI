@@ -3,7 +3,7 @@
   "name": "KAXI RAG Typebot Orchestrator",
   "nodes": [
     {
-      "id": "d06d18b2-3593-4995-9d49-27654311fc14",
+      "id": "44a07717-684c-48ac-9add-7eecc5bbcc12",
       "name": "Typebot Runtime Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -20,10 +20,10 @@
           "ignoreBots": false
         }
       },
-      "webhookId": "2d19a1a8-4ac8-4849-a51c-c25e01e31d34"
+      "webhookId": "bb704a29-14bc-4344-b0ef-8108fd367057"
     },
     {
-      "id": "ec8ed556-3b75-4e5f-bce0-98238d70355a",
+      "id": "a131f633-ad2c-4ad0-9470-6375f1f9262d",
       "name": "Verify Runtime Signature",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -51,7 +51,7 @@
       }
     },
     {
-      "id": "3ec06fb7-6e04-487f-893e-d9d133038362",
+      "id": "d0e2e8b4-09fa-4d34-97e9-81e41da7f111",
       "name": "Runtime Signature Valid",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
@@ -83,12 +83,35 @@
       }
     },
     {
-      "id": "ca4e1aff-ef71-4418-b7f8-d0d29627a7e8",
+      "id": "2d1ded94-6b9d-406d-9432-0d02a908a4a4",
+      "name": "Compute Query Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        160
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'text-embedding-3-small', input: String($json.body?.payload?.retrievalQuery || $json.body?.payload?.question || '').slice(0, 4000), dimensions: 1536, encoding_format: 'float' }) }}",
+        "options": {
+          "timeout": 4000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "81531323-6ed5-4d2c-b2de-66da7ebdf37b",
       "name": "Run KAXI RAG Core",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        880,
+        1120,
         160
       ],
       "parameters": {
@@ -98,7 +121,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { verificationToken: $('Verify Runtime Signature').item.json.verificationToken ?? '', payload: $('Typebot Runtime Webhook').item.json.body ?? {} } }}",
+        "jsonBody": "={{ { verificationToken: $('Verify Runtime Signature').item.json.verificationToken ?? '', payload: $('Typebot Runtime Webhook').item.json.body ?? {}, queryEmbedding: Array.isArray($json.data) && Array.isArray($json.data[0]?.embedding) ? $json.data[0].embedding : undefined } }}",
         "options": {
           "response": {
             "response": {
@@ -112,12 +135,12 @@
       }
     },
     {
-      "id": "5b4f91d9-6c96-4aca-8759-406792cf0d0e",
+      "id": "06d853af-953a-444e-af00-a41ee6630e0c",
       "name": "Respond to Typebot",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        1160,
+        1400,
         160
       ],
       "parameters": {
@@ -141,7 +164,7 @@
       }
     },
     {
-      "id": "f7a8c0ce-e8c2-414c-8efa-409013b89f26",
+      "id": "c05a3e0f-d647-46fc-a967-f8d1bd3c77ac",
       "name": "Respond Runtime Unauthorized",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
@@ -166,7 +189,7 @@
       }
     },
     {
-      "id": "1ed6c16c-51de-44d5-a413-bb60db4977ed",
+      "id": "e2e07748-2853-45df-b85b-2d9a26e6e3a3",
       "name": "RAG Knowledge Ingestion Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -183,10 +206,10 @@
           "ignoreBots": false
         }
       },
-      "webhookId": "0c0f028b-2a37-4e51-8f64-62af940afa55"
+      "webhookId": "eaccee48-913d-4e98-a387-237a6f7e722f"
     },
     {
-      "id": "20ae5c7e-3211-4118-8ab4-776b2c430143",
+      "id": "fa62e2b0-4bdc-4124-bd96-990912d97b18",
       "name": "Verify Ingestion Signature",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -214,7 +237,7 @@
       }
     },
     {
-      "id": "8889e2ae-6bfb-4160-ab99-47933ba3046e",
+      "id": "fd0c8b51-bd0c-4b81-b4c3-91b7723e91ad",
       "name": "Ingestion Signature Valid",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
@@ -246,7 +269,7 @@
       }
     },
     {
-      "id": "8e48492e-cd77-4d58-9e22-aaf20ec23b31",
+      "id": "3760cc44-27c1-4991-ab38-753f49973cf8",
       "name": "Run KAXI RAG Ingestion Core",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -278,7 +301,7 @@
       "waitBetweenTries": 750
     },
     {
-      "id": "1fb87f03-f7f2-4306-a33b-42385f60b0ba",
+      "id": "20a669f1-8138-4754-a2d4-2244de0abf56",
       "name": "Respond Ingestion",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
@@ -307,7 +330,7 @@
       }
     },
     {
-      "id": "5ea47edb-bc34-44fb-a779-1c74b0dcf82c",
+      "id": "90860ed5-7479-4a21-a5fe-e72c88e26aed",
       "name": "Respond Ingestion Unauthorized",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
@@ -332,7 +355,7 @@
       }
     },
     {
-      "id": "26b93755-2cc1-4a58-b53d-523389f916a6",
+      "id": "89066cd9-284c-49c9-a048-4f28f6033523",
       "name": "Typebot Handoff Update Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -349,10 +372,10 @@
           "ignoreBots": false
         }
       },
-      "webhookId": "77f9eda8-c435-4e9f-9778-1725c802464f"
+      "webhookId": "5945d188-a693-482f-9e20-e397f20d474f"
     },
     {
-      "id": "0008d74b-36b1-4f66-ae65-23e1efab569d",
+      "id": "4f487831-7a2d-4619-95a5-212560510d27",
       "name": "Verify Handoff Signature",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -380,7 +403,7 @@
       }
     },
     {
-      "id": "3e766bbb-3d52-43e2-b868-02ac202704ed",
+      "id": "d32e721b-2c24-48cc-884d-63b60186fdcc",
       "name": "Handoff Signature Valid",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
@@ -412,7 +435,7 @@
       }
     },
     {
-      "id": "ad2e1717-ac6d-453c-a9a0-cb34ea7fe523",
+      "id": "c578648c-d6f9-43da-bf46-cd844d093c15",
       "name": "Run KAXI Handoff Core",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -444,7 +467,7 @@
       "waitBetweenTries": 500
     },
     {
-      "id": "18861f67-e4eb-4ae7-bcd3-afd63172fff1",
+      "id": "1b478664-6be3-45db-911d-98ca00e34c2f",
       "name": "Respond Handoff Update",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
@@ -473,7 +496,7 @@
       }
     },
     {
-      "id": "d87b8fea-ce70-49f7-accd-3e92f89e2e06",
+      "id": "b11b7ca4-7dd0-4d7a-88b3-c981e02454e9",
       "name": "Respond Handoff Unauthorized",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
@@ -498,7 +521,7 @@
       }
     },
     {
-      "id": "1307a84d-cbb2-488a-a6aa-855a746d8a86",
+      "id": "b0708be8-6852-4dba-8cbe-9efb8ac7902c",
       "name": "RAG Serving Capability Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -515,10 +538,10 @@
           "ignoreBots": false
         }
       },
-      "webhookId": "4a1eee4a-4ab7-495c-8876-4d4e1d95bc3e"
+      "webhookId": "8e13d78d-307f-49b4-bb8f-6316bda17230"
     },
     {
-      "id": "d27f2bd2-8c3d-4247-8b1e-03b895fc8e33",
+      "id": "42e9972f-f85e-4bc3-98b8-47839097a9d1",
       "name": "Respond RAG Serving Capability",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
@@ -574,7 +597,7 @@
       "main": [
         [
           {
-            "node": "Run KAXI RAG Core",
+            "node": "Compute Query Embedding",
             "type": "main",
             "index": 0
           }
@@ -582,6 +605,17 @@
         [
           {
             "node": "Respond Runtime Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Query Embedding": {
+      "main": [
+        [
+          {
+            "node": "Run KAXI RAG Core",
             "type": "main",
             "index": 0
           }
