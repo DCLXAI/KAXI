@@ -16,9 +16,13 @@ const onnxRuntimeNodeTrace = [
 // PDFs extract to 0 chars in production ("Official source body too short").
 // @napi-rs/canvas is pdf-parse's native peer; include the linux builds the
 // Vercel runtime needs (same pattern as onnxruntime-node above).
+// The narrow cmaps/standard_fonts include was not enough: pdf-parse also
+// path-loads its bundled pdf.worker.mjs (its own cmap/worker defaults are
+// commented out upstream), and pdfjs-dist path-loads worker/build files, so
+// both packages must ship whole (~80MB total, within the function limit).
 const pdfExtractionTrace = [
-  "./node_modules/pdfjs-dist/cmaps/**/*",
-  "./node_modules/pdfjs-dist/standard_fonts/**/*",
+  "./node_modules/pdf-parse/**/*",
+  "./node_modules/pdfjs-dist/**/*",
   "./node_modules/@napi-rs/canvas/**/*",
   "./node_modules/@napi-rs/canvas-linux-x64-gnu/**/*",
   "./node_modules/@napi-rs/canvas-linux-x64-musl/**/*",
