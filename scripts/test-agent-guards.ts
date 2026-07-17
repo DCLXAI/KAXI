@@ -459,6 +459,169 @@ async function testAgentEscalatesTransientLlmFailure() {
   }
 }
 
+type CapturedAgentOptions = { thinking?: string; messages: { role: string; content: unknown }[] };
+
+function stubAgentSystemPrompt(captured: CapturedAgentOptions[]) {
+  return async (opts: { thinking?: string; messages: { role: string; content: unknown }[] }) => {
+    captured.push({ thinking: opts.thinking, messages: opts.messages });
+    return {
+      text: "출입국관리법에 따르면 체류기간 연장 신청이 필요합니다[1].\n📚 출처: 하이코리아",
+      model: "stub",
+      backend: "kimi" as const,
+      durationMs: 1,
+      inputChars: 0,
+      outputChars: 0,
+    };
+  };
+}
+
+async function testGroundedShortCircuitOneShot() {
+  const captured: CapturedAgentOptions[] = [];
+  const result = await runAgent(
+    "D-2 비자 연장 요건을 알려줘",
+    "ko",
+    [],
+    { lang: "ko", leadId: "local-agent-guard" },
+    { generateText: stubAgentSystemPrompt(captured) },
+    { grounded: true },
+  );
+
+  if (captured.length !== 1) {
+    fail(`grounded short-circuit must synthesize in exactly one model call, got ${captured.length}`);
+  }
+  if (!result.answer.includes("출입국관리법")) {
+    fail(`grounded short-circuit should return the synthesized answer: ${result.answer}`);
+  }
+  if (captured[0]?.thinking !== "disabled") {
+    fail(`grounded synthesis must pass thinking:"disabled", got ${JSON.stringify(captured[0]?.thinking)}`);
+  }
+}
+
+async function testGroundedGapFillCapsIterations() {
+  const toolJson = '```json\n{"tool":"search_knowledge","args":{"query":"D-10 구직 체류자격 요건"}}\n```';
+  const makeAlwaysToolStub = () => {
+    let calls = 0;
+    const stub = async () => {
+      calls += 1;
+      return {
+        text: toolJson,
+        model: "stub",
+        backend: "kimi" as const,
+        durationMs: 1,
+        inputChars: 0,
+        outputChars: 0,
+      };
+    };
+    return { stub, getCalls: () => calls };
+  };
+
+  const grounded = makeAlwaysToolStub();
+  await runAgent(
+    "D-10 구직 체류자격 변경 요건",
+    "ko",
+    [],
+    { lang: "ko", leadId: "local-agent-guard" },
+    { generateText: grounded.stub },
+    { grounded: true },
+  );
+  if (grounded.getCalls() !== 2) {
+    fail(`grounded gap-fill must cap the loop at 2 model calls, got ${grounded.getCalls()}`);
+  }
+
+  const nonGrounded = makeAlwaysToolStub();
+  await runAgent(
+    "D-10 구직 체류자격 변경 요건",
+    "ko",
+    [],
+    { lang: "ko", leadId: "local-agent-guard" },
+    { generateText: nonGrounded.stub },
+    { grounded: false },
+  );
+  if (nonGrounded.getCalls() !== 5) {
+    fail(`non-grounded ReAct must keep MAX_ITERATIONS=5 model calls, got ${nonGrounded.getCalls()}`);
+  }
+}
+
+async function testNonGroundedKeepsReasoningOn() {
+  const captured: CapturedAgentOptions[] = [];
+  await runAgent(
+    "D-10 변경 요건을 알려줘",
+    "ko",
+    [],
+    { lang: "ko", leadId: "local-agent-guard" },
+    { generateText: stubAgentSystemPrompt(captured) },
+    { grounded: false },
+  );
+  if (captured[0]?.thinking !== undefined) {
+    fail(`non-grounded ReAct must keep reasoning on (thinking undefined), got ${JSON.stringify(captured[0]?.thinking)}`);
+  }
+}
+
+async function testGroundedPromptPreservesSafetyRules() {
+  const nonGrounded: CapturedAgentOptions[] = [];
+  await runAgent(
+    "D-4 비자 서류를 알려줘",
+    "ko",
+    [],
+    { lang: "ko", leadId: "local-agent-guard" },
+    { generateText: stubAgentSystemPrompt(nonGrounded) },
+    { grounded: false },
+  );
+  const grounded: CapturedAgentOptions[] = [];
+  await runAgent(
+    "D-4 비자 서류를 알려줘",
+    "ko",
+    [],
+    { lang: "ko", leadId: "local-agent-guard" },
+    { generateText: stubAgentSystemPrompt(grounded) },
+    { grounded: true },
+  );
+
+  const nonGroundedPrompt = String(nonGrounded[0]?.messages?.[0]?.content ?? "");
+  const groundedPrompt = String(grounded[0]?.messages?.[0]?.content ?? "");
+
+  // Byte-identical tool-first mandates on the non-grounded (fallback) path.
+  const toolFirstMandates = [
+    "1. 정보가 필요하면 반드시 도구 호출 (추측 금지)",
+    "2. 학교 정보 → search_schools 먼저 호출",
+    "3. 비용 질문 → search_schools → calculate_cost 순서",
+    "5. 개인 진단 → diagnose_path 호출",
+  ];
+  for (const mandate of toolFirstMandates) {
+    if (!nonGroundedPrompt.includes(mandate)) {
+      fail(`non-grounded prompt must keep tool-first mandate verbatim: ${mandate}`);
+    }
+    if (groundedPrompt.includes(mandate)) {
+      fail(`grounded prompt must drop the tool-first mandate: ${mandate}`);
+    }
+  }
+  if (!groundedPrompt.includes("제공된 컨텍스트가 authoritative 1차 근거입니다.")) {
+    fail(`grounded prompt must add the authoritative-context instruction`);
+  }
+
+  // Safety / citation / legal-ordering / partner / length invariants must stay
+  // byte-identical on BOTH paths.
+  const safetyInvariants = [
+    "4. 비자/체류/출입국/서류 절차 → search_knowledge로 공식 문서 검색. 최종 답변은 출입국관리법 → 시행령 체류자격 별표 → 시행규칙 첨부서류·수수료 → 하이코리아/매뉴얼 순서로 근거를 제시",
+    "6. 전문가 연결 → 사용자가 명시적으로 상담 접수/연결을 요청한 경우에만 request_partner 호출",
+    "7. 위험 신호 (허위서류, 불법취업, 비자보장) 감지시 경고",
+    "9. 사실·법령·요건·절차·학교 정보 문장 뒤에는 도구 결과의 citation 번호([1], [2]...)를 붙이고, 출처 표기 (📚 출처: ...)를 포함",
+    "11. 사용자가 상담 접수 의사를 밝히지 않았다면 request_partner를 호출하지 말고, 필요한 정보와 확인 질문만 안내",
+    "12. request_partner는 상담 요청 초안만 만들며, 실제 접수에는 사용자 확인과 운영 접수 절차가 필요함을 안내",
+    "13. 하이코리아·비자포털 안내는 운영 보조 근거이며, 법령과 충돌하거나 최신성이 불명확하면 법령과 관할 출입국외국인관서 확인을 우선",
+    "14. 근거가 없는 요건 단정은 하지 말고 \"공식 근거 확인 필요\"라고 말함",
+    "15. 최종 답변은 표 없이 약 1,200자 이내, 최대 4개 짧은 섹션으로 완결하고 마지막에 다음 확인 단계를 한 문장으로 제시",
+  ];
+  for (const invariant of safetyInvariants) {
+    if (!nonGroundedPrompt.includes(invariant)) {
+      fail(`non-grounded prompt lost a safety invariant: ${invariant}`);
+    }
+    if (!groundedPrompt.includes(invariant)) {
+      fail(`grounded prompt must keep every safety invariant byte-identical: ${invariant}`);
+    }
+  }
+}
+
 async function testD10KnowledgeKeepsQuestionSpecificDocuments() {
   const snapshot = { ...process.env };
   try {
@@ -802,6 +965,10 @@ await testPreflightCarriesPlannerContext();
 await testFallbackPartnerRequestStaysDraft();
 await testFallbackAnswerIncludesCitationMarkers();
 await testAgentEscalatesTransientLlmFailure();
+await testGroundedShortCircuitOneShot();
+await testGroundedGapFillCapsIterations();
+await testNonGroundedKeepsReasoningOn();
+await testGroundedPromptPreservesSafetyRules();
 await testD10KnowledgeKeepsQuestionSpecificDocuments();
 await testAgentStatusRoute();
 await testClaudeMissingKeyFallsBackToTools();
