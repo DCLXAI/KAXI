@@ -181,6 +181,38 @@ try {
   }
   process.env.AI_PROVIDER = "kimi";
 
+  // Per-call `thinking` override: the grounded synthesis path disables Kimi
+  // reasoning, and an explicit "enabled" must beat the structured-feature
+  // default. Capture the request body to prove the override reaches the wire.
+  let thinkingBody: Record<string, unknown> = {};
+  const thinkingFetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+    thinkingBody = JSON.parse(String(init?.body || "{}")) as Record<string, unknown>;
+    return Response.json({
+      model: "kimi-k2.6-test",
+      choices: [{ message: { role: "assistant", content: JSON.stringify({ ok: true }) } }],
+    });
+  };
+  globalThis.fetch = Object.assign(thinkingFetch, { preconnect: originalFetch.preconnect });
+
+  await generateLlmText({
+    feature: "agent",
+    thinking: "disabled",
+    messages: [{ role: "user", content: "Answer over authoritative context." }],
+  });
+  if (JSON.stringify(thinkingBody.thinking) !== JSON.stringify({ type: "disabled" })) {
+    fail(`per-call thinking:"disabled" must set thinking.type on the agent request: ${JSON.stringify(thinkingBody)}`);
+  }
+
+  await generateLlmText({
+    feature: "structured",
+    thinking: "enabled",
+    jsonSchema: { name: "thinking_override_contract", schema: { type: "object" } },
+    messages: [{ role: "user", content: "Override the structured reasoning-off default." }],
+  });
+  if (JSON.stringify(thinkingBody.thinking) !== JSON.stringify({ type: "enabled" })) {
+    fail(`per-call thinking:"enabled" must override the structured default: ${JSON.stringify(thinkingBody)}`);
+  }
+
   const truncatedFetch = async () => Response.json({
     model: "kimi-k2.6-test",
     choices: [{

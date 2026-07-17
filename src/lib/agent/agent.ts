@@ -82,11 +82,31 @@ export async function runAgent(
   history: { role: string; content: string }[],
   ctx: ToolContext,
   dependencies: AgentDependencies = {},
+  options: { grounded?: boolean } = {},
 ): Promise<AgentResponse> {
   const steps: AgentStep[] = [];
   const toolResults: ToolResult[] = [];
 
   const langName = { ko: "Korean", vi: "Vietnamese", mn: "Mongolian", en: "English" }[lang];
+
+  // Preflight already ran the deterministic tools (LLM-free) and embedded their
+  // results into `question` as authoritative context. On that grounded path we
+  // relax ONLY the "call tools first" mandates (rules 1-3, 5) so the model
+  // synthesizes over the context in ~1 call instead of re-fetching the same
+  // tools across a 5-hop ReAct chain. Every safety/citation/legal-ordering rule
+  // (4, 6-15) stays byte-identical, and the non-grounded fallback is unchanged.
+  const toolMandateRules = options.grounded
+    ? "1. 제공된 컨텍스트가 authoritative 1차 근거입니다. 컨텍스트로 답할 수 있으면 도구를 호출하지 말고 바로 최종 답변을 작성하세요. 컨텍스트에 없는 필수 정보에 한해 도구를 최대 1회 호출할 수 있습니다."
+    : `1. 정보가 필요하면 반드시 도구 호출 (추측 금지)
+2. 학교 정보 → search_schools 먼저 호출
+3. 비용 질문 → search_schools → calculate_cost 순서`;
+  // Grounded rule 4 drops the "search_knowledge로 공식 문서 검색" tool directive
+  // (preflight already retrieved the official docs into the context) but keeps
+  // the legal-ordering clause verbatim. Non-grounded rule 4 is byte-identical.
+  const rule4 = options.grounded
+    ? "4. 비자/체류/출입국/서류 절차 답변은 출입국관리법 → 시행령 체류자격 별표 → 시행규칙 첨부서류·수수료 → 하이코리아/매뉴얼 순서로 근거를 제시"
+    : "4. 비자/체류/출입국/서류 절차 → search_knowledge로 공식 문서 검색. 최종 답변은 출입국관리법 → 시행령 체류자격 별표 → 시행규칙 첨부서류·수수료 → 하이코리아/매뉴얼 순서로 근거를 제시";
+  const diagnoseRule = options.grounded ? "" : "\n5. 개인 진단 → diagnose_path 호출";
 
   const systemPrompt = `당신은 KAXI의 AI 에이전트입니다. 한국 유학 준비생을 도와 학교 검색, 비용 계산, 서류 확인, 비자 정보 등을 제공합니다.
 
@@ -106,11 +126,8 @@ export async function runAgent(
 ${getToolsDescription()}
 
 ## 규칙
-1. 정보가 필요하면 반드시 도구 호출 (추측 금지)
-2. 학교 정보 → search_schools 먼저 호출
-3. 비용 질문 → search_schools → calculate_cost 순서
-4. 비자/체류/출입국/서류 절차 → search_knowledge로 공식 문서 검색. 최종 답변은 출입국관리법 → 시행령 체류자격 별표 → 시행규칙 첨부서류·수수료 → 하이코리아/매뉴얼 순서로 근거를 제시
-5. 개인 진단 → diagnose_path 호출
+${toolMandateRules}
+${rule4}${diagnoseRule}
 6. 전문가 연결 → 사용자가 명시적으로 상담 접수/연결을 요청한 경우에만 request_partner 호출
 7. 위험 신호 (허위서류, 불법취업, 비자보장) 감지시 경고
 8. 최종 답변은 간결하고 실용적으로 (마크다운 사용)
@@ -140,8 +157,22 @@ ${getToolsDescription()}
   let finalAnswer = "";
   let citationSourceCount = 0;
 
-  while (iteration < MAX_ITERATIONS) {
+  // Grounded turns short-circuit to one synthesis call plus at most one gap-fill
+  // iteration; the non-grounded ReAct fallback keeps the full 5-hop budget.
+  const iterationCap = options.grounded ? 2 : MAX_ITERATIONS;
+
+  while (iteration < iterationCap) {
     iteration++;
+
+    // On the last allowed grounded iteration, force a final answer instead of
+    // another tool call — this kills the exhaustion path that would otherwise
+    // return the canned "최대 처리 횟수" message with no synthesis.
+    if (options.grounded && iteration === iterationCap && iteration > 1) {
+      messages.push({
+        role: "user",
+        content: "(시스템) 이번 응답은 도구 호출 없이 반드시 최종 답변으로 작성하세요. 지금까지 제공된 컨텍스트와 도구 결과만 사용해 답하세요.",
+      });
+    }
 
     try {
       const completion = await (dependencies.generateText || generateLlmText)({
@@ -153,6 +184,10 @@ ${getToolsDescription()}
         // in production (gateway failure code "output_budget") and dropped
         // the turn to the deterministic tool fallback.
         maxTokens: 2400,
+        // Grounded synthesis over authoritative context needs far less
+        // reasoning than a 5-hop planning chain; scope reasoning-off to that
+        // path only. The non-grounded fallback keeps reasoning on.
+        thinking: options.grounded ? "disabled" : undefined,
       });
       const content = completion.text || "";
 

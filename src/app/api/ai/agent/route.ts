@@ -195,13 +195,13 @@ export async function GET() {
     claude: backendPolicy.claude,
     preflight: {
       enabled: isEnvTrue(process.env.AI_AGENT_PREFLIGHT_ENABLED),
-      timeoutMs: parsePositiveInt(process.env.AI_AGENT_PREFLIGHT_TIMEOUT_MS, 12_000),
+      timeoutMs: parsePositiveInt(process.env.AI_AGENT_PREFLIGHT_TIMEOUT_MS, 4_000),
     },
     limits: {
       rateLimit: parseLimit(process.env.AI_AGENT_RATE_LIMIT, 6),
       dailyQuota: parseLimit(process.env.AI_AGENT_DAILY_QUOTA, 30),
       maxQuestionChars: parsePositiveInt(process.env.AI_AGENT_MAX_CHARS, 2000),
-      timeoutMs: parsePositiveInt(process.env.AI_AGENT_TIMEOUT_MS, 18_000),
+      timeoutMs: parsePositiveInt(process.env.AI_AGENT_TIMEOUT_MS, 15_000),
     },
     persistence: {
       writableDatabase: canWriteRuntimeDatabase(),
@@ -245,12 +245,16 @@ export async function POST(req: NextRequest) {
     const ctx: ToolContext = { lang, leadId };
     ledgerContext = { question, leadId, preflight: emptyPreflight(question) };
 
+    // Sequential server budget sealed under the client's 25s abort:
+    // preflight 4s + LLM agent 15s + deterministic tool fallback ~5s = 24s < 25s.
+    // A preflight timeout is caught below and the request continues on the
+    // non-grounded path safely (empty groundingContext → full ReAct fallback).
     let preflight = emptyPreflight(question);
     if (isEnvTrue(process.env.AI_AGENT_PREFLIGHT_ENABLED)) {
       try {
         preflight = await withTimeout(
           runAgentPreflight(question, lang, ctx),
-          parsePositiveInt(process.env.AI_AGENT_PREFLIGHT_TIMEOUT_MS, 12_000),
+          parsePositiveInt(process.env.AI_AGENT_PREFLIGHT_TIMEOUT_MS, 4_000),
           "Agent preflight"
         );
       } catch (preflightErr) {
@@ -267,8 +271,8 @@ export async function POST(req: NextRequest) {
 
     try {
       result = await withTimeout(
-        runAgent(preflight.groundedQuestion, lang, history, ctx),
-        parsePositiveInt(process.env.AI_AGENT_TIMEOUT_MS, 18_000),
+        runAgent(preflight.groundedQuestion, lang, history, ctx, {}, { grounded: Boolean(preflight.groundingContext) }),
+        parsePositiveInt(process.env.AI_AGENT_TIMEOUT_MS, 15_000),
         "LLM Agent execution"
       );
     } catch (agentErr) {

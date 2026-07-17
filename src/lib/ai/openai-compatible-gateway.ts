@@ -232,11 +232,12 @@ export async function generateOpenAICompatibleText(options: LlmGatewayOptions): 
   };
 
   const configuredThinking = configured(process.env.KIMI_THINKING).toLowerCase();
-  const thinking = configuredThinking === "enabled" || configuredThinking === "disabled"
-    ? configuredThinking
-    : options.feature === "structured"
-      ? "disabled"
-      : "";
+  const thinking = options.thinking
+    ?? (configuredThinking === "enabled" || configuredThinking === "disabled"
+      ? configuredThinking
+      : options.feature === "structured"
+        ? "disabled"
+        : "");
   if (thinking && !model.startsWith("kimi-k2.7-code")) {
     body.thinking = { type: thinking };
   }
