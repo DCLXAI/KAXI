@@ -71,6 +71,14 @@ if (sourceAudit.expiredDocs.length > 0) {
   fail(`RAG docs expired today: ${sourceAudit.expiredDocs.map((doc) => doc.id).join(", ")}`);
 }
 
+// Docs re-verified after their fast-review window expired keep their own
+// expected check date; the evidence for each re-verification lives beside the
+// entry in src/lib/data/source-metadata.ts.
+const REVERIFIED_CHECK_DATES: Record<string, string> = {
+  "hikorea-homepage-urgent-notices": "2026-07-17",
+  "immigration-law-recent-promulgations": "2026-07-17",
+};
+
 const requiredHiKoreaDocs = [
   "hikorea-homepage-urgent-notices",
   "hikorea-integrated-status-manual",
@@ -89,7 +97,8 @@ for (const docId of requiredHiKoreaDocs) {
   const meta = getRagDocumentMetadata(doc, "ko");
   if (!meta.source_url.includes("hikorea.go.kr")) fail(`${docId} must point to hikorea.go.kr`);
   if (meta.source_type !== "official_government") fail(`${docId} must use official_government source type`);
-  if (meta.last_checked_at !== "2026-07-02") fail(`${docId} checked date must be 2026-07-02`);
+  const expectedCheckedAt = REVERIFIED_CHECK_DATES[docId] || "2026-07-02";
+  if (meta.last_checked_at !== expectedCheckedAt) fail(`${docId} checked date must be ${expectedCheckedAt}`);
 }
 
 const requiredImmigrationLawDocs = [
@@ -145,7 +154,8 @@ for (const docId of requiredImmigrationLawDocs) {
   const meta = getRagDocumentMetadata(doc, "ko");
   if (!meta.source_url.includes("law.go.kr")) fail(`${docId} must point to law.go.kr`);
   if (meta.source_type !== "official_law") fail(`${docId} must use official_law source type`);
-  if (meta.last_checked_at !== "2026-07-02") fail(`${docId} checked date must be 2026-07-02`);
+  const expectedCheckedAt = REVERIFIED_CHECK_DATES[docId] || "2026-07-02";
+  if (meta.last_checked_at !== expectedCheckedAt) fail(`${docId} checked date must be ${expectedCheckedAt}`);
 }
 
 const requiredMojPolicyDocs = [
