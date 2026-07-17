@@ -75,7 +75,7 @@ const computeQueryEmbedding = node({
       nodeCredentialType: "openAiApi",
       sendBody: true,
       specifyBody: "json",
-      jsonBody: expr("{{ JSON.stringify({ model: 'text-embedding-3-small', input: String($json.body?.payload?.retrievalQuery || $json.body?.payload?.question || '').slice(0, 4000), dimensions: 1536, encoding_format: 'float' }) }}"),
+      jsonBody: expr("{{ JSON.stringify({ model: 'text-embedding-3-small', input: String($('Typebot Runtime Webhook').item.json.body?.retrievalQuery || $('Typebot Runtime Webhook').item.json.body?.question || '').slice(0, 4000), dimensions: 1536, encoding_format: 'float' }) }}"),
       options: { timeout: 4000 },
     },
   },

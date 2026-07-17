@@ -3,7 +3,7 @@
   "name": "KAXI RAG Typebot Orchestrator",
   "nodes": [
     {
-      "id": "44a07717-684c-48ac-9add-7eecc5bbcc12",
+      "id": "a2298f64-82e9-486c-9194-976ecf3b5a26",
       "name": "Typebot Runtime Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -20,10 +20,10 @@
           "ignoreBots": false
         }
       },
-      "webhookId": "bb704a29-14bc-4344-b0ef-8108fd367057"
+      "webhookId": "704f9c99-e2cf-4e53-b38f-df90c4b996ec"
     },
     {
-      "id": "a131f633-ad2c-4ad0-9470-6375f1f9262d",
+      "id": "b82c39e2-e95b-4e9f-b574-d5965d3d28dc",
       "name": "Verify Runtime Signature",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -51,7 +51,7 @@
       }
     },
     {
-      "id": "d0e2e8b4-09fa-4d34-97e9-81e41da7f111",
+      "id": "7b4e267f-7217-4f81-a3e2-60a3c53db1f2",
       "name": "Runtime Signature Valid",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
@@ -83,7 +83,7 @@
       }
     },
     {
-      "id": "2d1ded94-6b9d-406d-9432-0d02a908a4a4",
+      "id": "fbe7c208-54e6-4c87-ae61-815296ad0ab1",
       "name": "Compute Query Embedding",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -98,7 +98,7 @@
         "nodeCredentialType": "openAiApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'text-embedding-3-small', input: String($json.body?.payload?.retrievalQuery || $json.body?.payload?.question || '').slice(0, 4000), dimensions: 1536, encoding_format: 'float' }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: 'text-embedding-3-small', input: String($('Typebot Runtime Webhook').item.json.body?.retrievalQuery || $('Typebot Runtime Webhook').item.json.body?.question || '').slice(0, 4000), dimensions: 1536, encoding_format: 'float' }) }}",
         "options": {
           "timeout": 4000
         }
@@ -106,7 +106,7 @@
       "onError": "continueRegularOutput"
     },
     {
-      "id": "81531323-6ed5-4d2c-b2de-66da7ebdf37b",
+      "id": "9d089a35-af88-4bc4-a1b9-22c3be0490dd",
       "name": "Run KAXI RAG Core",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -135,7 +135,7 @@
       }
     },
     {
-      "id": "06d853af-953a-444e-af00-a41ee6630e0c",
+      "id": "788772a3-0a48-406b-b058-f067f219ab02",
       "name": "Respond to Typebot",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
@@ -164,7 +164,7 @@
       }
     },
     {
-      "id": "c05a3e0f-d647-46fc-a967-f8d1bd3c77ac",
+      "id": "71d2a7a2-3583-4dba-8011-bcaa1eac4d8b",
       "name": "Respond Runtime Unauthorized",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
@@ -189,7 +189,7 @@
       }
     },
     {
-      "id": "e2e07748-2853-45df-b85b-2d9a26e6e3a3",
+      "id": "7102cf44-5919-42fb-89e2-f84b38d58b30",
       "name": "RAG Knowledge Ingestion Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -206,10 +206,10 @@
           "ignoreBots": false
         }
       },
-      "webhookId": "eaccee48-913d-4e98-a387-237a6f7e722f"
+      "webhookId": "a8e3592c-1643-439a-996c-d32cba073692"
     },
     {
-      "id": "fa62e2b0-4bdc-4124-bd96-990912d97b18",
+      "id": "337fe8b6-58b8-4a48-979b-ccabedec2073",
       "name": "Verify Ingestion Signature",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -237,7 +237,7 @@
       }
     },
     {
-      "id": "fd0c8b51-bd0c-4b81-b4c3-91b7723e91ad",
+      "id": "7c90a02c-e54f-489e-b775-5e606517e9b9",
       "name": "Ingestion Signature Valid",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
@@ -269,7 +269,7 @@
       }
     },
     {
-      "id": "3760cc44-27c1-4991-ab38-753f49973cf8",
+      "id": "be1a6874-ce89-493e-ba16-fa061f184784",
       "name": "Run KAXI RAG Ingestion Core",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -301,7 +301,7 @@
       "waitBetweenTries": 750
     },
     {
-      "id": "20a669f1-8138-4754-a2d4-2244de0abf56",
+      "id": "64a27f91-2363-4957-9e8c-073a6948a5e0",
       "name": "Respond Ingestion",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
@@ -330,7 +330,7 @@
       }
     },
     {
-      "id": "90860ed5-7479-4a21-a5fe-e72c88e26aed",
+      "id": "2a1af80f-1d0a-47cc-b4d2-9f9a0bd1d424",
       "name": "Respond Ingestion Unauthorized",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
@@ -355,7 +355,7 @@
       }
     },
     {
-      "id": "89066cd9-284c-49c9-a048-4f28f6033523",
+      "id": "484aaacd-0364-4553-bc4d-12270226f319",
       "name": "Typebot Handoff Update Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -372,10 +372,10 @@
           "ignoreBots": false
         }
       },
-      "webhookId": "5945d188-a693-482f-9e20-e397f20d474f"
+      "webhookId": "061cc04b-3be9-4bd5-8bd2-dcc61d31dcb1"
     },
     {
-      "id": "4f487831-7a2d-4619-95a5-212560510d27",
+      "id": "882e8797-48af-47e4-ae4a-50cb319a113d",
       "name": "Verify Handoff Signature",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -403,7 +403,7 @@
       }
     },
     {
-      "id": "d32e721b-2c24-48cc-884d-63b60186fdcc",
+      "id": "c5e7b3fe-0d0a-4333-a0f0-2f3cff4f7028",
       "name": "Handoff Signature Valid",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
@@ -435,7 +435,7 @@
       }
     },
     {
-      "id": "c578648c-d6f9-43da-bf46-cd844d093c15",
+      "id": "aae1bb31-fa82-4586-a99f-faf5f95a14d0",
       "name": "Run KAXI Handoff Core",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -467,7 +467,7 @@
       "waitBetweenTries": 500
     },
     {
-      "id": "1b478664-6be3-45db-911d-98ca00e34c2f",
+      "id": "f6a8d969-9eef-481a-ab29-1bb374238195",
       "name": "Respond Handoff Update",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
@@ -496,7 +496,7 @@
       }
     },
     {
-      "id": "b11b7ca4-7dd0-4d7a-88b3-c981e02454e9",
+      "id": "9a72340a-2292-4973-aedf-def83aa157a3",
       "name": "Respond Handoff Unauthorized",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
@@ -521,7 +521,7 @@
       }
     },
     {
-      "id": "b0708be8-6852-4dba-8cbe-9efb8ac7902c",
+      "id": "539c5583-5582-457e-82e1-2a6cbc7e0754",
       "name": "RAG Serving Capability Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -538,10 +538,10 @@
           "ignoreBots": false
         }
       },
-      "webhookId": "8e13d78d-307f-49b4-bb8f-6316bda17230"
+      "webhookId": "7c743ac1-2c1f-4a15-974c-c2adbf286ba5"
     },
     {
-      "id": "42e9972f-f85e-4bc3-98b8-47839097a9d1",
+      "id": "737693d5-9fab-486b-be66-82ee193f05ac",
       "name": "Respond RAG Serving Capability",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
