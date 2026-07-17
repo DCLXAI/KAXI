@@ -44,3 +44,23 @@ export function parseProvidedQueryEmbedding(value: unknown): ProvidedEmbeddingPa
     },
   };
 }
+
+export function resolveProvidedEmbedding(value: unknown): {
+  dependencies: { createEmbedding?: () => Promise<QueryEmbeddingResult> };
+  embeddingSource: "n8n-openai" | "core";
+  rejectedReason: string | null;
+} {
+  const parsed = parseProvidedQueryEmbedding(value);
+  if (parsed.ok) {
+    return {
+      dependencies: { createEmbedding: async () => parsed.embedding },
+      embeddingSource: "n8n-openai",
+      rejectedReason: null,
+    };
+  }
+  return {
+    dependencies: {},
+    embeddingSource: "core",
+    rejectedReason: parsed.reason === "not_provided" ? null : parsed.reason,
+  };
+}

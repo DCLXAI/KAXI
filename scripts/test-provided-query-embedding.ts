@@ -29,3 +29,24 @@ assert.deepEqual(parseProvidedQueryEmbedding(new Array(1536).fill(0)), { ok: fal
 assert.deepEqual(parseProvidedQueryEmbedding(new Array(1536).fill(1)), { ok: false, reason: "abnormal_norm" });
 
 console.log("PASS provided query embedding: shape, guards, predicate compatibility");
+
+const { resolveProvidedEmbedding } = await import("../src/lib/n8n/provided-query-embedding");
+
+const resolvedOk = resolveProvidedEmbedding(unit);
+assert.equal(resolvedOk.embeddingSource, "n8n-openai");
+assert.equal(resolvedOk.rejectedReason, null);
+assert.ok(resolvedOk.dependencies.createEmbedding);
+const injected = await resolvedOk.dependencies.createEmbedding!();
+assert.equal(isOpenAiQueryEmbedding(injected), true);
+
+const resolvedAbsent = resolveProvidedEmbedding(undefined);
+assert.equal(resolvedAbsent.embeddingSource, "core");
+assert.equal(resolvedAbsent.rejectedReason, null);
+assert.equal(resolvedAbsent.dependencies.createEmbedding, undefined);
+
+const resolvedBad = resolveProvidedEmbedding(unit.slice(0, 10));
+assert.equal(resolvedBad.embeddingSource, "core");
+assert.equal(resolvedBad.rejectedReason, "invalid_dimension");
+assert.equal(resolvedBad.dependencies.createEmbedding, undefined);
+
+console.log("PASS provided embedding resolution: inject on valid, core fallback otherwise");
