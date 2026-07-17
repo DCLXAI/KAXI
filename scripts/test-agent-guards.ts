@@ -723,6 +723,9 @@ async function testAgentStatusRoute() {
       OPENAI_BASE_URL: "https://api.moonshot.ai/v1",
       OPENAI_MODEL: "kimi-k2.6",
     });
+    // Exercise the default budget (no env override) sealed under the 25s client abort.
+    delete process.env.AI_AGENT_PREFLIGHT_TIMEOUT_MS;
+    delete process.env.AI_AGENT_TIMEOUT_MS;
 
     const route = await import("../src/app/api/ai/agent/route");
     const res = await route.GET();
@@ -730,6 +733,12 @@ async function testAgentStatusRoute() {
     const body = await res.json();
     if (!body.backend || !body.preflight || !body.limits || !body.llm || !body.kimi) {
       fail(`agent status shape incomplete: ${JSON.stringify(body)}`);
+    }
+    if (body.preflight.timeoutMs !== 4_000) {
+      fail(`agent preflight timeout default should be 4000ms (sealed budget), got ${body.preflight.timeoutMs}`);
+    }
+    if (body.limits.timeoutMs !== 15_000) {
+      fail(`agent LLM timeout default should be 15000ms (sealed budget), got ${body.limits.timeoutMs}`);
     }
     if (!body.backendPolicy?.agent || !body.backendPolicy?.consult || !body.backendPolicy?.fallbackPolicy) {
       fail(`agent status should expose backend policy diagnostics: ${JSON.stringify(body)}`);
