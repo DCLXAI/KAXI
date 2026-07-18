@@ -8,6 +8,7 @@ import {
   RAG_QUERY_EMBEDDING_MODEL,
 } from "@/lib/chat/query-embedding";
 import { signN8nPayload } from "@/lib/n8n/signature";
+import { resolveProvidedChunkEmbedding } from "@/lib/n8n/provided-query-embedding";
 
 type CanonicalDocument = {
   id: string;
@@ -211,12 +212,19 @@ async function writeDirectRecoveryProjection(input: {
   chunk: CanonicalChunk;
   payload: Record<string, unknown>;
   writer?: "kaxi-direct-recovery" | "kaxi-n8n-orchestrated";
+  providedEmbedding?: unknown;
+  providedContentHash?: string;
 }) {
   const projection = buildRagServingEmbeddingProjection({
     content: input.chunk.content,
     documentLanguage: input.document.language,
   });
-  const embedding = await createRagQueryEmbedding(projection.content);
+  const provided = resolveProvidedChunkEmbedding({
+    value: input.providedEmbedding,
+    providedContentHash: input.providedContentHash || "",
+    expectedContentHash: projection.contentHash,
+  });
+  const embedding = provided.embedding ?? await createRagQueryEmbedding(projection.content);
   const vectorReady = isOpenAiQueryEmbedding(embedding);
   if (!vectorReady) {
     throw new Error(`OPENAI_SERVING_EMBEDDING_UNAVAILABLE: ${embedding.failureReason || embedding.status}`);
@@ -230,6 +238,8 @@ async function writeDirectRecoveryProjection(input: {
     embedding_provider: embedding.provider,
     embedding_status: "ready",
     embedding_failure_reason: null,
+    embedding_source: provided.embeddingSource,
+    embedding_rejected_reason: provided.rejectedReason,
     embedding_content_strategy: projection.strategy,
     embedding_content_locale: projection.locale,
     embedding_content_hash: projection.contentHash,
@@ -259,14 +269,21 @@ async function writeDirectRecoveryProjection(input: {
 
   const persisted = await findServingRow(input.supabase, input.chunk);
   if (persisted?.status !== "ready") throw new Error("direct_projection_not_persisted");
-  return "ready" as const;
+  return {
+    embeddingStatus: "ready" as const,
+    embeddingSource: provided.embeddingSource,
+    embeddingRejectedReason: provided.rejectedReason,
+  };
 }
 
 function payloadText(value: unknown, maxLength: number) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
 
-export async function ingestRagServingPayload(payload: Record<string, unknown>) {
+export async function ingestRagServingPayload(
+  payload: Record<string, unknown>,
+  options: { providedEmbedding?: unknown } = {},
+) {
   const canonicalChunkId = payloadText(payload.canonical_chunk_id, 160);
   const canonicalDocumentId = payloadText(payload.canonical_document_id, 160);
   const externalDocumentId = payloadText(payload.doc_id, 240);
@@ -329,12 +346,14 @@ export async function ingestRagServingPayload(payload: Record<string, unknown>) 
     embedding_model: RAG_QUERY_EMBEDDING_MODEL,
     review_status: "approved",
   };
-  await writeDirectRecoveryProjection({
+  const projected = await writeDirectRecoveryProjection({
     supabase,
     document,
     chunk,
     payload: governedPayload,
     writer: "kaxi-n8n-orchestrated",
+    providedEmbedding: options.providedEmbedding,
+    providedContentHash: payloadText(payload.embedding_content_hash, 128),
   });
   const refresh = await supabase.rpc("kaxi_refresh_rag_serving_status");
   if (refresh.error) throw refresh.error;
@@ -348,6 +367,8 @@ export async function ingestRagServingPayload(payload: Record<string, unknown>) 
     embeddingModel: RAG_QUERY_EMBEDDING_MODEL,
     dimensions: RAG_QUERY_EMBEDDING_DIMENSIONS,
     embeddingContentStrategy: RAG_SERVING_EMBEDDING_CONTENT_STRATEGY,
+    embeddingSource: projected.embeddingSource,
+    embeddingRejectedReason: projected.embeddingRejectedReason,
   };
 }
 
@@ -541,7 +562,10 @@ export async function syncRagServingProjection(options: { limit?: number; force?
         review_status: "approved",
       };
       try {
-        const signed = signN8nPayload("rag-ingestion", payload);
+        // n8n cannot compute the single-locale projection (core logic we must
+        // not fork), so the exact text to embed travels inside the signed
+        // payload; embedding_content_hash (already in `payload`) binds it.
+        const signed = signN8nPayload("rag-ingestion", { ...payload, embedding_content: projection.content });
         const response = await fetch(signed.url, {
           method: "POST",
           headers: signed.headers,
@@ -556,7 +580,7 @@ export async function syncRagServingProjection(options: { limit?: number; force?
         n8nError = error instanceof Error ? error.message : String(error);
       }
 
-      const embeddingStatus = await writeDirectRecoveryProjection({
+      const recovered = await writeDirectRecoveryProjection({
         supabase: data.supabase,
         document,
         chunk,
@@ -567,7 +591,7 @@ export async function syncRagServingProjection(options: { limit?: number; force?
         ok: true,
         status: responseStatus,
         writer: "kaxi-direct-recovery",
-        embeddingStatus,
+        embeddingStatus: recovered.embeddingStatus,
       };
     } catch (error) {
       return {

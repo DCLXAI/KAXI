@@ -41,7 +41,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Invalid or expired verification receipt" }, { status: 401 });
     }
 
-    return NextResponse.json(await ingestRagServingPayload(payload));
+    // chunkEmbedding is top-level, OUTSIDE the receipt-bound payload: the
+    // verification receipt binds the payloadHash KAXI originally signed, and
+    // n8n attaches its computed vector alongside (same pattern as the
+    // rag-runtime queryEmbedding). It is validated in the governed writer.
+    return NextResponse.json(
+      await ingestRagServingPayload(payload, { providedEmbedding: body.chunkEmbedding }),
+    );
   } catch (error) {
     if (error instanceof JsonBodyError) {
       return NextResponse.json({ ok: false, error: error.message }, { status: error.status });
