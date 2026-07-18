@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { defaultLocale, isLocale } from "@/i18n/routing";
 import { useLeadStore } from "@/store/kbridge";
 import { recommendPath, type DiagnosisInput } from "@/lib/data/diagnosis";
+import { GOAL_VALUES, isOneOf } from "./diagnosis-options";
 
 const DEFAULT_INPUT: DiagnosisInput = {
   nationality: "vn",
@@ -24,21 +26,31 @@ export function useDiagnosisFlow() {
   const activeLocale = useLocale();
   const locale = isLocale(activeLocale) ? activeLocale : defaultLocale;
   const { saveDiagnosis, savingDiagnosis, currentDiagnosis, updateCurrentDiagnosisRecommendation } = useLeadStore();
+  // Visitors can arrive from an external funnel (the VISA QUEST game) that already asked
+  // "what do you want to do in Korea" — e.g. /diagnose?goal=degree. Only a known goal is
+  // honoured; anything else falls through to the normal first question.
+  const searchParams = useSearchParams();
+  const goalParam = searchParams.get("goal");
+  const linkedGoal = goalParam && isOneOf(goalParam, GOAL_VALUES) ? goalParam : null;
   const [result, setResult] = useState<ReturnType<typeof recommendPath> | null>(null);
   const [showSave, setShowSave] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [nickname, setNickname] = useState("");
-  const [input, setInput] = useState<DiagnosisInput>(DEFAULT_INPUT);
+  const [input, setInput] = useState<DiagnosisInput>(() =>
+    linkedGoal ? { ...DEFAULT_INPUT, goal: linkedGoal } : DEFAULT_INPUT,
+  );
   const [submitting, setSubmitting] = useState(false);
 
   const update = (patch: Partial<DiagnosisInput>) => setInput((current) => ({ ...current, ...patch }));
 
   useEffect(() => {
     if (currentDiagnosis) {
-      setInput(currentDiagnosis.input);
+      // A goal carried in on the link is the visitor's latest intent, so it wins over a
+      // restored session.
+      setInput(linkedGoal ? { ...currentDiagnosis.input, goal: linkedGoal } : currentDiagnosis.input);
       if (currentDiagnosis.recommendation) setResult(currentDiagnosis.recommendation);
     }
-  }, [currentDiagnosis]);
+  }, [currentDiagnosis, linkedGoal]);
 
   const submit = async () => {
     if (submitting) return;
@@ -79,6 +91,7 @@ export function useDiagnosisFlow() {
   };
 
   return {
+    goalFromLink: Boolean(linkedGoal),
     input,
     locale,
     nickname,

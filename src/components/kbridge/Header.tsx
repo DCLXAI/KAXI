@@ -33,6 +33,7 @@ import {
   ChevronDown,
   Compass,
   FileText,
+  Gamepad2,
   Globe,
   Handshake,
   LayoutDashboard,
@@ -42,6 +43,16 @@ import {
   User,
   type LucideIcon,
 } from "lucide-react";
+
+// The VISA QUEST game is a separate app (a fun funnel into the diagnosis flow).
+const GAME_URL = "https://mirror-rouge-sigma.vercel.app";
+
+// The game supports EN/KO/VI/RU; KAXI's Mongolian has no game equivalent, so it opens in English.
+const GAME_LANG: Record<Lang, string> = { ko: "KO", vi: "VI", mn: "EN", en: "EN" };
+
+function gameHref(activeLang: Lang): string {
+  return `${GAME_URL}/?lang=${GAME_LANG[activeLang] ?? "EN"}`;
+}
 
 export function LangSwitcher({
   currentView,
@@ -105,6 +116,8 @@ interface HeaderNavItem {
   label: string;
   href: string;
   icon: LucideIcon | typeof KaxiPawMark;
+  /** External destination (opens in a new tab); rendered as a plain anchor, never "active". */
+  external?: boolean;
 }
 
 interface HeaderNavGroup {
@@ -149,6 +162,17 @@ function DesktopNavGroup({
 
 function DesktopNavLink({ currentView, item }: { currentView: string; item: HeaderNavItem }) {
   const Icon = item.icon;
+
+  if (item.external) {
+    return (
+      <Button variant="ghost" size="sm" asChild>
+        <a href={item.href} target="_blank" rel="noopener noreferrer" className="gap-1.5">
+          <Icon className="h-3.5 w-3.5" />
+          {item.label}
+        </a>
+      </Button>
+    );
+  }
 
   return (
     <Button variant={currentView === item.key ? "secondary" : "ghost"} size="sm" asChild>
@@ -223,17 +247,22 @@ function MobileNav({
           <div className="space-y-1 border-t pt-4">
             {items.map((item) => {
               const Icon = item.icon;
+              const itemClass = `flex h-10 items-center gap-3 rounded-md px-2 text-sm font-medium transition-colors hover:bg-accent ${
+                currentView === item.key ? "bg-accent text-accent-foreground" : "text-foreground"
+              }`;
               return (
                 <SheetClose key={item.key} asChild>
-                  <Link
-                    href={item.href}
-                    className={`flex h-10 items-center gap-3 rounded-md px-2 text-sm font-medium transition-colors hover:bg-accent ${
-                      currentView === item.key ? "bg-accent text-accent-foreground" : "text-foreground"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4 text-muted-foreground" />
-                    {item.label}
-                  </Link>
+                  {item.external ? (
+                    <a href={item.href} target="_blank" rel="noopener noreferrer" className={itemClass}>
+                      <Icon className="h-4 w-4 text-muted-foreground" />
+                      {item.label}
+                    </a>
+                  ) : (
+                    <Link href={item.href} className={itemClass}>
+                      <Icon className="h-4 w-4 text-muted-foreground" />
+                      {item.label}
+                    </Link>
+                  )}
                 </SheetClose>
               );
             })}
@@ -323,6 +352,7 @@ export function Header({
     { key: "agent", label: tr("nav_agent", activeLang), href: publicHref("agent"), icon: KaxiPawMark },
     { key: "docs", label: tr("nav_my_docs", activeLang), href: publicHref("docs"), icon: FileText },
     { key: "partners", label: tr("nav_expert_support", activeLang), href: publicHref("partners"), icon: Handshake },
+    { key: "game", label: tr("nav_game", activeLang), href: gameHref(activeLang), icon: Gamepad2, external: true },
   ];
 
   return (

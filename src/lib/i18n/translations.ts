@@ -21,6 +21,7 @@ export const t = {
   nav_my_docs: { ko: "내 서류", vi: "Hồ sơ của tôi", mn: "Миний баримт", en: "My Documents" },
   nav_partners: { ko: "파트너 연결", vi: "Đối tác", mn: "Түншийн холбоо", en: "Partners" },
   nav_expert_support: { ko: "전문가 연결", vi: "Kết nối chuyên gia", mn: "Мэргэжилтэнтэй холбогдох", en: "Expert Support" },
+  nav_game: { ko: "게임", vi: "Trò chơi", mn: "Тоглоом", en: "Game" },
   nav_admin: { ko: "관리자", vi: "Quản trị", mn: "Админ", en: "Admin" },
   nav_admin_console: { ko: "관리 콘솔", vi: "Bảng quản trị", mn: "Удирдлагын самбар", en: "Admin Console" },
   nav_menu: { ko: "전체 메뉴", vi: "Menu chính", mn: "Үндсэн цэс", en: "Full Menu" },

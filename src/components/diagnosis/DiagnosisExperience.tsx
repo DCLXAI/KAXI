@@ -40,7 +40,9 @@ export function DiagnosisExperience({ onNavigate }: DiagnosisExperienceProps) {
 
       {!showResult && (
         <DiagnosisForm
-          initialStep={flow.result ? 5 : 0}
+          // A goal carried in on the link (e.g. from the VISA QUEST game) already answers the
+          // first question, so start on the next one. Visitors can still step back to change it.
+          initialStep={flow.result ? 5 : flow.goalFromLink ? 1 : 0}
           input={flow.input}
           locale={flow.locale}
           onSubmit={submit}
