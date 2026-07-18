@@ -238,8 +238,10 @@ async function writeDirectRecoveryProjection(input: {
     embedding_provider: embedding.provider,
     embedding_status: "ready",
     embedding_failure_reason: null,
-    embedding_source: provided.embeddingSource,
-    embedding_rejected_reason: provided.rejectedReason,
+    // Distinct from the query-time `embedding_source` key that
+    // match_rag_documents_hybrid_v3 right-biased-merges over stored metadata.
+    ingest_embedding_source: provided.embeddingSource,
+    ingest_embedding_rejected_reason: provided.rejectedReason,
     embedding_content_strategy: projection.strategy,
     embedding_content_locale: projection.locale,
     embedding_content_hash: projection.contentHash,
