@@ -164,6 +164,32 @@ assert(
   !computeQueryEmbeddingBody.includes("$json.body?.payload"),
   "Compute Query Embedding must not read $json.body?.payload — at this node's position $json is Verify Runtime Signature's response, which has no body/payload",
 );
+
+// Regression pin: Compute Chunk Embedding must read the ORIGINAL ingestion
+// webhook body via a cross-node reference (at its own position $json is the
+// IF node's passthrough of Verify Ingestion Signature's response), and it must
+// embed the core-computed projection text, never the raw chunk content.
+const computeChunkEmbedding = compiledOrchestrator.nodes.find(
+  (node) => node.name === "Compute Chunk Embedding",
+);
+assert(computeChunkEmbedding, "compiled orchestrator is missing the Compute Chunk Embedding node");
+const computeChunkEmbeddingBody = String(computeChunkEmbedding.parameters?.jsonBody || "");
+assert(
+  computeChunkEmbeddingBody.includes("$('RAG Knowledge Ingestion Webhook')"),
+  "Compute Chunk Embedding must source its input from the original ingestion webhook payload",
+);
+assert(
+  computeChunkEmbeddingBody.includes("embedding_content")
+    && !computeChunkEmbeddingBody.includes("body?.content"),
+  "Compute Chunk Embedding must embed the projection text (embedding_content), not the raw chunk content",
+);
+const ingestionCoreNode = compiledOrchestrator.nodes.find(
+  (node) => node.name === "Run KAXI RAG Ingestion Core",
+);
+assert(
+  String(ingestionCoreNode?.parameters?.jsonBody || "").includes("chunkEmbedding"),
+  "ingestion core request must forward the computed chunk embedding top-level",
+);
 assert(
   String(respond?.parameters?.responseBody || "").includes("n8n-kaxi-orchestrated")
     && String(respond?.parameters?.responseBody || "").includes("railway-mcp-v3")
