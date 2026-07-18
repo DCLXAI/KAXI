@@ -50,3 +50,52 @@ assert.equal(resolvedBad.rejectedReason, "invalid_dimension");
 assert.equal(resolvedBad.dependencies.createEmbedding, undefined);
 
 console.log("PASS provided embedding resolution: inject on valid, core fallback otherwise");
+
+const { resolveProvidedChunkEmbedding } = await import("../src/lib/n8n/provided-query-embedding");
+
+const chunkHash = "a".repeat(64);
+const chunkOk = resolveProvidedChunkEmbedding({
+  value: unit,
+  providedContentHash: chunkHash,
+  expectedContentHash: chunkHash,
+});
+assert.equal(chunkOk.embeddingSource, "n8n-openai");
+assert.equal(chunkOk.rejectedReason, null);
+assert.ok(chunkOk.embedding && isOpenAiQueryEmbedding(chunkOk.embedding));
+
+const chunkHashMismatch = resolveProvidedChunkEmbedding({
+  value: unit,
+  providedContentHash: "b".repeat(64),
+  expectedContentHash: chunkHash,
+});
+assert.equal(chunkHashMismatch.embeddingSource, "core");
+assert.equal(chunkHashMismatch.rejectedReason, "content_hash_mismatch");
+assert.equal(chunkHashMismatch.embedding, null);
+
+const chunkHashMissing = resolveProvidedChunkEmbedding({
+  value: unit,
+  providedContentHash: "",
+  expectedContentHash: chunkHash,
+});
+assert.equal(chunkHashMissing.embeddingSource, "core");
+assert.equal(chunkHashMissing.rejectedReason, "content_hash_mismatch");
+
+const chunkAbsent = resolveProvidedChunkEmbedding({
+  value: undefined,
+  providedContentHash: chunkHash,
+  expectedContentHash: chunkHash,
+});
+assert.equal(chunkAbsent.embeddingSource, "core");
+assert.equal(chunkAbsent.rejectedReason, null);
+assert.equal(chunkAbsent.embedding, null);
+
+const chunkBadShape = resolveProvidedChunkEmbedding({
+  value: unit.slice(0, 10),
+  providedContentHash: chunkHash,
+  expectedContentHash: chunkHash,
+});
+assert.equal(chunkBadShape.embeddingSource, "core");
+assert.equal(chunkBadShape.rejectedReason, "invalid_dimension");
+assert.equal(chunkBadShape.embedding, null);
+
+console.log("PASS provided chunk embedding: hash binding, shape guards, core fallback");

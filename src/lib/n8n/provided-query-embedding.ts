@@ -64,3 +64,32 @@ export function resolveProvidedEmbedding(value: unknown): {
     rejectedReason: parsed.reason === "not_provided" ? null : parsed.reason,
   };
 }
+
+// An n8n-supplied INGESTION vector must additionally be bound to the exact
+// projection content the core would embed: the sender's embedding_content_hash
+// (carried inside the signed payload) must equal the hash the core recomputes
+// from the canonical chunk. Shape-valid but unbound vectors are rejected —
+// otherwise a stale or divergent canonical chunk could be stored with a vector
+// of different text.
+export function resolveProvidedChunkEmbedding(input: {
+  value: unknown;
+  providedContentHash: string;
+  expectedContentHash: string;
+}): {
+  embedding: QueryEmbeddingResult | null;
+  embeddingSource: "n8n-openai" | "core";
+  rejectedReason: string | null;
+} {
+  const parsed = parseProvidedQueryEmbedding(input.value);
+  if (!parsed.ok) {
+    return {
+      embedding: null,
+      embeddingSource: "core",
+      rejectedReason: parsed.reason === "not_provided" ? null : parsed.reason,
+    };
+  }
+  if (!input.providedContentHash || input.providedContentHash !== input.expectedContentHash) {
+    return { embedding: null, embeddingSource: "core", rejectedReason: "content_hash_mismatch" };
+  }
+  return { embedding: parsed.embedding, embeddingSource: "n8n-openai", rejectedReason: null };
+}

@@ -191,12 +191,33 @@ const ingestionAllowed = ifElse({
   },
 });
 
+const computeChunkEmbedding = node({
+  type: "n8n-nodes-base.httpRequest",
+  version: 4.2,
+  config: {
+    name: "Compute Chunk Embedding",
+    position: [880, 600],
+    onError: "continueRegularOutput",
+    parameters: {
+      method: "POST",
+      url: "https://api.openai.com/v1/embeddings",
+      authentication: "predefinedCredentialType",
+      nodeCredentialType: "openAiApi",
+      sendBody: true,
+      specifyBody: "json",
+      jsonBody: expr("{{ JSON.stringify({ model: 'text-embedding-3-small', input: String($('RAG Knowledge Ingestion Webhook').item.json.body?.embedding_content || '').slice(0, 4000), dimensions: 1536, encoding_format: 'float' }) }}"),
+      options: { timeout: 10000 },
+    },
+  },
+  output: [{ data: [{ embedding: [0.001, 0.002] }] }],
+});
+
 const runIngestionCore = node({
   type: "n8n-nodes-base.httpRequest",
   version: 4.4,
   config: {
     name: "Run KAXI RAG Ingestion Core",
-    position: [880, 600],
+    position: [1120, 600],
     retryOnFail: true,
     maxTries: 2,
     waitBetweenTries: 750,
@@ -207,7 +228,7 @@ const runIngestionCore = node({
       sendBody: true,
       contentType: "json",
       specifyBody: "json",
-      jsonBody: expr("{{ { verificationToken: $('Verify Ingestion Signature').item.json.verificationToken ?? '', payload: $('RAG Knowledge Ingestion Webhook').item.json.body ?? {} } }}"),
+      jsonBody: expr("{{ { verificationToken: $('Verify Ingestion Signature').item.json.verificationToken ?? '', payload: $('RAG Knowledge Ingestion Webhook').item.json.body ?? {}, chunkEmbedding: Array.isArray($json.data) && Array.isArray($json.data[0]?.embedding) ? $json.data[0].embedding : undefined } }}"),
       options: {
         response: { response: { fullResponse: true, neverError: true, responseFormat: "json" } },
         timeout: 40000,
@@ -222,7 +243,7 @@ const respondIngestion = node({
   version: 1.5,
   config: {
     name: "Respond Ingestion",
-    position: [1160, 600],
+    position: [1400, 600],
     parameters: {
       respondWith: "json",
       responseBody: expr("{{ JSON.stringify({ ...($('Run KAXI RAG Ingestion Core').item.json.body ?? {}), executionId: $('Run KAXI RAG Ingestion Core').item.json.body?.executionId ?? $execution.id, workflowId: $('Run KAXI RAG Ingestion Core').item.json.body?.workflowId ?? $workflow.id, workflowVersionId: $('Run KAXI RAG Ingestion Core').item.json.body?.workflowVersionId ?? '" + release + "', modelVersion: $('Run KAXI RAG Ingestion Core').item.json.body?.modelVersion ?? '" + embeddingModel + "', promptVersion: $('Run KAXI RAG Ingestion Core').item.json.body?.promptVersion ?? 'kaxi-rag-ingestion@2026-07-14.mcp-v1', n8nExecutionId: $execution.id, n8nWorkflowId: $workflow.id, n8nWorkflowVersionId: '" + release + "' }) }}"),
@@ -404,7 +425,7 @@ export default workflow("kaxi-rag-typebot-railway", "KAXI RAG Typebot Orchestrat
   .add(ingestionWebhook)
   .to(verifyIngestion)
   .to(ingestionAllowed
-    .onTrue(runIngestionCore.to(respondIngestion))
+    .onTrue(computeChunkEmbedding.to(runIngestionCore.to(respondIngestion)))
     .onFalse(respondIngestionUnauthorized))
   .add(handoffWebhook)
   .to(verifyHandoff)

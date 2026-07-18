@@ -164,6 +164,49 @@ assert(
   !computeQueryEmbeddingBody.includes("$json.body?.payload"),
   "Compute Query Embedding must not read $json.body?.payload — at this node's position $json is Verify Runtime Signature's response, which has no body/payload",
 );
+
+// Regression pin: Compute Chunk Embedding must read the ORIGINAL ingestion
+// webhook body via a cross-node reference (at its own position $json is the
+// IF node's passthrough of Verify Ingestion Signature's response), and it must
+// embed the core-computed projection text, never the raw chunk content.
+const computeChunkEmbedding = compiledOrchestrator.nodes.find(
+  (node) => node.name === "Compute Chunk Embedding",
+);
+assert(computeChunkEmbedding, "compiled orchestrator is missing the Compute Chunk Embedding node");
+const computeChunkEmbeddingBody = String(computeChunkEmbedding.parameters?.jsonBody || "");
+assert(
+  computeChunkEmbeddingBody.includes("$('RAG Knowledge Ingestion Webhook')"),
+  "Compute Chunk Embedding must source its input from the original ingestion webhook payload",
+);
+assert(
+  computeChunkEmbeddingBody.includes("embedding_content")
+    && !computeChunkEmbeddingBody.includes("body?.content"),
+  "Compute Chunk Embedding must embed the projection text (embedding_content), not the raw chunk content",
+);
+
+// Drift tripwire: the n8n compute nodes and the core embedder must slice the
+// embedding input identically — the content-hash gate hashes the FULL text, so
+// a slice divergence would store vectors of a different text window without
+// failing any hash check. Pin both literals; change them only together.
+const coreEmbedderSource = readFileSync("src/lib/chat/query-embedding.ts", "utf8");
+assert(
+  coreEmbedderSource.includes("question.slice(0, 4_000)"),
+  "core embedder input slice changed — update the n8n compute nodes' slice to match, then update this pin",
+);
+const computeNodeSliceCount = (railwayWorkflow.match(/\.slice\(0, 4000\)/g) || []).length;
+assert(
+  computeNodeSliceCount === 2,
+  "both n8n compute embedding nodes (query + chunk) must slice input to exactly 4000 chars to match the core embedder",
+);
+
+const ingestionCoreNode = compiledOrchestrator.nodes.find(
+  (node) => node.name === "Run KAXI RAG Ingestion Core",
+);
+assert(
+  String(ingestionCoreNode?.parameters?.jsonBody || "").includes("chunkEmbedding")
+    && String(ingestionCoreNode?.parameters?.jsonBody || "").includes("Array.isArray($json.data)"),
+  "ingestion core request must forward the computed chunk embedding top-level behind an Array.isArray guard",
+);
 assert(
   String(respond?.parameters?.responseBody || "").includes("n8n-kaxi-orchestrated")
     && String(respond?.parameters?.responseBody || "").includes("railway-mcp-v3")

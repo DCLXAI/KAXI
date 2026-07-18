@@ -1,7 +1,7 @@
 # n8n Embedding Ownership: OpenAI Query + Ingestion Embeddings in n8n, Retrieval/Generation/Guardrails in the KAXI Core
 
 Date: 2026-07-17
-Status: Draft for operator review
+Status: A implemented & live (n8n-primary, 2026-07-17). B implemented (plan 2026-07-18-n8n-ingestion-embedding); rollout pending workflow PUT.
 
 ## Problem / Motivation
 
