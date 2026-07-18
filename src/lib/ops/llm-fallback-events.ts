@@ -8,6 +8,10 @@ export async function reportLlmFallback(input: {
   feature: LlmFallbackFeature;
   failureReason: string;
   detail?: string;
+  // Additional telemetry fields (e.g. preflightMs, preflightTimedOut, grounded)
+  // spread into the recorded payload. Trusted internal callers only — never
+  // pass user-controlled keys here, since they can shadow the fields above.
+  context?: Record<string, unknown>;
 }): Promise<void> {
   try {
     await recordOpsEvent({
@@ -19,6 +23,7 @@ export async function reportLlmFallback(input: {
         feature: input.feature,
         failureReason: input.failureReason,
         detail: (input.detail || "").slice(0, 300),
+        ...input.context,
       },
     });
   } catch (error) {

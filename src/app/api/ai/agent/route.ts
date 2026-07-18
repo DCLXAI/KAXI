@@ -250,6 +250,8 @@ export async function POST(req: NextRequest) {
     // A preflight timeout is caught below and the request continues on the
     // non-grounded path safely (empty groundingContext → full ReAct fallback).
     let preflight = emptyPreflight(question);
+    const preflightStartedAt = Date.now();
+    let preflightTimedOut = false;
     if (isEnvTrue(process.env.AI_AGENT_PREFLIGHT_ENABLED)) {
       try {
         preflight = await withTimeout(
@@ -258,9 +260,11 @@ export async function POST(req: NextRequest) {
           "Agent preflight"
         );
       } catch (preflightErr) {
+        preflightTimedOut = true;
         console.warn("[Agent preflight skipped]", preflightErr instanceof Error ? preflightErr.message : preflightErr);
       }
     }
+    const preflightMs = Date.now() - preflightStartedAt;
     ledgerContext.preflight = preflight;
 
     let result;
@@ -268,10 +272,11 @@ export async function POST(req: NextRequest) {
     let backend: string = selectedLlmBackend;
     let errorType: string | undefined;
     let errorMessage: string | undefined;
+    const grounded = Boolean(preflight.groundingContext);
 
     try {
       result = await withTimeout(
-        runAgent(preflight.groundedQuestion, lang, history, ctx, {}, { grounded: Boolean(preflight.groundingContext) }),
+        runAgent(preflight.groundedQuestion, lang, history, ctx, {}, { grounded }),
         parsePositiveInt(process.env.AI_AGENT_TIMEOUT_MS, 15_000),
         "LLM Agent execution"
       );
@@ -296,7 +301,12 @@ export async function POST(req: NextRequest) {
       backend = "tool-fallback";
       errorType = isLlmNotConfiguredError(agentErr) ? "llm_not_configured_fallback" : "llm_backend_fallback";
       errorMessage = agentErr instanceof Error ? agentErr.message : "Unknown LLM error";
-      void reportLlmFallback({ feature: "action", failureReason: errorType, detail: errorMessage });
+      void reportLlmFallback({
+        feature: "action",
+        failureReason: errorType,
+        detail: errorMessage,
+        context: { preflightMs, preflightTimedOut, grounded },
+      });
       result = await runFallbackAgent(question, lang, ctx);
     }
 
@@ -361,14 +371,15 @@ export async function POST(req: NextRequest) {
       toolResults,
       iterations: result.iterations,
       durationMs: Date.now() - requestStartedAt,
-      grounded: Boolean(preflight.groundingContext),
+      grounded,
+      preflightMs,
       needsHumanExpert,
       escalationCaseCreated,
       meta: buildAgentMeta({
         lang,
         question,
         backend,
-        grounded: Boolean(preflight.groundingContext),
+        grounded,
         toolResults,
         durationMs: Date.now() - requestStartedAt,
       }),
