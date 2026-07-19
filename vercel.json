@@ -18,6 +18,10 @@
     {
       "path": "/api/ops/sla",
       "schedule": "45 18 * * *"
+    },
+    {
+      "path": "/api/ops/embedding-audit",
+      "schedule": "0 19 * * *"
     }
   ]
 }
