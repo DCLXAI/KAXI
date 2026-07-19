@@ -150,6 +150,7 @@ export async function runIngestEmbeddingAudit(trigger: string): Promise<IngestEm
     .eq("status", "ready")
     .eq("embedding_model", RAG_QUERY_EMBEDDING_MODEL)
     .eq("metadata->>ingest_embedding_source", "n8n-openai")
+    .order("indexed_at", { ascending: false })
     .limit(500);
   if (candidates.error) throw candidates.error;
   const sampledRows = ((candidates.data || []) as AuditCandidateRow[])
@@ -171,12 +172,12 @@ export async function runIngestEmbeddingAudit(trigger: string): Promise<IngestEm
     const chunkResult = row.canonical_chunk_id
       ? await supabase
           .from("KnowledgeChunk")
-          .select("id,content,contentHash,documentId")
+          .select("id,content,documentId")
           .eq("id", row.canonical_chunk_id)
           .maybeSingle()
       : { data: null, error: null };
     if (chunkResult.error) throw chunkResult.error;
-    const chunk = chunkResult.data as { id: string; content: string; contentHash: string; documentId: string } | null;
+    const chunk = chunkResult.data as { id: string; content: string; documentId: string } | null;
     if (!chunk) {
       skipped += 1;
       record("skip_canonical_missing", null);
@@ -229,6 +230,9 @@ export async function runIngestEmbeddingAudit(trigger: string): Promise<IngestEm
     if (decision.action === "skip_embed_unavailable") {
       skipped += 1;
       providerUnavailable = true;
+      // No executionId is passed, so the ops_events dedup index never applies:
+      // every audit event inserts and alerts. Intentional — healed rows leave
+      // the population, so a repeat alert means genuine re-poisoning.
       await recordOpsEvent({
         source: "kaxi-embedding-audit",
         severity: "warning",
@@ -284,7 +288,7 @@ export async function runIngestEmbeddingAudit(trigger: string): Promise<IngestEm
   }
 
   return {
-    ok: true,
+    ok: !providerUnavailable,
     trigger,
     checkedAt,
     sampled: sampledRows.length,
