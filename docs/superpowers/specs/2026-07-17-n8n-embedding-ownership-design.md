@@ -113,6 +113,24 @@ prohibited — writes go through the governed KAXI endpoints).
 - The n8n path bypasses the core's query-embedding cache; cache hit-rate
   loss is accepted on that path.
 
+## Compensating control — ingest embedding cosine audit (2026-07-18)
+
+The content-hash gate binds the TEXT n8n embedded, but no gate can bind the
+VECTOR to that text without re-embedding. The accepted residual (final B
+review, Important): a compromised n8n could store a shape-valid vector of
+attacker-chosen text, steering retrieval. Control: `/api/ops/embedding-audit`
+(Vercel cron `0 19 * * *`, admin POST for manual runs) samples
+`ingest_embedding_source: "n8n-openai"` serving rows (default 5/day,
+`KAXI_EMBEDDING_AUDIT_SAMPLE`), re-embeds the recomputed projection text with
+the core embedder, and compares cosine similarity (floor 0.98,
+`KAXI_EMBEDDING_AUDIT_MIN_COSINE`). Below the floor → the row is HEALED in
+place with the core-verified vector (`ingest_embedding_source: "core"`,
+audit stamps in metadata) and a `critical` ops event
+(`ingest_embedding_audit.mismatch`) rides the existing Slack/email alert
+path. Content drift versus the canonical chunk is a skip (normal re-sync
+territory), and a down provider aborts the run with a single `warning`
+event.
+
 ## Out of scope
 
 - Moving retrieval, generation, guardrails, mediation, session profiles, or
