@@ -24,7 +24,9 @@ export function parseStoredVector(value: unknown): number[] | null {
   const parts = trimmed.slice(1, -1).split(",");
   const vector: number[] = new Array(parts.length);
   for (let index = 0; index < parts.length; index++) {
-    const parsed = Number(parts[index]);
+    const token = parts[index].trim();
+    if (!token) return null;
+    const parsed = Number(token);
     if (!Number.isFinite(parsed)) return null;
     vector[index] = parsed;
   }

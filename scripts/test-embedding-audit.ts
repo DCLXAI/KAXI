@@ -35,6 +35,8 @@ assert.equal(parseStoredVector(null), null);
 assert.equal(parseStoredVector(undefined), null);
 assert.equal(parseStoredVector({ vector: [1] }), null);
 assert.equal(parseStoredVector([1, Number.NaN]), null);
+assert.equal(parseStoredVector("[]"), null);
+assert.equal(parseStoredVector("[1,,3]"), null);
 console.log("PASS embedding audit: stored-vector parsing");
 
 // cosineSimilarity: identity 1, orthogonal 0, guards
@@ -85,4 +87,7 @@ assert.deepEqual(wrongDimStored, { action: "heal", cosine: null, reason: "stored
 
 const providerDown = decideAuditAction({ storedEmbedding: a, reembedded: readyEmbedding(null), minCosine: 0.98 });
 assert.deepEqual(providerDown, { action: "skip_embed_unavailable", cosine: null });
+
+const providerDownInvalidStored = decideAuditAction({ storedEmbedding: "junk", reembedded: readyEmbedding(null), minCosine: 0.98 });
+assert.deepEqual(providerDownInvalidStored, { action: "skip_embed_unavailable", cosine: null });
 console.log("PASS embedding audit: decision verdicts");
