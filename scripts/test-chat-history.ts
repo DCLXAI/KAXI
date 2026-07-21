@@ -17,6 +17,16 @@ const failedRequestId = "86d859c4-fb4d-4c74-b5c9-15e35c331ad4";
 const serviceRoleKey = "chat-history-fake-service-role-key";
 const observedQueries: Array<{ table: string; sessionKey?: string }> = [];
 
+// Populated once the unified-agent session key is minted below; the mock
+// keeps a tiny in-memory chat_messages table scoped to that session so the
+// persist -> snapshot round trip is a real assertion, not a canned fixture.
+let agentSessionKey = "";
+const agentMessages: Array<Record<string, unknown>> = [];
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -26,7 +36,7 @@ function json(data: unknown, status = 200) {
 
 const server = Bun.serve({
   port: 0,
-  fetch(request) {
+  async fetch(request) {
     const url = new URL(request.url);
     if (!url.pathname.startsWith("/rest/v1/")) return json({ error: "not found" }, 404);
     if (
@@ -48,6 +58,39 @@ const server = Bun.serve({
       });
     }
     if (table === "chat_messages") {
+      if (request.method === "POST") {
+        // persistChatExchange's insert().select("id").single() call: store the
+        // row against the in-memory agent session table and hand back its id.
+        const payload = asRecord(await request.json());
+        const id = agentMessages.length + 1;
+        agentMessages.push({ ...payload, id, created_at: new Date().toISOString() });
+        return json({ id });
+      }
+      if (url.searchParams.has("idempotency_key")) {
+        // persistChatExchange's pre-insert existing-row lookup: these
+        // fabricated idempotency keys never collide with a prior row.
+        return json([]);
+      }
+      if (url.searchParams.get("session_id") === `eq.${agentSessionKey}`) {
+        return json(agentMessages.map((row) => ({
+          id: row.id,
+          request_id: row.request_id,
+          question: row.question,
+          question_ciphertext: row.question_ciphertext,
+          answer: row.answer,
+          answer_ciphertext: row.answer_ciphertext,
+          status: row.status,
+          error_code: row.error_code,
+          next_step: row.next_step,
+          sources: row.sources,
+          sources_json: row.sources_json,
+          workflow_id: row.workflow_id,
+          workflow_version_id: row.workflow_version_id,
+          model_version: row.model_version,
+          prompt_version: row.prompt_version,
+          created_at: row.created_at,
+        })));
+      }
       return json([
         {
           id: 2,
@@ -86,6 +129,11 @@ const server = Bun.serve({
           created_at: "2026-07-10T00:00:00.000Z",
         },
       ]);
+    }
+    if (table === "n8n_audit_messages") {
+      // persistN8nAuditMetadataBestEffort's insert; the row itself is never
+      // read back in this test, so a bare success response is enough.
+      return json({}, 201);
     }
     if (table === "retrieval_runs") {
       return json([
@@ -168,11 +216,46 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = serviceRoleKey;
 
 try {
   const { loadChatSessionSnapshot, normalizeChatHistorySources } = await import("../src/lib/chat/history");
+  const { persistChatExchange } = await import("../src/lib/chat/persistence");
   const {
     CHAT_SESSION_COOKIE,
+    createKaxiSessionId,
     issueChatSessionToken,
   } = await import("../src/lib/chat/session-token");
   const sessionRoute = await import("../src/app/api/chat-session/route");
+
+  agentSessionKey = createKaxiSessionId();
+  const agentQuestion = "국비유학 비자 신청 절차가 궁금합니다.";
+  const agentAnswer = "국비유학 비자는 학교 발급 서류와 정부 지원 확인서가 필요합니다.";
+  await persistChatExchange({
+    requestId: crypto.randomUUID(),
+    idempotencyKey: `unified-${crypto.randomUUID()}`,
+    sessionKey: agentSessionKey,
+    tenantId: "default",
+    locale: "ko",
+    source: "kaxi-site",
+    question: agentQuestion,
+    answer: agentAnswer,
+    needsHuman: false,
+    provenance: {
+      workflowId: "kaxi-unified-chat",
+      workflowVersionId: "kaxi-unified-chat@2026-07-21.v1",
+      modelVersion: "unknown",
+      promptVersion: "kaxi-unified-expert@v1",
+    },
+    sources: [],
+    searchMeta: { retrievedCount: 0 },
+    latencyMs: 42,
+  });
+
+  const agentSnapshot = await loadChatSessionSnapshot(agentSessionKey);
+  assert(agentSnapshot, "a persisted unified agent turn should be restorable from the cookie session");
+  assert.equal(agentSnapshot.messages.length, 1);
+  assert.equal(agentSnapshot.messages[0].question, agentQuestion);
+  assert.equal(agentSnapshot.messages[0].answer, agentAnswer);
+  assert.equal(agentSnapshot.messages[0].workflowId, "kaxi-unified-chat");
+  assert.equal(agentSnapshot.messages[0].workflowVersionId, "kaxi-unified-chat@2026-07-21.v1");
+  assert.equal(agentSnapshot.messages[0].status, "completed");
 
   const snapshot = await loadChatSessionSnapshot(sessionKey);
   assert(snapshot, "owned KAXI session should produce a snapshot");
@@ -234,4 +317,4 @@ try {
   await server.stop(true);
 }
 
-console.log("PASS chat history: canonical Supabase restore, signed ownership, encrypted text, citations, retry identity, and attachment resume state");
+console.log("PASS chat history: canonical Supabase restore, signed ownership, encrypted text, citations, retry identity, attachment resume state, and unified agent turn persistence round-trip");

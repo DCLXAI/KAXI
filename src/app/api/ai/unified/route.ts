@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { GET as getAgentStatus, POST as runActionAgent } from "@/app/api/ai/agent/route";
 import { POST as runExpertConsult } from "@/app/api/ai/consult/route";
 import type { Lang } from "@/lib/i18n/translations";
@@ -9,6 +9,8 @@ import {
   type UnifiedAiRouteDecision,
   type UnifiedExpertMode,
 } from "@/lib/ai/unified-router";
+import { CHAT_SESSION_COOKIE, verifyChatSessionToken } from "@/lib/chat/session-token";
+import { persistChatExchange } from "@/lib/chat/persistence";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -224,6 +226,44 @@ export async function POST(req: NextRequest) {
   const normalized = decision.capability === "expert"
     ? normalizeExpertResponse(data, decision, lang, question, Date.now() - startedAt)
     : { ...data, routing: decision };
+
+  const chatSession = verifyChatSessionToken(req.cookies.get(CHAT_SESSION_COOKIE)?.value);
+  if (chatSession?.sessionId) {
+    const sessionId = chatSession.sessionId;
+    const requestId = crypto.randomUUID();
+    const normalizedRecord = record(normalized);
+    const quality = record(record(normalizedRecord.meta).quality);
+    const answer = text(normalizedRecord.answer);
+    after(async () => {
+      try {
+        if (!answer) return;
+        await persistChatExchange({
+          requestId,
+          idempotencyKey: `unified-${requestId}`,
+          sessionKey: sessionId,
+          tenantId: "default",
+          locale: lang,
+          source: "kaxi-site",
+          question,
+          answer,
+          needsHuman: boolean(normalizedRecord.needsHumanExpert),
+          provenance: {
+            workflowId: "kaxi-unified-chat",
+            workflowVersionId: "kaxi-unified-chat@2026-07-21.v1",
+            modelVersion: text(quality.backend, "unknown"),
+            promptVersion: `kaxi-unified-${decision.capability}@v1`,
+          },
+          sources: record(normalizedRecord.meta).sources,
+          searchMeta: quality,
+          latencyMs: Date.now() - startedAt,
+        });
+      } catch (error) {
+        // Persistence is a convenience, never a gate: the user already has
+        // the answer; losing one history row must stay invisible.
+        console.warn("[unified chat persistence]", error instanceof Error ? error.message : error);
+      }
+    });
+  }
 
   return NextResponse.json(normalized, {
     status: response.status,
