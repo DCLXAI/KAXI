@@ -8,6 +8,7 @@ import { recommendPath } from "../src/lib/data/diagnosis";
 import {
   quickDiagnosisInput,
 } from "../src/lib/data/quick-diagnosis";
+import { normalizeExpertResponse } from "../src/app/api/ai/unified/route";
 
 assert.deepEqual(
   decideUnifiedAiRoute("서울 인증대학 3곳 찾아서 비용을 계산해줘"),
@@ -82,6 +83,36 @@ assert.doesNotMatch(header, />\s*K\s*<\/div>/, "the legacy K badge must be remov
 assert.match(agentHook, /\/api\/ai\/unified/, "the single AI screen must use the server-side router");
 assert.match(unifiedApi, /runExpertConsult/, "regulated guidance must retain the expert backend boundary");
 assert.match(unifiedApi, /runActionAgent/, "task execution must retain the action backend boundary");
+
+const officialSummaryDecision = decideUnifiedAiRoute("D-4 체류기간 연장 기준이 어떻게 되나요?");
+const officialSummaryNormalized = normalizeExpertResponse(
+  { answer: "공식 근거 기반 요약", backend: "official-summary" },
+  officialSummaryDecision,
+  "ko",
+  "D-4 체류기간 연장 기준이 어떻게 되나요?",
+  120,
+);
+assert.equal(
+  officialSummaryNormalized.meta.quality.answerSource,
+  "official-summary",
+  "official-summary fallback answers must be labeled as non-LLM",
+);
+assert.equal(
+  officialSummaryNormalized.meta.quality.intentConfidence,
+  undefined,
+  "official-summary fallback answers must not carry a fabricated confidence chip",
+);
+
+const llmDecision = decideUnifiedAiRoute("D-4 체류기간 연장 기준이 어떻게 되나요?");
+const llmNormalized = normalizeExpertResponse(
+  { answer: "LLM이 생성한 답변", backend: "kimi" },
+  llmDecision,
+  "ko",
+  "D-4 체류기간 연장 기준이 어떻게 되나요?",
+  120,
+);
+assert.equal(llmNormalized.meta.quality.answerSource, "llm", "LLM-backed answers must be labeled as model output");
+assert.equal(llmNormalized.meta.quality.intentConfidence, "high", "LLM-backed answers must keep the confidence chip");
 assert.match(consultPage, /redirect\(`\/\$\{locale\}\/agent`\)/, "legacy consult path must redirect to KAXI AI");
 assert.doesNotMatch(sitemap, /"\/consult"/, "legacy consult path must not be indexed as a separate product");
 assert.match(widget, /"\/agent"/, "the compact widget must be hidden on the full KAXI AI screen");

@@ -82,7 +82,7 @@ function expertPlan(lang: Lang): string[] {
   }[lang];
 }
 
-function normalizeExpertResponse(
+export function normalizeExpertResponse(
   raw: Record<string, unknown>,
   decision: UnifiedAiRouteDecision,
   lang: Lang,
@@ -160,7 +160,8 @@ function normalizeExpertResponse(
         officialSourceCount: sources.length,
         retrievalBackends: methods.length > 0 ? methods : [text(retrieval.backend, "none")],
         pgvectorResultCount: boolean(retrieval.pgvectorUsed) ? Number(retrieval.resultCount || 0) : 0,
-        intentConfidence: "high" as const,
+        answerSource: backend === "official-summary" ? "official-summary" as const : "llm" as const,
+        intentConfidence: backend === "official-summary" ? undefined : "high" as const,
         missingSlotCount: 0,
         durationMs,
       },
