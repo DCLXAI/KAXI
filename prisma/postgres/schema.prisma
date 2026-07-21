@@ -594,6 +594,7 @@ model ChatSession {
   source            String    @default("kaxi-site")
   channel           String    @default("kaxi-site")
   typebotResultId   String?   @unique @map("typebot_result_id")
+  userId            String?   @map("user_id")
   status            String    @default("active")
   startedAt         DateTime  @default(now()) @map("started_at")
   lastMessageAt     DateTime  @default(now()) @map("last_message_at")
@@ -616,6 +617,7 @@ model ChatSession {
   @@index([status])
   @@index([lastMessageAt])
   @@index([createdAt])
+  @@index([userId])
   @@map("chat_sessions")
 }
 

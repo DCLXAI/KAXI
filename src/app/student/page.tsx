@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { FileText, FolderKanban, Stethoscope } from "lucide-react";
+import { FileText, FolderKanban, MessageCircle, Stethoscope } from "lucide-react";
 import { db } from "@/lib/db";
+import { readPiiField } from "@/lib/privacy/pii";
 import { requireKaxiPageUser } from "@/lib/supabase/auth";
 import { tr, translationKey } from "@/lib/i18n/translations";
 import { workspaceCopy, workspaceDateLocale, workspaceLocale, workspaceStatusLabel } from "@/lib/i18n/workspace";
@@ -42,6 +43,30 @@ export default async function StudentMyPage() {
     select: { id: true, pathKey: true, estimatedCost: true, createdAt: true },
   });
   const money = new Intl.NumberFormat(workspaceDateLocale[locale]);
+
+  const chatSessions = await db.chatSession.findMany({
+    where: { userId: user.id, deletedAt: null },
+    orderBy: { lastMessageAt: "desc" },
+    take: 5,
+    select: { sessionKey: true, startedAt: true, lastMessageAt: true, locale: true },
+  });
+  const consultations = await Promise.all(
+    chatSessions.map(async (session) => {
+      const firstMessage = await db.chatMessage.findFirst({
+        where: { sessionKey: session.sessionKey },
+        orderBy: { createdAt: "asc" },
+        select: { question: true, questionCiphertext: true },
+      });
+      const question = firstMessage
+        ? readPiiField(firstMessage.question, firstMessage.questionCiphertext)?.trim() || ""
+        : "";
+      return {
+        sessionKey: session.sessionKey,
+        lastMessageAt: session.lastMessageAt,
+        preview: question.slice(0, 80),
+      };
+    }),
+  );
 
   return (
     <main lang={locale} className="min-h-screen bg-background px-4 py-8">
@@ -140,6 +165,29 @@ export default async function StudentMyPage() {
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">
                     {money.format(diag.estimatedCost)} KRW · {formatDate(diag.createdAt, locale)}
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 font-serif text-base">
+              <MessageCircle className="h-4 w-4" />
+              {tr("student_consultations", locale)}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {consultations.length === 0 ? (
+              <EmptyState label={tr("consultation_empty", locale)} />
+            ) : (
+              consultations.map((consultation) => (
+                <div key={consultation.sessionKey} className="rounded-md border bg-background px-3 py-2 text-sm">
+                  <div className="font-medium">{consultation.preview || "-"}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {formatDate(consultation.lastMessageAt, locale)}
                   </div>
                 </div>
               ))

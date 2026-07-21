@@ -358,6 +358,8 @@ export const t = {
   student_cases: { ko: "내 케이스", vi: "Hồ sơ của tôi", mn: "Миний кейс", en: "My cases" },
   student_documents: { ko: "서류 상태", vi: "Trạng thái giấy tờ", mn: "Баримтын төлөв", en: "Document status" },
   student_diagnoses: { ko: "내 진단 이력", vi: "Lịch sử chẩn đoán", mn: "Миний оношилгооны түүх", en: "My diagnoses" },
+  student_consultations: { ko: "최근 상담 기록", vi: "Tư vấn gần đây", mn: "Сүүлийн зөвлөгөө", en: "Recent consultations" },
+  consultation_empty: { ko: "저장된 상담 기록이 없어요.", vi: "Chưa có cuộc tư vấn nào được lưu.", mn: "Хадгалсан зөвлөгөө алга.", en: "No saved consultations yet." },
   diagnosis_empty: { ko: "저장된 진단이 없어요. 진단을 완료하면 여기에 모여요.", vi: "Chưa có chẩn đoán nào được lưu.", mn: "Хадгалсан оношилгоо алга.", en: "No saved diagnoses yet." },
   diagnosis_view: { ko: "결과 보기", vi: "Xem kết quả", mn: "Үр дүн харах", en: "View result" },
   partner_workspace: { ko: "파트너 워크스페이스", vi: "Không gian đối tác", mn: "Түншийн талбар", en: "Partner workspace" },

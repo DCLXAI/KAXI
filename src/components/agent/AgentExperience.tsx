@@ -3,6 +3,7 @@
 import { AgentLanding } from "./AgentLanding";
 import { AgentChatHeader } from "./AgentChatHeader";
 import { AgentComposer } from "./AgentComposer";
+import { AgentLoginNudge } from "./AgentLoginNudge";
 import { AgentMessageList } from "./AgentMessageList";
 import { useAgentChat } from "./useAgentChat";
 
@@ -39,6 +40,10 @@ export function AgentExperience({ embedded = false }: { embedded?: boolean }) {
         onRetry={chat.retry}
         onSend={chat.send}
         onSendDraft={chat.sendClarifyDraft}
+      />
+      <AgentLoginNudge
+        locale={chat.locale}
+        hasAssistantMessage={chat.messages.some((message) => message.role === "agent")}
       />
       <AgentComposer
         input={chat.input}

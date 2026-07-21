@@ -52,6 +52,10 @@ export function AuthComplete() {
         throw new Error(data.error || "account_sync_failed");
       }
 
+      // Fire-and-forget: attach any anonymous /agent chat session (signed
+      // cookie) to the now-authenticated account. Never blocks the redirect.
+      void fetch("/api/chat-session/claim", { method: "POST" }).catch(() => undefined);
+
       router.replace(data.redirectTo || "/student");
       router.refresh();
     }

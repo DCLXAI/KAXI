@@ -313,6 +313,83 @@ try {
     observedQueries.some((query) => query.table === "chat_sessions" && query.sessionKey === `eq.${sessionKey}`),
     "history must scope the canonical session query",
   );
+
+  // --- Claim semantics: a claimed session never changes hands ------------
+  // test-chat-history has no Prisma DB (it drives a fake Supabase over HTTP),
+  // so we exercise the real /api/chat-session/claim route against an in-memory
+  // chat_sessions table that faithfully models db.chatSession.updateMany's
+  // exact where-clause ({ sessionKey, userId: null }). This locks the route's
+  // ownership gate: first claim by user A succeeds (count 1); a second claim
+  // for a different user B fails because userId is no longer null (count 0).
+  const { mock } = await import("bun:test");
+
+  const claimSessionKey = createKaxiSessionId();
+  const chatSessionRows: Array<{ sessionKey: string; userId: string | null }> = [
+    { sessionKey: claimSessionKey, userId: null },
+  ];
+  let currentUserId = "student-claim-a";
+
+  mock.module("@/lib/db", () => ({
+    db: {
+      chatSession: {
+        async updateMany({
+          where,
+          data,
+        }: {
+          where: { sessionKey: string; userId: string | null };
+          data: { userId: string };
+        }) {
+          let count = 0;
+          for (const row of chatSessionRows) {
+            if (row.sessionKey === where.sessionKey && row.userId === where.userId) {
+              row.userId = data.userId;
+              count += 1;
+            }
+          }
+          return { count };
+        },
+      },
+    },
+  }));
+  mock.module("@/lib/supabase/auth", () => ({
+    getCurrentKaxiUser: async () => ({ id: currentUserId }),
+  }));
+  mock.module("@/lib/api/security", () => ({
+    parseLimit: (_value: string | undefined, fallback: number) => fallback,
+    rateLimit: async () => null,
+  }));
+
+  const claimRoute = await import("../src/app/api/chat-session/claim/route");
+  const claimToken = issueChatSessionToken(claimSessionKey);
+  const claimCookie = `${CHAT_SESSION_COOKIE}=${claimToken}`;
+
+  const firstClaim = await claimRoute.POST(
+    new NextRequest("http://localhost/api/chat-session/claim", {
+      method: "POST",
+      headers: { cookie: claimCookie },
+    }),
+  );
+  assert.equal(firstClaim.status, 200);
+  assert.equal((await firstClaim.json() as { claimed?: boolean }).claimed, true, "first claim of an unowned session succeeds");
+  assert.equal(chatSessionRows[0].userId, "student-claim-a");
+
+  currentUserId = "student-claim-b";
+  const secondClaim = await claimRoute.POST(
+    new NextRequest("http://localhost/api/chat-session/claim", {
+      method: "POST",
+      headers: { cookie: claimCookie },
+    }),
+  );
+  assert.equal(secondClaim.status, 200);
+  assert.equal((await secondClaim.json() as { claimed?: boolean }).claimed, false, "an already-owned session is never re-claimed");
+  assert.equal(chatSessionRows[0].userId, "student-claim-a", "a claimed session never changes hands");
+
+  // A caller without a valid chat-session cookie can never claim anything.
+  const noCookieClaim = await claimRoute.POST(
+    new NextRequest("http://localhost/api/chat-session/claim", { method: "POST" }),
+  );
+  assert.equal(noCookieClaim.status, 200);
+  assert.equal((await noCookieClaim.json() as { claimed?: boolean }).claimed, false, "no cookie means nothing to claim");
 } finally {
   await server.stop(true);
 }
