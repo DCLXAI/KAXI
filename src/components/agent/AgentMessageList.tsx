@@ -44,7 +44,7 @@ export function AgentMessageList({
   const hasStreamingAnswer = messages.some((message) => message.state === "streaming");
 
   return (
-    <div className={compact ? "space-y-6 mb-4" : "space-y-6 mb-32"} aria-live="polite">
+    <div className={compact ? "space-y-6 mb-4" : "space-y-6"} aria-live="polite">
       {messages.map((message, index) => (
         <motion.div
           key={message.requestId || index}
