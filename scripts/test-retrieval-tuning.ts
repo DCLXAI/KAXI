@@ -22,6 +22,7 @@ function candidateRow(overrides: {
   content: string;
   category?: string;
   keywords?: string;
+  lexicalScore?: number;
 }) {
   rowCounter += 1;
   return {
@@ -36,7 +37,7 @@ function candidateRow(overrides: {
       checked_by: "kaxi-legal-review",
       language: "ko",
       category: overrides.category || "visa",
-      lexical_score: 0.5,
+      lexical_score: overrides.lexicalScore ?? 0.5,
       keywords: overrides.keywords || "",
     },
     similarity: 0,
@@ -60,6 +61,27 @@ async function scores(question: string, rows: unknown[], category: "visa" | "doc
     },
   );
   return new Map(result.documents.map((document) => [document.id, document.rerankScore]));
+}
+
+// Same call as scores(), but returns the ordered docId array instead of a
+// Map, so ordering itself (not just presence/score) can be asserted.
+async function orderedIds(question: string, rows: unknown[], category: "visa" | "documents" | "cost" | "school" | "general" = "visa") {
+  const result = await searchServingRagDocuments(
+    {
+      question,
+      category,
+      locale: "ko",
+      tenantId: "default",
+      requestId: "11111111-1111-4111-8111-111111111111",
+      fallbackReason: "characterization",
+      maxDocuments: 6,
+    },
+    {
+      createEmbedding: async () => noEmbedding,
+      rpc: async () => ({ data: rows }),
+    },
+  );
+  return result.documents.map((document) => document.id);
 }
 
 function delta(map: Map<string, number>, a: string, b: string) {
@@ -86,6 +108,21 @@ const NEUTRAL_TITLE = "안내 문서";
   assert.equal(map.get("cat-scope"), 0.6, "base 0.5 + categoryScope 0.08 + bias 0.02");
   assert.equal(delta(map, "cat-exact", "cat-scope"), 0.1);
   console.log("PASS retrieval tuning: category boosts + bias (absolute anchors)");
+}
+
+// ── bias (0.02) alone, isolated via category "general" ── with category
+// "general" the categoryBoost branch is forced to 0 unconditionally, so the
+// absolute score pins bias alone: base 0.5 + bias 0.02 = 0.52. Reuses the
+// same boost-inert question as the block above. Note: category "general"
+// also disables the category allow-list filter in parseCandidates entirely
+// (it only applies `input.category !== "general"`), so the single neutral
+// candidate survives unfiltered.
+{
+  const map = await scores("공항 라운지 이용 방법을 알려줘", [
+    candidateRow({ docId: "general-bias-only", title: NEUTRAL_TITLE, content: NEUTRAL_CONTENT, category: "visa" }),
+  ], "general");
+  assert.equal(map.get("general-bias-only"), 0.52, "base 0.5 + bias 0.02, categoryBoost forced to 0 under general");
+  console.log("PASS retrieval tuning: bias alone (general category forces categoryBoost to 0)");
 }
 
 // ── risk (0.58) ── risk marker lives in docId only (docId is NOT part of
@@ -169,10 +206,32 @@ const NEUTRAL_TITLE = "안내 문서";
     candidateRow({ docId: "capped-a", title: NEUTRAL_TITLE, content: NEUTRAL_CONTENT, keywords: "stay extension gia hạn хугацаа сунгах" }),
     candidateRow({ docId: "capped-b", title: NEUTRAL_TITLE, content: NEUTRAL_CONTENT, keywords: "stay extension gia hạn хугацаа сунгах hikorea-stay-extension immigration-act-stay-extension" }),
     candidateRow({ docId: "no-keywords", title: NEUTRAL_TITLE, content: NEUTRAL_CONTENT }),
+    // Below-cap pin: the stay-extension rule's hint string
+    // ("hikorea-stay-extension immigration-act-stay-extension stay extension
+    // 체류기간 연장 gia hạn хугацаа сунгах") tokenizes (unique, length>=2,
+    // hyphens kept as part of the token) to exactly 10 tokens:
+    // hikorea-stay-extension, immigration-act-stay-extension, stay,
+    // extension, 체류기간, 연장, gia, hạn, хугацаа, сунгах (count verified
+    // via a standalone tokenize() replica run against this exact hint
+    // string). Keywords "stay extension" tokenize to just {stay, extension},
+    // but tokenCoverage's match rule is substring-inclusive in BOTH
+    // directions (`candidateToken.includes(queryToken) ||
+    // queryToken.includes(candidateToken)`), so the two hyphenated hint
+    // tokens "hikorea-stay-extension" and "immigration-act-stay-extension"
+    // ALSO count as matched because each contains "stay" and "extension" as
+    // substrings — confirmed by instrumenting tokenCoverage for this exact
+    // candidate text (candidateTokens: partial-coverage, 안내, 문서, stay,
+    // extension; matched: hikorea-stay-extension,
+    // immigration-act-stay-extension, stay, extension = 4, not 2). So actual
+    // matched/count = 4/10 = 0.4 -> boost 0.4*0.6 = 0.24, still under the
+    // 0.3 cap. The 0.6 multiplier itself (not the matched-count arithmetic)
+    // is the invariant being pinned here.
+    candidateRow({ docId: "partial-coverage", title: NEUTRAL_TITLE, content: NEUTRAL_CONTENT, keywords: "stay extension" }),
   ]);
   assert.equal(delta(map, "capped-a", "capped-b"), 0, "both stuffing levels must hit the cap");
   assert.equal(delta(map, "capped-a", "no-keywords"), 0.3, "cap value");
-  console.log("PASS retrieval tuning: operational coverage cap");
+  assert.equal(delta(map, "partial-coverage", "no-keywords"), 0.24, "4/10 hint tokens matched (substring-inclusive) * 0.6 weight, below cap");
+  console.log("PASS retrieval tuning: operational coverage cap + below-cap weight (0.6)");
 }
 
 // ── bodyCoverage (0.45) and headingCoverage (0.25) ── query tokens appear
@@ -201,6 +260,21 @@ const NEUTRAL_TITLE = "안내 문서";
   assert.equal(map.size, 6, "dedup by docId + clamp to maxDocuments");
   assert.equal(map.has("dup-doc"), true);
   console.log("PASS retrieval tuning: dedup and result clamp");
+}
+
+// ── score-based ordering ── three candidates, otherwise neutral/identical,
+// differ only in metadata lexical_score (0.9 / 0.5 / 0.7). Since every other
+// boost term is identical across the three (boost-inert question, same
+// category, no coverage/risk/code/operational signal), the final rerank
+// order must exactly track descending lexical_score.
+{
+  const ids = await orderedIds("공항 라운지 이용 방법을 알려줘", [
+    candidateRow({ docId: "mid-score", title: NEUTRAL_TITLE, content: NEUTRAL_CONTENT, lexicalScore: 0.7 }),
+    candidateRow({ docId: "high-score", title: NEUTRAL_TITLE, content: NEUTRAL_CONTENT, lexicalScore: 0.9 }),
+    candidateRow({ docId: "low-score", title: NEUTRAL_TITLE, content: NEUTRAL_CONTENT, lexicalScore: 0.5 }),
+  ]);
+  assert.deepEqual(ids, ["high-score", "mid-score", "low-score"], "descending lexical_score order: 0.9, 0.7, 0.5");
+  console.log("PASS retrieval tuning: score-based ordering (differentiated scores)");
 }
 
 console.log("PASS retrieval tuning characterization: every rerank coefficient pinned");
