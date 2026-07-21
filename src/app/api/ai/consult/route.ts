@@ -25,6 +25,7 @@ import {
 import { maybeCreateHighRiskEscalationCase } from "@/lib/cases/high-risk-hook";
 import { currentAuthenticatedStudentProfileId } from "@/lib/cases/current-student";
 import { reportLlmFallback } from "@/lib/ops/llm-fallback-events";
+import { buildOfficialSummaryLead } from "@/lib/chat/official-summary-lead";
 
 // POST /api/ai/consult - 행정사 전문 AI 에이전트 상담 채팅
 // 일반 AI 도우미보다 더 깊이 있는 법적/행정적 답변 제공
@@ -636,9 +637,20 @@ function buildOfficialSummaryFallback(
     })
     .join("\n");
 
+  const lead = buildOfficialSummaryLead({
+    question,
+    docContents: prioritized.map((doc, index) => ({
+      content: pickLangText(doc.content, lang),
+      index: index + 1,
+    })),
+    lang,
+  });
+
   return `## 공식 근거 기반 요약
 
-검색된 승인 문서를 기준으로 질문과 가까운 근거를 먼저 정리했습니다. 개별 체류 이력, 학교 상태, 만료일, 재정 상황에 따라 요구 서류가 달라질 수 있으므로 접수 전 원문 확인과 행정사 검토가 필요합니다.
+${lead ? `${lead}
+
+` : ""}검색된 승인 문서를 기준으로 질문과 가까운 근거를 먼저 정리했습니다. 개별 체류 이력, 학교 상태, 만료일, 재정 상황에 따라 요구 서류가 달라질 수 있으므로 접수 전 원문 확인과 행정사 검토가 필요합니다.
 
 ${sections}
 

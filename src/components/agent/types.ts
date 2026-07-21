@@ -150,7 +150,8 @@ export interface AgentMeta {
     officialSourceCount: number;
     retrievalBackends?: string[];
     pgvectorResultCount?: number;
-    intentConfidence: "low" | "medium" | "high";
+    answerSource?: "llm" | "official-summary";
+    intentConfidence?: "low" | "medium" | "high";
     missingSlotCount: number;
     durationMs?: number;
   };

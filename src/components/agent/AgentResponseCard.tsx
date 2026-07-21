@@ -127,6 +127,18 @@ export function AgentResponseCard({
             Grounded
           </Badge>
         )}
+        {message.meta?.quality.answerSource === "official-summary" && (
+          <Badge variant="secondary" className="text-[10px] gap-0.5">
+            <ShieldAlert className="h-2.5 w-2.5" />
+            {locale === "ko"
+              ? "모델 미사용 · 문서 직접 요약"
+              : locale === "vi"
+                ? "Tóm tắt trực tiếp tài liệu"
+                : locale === "mn"
+                  ? "Баримтын шууд хураангуй"
+                  : "Direct document summary"}
+          </Badge>
+        )}
         {message.cached && (
           <Badge variant="outline" className="text-[10px] gap-0.5">
             <Zap className="h-2.5 w-2.5" />
