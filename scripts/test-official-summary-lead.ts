@@ -90,3 +90,17 @@ for (const [lang, heading] of [
 }
 
 console.log("PASS official summary lead: intent-driven evidence sentences with citations");
+
+// Markdown heading lines are titles, not evidence: they must be dropped, not
+// glued onto the first sentence of the content.
+const headingLead = buildOfficialSummaryLead({
+  question: "연장 신청에 필요한 서류를 알려주세요",
+  docContents: [{
+    index: 1,
+    content: "# 비자 신청 필수 서류\n한국유학종합시스템에 따르면 신청에는 여권 사본과 재정능력 증빙 서류 제출이 필요합니다.",
+  }],
+  lang: "ko",
+});
+assert.ok(headingLead && !headingLead.includes("#"), "heading markers must not leak into bullets");
+assert.ok(headingLead && headingLead.includes("한국유학종합시스템에 따르면"), "first real sentence survives heading removal");
+console.log("PASS official summary lead: heading lines dropped");

@@ -11,6 +11,9 @@ const LEAD_HEADING: Record<LeadLang, string> = {
 
 function splitSentences(content: string): string[] {
   return content
+    // Heading lines are titles, not evidence — dropping them BEFORE the
+    // whitespace collapse keeps "# 제목" from gluing onto the first sentence.
+    .replace(/^#{1,6}\s.*$/gm, " ")
     .replace(/\s+/g, " ")
     .split(/(?<=[.!?。])\s+|(?<=[.。])(?=[가-힣])/u)
     .map((sentence) => sentence.trim())
