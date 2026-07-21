@@ -18,7 +18,7 @@ import {
 } from "../src/lib/typebot/runtime-health";
 
 const expectedMigration = latestMigrationName();
-assert.equal(expectedMigration, "20260716140000_queue_sla_fields");
+assert.equal(expectedMigration, "20260721210000_chat_session_user_link");
 assert.equal(declaredRequiredMigration(), expectedMigration);
 
 const readyPayload = {

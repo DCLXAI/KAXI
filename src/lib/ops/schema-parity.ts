@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 
-export const REQUIRED_PRODUCTION_MIGRATION = "20260716140000_queue_sla_fields";
+export const REQUIRED_PRODUCTION_MIGRATION = "20260721210000_chat_session_user_link";
 
 const REQUIRED_SCHEMA_OBJECTS = [
   "migration_ledger",

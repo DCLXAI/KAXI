@@ -3,6 +3,7 @@
 import { AgentLanding } from "./AgentLanding";
 import { AgentChatHeader } from "./AgentChatHeader";
 import { AgentComposer } from "./AgentComposer";
+import { AgentLoginNudge } from "./AgentLoginNudge";
 import { AgentMessageList } from "./AgentMessageList";
 import { useAgentChat } from "./useAgentChat";
 
@@ -27,19 +28,27 @@ export function AgentExperience({ embedded = false }: { embedded?: boolean }) {
   return (
     <div className={embedded ? "mx-auto w-full max-w-3xl text-left" : "mx-auto max-w-3xl px-4 py-6"}>
       <AgentChatHeader agentStatus={chat.agentStatus} locale={chat.locale} onReset={chat.reset} />
-      <AgentMessageList
-        clarifyDrafts={chat.clarifyDrafts}
-        endRef={chat.endRef}
-        loading={chat.loading}
-        locale={chat.locale}
-        messages={chat.messages}
-        progress={chat.progress}
-        compact={embedded}
-        onDraftChange={chat.updateClarifyDraft}
-        onRetry={chat.retry}
-        onSend={chat.send}
-        onSendDraft={chat.sendClarifyDraft}
-      />
+      {/* The fixed composer clearance (mb-32) must wrap the nudge too, or the
+          nudge renders underneath the fixed bar. */}
+      <div className={embedded ? undefined : "mb-32"}>
+        <AgentMessageList
+          clarifyDrafts={chat.clarifyDrafts}
+          endRef={chat.endRef}
+          loading={chat.loading}
+          locale={chat.locale}
+          messages={chat.messages}
+          progress={chat.progress}
+          compact={embedded}
+          onDraftChange={chat.updateClarifyDraft}
+          onRetry={chat.retry}
+          onSend={chat.send}
+          onSendDraft={chat.sendClarifyDraft}
+        />
+        <AgentLoginNudge
+          locale={chat.locale}
+          hasAssistantMessage={chat.messages.some((message) => message.role === "agent")}
+        />
+      </div>
       <AgentComposer
         input={chat.input}
         inputRef={chat.inputRef}

@@ -17,6 +17,16 @@ const failedRequestId = "86d859c4-fb4d-4c74-b5c9-15e35c331ad4";
 const serviceRoleKey = "chat-history-fake-service-role-key";
 const observedQueries: Array<{ table: string; sessionKey?: string }> = [];
 
+// Populated once the unified-agent session key is minted below; the mock
+// keeps a tiny in-memory chat_messages table scoped to that session so the
+// persist -> snapshot round trip is a real assertion, not a canned fixture.
+let agentSessionKey = "";
+const agentMessages: Array<Record<string, unknown>> = [];
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -26,7 +36,7 @@ function json(data: unknown, status = 200) {
 
 const server = Bun.serve({
   port: 0,
-  fetch(request) {
+  async fetch(request) {
     const url = new URL(request.url);
     if (!url.pathname.startsWith("/rest/v1/")) return json({ error: "not found" }, 404);
     if (
@@ -48,6 +58,39 @@ const server = Bun.serve({
       });
     }
     if (table === "chat_messages") {
+      if (request.method === "POST") {
+        // persistChatExchange's insert().select("id").single() call: store the
+        // row against the in-memory agent session table and hand back its id.
+        const payload = asRecord(await request.json());
+        const id = agentMessages.length + 1;
+        agentMessages.push({ ...payload, id, created_at: new Date().toISOString() });
+        return json({ id });
+      }
+      if (url.searchParams.has("idempotency_key")) {
+        // persistChatExchange's pre-insert existing-row lookup: these
+        // fabricated idempotency keys never collide with a prior row.
+        return json([]);
+      }
+      if (url.searchParams.get("session_id") === `eq.${agentSessionKey}`) {
+        return json(agentMessages.map((row) => ({
+          id: row.id,
+          request_id: row.request_id,
+          question: row.question,
+          question_ciphertext: row.question_ciphertext,
+          answer: row.answer,
+          answer_ciphertext: row.answer_ciphertext,
+          status: row.status,
+          error_code: row.error_code,
+          next_step: row.next_step,
+          sources: row.sources,
+          sources_json: row.sources_json,
+          workflow_id: row.workflow_id,
+          workflow_version_id: row.workflow_version_id,
+          model_version: row.model_version,
+          prompt_version: row.prompt_version,
+          created_at: row.created_at,
+        })));
+      }
       return json([
         {
           id: 2,
@@ -86,6 +129,11 @@ const server = Bun.serve({
           created_at: "2026-07-10T00:00:00.000Z",
         },
       ]);
+    }
+    if (table === "n8n_audit_messages") {
+      // persistN8nAuditMetadataBestEffort's insert; the row itself is never
+      // read back in this test, so a bare success response is enough.
+      return json({}, 201);
     }
     if (table === "retrieval_runs") {
       return json([
@@ -168,11 +216,46 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = serviceRoleKey;
 
 try {
   const { loadChatSessionSnapshot, normalizeChatHistorySources } = await import("../src/lib/chat/history");
+  const { persistChatExchange } = await import("../src/lib/chat/persistence");
   const {
     CHAT_SESSION_COOKIE,
+    createKaxiSessionId,
     issueChatSessionToken,
   } = await import("../src/lib/chat/session-token");
   const sessionRoute = await import("../src/app/api/chat-session/route");
+
+  agentSessionKey = createKaxiSessionId();
+  const agentQuestion = "국비유학 비자 신청 절차가 궁금합니다.";
+  const agentAnswer = "국비유학 비자는 학교 발급 서류와 정부 지원 확인서가 필요합니다.";
+  await persistChatExchange({
+    requestId: crypto.randomUUID(),
+    idempotencyKey: `unified-${crypto.randomUUID()}`,
+    sessionKey: agentSessionKey,
+    tenantId: "default",
+    locale: "ko",
+    source: "kaxi-site",
+    question: agentQuestion,
+    answer: agentAnswer,
+    needsHuman: false,
+    provenance: {
+      workflowId: "kaxi-unified-chat",
+      workflowVersionId: "kaxi-unified-chat@2026-07-21.v1",
+      modelVersion: "unknown",
+      promptVersion: "kaxi-unified-expert@v1",
+    },
+    sources: [],
+    searchMeta: { retrievedCount: 0 },
+    latencyMs: 42,
+  });
+
+  const agentSnapshot = await loadChatSessionSnapshot(agentSessionKey);
+  assert(agentSnapshot, "a persisted unified agent turn should be restorable from the cookie session");
+  assert.equal(agentSnapshot.messages.length, 1);
+  assert.equal(agentSnapshot.messages[0].question, agentQuestion);
+  assert.equal(agentSnapshot.messages[0].answer, agentAnswer);
+  assert.equal(agentSnapshot.messages[0].workflowId, "kaxi-unified-chat");
+  assert.equal(agentSnapshot.messages[0].workflowVersionId, "kaxi-unified-chat@2026-07-21.v1");
+  assert.equal(agentSnapshot.messages[0].status, "completed");
 
   const snapshot = await loadChatSessionSnapshot(sessionKey);
   assert(snapshot, "owned KAXI session should produce a snapshot");
@@ -230,8 +313,95 @@ try {
     observedQueries.some((query) => query.table === "chat_sessions" && query.sessionKey === `eq.${sessionKey}`),
     "history must scope the canonical session query",
   );
+
+  // --- Claim semantics: a claimed session never changes hands ------------
+  // test-chat-history has no Prisma DB (it drives a fake Supabase over HTTP),
+  // so we exercise the real /api/chat-session/claim route against an in-memory
+  // chat_sessions table that faithfully models db.chatSession.updateMany's
+  // exact where-clause ({ sessionKey, userId: null }). This locks the route's
+  // ownership gate: first claim by user A succeeds (count 1); a second claim
+  // for a different user B fails because userId is no longer null (count 0).
+  const { mock } = await import("bun:test");
+
+  const claimSessionKey = createKaxiSessionId();
+  const chatSessionRows: Array<{ sessionKey: string; userId: string | null }> = [
+    { sessionKey: claimSessionKey, userId: null },
+  ];
+  let currentUserId: string | null = "student-claim-a";
+
+  mock.module("@/lib/db", () => ({
+    db: {
+      chatSession: {
+        async updateMany({
+          where,
+          data,
+        }: {
+          where: { sessionKey: string; userId: string | null };
+          data: { userId: string };
+        }) {
+          let count = 0;
+          for (const row of chatSessionRows) {
+            if (row.sessionKey === where.sessionKey && row.userId === where.userId) {
+              row.userId = data.userId;
+              count += 1;
+            }
+          }
+          return { count };
+        },
+      },
+    },
+  }));
+  mock.module("@/lib/supabase/auth", () => ({
+    getCurrentKaxiUser: async () => (currentUserId ? { id: currentUserId } : null),
+  }));
+  mock.module("@/lib/api/security", () => ({
+    parseLimit: (_value: string | undefined, fallback: number) => fallback,
+    rateLimit: async () => null,
+  }));
+
+  const claimRoute = await import("../src/app/api/chat-session/claim/route");
+  const claimToken = issueChatSessionToken(claimSessionKey);
+  const claimCookie = `${CHAT_SESSION_COOKIE}=${claimToken}`;
+
+  const firstClaim = await claimRoute.POST(
+    new NextRequest("http://localhost/api/chat-session/claim", {
+      method: "POST",
+      headers: { cookie: claimCookie },
+    }),
+  );
+  assert.equal(firstClaim.status, 200);
+  assert.equal((await firstClaim.json() as { claimed?: boolean }).claimed, true, "first claim of an unowned session succeeds");
+  assert.equal(chatSessionRows[0].userId, "student-claim-a");
+
+  currentUserId = "student-claim-b";
+  const secondClaim = await claimRoute.POST(
+    new NextRequest("http://localhost/api/chat-session/claim", {
+      method: "POST",
+      headers: { cookie: claimCookie },
+    }),
+  );
+  assert.equal(secondClaim.status, 200);
+  assert.equal((await secondClaim.json() as { claimed?: boolean }).claimed, false, "an already-owned session is never re-claimed");
+  assert.equal(chatSessionRows[0].userId, "student-claim-a", "a claimed session never changes hands");
+
+  // A caller without a valid chat-session cookie can never claim anything.
+  const noCookieClaim = await claimRoute.POST(
+    new NextRequest("http://localhost/api/chat-session/claim", { method: "POST" }),
+  );
+  assert.equal(noCookieClaim.status, 200);
+  assert.equal((await noCookieClaim.json() as { claimed?: boolean }).claimed, false, "no cookie means nothing to claim");
+
+  // A caller without a valid auth session must receive 401.
+  currentUserId = null;
+  const unauthedClaim = await claimRoute.POST(
+    new NextRequest("http://localhost/api/chat-session/claim", {
+      method: "POST",
+      headers: { cookie: claimCookie },
+    }),
+  );
+  assert.equal(unauthedClaim.status, 401, "unauthenticated claim returns 401");
 } finally {
   await server.stop(true);
 }
 
-console.log("PASS chat history: canonical Supabase restore, signed ownership, encrypted text, citations, retry identity, and attachment resume state");
+console.log("PASS chat history: canonical Supabase restore, signed ownership, encrypted text, citations, retry identity, attachment resume state, and unified agent turn persistence round-trip");
