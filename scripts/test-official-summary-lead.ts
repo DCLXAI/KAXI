@@ -62,4 +62,31 @@ const enLead = buildOfficialSummaryLead({
 });
 assert.ok(enLead && enLead.includes("Key points first"), "English heading");
 
+// No-space-after-period text (PDF/scrape artifact) still splits into sentences.
+const noSpaceLead = buildOfficialSummaryLead({
+  question: "연장 신청에 필요한 서류를 알려주세요",
+  docContents: [{
+    index: 1,
+    content: "체류기간연장허가 신청서와 여권, 외국인등록증을 제출해야 합니다.수수료 규정은 별도로 정해집니다.해외 체류 중에는 민원 신청이 불가할 수 있습니다.",
+  }],
+  lang: "ko",
+});
+assert.ok(noSpaceLead && noSpaceLead.includes("신청서와 여권"), "must split sentences without trailing spaces");
+
+// Timing lead must not drag in off-topic sentences.
+assert.ok(timingLead && !timingLead.includes("해외 체류 중"), "timing lead must exclude non-timing sentences");
+
+// All four locale headings ship correctly.
+for (const [lang, heading] of [
+  ["vi", "Điểm chính cần xem ngay"],
+  ["mn", "Шууд шалгах гол зүйл"],
+] as const) {
+  const localized = buildOfficialSummaryLead({
+    question: "연장 신청에 필요한 서류를 알려주세요",
+    docContents: [{ index: 1, content: "체류기간연장허가 신청서와 여권을 제출해야 합니다." }],
+    lang,
+  });
+  assert.ok(localized && localized.includes(heading), `${lang} heading must localize`);
+}
+
 console.log("PASS official summary lead: intent-driven evidence sentences with citations");

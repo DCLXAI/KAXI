@@ -12,7 +12,7 @@ const LEAD_HEADING: Record<LeadLang, string> = {
 function splitSentences(content: string): string[] {
   return content
     .replace(/\s+/g, " ")
-    .split(/(?<=[.!?。])\s+/u)
+    .split(/(?<=[.!?。])\s+|(?<=[.。])(?=[가-힣])/u)
     .map((sentence) => sentence.trim())
     .filter((sentence) => sentence.length >= 12 && sentence.length <= 240);
 }
