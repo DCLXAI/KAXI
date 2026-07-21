@@ -53,6 +53,23 @@ function agentMessageFromResponse(data: Record<string, unknown>, requestId: stri
   };
 }
 
+function buildRestoredUserMessage(question: string, index: number): AgentMessage {
+  return {
+    role: "user",
+    text: question,
+  };
+}
+
+function buildRestoredAssistantMessage(answer: string, index: number): AgentMessage {
+  return {
+    role: "agent",
+    requestId: `restored-${index}`,
+    state: "complete",
+    text: answer,
+    restored: true,
+  };
+}
+
 function upsertAgentMessage(messages: AgentMessage[], requestId: string, next: AgentMessage): AgentMessage[] {
   const index = messages.findIndex((message) => message.requestId === requestId);
   if (index === -1) return [...messages, next];
@@ -133,6 +150,36 @@ export function useAgentChat() {
     return () => {
       alive = false;
     };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        await fetch("/api/chat-session", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ locale }),
+        });
+        const res = await fetch("/api/chat-session");
+        if (!res.ok || !alive) return;
+        const snapshot = await res.json() as { messages?: Array<{ question?: string; answer?: string; createdAt?: string }> };
+        const restored = (snapshot.messages || []).flatMap((exchange, index): AgentMessage[] => {
+          if (!exchange.question || !exchange.answer) return [];
+          return [
+            buildRestoredUserMessage(exchange.question, index),
+            buildRestoredAssistantMessage(exchange.answer, index),
+          ];
+        });
+        if (alive && restored.length > 0) {
+          setMessages((current) => (current.length === 0 ? restored : current));
+          setStarted(true);
+        }
+      } catch {
+        // Fail soft: refresh-loss behavior is simply what we have today.
+      }
+    })();
+    return () => { alive = false; };
   }, []);
 
   useEffect(() => () => abortRef.current?.abort(), []);

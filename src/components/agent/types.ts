@@ -45,6 +45,7 @@ export interface AgentMessage {
   };
   needsHumanExpert?: boolean;
   escalationCaseCreated?: boolean;
+  restored?: boolean;
 }
 
 export interface AgentProgress {
