@@ -60,3 +60,7 @@ jobs:
         run: bun run ci:ops
       - name: Build
         run: bun run build
+      - name: Install Playwright browsers
+        run: bunx playwright install --with-deps chromium
+      - name: End-to-end smoke
+        run: bun run test:e2e
