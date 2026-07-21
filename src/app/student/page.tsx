@@ -50,6 +50,7 @@ export default async function StudentMyPage() {
     take: 5,
     select: { sessionKey: true, startedAt: true, lastMessageAt: true, locale: true },
   });
+  const clip = (value: unknown, max: number) => (typeof value === "string" ? value.slice(0, max) : "");
   const consultations = await Promise.all(
     chatSessions.map(async (session) => {
       const firstMessage = await db.chatMessage.findFirst({
@@ -58,7 +59,7 @@ export default async function StudentMyPage() {
         select: { question: true, questionCiphertext: true },
       });
       const question = firstMessage
-        ? readPiiField(firstMessage.question, firstMessage.questionCiphertext)?.trim() || ""
+        ? readPiiField(clip(firstMessage.question, 8_000), clip(firstMessage.questionCiphertext, 32_000))?.trim() || ""
         : "";
       return {
         sessionKey: session.sessionKey,

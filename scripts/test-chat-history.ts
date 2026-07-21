@@ -327,7 +327,7 @@ try {
   const chatSessionRows: Array<{ sessionKey: string; userId: string | null }> = [
     { sessionKey: claimSessionKey, userId: null },
   ];
-  let currentUserId = "student-claim-a";
+  let currentUserId: string | null = "student-claim-a";
 
   mock.module("@/lib/db", () => ({
     db: {
@@ -352,7 +352,7 @@ try {
     },
   }));
   mock.module("@/lib/supabase/auth", () => ({
-    getCurrentKaxiUser: async () => ({ id: currentUserId }),
+    getCurrentKaxiUser: async () => (currentUserId ? { id: currentUserId } : null),
   }));
   mock.module("@/lib/api/security", () => ({
     parseLimit: (_value: string | undefined, fallback: number) => fallback,
@@ -390,6 +390,16 @@ try {
   );
   assert.equal(noCookieClaim.status, 200);
   assert.equal((await noCookieClaim.json() as { claimed?: boolean }).claimed, false, "no cookie means nothing to claim");
+
+  // A caller without a valid auth session must receive 401.
+  currentUserId = null;
+  const unauthedClaim = await claimRoute.POST(
+    new NextRequest("http://localhost/api/chat-session/claim", {
+      method: "POST",
+      headers: { cookie: claimCookie },
+    }),
+  );
+  assert.equal(unauthedClaim.status, 401, "unauthenticated claim returns 401");
 } finally {
   await server.stop(true);
 }
