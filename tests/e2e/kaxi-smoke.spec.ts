@@ -44,7 +44,8 @@ test("home quick diagnosis uses three answers for its path result", async ({ pag
     const primaryButton = document.querySelector('[data-testid="quick-diagnosis-result"] button');
     return primaryButton ? getComputedStyle(primaryButton).backgroundColor : "";
   });
-  expect(primaryButtonBackground).toBe("rgb(201, 100, 66)");
+  // --primary token (globals.css): #c7d2fe after the pastel refresh.
+  expect(primaryButtonBackground).toBe("rgb(199, 210, 254)");
 
   const resultBox = await result.boundingBox();
   expect(resultBox).not.toBeNull();
@@ -55,7 +56,7 @@ test("home quick diagnosis uses three answers for its path result", async ({ pag
   const note = page.getByTestId("quick-diagnosis-note");
   await note.scrollIntoViewIfNeeded();
   const noteBox = await note.boundingBox();
-  const launcherBox = await page.getByRole("button", { name: "KAXI 상담 열기" }).boundingBox();
+  const launcherBox = await page.getByRole("button", { name: "Open chatbot" }).boundingBox();
   expect(noteBox).not.toBeNull();
   expect(launcherBox).not.toBeNull();
   const overlapsLauncher =
@@ -66,7 +67,7 @@ test("home quick diagnosis uses three answers for its path result", async ({ pag
   expect(overlapsLauncher).toBe(false);
 });
 
-test("landing -> diagnosis save -> admin lookup -> Agent question -> RAG consult", async ({ page, request }) => {
+test("landing -> diagnosis save -> admin lookup -> Agent question", async ({ page, request }) => {
   await page.goto("/ko");
   await expect(page.getByText("KAXI").first()).toBeVisible();
   await expect(page.getByText(/브로커 없이|Broker-free/i).first()).toBeVisible();
@@ -122,6 +123,16 @@ test("landing -> diagnosis save -> admin lookup -> Agent question -> RAG consult
   expect(String(agentData.answer || "").length).toBeGreaterThan(20);
   expect(Array.isArray(agentData.toolResults)).toBe(true);
 
+});
+
+test("RAG consult answers from the serving corpus (opt-in integration)", async ({ request }) => {
+  // The consult route is wired to the OpenAI+Supabase serving core by design
+  // (shared-openai-rag injects createRagQueryEmbedding), so it cannot run
+  // against the hermetic e2e server, whose Supabase config is a dummy. The
+  // live deploy canary (release:check:backend) asserts this same endpoint
+  // against every real deployment; run it here only when explicitly pointed
+  // at an environment with a real serving corpus.
+  test.skip(!process.env.E2E_RAG_CONSULT, "needs a real Supabase serving corpus; covered by the deploy canary");
   const consultResponse = await request.post("/api/ai/consult", {
     data: {
       lang: "ko",
@@ -176,4 +187,14 @@ test("KAXI Typebot bubble stays usable on mobile and is hidden on account routes
 
   await page.goto("/login");
   await expect(page.locator("typebot-bubble")).toHaveCount(0);
+});
+
+test("unauthenticated protected pages redirect at the proxy layer", async ({ page }) => {
+  for (const path of ["/admin", "/student", "/partner"]) {
+    await page.goto(path);
+    await expect(page).toHaveURL(/\/login$/);
+  }
+  // Login pages under protected prefixes must stay reachable (no loop).
+  const partnerLogin = await page.goto("/partner/login");
+  expect(partnerLogin?.status()).toBe(200);
 });

@@ -30,6 +30,12 @@ export default defineConfig({
       TEST_DATABASE_URL: e2eDatabaseUrl,
       ADMIN_API_KEY: "e2e-admin-key",
       CHAT_SESSION_SIGNING_SECRET: "e2e-chat-session-signing-secret-with-more-than-thirty-two-characters",
+      // Dummy Supabase public config so the proxy-layer auth middleware is
+      // constructible in CI (no .env.local there). Unauthenticated requests
+      // never hit the network: with no session cookie, getUser() resolves a
+      // null user locally, which is exactly the redirect path under test.
+      NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321",
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "e2e-supabase-anon-key",
       AGENT_BACKEND: "tool-fallback",
       ZAI_ENABLED: "false",
       AI_AGENT_RATE_LIMIT: "0",
