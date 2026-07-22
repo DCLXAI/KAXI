@@ -257,7 +257,13 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
                   selected={goalConfirmed && input.goal === option.value}
                   onSelect={() => {
                     setGoalConfirmed(true);
-                    onUpdate({ goal: option.value });
+                    // Leaving the in-Korea branch clears the sub-answer so a
+                    // stale currentVisa never rides along on a study-goal lead.
+                    onUpdate(
+                      option.value === "in_korea_job" || option.value === "in_korea_employment"
+                        ? { goal: option.value }
+                        : { goal: option.value, currentVisa: "" },
+                    );
                   }}
                 />
               ))}

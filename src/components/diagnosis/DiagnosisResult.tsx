@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { AlertTriangle, ArrowRight, CheckCircle2, Clock, FileText, Loader2, LogIn, Save } from "lucide-react";
 import { pickLang, recommendPath } from "@/lib/data/diagnosis";
-import { docsWorkspaceHref } from "@/lib/agent/meta";
 import type { Locale } from "@/i18n/routing";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -67,7 +66,9 @@ export function DiagnosisResult({
           </div>
           {(result.pathKey === "goal_in_korea_d10" || result.pathKey === "goal_in_korea_e7") && (
             <Button asChild className="gap-2 md:col-span-2">
-              <a href={docsWorkspaceHref(result.visaType)}>
+              {/* Inline on purpose: importing the agent meta barrel would pull
+                  agent-only modules into this client bundle. */}
+              <a href={result.visaType === "D-10" || result.visaType === "E-7" ? `/docs?track=${result.visaType}` : "/docs"}>
                 {t("diagnose_cta_docs_workspace")}
                 <ArrowRight className="h-4 w-4" />
               </a>
