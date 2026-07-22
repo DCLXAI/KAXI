@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import type { Lang } from "@/lib/i18n/translations";
 import { BookOpen, ExternalLink, ShieldCheck } from "lucide-react";
 
@@ -39,14 +40,31 @@ function sourceKind(source: SourceAnnotation, lang: Lang): string {
   return lang === "ko" ? "공식" : "Official";
 }
 
+function reviewStatusText(status: string, lang: Lang): string {
+  if (status === "approved") {
+    if (lang === "ko") return "검수 완료";
+    if (lang === "vi") return "Đã duyệt";
+    if (lang === "mn") return "Баталгаажсан";
+    return "Reviewed";
+  }
+  return lang === "ko" ? `검수 ${status}` : `review ${status}`;
+}
+
+function detailsLabelText(lang: Lang): string {
+  if (lang === "ko") return "출처 근거 자세히 보기";
+  if (lang === "vi") return "Xem chi tiết căn cứ nguồn";
+  if (lang === "mn") return "Эх сурвалжийн үндэслэлийг харах";
+  return "Show source evidence";
+}
+
 function checkedText(source: SourceAnnotation, lang: Lang): string | null {
   const checked = source.verifiedAt;
   const status = source.reviewStatus;
   if (!checked && !status) return null;
   if (lang === "ko") {
-    return [checked ? `확인일 ${checked}` : null, status ? `검수 ${status}` : null].filter(Boolean).join(" · ");
+    return [checked ? `확인일 ${checked}` : null, status ? reviewStatusText(status, lang) : null].filter(Boolean).join(" · ");
   }
-  return [checked ? `checked ${checked}` : null, status ? `review ${status}` : null].filter(Boolean).join(" · ");
+  return [checked ? `checked ${checked}` : null, status ? reviewStatusText(status, lang) : null].filter(Boolean).join(" · ");
 }
 
 function reviewAfterText(source: SourceAnnotation, lang: Lang): string | null {
@@ -104,6 +122,28 @@ export function SourceAnnotations({
   idPrefix?: string;
 }) {
   const visibleSources = visibleSourceList(sources, max);
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+
+  // Citation [n] links target anchors inside the collapsed <details>. Modern
+  // browsers auto-reveal hidden fragment targets, but older embedded WebViews
+  // silently no-op — so open the disclosure ourselves whenever the URL hash
+  // points at one of our source anchors.
+  useEffect(() => {
+    const reveal = () => {
+      const hash = window.location.hash.slice(1);
+      if (!hash || !idPrefix || !hash.startsWith(`${idPrefix.replace(/[^A-Za-z0-9_-]/g, "-")}-source-`)) return;
+      const target = document.getElementById(hash);
+      const container = detailsRef.current;
+      if (target && container && container.contains(target)) {
+        if (!container.open) container.open = true;
+        requestAnimationFrame(() => target.scrollIntoView({ block: "start", behavior: "smooth" }));
+      }
+    };
+    reveal();
+    window.addEventListener("hashchange", reveal);
+    return () => window.removeEventListener("hashchange", reveal);
+  }, [idPrefix]);
+
   if (visibleSources.length === 0) return null;
 
   return (
@@ -144,7 +184,11 @@ export function SourceAnnotations({
         })}
       </div>
 
-      <div className="space-y-2">
+      <details className="mt-2">
+        <summary className="cursor-pointer text-xs text-muted-foreground select-none">
+          {detailsLabelText(lang)}
+        </summary>
+        <div className="mt-2 space-y-2">
         {visibleSources.map((source, index) => {
           const url = source.url && !source.url.startsWith("internal://") ? source.url : null;
           const checked = checkedText(source, lang);
@@ -210,13 +254,13 @@ export function SourceAnnotations({
                 <div className="mt-2 flex items-center gap-1 text-[11px] text-muted-foreground">
                   <ShieldCheck className="h-3 w-3" />
                   {checked}
-                  {source.checkedBy ? ` · ${source.checkedBy}` : ""}
                 </div>
               )}
             </div>
           );
         })}
-      </div>
+        </div>
+      </details>
     </div>
   );
 }

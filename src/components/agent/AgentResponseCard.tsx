@@ -30,6 +30,11 @@ import { agentSourceAnnotations } from "./types";
 import { localePath } from "@/i18n/routing";
 import { unifiedRouteLabel } from "@/lib/ai/unified-router";
 
+const RETRIEVAL_BACKEND_LABELS: Record<string, { ko: string; vi: string; mn: string; en: string }> = {
+  "openai-pgvector": { ko: "공식 문서 검색", vi: "Tìm tài liệu chính thức", mn: "Албан баримт хайлт", en: "Document search" },
+  "legal-basis": { ko: "법령 근거", vi: "Căn cứ pháp luật", mn: "Хуулийн үндэслэл", en: "Legal basis" },
+};
+
 interface AgentResponseCardProps {
   clarifyDraft?: ClarifyDraft;
   loading: boolean;
@@ -114,17 +119,19 @@ export function AgentResponseCard({
         )}
         {message.meta?.quality.retrievalBackends && message.meta.quality.retrievalBackends.length > 0 && (
           <Badge
-            variant={message.meta.quality.retrievalBackends.includes("pgvector") ? "default" : "outline"}
+            variant={message.meta.quality.retrievalBackends.some((backend) => backend.includes("pgvector")) ? "default" : "outline"}
             className="text-[10px] gap-0.5"
           >
             <Database className="h-2.5 w-2.5" />
-            {message.meta.quality.retrievalBackends.join("/")}
+            {message.meta.quality.retrievalBackends
+              .map((backend) => RETRIEVAL_BACKEND_LABELS[backend]?.[locale] ?? backend)
+              .join("/")}
           </Badge>
         )}
         {message.grounded && (
           <Badge variant="outline" className="text-[10px] gap-0.5">
             <BookOpen className="h-2.5 w-2.5" />
-            Grounded
+            {locale === "ko" ? "공식 근거" : locale === "vi" ? "Có căn cứ" : locale === "mn" ? "Баримттай" : "Grounded"}
           </Badge>
         )}
         {message.meta?.quality.answerSource === "official-summary" && (
