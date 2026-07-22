@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
   ArrowUpRight,
+  Briefcase,
   Building2,
   Check,
   CheckCircle2,
@@ -153,6 +154,7 @@ const STAGE_ICONS = {
   admission: Building2,
   visa: Landmark,
   arrival: Plane,
+  post_graduation: Briefcase,
 } satisfies Record<DocumentStage, typeof GraduationCap>;
 
 const COMPLETE_STATUSES = new Set(["APPROVED", "OCR_DONE"]);
