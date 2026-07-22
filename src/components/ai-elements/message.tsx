@@ -323,6 +323,26 @@ export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
 const streamdownPlugins = { cjk, code, math, mermaid };
 
+// Answers quote official documents whose markdown headings would otherwise
+// render at page scale inside a chat bubble. Chat-scale sizes, semantic tags
+// kept for accessibility. Callers can still override via the props spread.
+const chatHeading = (Tag: "h1" | "h2" | "h3" | "h4" | "h5" | "h6", className: string) => {
+  const Heading = ({ node: _node, ...props }: ComponentProps<typeof Tag> & { node?: unknown }) => (
+    <Tag {...props} className={className} />
+  );
+  Heading.displayName = `Chat${Tag.toUpperCase()}`;
+  return Heading;
+};
+
+const CHAT_MARKDOWN_COMPONENTS: MessageResponseProps["components"] = {
+  h1: chatHeading("h2", "mt-4 mb-2 text-base font-semibold"),
+  h2: chatHeading("h2", "mt-4 mb-2 text-base font-semibold"),
+  h3: chatHeading("h3", "mt-3 mb-1.5 text-sm font-semibold"),
+  h4: chatHeading("h4", "mt-3 mb-1.5 text-sm font-semibold"),
+  h5: chatHeading("h5", "mt-2 mb-1 text-sm font-medium"),
+  h6: chatHeading("h6", "mt-2 mb-1 text-sm font-medium"),
+};
+
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps) => (
     <Streamdown
@@ -331,6 +351,7 @@ export const MessageResponse = memo(
         className
       )}
       plugins={streamdownPlugins}
+      components={CHAT_MARKDOWN_COMPONENTS}
       {...props}
     />
   ),

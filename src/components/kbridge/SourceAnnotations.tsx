@@ -39,14 +39,31 @@ function sourceKind(source: SourceAnnotation, lang: Lang): string {
   return lang === "ko" ? "공식" : "Official";
 }
 
+function reviewStatusText(status: string, lang: Lang): string {
+  if (status === "approved") {
+    if (lang === "ko") return "검수 완료";
+    if (lang === "vi") return "Đã duyệt";
+    if (lang === "mn") return "Баталгаажсан";
+    return "Reviewed";
+  }
+  return lang === "ko" ? `검수 ${status}` : `review ${status}`;
+}
+
+function detailsLabelText(lang: Lang): string {
+  if (lang === "ko") return "출처 근거 자세히 보기";
+  if (lang === "vi") return "Xem chi tiết căn cứ nguồn";
+  if (lang === "mn") return "Эх сурвалжийн үндэслэлийг харах";
+  return "Show source evidence";
+}
+
 function checkedText(source: SourceAnnotation, lang: Lang): string | null {
   const checked = source.verifiedAt;
   const status = source.reviewStatus;
   if (!checked && !status) return null;
   if (lang === "ko") {
-    return [checked ? `확인일 ${checked}` : null, status ? `검수 ${status}` : null].filter(Boolean).join(" · ");
+    return [checked ? `확인일 ${checked}` : null, status ? reviewStatusText(status, lang) : null].filter(Boolean).join(" · ");
   }
-  return [checked ? `checked ${checked}` : null, status ? `review ${status}` : null].filter(Boolean).join(" · ");
+  return [checked ? `checked ${checked}` : null, status ? reviewStatusText(status, lang) : null].filter(Boolean).join(" · ");
 }
 
 function reviewAfterText(source: SourceAnnotation, lang: Lang): string | null {
@@ -144,7 +161,11 @@ export function SourceAnnotations({
         })}
       </div>
 
-      <div className="space-y-2">
+      <details className="mt-2 group">
+        <summary className="cursor-pointer text-xs text-muted-foreground select-none">
+          {detailsLabelText(lang)}
+        </summary>
+        <div className="mt-2 space-y-2">
         {visibleSources.map((source, index) => {
           const url = source.url && !source.url.startsWith("internal://") ? source.url : null;
           const checked = checkedText(source, lang);
@@ -210,13 +231,13 @@ export function SourceAnnotations({
                 <div className="mt-2 flex items-center gap-1 text-[11px] text-muted-foreground">
                   <ShieldCheck className="h-3 w-3" />
                   {checked}
-                  {source.checkedBy ? ` · ${source.checkedBy}` : ""}
                 </div>
               )}
             </div>
           );
         })}
-      </div>
+        </div>
+      </details>
     </div>
   );
 }
