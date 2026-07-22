@@ -125,12 +125,22 @@ export function normalizeExpertResponse(
     prompt,
   }));
   if (decision.mode === "documents") {
-    const trackMatch = question.match(/d\s*-?\s*(2|4)/i);
+    // Detection order matters: D-10 must win before the D-(2|4) digit match so
+    // that "D-10" never collapses to a study-visa track. E-7 is recognized next.
+    let track: string | undefined;
+    if (/d\s*-?\s*10/i.test(question)) {
+      track = "D-10";
+    } else if (/e\s*-?\s*7/i.test(question)) {
+      track = "E-7";
+    } else {
+      const trackMatch = question.match(/d\s*-?\s*(2|4)/i);
+      if (trackMatch) track = `D-${trackMatch[1]}`;
+    }
     suggestions.unshift({
       kind: "documents" as const,
       label: DOCS_WORKSPACE_CTA_LABELS[lang],
       prompt: "",
-      href: docsWorkspaceHref(trackMatch ? `D-${trackMatch[1]}` : undefined),
+      href: docsWorkspaceHref(track),
     });
   }
 

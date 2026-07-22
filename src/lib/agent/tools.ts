@@ -10,6 +10,16 @@ import { findSchoolById, listSchools } from "../schools/repository";
 import { createPartnerRequest } from "../partners/repository";
 import { redactSensitiveText } from "../privacy/pii";
 import { evaluateVisaRulesWithDbFallback } from "../rules/visa-rule-engine";
+import { VISA_DOCUMENT_REQUIREMENT_SEEDS } from "../documents/visa-document-matrix";
+
+// D-10/E-7 have no approved executable compliance rule version
+// (complianceCoverage, src/lib/data/diagnosis.ts:355-363). Per the binding honesty
+// posture the get_documents tool must NEVER emit a rule-engine verdict for them:
+// it returns the static HiKorea-derived seed checklist plus this caveat. get_documents
+// does not localize its document output today (it emits ko rule-engine labels regardless
+// of ctx.lang), so this caveat follows that same ko-only convention.
+const NO_EXECUTABLE_RULE_CAVEAT_KO =
+  "실행형 판정 규칙이 없는 자격입니다. 공식 안내 기준 체크리스트이며 행정사 검토를 권장합니다.";
 
 // 도구 호출 결과 (UI에서 시각화)
 export type ToolArgs = Record<string, unknown>;
@@ -244,7 +254,7 @@ const getDocumentsTool: Tool = {
       visa_type: {
         type: "string",
         description: "비자 종류",
-        enum: ["D-2", "D-4"],
+        enum: ["D-2", "D-4", "D-10", "E-7"],
       },
       nationality: {
         type: "string",
@@ -255,8 +265,37 @@ const getDocumentsTool: Tool = {
     required: ["visa_type"],
   },
   execute: async (args) => {
-    const visaType = enumArg(args, "visa_type", ["D-2", "D-4"] as const, "D-2");
+    const visaType = enumArg(args, "visa_type", ["D-2", "D-4", "D-10", "E-7"] as const, "D-2");
     const nationality = stringArg(args, "nationality");
+
+    // Honesty rule: D-10/E-7 carry no approved executable compliance rule version,
+    // so we never run the rule engine or expose a verdict for them. Return the static
+    // HiKorea-derived seed checklist (VISA_DOCUMENT_REQUIREMENT_SEEDS) plus the caveat.
+    if (visaType === "D-10" || visaType === "E-7") {
+      const checklist = VISA_DOCUMENT_REQUIREMENT_SEEDS
+        .filter((seed) => seed.visaType === visaType)
+        .map((seed) => ({
+          id: seed.code,
+          doc: seed.labelKo,
+          required: seed.required,
+          note: seed.notes,
+          source_refs: seed.sourceRefs,
+        }));
+      return {
+        result: {
+          visa_type: visaType,
+          nationality: nationality || undefined,
+          documents: checklist,
+          coverage: {
+            status: "rag_only",
+            policy: "no approved executable compliance rule version",
+            caveat: NO_EXECUTABLE_RULE_CAVEAT_KO,
+          },
+        },
+        summary: `${visaType} 비자 서류 ${checklist.length}종 (실행형 판정 규칙 없음 · 공식 안내 기준)${nationality ? ` (국적: ${nationality.toUpperCase()})` : ""}`,
+      };
+    }
+
     const evaluation = await evaluateVisaRulesWithDbFallback({
       visa_type: visaType,
       nationality: nationality || undefined,

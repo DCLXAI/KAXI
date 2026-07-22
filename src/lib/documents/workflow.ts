@@ -1,7 +1,7 @@
 import type { TranslationKey } from "@/lib/i18n/translations";
 
-export type DocumentTrack = "D-2" | "D-4";
-export type DocumentStage = "school" | "admission" | "visa" | "arrival";
+export type DocumentTrack = "D-2" | "D-4" | "D-10" | "E-7";
+export type DocumentStage = "school" | "admission" | "visa" | "arrival" | "post_graduation";
 export type DocumentRequirement = "required" | "conditional" | "result";
 
 export interface DocumentWorkflowStage {
@@ -61,6 +61,15 @@ export const DOCUMENT_WORKFLOW_STAGES: readonly DocumentWorkflowStage[] = [
     sourceName: "Study in Korea",
     sourceUrl: "https://was2.studyinkorea.go.kr/ko/life/residenceAndStayInfo.do",
     checkedAt: "2026-07-11",
+  },
+  {
+    id: "post_graduation",
+    titleKey: "docs_stage_post_grad_title",
+    descriptionKey: "docs_stage_post_grad_desc",
+    sourceName: "하이코리아(HiKorea)",
+    sourceUrl:
+      "https://www.hikorea.go.kr/board/BoardNtcDetailR.pt?BBS_GB_CD=BS10&BBS_SEQ=1&NTCCTT_SEQ=1062&page=1",
+    checkedAt: "2026-07-02",
   },
 ] as const;
 
@@ -235,6 +244,70 @@ export const DOCUMENT_WORKFLOW_ITEMS: readonly DocumentWorkflowItem[] = [
     issuerKey: "docs_issuer_immigration",
     hintKey: "docs_hint_result",
     uses: [{ stage: "arrival", tracks: BOTH_TRACKS, requirement: "result" }],
+  },
+  // Post-graduation D-10/E-7 items mirror the visa-document-matrix seeds d10_change_*/e7_change_*.
+  {
+    type: "d10_integrated_application",
+    labelKey: "docs_doc_d10_integrated_application",
+    issuerKey: "docs_issuer_d10_integrated_application",
+    hintKey: "docs_hint_d10_integrated_application",
+    uses: [{ stage: "post_graduation", tracks: ["D-10"], requirement: "required" }],
+  },
+  {
+    type: "d10_graduation_certificate",
+    labelKey: "docs_doc_d10_graduation_certificate",
+    issuerKey: "docs_issuer_d10_graduation_certificate",
+    hintKey: "docs_hint_d10_graduation_certificate",
+    uses: [{ stage: "post_graduation", tracks: ["D-10"], requirement: "required" }],
+  },
+  {
+    type: "d10_job_seeking_plan",
+    labelKey: "docs_doc_d10_job_seeking_plan",
+    issuerKey: "docs_issuer_d10_job_seeking_plan",
+    hintKey: "docs_hint_d10_job_seeking_plan",
+    uses: [{ stage: "post_graduation", tracks: ["D-10"], requirement: "required" }],
+  },
+  {
+    type: "d10_financial_proof",
+    labelKey: "docs_doc_d10_financial_proof",
+    issuerKey: "docs_issuer_d10_financial_proof",
+    hintKey: "docs_hint_d10_financial_proof",
+    uses: [{ stage: "post_graduation", tracks: ["D-10"], requirement: "required" }],
+  },
+  {
+    type: "d10_residence_proof",
+    labelKey: "docs_doc_d10_residence_proof",
+    issuerKey: "docs_issuer_d10_residence_proof",
+    hintKey: "docs_hint_d10_residence_proof",
+    uses: [{ stage: "post_graduation", tracks: ["D-10"], requirement: "required" }],
+  },
+  {
+    type: "e7_employment_contract",
+    labelKey: "docs_doc_e7_employment_contract",
+    issuerKey: "docs_issuer_e7_employment_contract",
+    hintKey: "docs_hint_e7_employment_contract",
+    uses: [{ stage: "post_graduation", tracks: ["E-7"], requirement: "required" }],
+  },
+  {
+    type: "e7_business_registration",
+    labelKey: "docs_doc_e7_business_registration",
+    issuerKey: "docs_issuer_e7_business_registration",
+    hintKey: "docs_hint_e7_business_registration",
+    uses: [{ stage: "post_graduation", tracks: ["E-7"], requirement: "required" }],
+  },
+  {
+    type: "e7_job_description",
+    labelKey: "docs_doc_e7_job_description",
+    issuerKey: "docs_issuer_e7_job_description",
+    hintKey: "docs_hint_e7_job_description",
+    uses: [{ stage: "post_graduation", tracks: ["E-7"], requirement: "required" }],
+  },
+  {
+    type: "e7_degree_or_career",
+    labelKey: "docs_doc_e7_degree_or_career",
+    issuerKey: "docs_issuer_e7_degree_or_career",
+    hintKey: "docs_hint_e7_degree_or_career",
+    uses: [{ stage: "post_graduation", tracks: ["E-7"], requirement: "required" }],
   },
 ] as const;
 

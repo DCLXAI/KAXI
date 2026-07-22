@@ -10,6 +10,7 @@ import {
 } from "../src/lib/data/quick-diagnosis";
 import { normalizeExpertResponse } from "../src/app/api/ai/unified/route";
 import { buildAgentMeta, docsWorkspaceHref, DOCS_WORKSPACE_CTA_LABELS } from "../src/lib/agent/meta";
+import { TOOL_MAP } from "../src/lib/agent/tools";
 
 assert.deepEqual(
   decideUnifiedAiRoute("서울 인증대학 3곳 찾아서 비용을 계산해줘"),
@@ -136,6 +137,24 @@ const documentsWithoutTrackNormalized = normalizeExpertResponse(
 );
 assert.equal(documentsWithoutTrackNormalized.meta.suggestions[0]?.href, "/docs", "a visa-code-free documents question must fall back to the general docs workspace");
 
+const documentsD10Normalized = normalizeExpertResponse(
+  { answer: "서류 안내", backend: "kimi" },
+  documentsDecision,
+  "ko",
+  "D-10 비자로 바꾸려면 서류 뭐가 필요해?",
+  120,
+);
+assert.equal(documentsD10Normalized.meta.suggestions[0]?.href, "/docs?track=D-10", "a D-10 documents question must route to the D-10 lifecycle track");
+
+const documentsE7Normalized = normalizeExpertResponse(
+  { answer: "서류 안내", backend: "kimi" },
+  documentsDecision,
+  "ko",
+  "E-7 취업 비자로 바꾸려면 어떤 서류가 필요한가요?",
+  120,
+);
+assert.equal(documentsE7Normalized.meta.suggestions[0]?.href, "/docs?track=E-7", "an E-7 documents question must route to the E-7 lifecycle track");
+
 assert.equal(
   llmNormalized.meta.suggestions.some((item) => item.href),
   false,
@@ -143,6 +162,8 @@ assert.equal(
 );
 
 assert.equal(docsWorkspaceHref("D-2"), "/docs?track=D-2", "docsWorkspaceHref must pin D-2 to its own track");
+assert.equal(docsWorkspaceHref("D-10"), "/docs?track=D-10", "docsWorkspaceHref must pin D-10 to its lifecycle track");
+assert.equal(docsWorkspaceHref("E-7"), "/docs?track=E-7", "docsWorkspaceHref must pin E-7 to its lifecycle track");
 assert.equal(docsWorkspaceHref("D-9"), "/docs", "docsWorkspaceHref must fall back for unsupported tracks");
 assert.equal(docsWorkspaceHref(undefined), "/docs", "docsWorkspaceHref must fall back when no track is known");
 
@@ -203,6 +224,34 @@ for (const scenario of [
     `quick diagnosis must use real answers for ${JSON.stringify(scenario)}`,
   );
 }
+// DB-free seam: get_documents' D-10/E-7 path reads only the static
+// VISA_DOCUMENT_REQUIREMENT_SEEDS and never touches the rule engine or DB, so it
+// can be exercised directly here. The honesty rule is asserted: seed-derived
+// checklist + caveat, and NO rule-engine verdict (no rule_meta / applied_rule_ids).
+const getDocuments = TOOL_MAP["get_documents"];
+const d10Documents = await getDocuments.execute({ visa_type: "D-10" }, { lang: "ko" });
+const d10Result = d10Documents.result as Record<string, unknown>;
+assert.equal(d10Result.visa_type, "D-10", "get_documents must echo the D-10 track");
+assert.ok(Array.isArray(d10Result.documents) && (d10Result.documents as unknown[]).length === 5, "D-10 must return the 5 seed-derived checklist items");
+assert.equal("rule_meta" in d10Result, false, "D-10 must NOT emit a rule-engine verdict (no rule_meta)");
+assert.equal(
+  (d10Result.coverage as Record<string, unknown>)?.caveat,
+  "실행형 판정 규칙이 없는 자격입니다. 공식 안내 기준 체크리스트이며 행정사 검토를 권장합니다.",
+  "D-10 must carry the no-executable-rule caveat",
+);
+assert.equal((d10Result.coverage as Record<string, unknown>)?.status, "rag_only", "D-10 coverage must be rag_only, not rule_engine");
+
+const e7Documents = await getDocuments.execute({ visa_type: "E-7" }, { lang: "ko" });
+const e7Result = e7Documents.result as Record<string, unknown>;
+assert.equal(e7Result.visa_type, "E-7", "get_documents must echo the E-7 track");
+assert.ok(Array.isArray(e7Result.documents) && (e7Result.documents as unknown[]).length === 4, "E-7 must return the 4 seed-derived checklist items");
+assert.equal("rule_meta" in e7Result, false, "E-7 must NOT emit a rule-engine verdict (no rule_meta)");
+assert.equal(
+  (e7Result.coverage as Record<string, unknown>)?.caveat,
+  "실행형 판정 규칙이 없는 자격입니다. 공식 안내 기준 체크리스트이며 행정사 검토를 권장합니다.",
+  "E-7 must carry the no-executable-rule caveat",
+);
+
 const consultFrontendFiles = existsSync("src/components/consult")
   ? readdirSync("src/components/consult")
   : [];
