@@ -150,6 +150,11 @@ function compactSourceLabel(label: string): string {
   if (/국가법령|법제처/i.test(label)) return "국가법령정보센터";
   if (/topik|국립국제교육원/i.test(label)) return "국립국제교육원/TOPIK";
   if (/kaxi/i.test(label)) return "KAXI";
+  // Some docs carry the sourceType enum instead of an org name — never show
+  // the raw literal to users.
+  if (label === "official_government") return "정부 공식";
+  if (label === "official_law") return "법령";
+  if (/^internal_/.test(label)) return "KAXI";
   return label;
 }
 

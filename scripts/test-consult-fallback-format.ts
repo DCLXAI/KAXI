@@ -40,3 +40,15 @@ assert.ok(!answer.includes("📚"), "in-answer source list removed");
 assert.ok(answer.includes("이 안내는 공식 출처 기준입니다."), "sourceNotice footer stays");
 
 console.log("PASS consult fallback format: clean sections, localized sources, no duplicate list");
+
+// The sourceNotice footer builder must never surface sourceType enum
+// literals either (walkthrough evidence: "법무부 / official_government 출처").
+const { buildRagBasisNoticeFromMetadata } = await import("../src/lib/data/knowledge");
+const notice = buildRagBasisNoticeFromMetadata("ko", [
+  { source_label: "official_government", last_checked_at: "2026-07-01", owner: "official" },
+  { source_label: "법무부 출입국·외국인정책본부", last_checked_at: "2026-07-02", owner: "official" },
+] as never[]);
+assert.ok(!notice.includes("official_government"), "footer must not leak the enum literal");
+assert.ok(notice.includes("정부 공식"), "footer localizes the enum to a display label");
+assert.ok(notice.includes("법무부"), "org-name labels keep working");
+console.log("PASS consult fallback format: source notice enum labels");
