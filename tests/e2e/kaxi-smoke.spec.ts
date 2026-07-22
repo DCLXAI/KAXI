@@ -198,3 +198,11 @@ test("unauthenticated protected pages redirect at the proxy layer", async ({ pag
   const partnerLogin = await page.goto("/partner/login");
   expect(partnerLogin?.status()).toBe(200);
 });
+
+test("docs workspace honors the track deep link for anonymous visitors", async ({ page }) => {
+  await page.goto("/ko/docs?track=D-4");
+  await expect(page).toHaveURL(/\/ko\/docs\?track=D-4$/);
+  // Anonymous visitors keep the student-login banner; the page must not crash
+  // and the deep link must survive the i18n proxy.
+  await expect(page.getByText(/로그인/).first()).toBeVisible();
+});

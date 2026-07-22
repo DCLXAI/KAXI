@@ -112,6 +112,7 @@ export interface AgentSuggestion {
   kind: "school" | "cost" | "documents" | "partner" | "followup";
   label: string;
   prompt: string;
+  href?: string;
 }
 
 export interface AgentClarifyingQuestion {

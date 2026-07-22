@@ -286,18 +286,29 @@ export function AgentResponseCard({
             {locale === "ko" ? "다음 작업" : "Next"}
           </div>
           <div className="flex flex-wrap gap-2">
-            {message.meta.suggestions.map((suggestion) => (
-              <button
-                key={`${suggestion.kind}-${suggestion.label}`}
-                type="button"
-                disabled={loading}
-                onClick={() => onSend(suggestion.prompt)}
-                className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-icon-accent/55 bg-background px-2.5 py-1.5 text-left text-xs hover:border-icon-accent hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <ArrowRight className="h-3 w-3 text-icon-accent" />
-                <span className="font-medium">{suggestion.label}</span>
-              </button>
-            ))}
+            {message.meta.suggestions.map((suggestion) =>
+              suggestion.href ? (
+                <a
+                  key={`${suggestion.kind}-${suggestion.label}`}
+                  href={suggestion.href}
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-icon-accent/55 bg-background px-2.5 py-1.5 text-left text-xs hover:border-icon-accent hover:bg-muted"
+                >
+                  <ArrowRight className="h-3 w-3 text-icon-accent" />
+                  <span className="font-medium">{suggestion.label}</span>
+                </a>
+              ) : (
+                <button
+                  key={`${suggestion.kind}-${suggestion.label}`}
+                  type="button"
+                  disabled={loading}
+                  onClick={() => onSend(suggestion.prompt)}
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-icon-accent/55 bg-background px-2.5 py-1.5 text-left text-xs hover:border-icon-accent hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <ArrowRight className="h-3 w-3 text-icon-accent" />
+                  <span className="font-medium">{suggestion.label}</span>
+                </button>
+              )
+            )}
           </div>
         </div>
       )}
