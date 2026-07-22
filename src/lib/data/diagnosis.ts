@@ -3,14 +3,15 @@ import type { Lang } from "../i18n/translations";
 import type { VisaRuleEvaluation } from "../rules/visa-rules";
 import { calculateReadinessScore, type CalculateReadinessInput, type ReadinessScore } from "./readiness";
 
-export type DiagnosisVisaType = "D-2" | "D-4" | "D-10";
+export type DiagnosisVisaType = "D-2" | "D-4" | "D-10" | "E-7";
 
 export interface DiagnosisInput {
   nationality: string;
   age: string;
   education: "highschool" | "college" | "university" | "master";
   korean: "none" | "topik1" | "topik2" | "topik3";
-  goal: "language" | "degree" | "transfer" | "career" | "unsure";
+  goal: "language" | "degree" | "transfer" | "career" | "unsure" | "in_korea_job" | "in_korea_employment";
+  currentVisa?: "D-2" | "D-4" | "";
   budget: number;
   region: string;
   usingBroker: boolean;
@@ -111,9 +112,42 @@ const PATH_PROFILES: Record<string, PathProfile> = {
     docs: ["docs_doc_passport", "docs_doc_photo", "docs_doc_diploma", "docs_doc_transcript", "docs_doc_finance", "docs_doc_plan"],
     sourceRefs: ["internal:diagnosis-profile-career", "knowledge:visa-documents", "knowledge:hikorea-d2-d4-d10-e7-f2-f5-requirements", "knowledge:visa-portal-visa-types"],
   },
+  // In-Korea post-graduation job-seeking track. Application-cost scale (not study-cost):
+  // baseCost/basePrepMonths reflect a status-change filing, not tuition. The result copy
+  // reuses goal_career's generic estimatedCost display, which never frames the number as tuition.
+  goal_in_korea_d10: {
+    pathKey: "goal_in_korea_d10",
+    visaType: "D-10",
+    basePrepMonths: 1,
+    baseCost: 1_500_000,
+    docs: [
+      "docs_doc_d10_integrated_application",
+      "docs_doc_d10_graduation_certificate",
+      "docs_doc_d10_job_seeking_plan",
+      "docs_doc_d10_financial_proof",
+      "docs_doc_d10_residence_proof",
+    ],
+    sourceRefs: ["internal:diagnosis-profile-in-korea-d10", "knowledge:visa-documents", "knowledge:hikorea-d2-d4-d10-e7-f2-f5-requirements", "knowledge:visa-portal-visa-types"],
+  },
+  // In-Korea E-7 change-of-status after a confirmed job offer. Application-cost scale.
+  goal_in_korea_e7: {
+    pathKey: "goal_in_korea_e7",
+    visaType: "E-7",
+    basePrepMonths: 2,
+    baseCost: 1_000_000,
+    docs: [
+      "docs_doc_e7_employment_contract",
+      "docs_doc_e7_business_registration",
+      "docs_doc_e7_job_description",
+      "docs_doc_e7_degree_or_career",
+    ],
+    sourceRefs: ["internal:diagnosis-profile-in-korea-e7", "knowledge:hikorea-d2-d4-d10-e7-f2-f5-requirements", "knowledge:moj-e7-wage-requirement-2026"],
+  },
 };
 
 function selectPathProfile(input: DiagnosisInput): PathProfile {
+  if (input.goal === "in_korea_job") return PATH_PROFILES.goal_in_korea_d10;
+  if (input.goal === "in_korea_employment") return PATH_PROFILES.goal_in_korea_e7;
   if (input.goal === "degree") return PATH_PROFILES.goal_degree;
   if (input.goal === "transfer") return PATH_PROFILES.goal_transfer;
   if (input.goal === "career") return PATH_PROFILES.goal_career;
@@ -246,6 +280,17 @@ const DIAGNOSIS_RULES: DiagnosisRule[] = [
     }),
   },
   {
+    id: "policy:e7-rag-only-compliance",
+    applies: (_input, profile) => profile.visaType === "E-7",
+    riskDelta: 1,
+    warning: () => ({
+      ko: "E-7 취업 전환 경로는 현재 KAXI compliance rule engine의 실행 대상이 아닙니다. 법령·하이코리아 RAG 근거로 일반 원칙만 확인하고, 고용계약·직무 적합성·현재 체류자격은 행정사 검토가 필요합니다. 임금 요건은 연도별 고시 확인이 필요합니다.",
+      vi: "Lộ trình chuyển sang E-7 hiện chưa được chạy bằng compliance rule engine của KAXI. Chỉ dùng căn cứ luật/HiKorea RAG cho nguyên tắc chung; hợp đồng lao động, tính phù hợp công việc và tình trạng lưu trú hiện tại cần chuyên gia hành chính rà soát. Yêu cầu tiền lương phải kiểm tra theo thông báo hằng năm.",
+      mn: "E-7 ажилд шилжих зам одоогоор KAXI compliance rule engine-д хамрагдаагүй. Хууль болон HiKorea RAG эх сурвалжаар ерөнхий зарчмыг шалгаж, хөдөлмөрийн гэрээ, ажлын тохироо, одоогийн оршин суух ангиллыг мэргэжлийн хүнээр шалгуулна. Цалингийн шаардлагыг жил бүрийн зарлигаар шалгах шаардлагатай.",
+      en: "The E-7 employment-change path is not yet executable in the KAXI compliance rule engine. Use law/HiKorea RAG only for general principles, and route employment-contract, job-suitability, and current-status facts to administrative-scrivener review. The wage requirement must be checked against the annual official notice.",
+    }),
+  },
+  {
     id: "rule:combined-low-korean-high-budget-risk",
     applies: (input, profile) =>
       profile.visaType === "D-2" &&
@@ -303,6 +348,7 @@ function confidenceFor(
   if (visaRuleEvaluation?.missing_inputs.length) return "medium";
   if (input.goal === "unsure") return "medium";
   if (appliedRules.includes("policy:d10-rag-only-compliance")) return "medium";
+  if (appliedRules.includes("policy:e7-rag-only-compliance")) return "medium";
   if (input.nationality === "other" || !input.budget || appliedRules.includes("rule:budget-gap")) return "medium";
   return "high";
 }
@@ -359,6 +405,16 @@ function complianceCoverage(
       policy: "D-10 is currently covered by law-first RAG and source references only; no approved executable compliance rule version is applied yet.",
       sourceRefs: ["hikorea-d2-d4-d10-e7-f2-f5-requirements", "visa-portal-visa-types"],
       unsupportedReason: "d10_compliance_rule_engine_not_implemented",
+    };
+  }
+
+  if (visaType === "E-7") {
+    return {
+      status: "rag_only",
+      visaType,
+      policy: "E-7 is currently covered by law-first RAG and source references only; no approved executable compliance rule version is applied yet.",
+      sourceRefs: ["hikorea-d2-d4-d10-e7-f2-f5-requirements", "moj-e7-wage-requirement-2026"],
+      unsupportedReason: "e7_compliance_rule_engine_not_implemented",
     };
   }
 

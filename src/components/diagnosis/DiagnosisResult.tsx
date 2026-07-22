@@ -64,6 +64,16 @@ export function DiagnosisResult({
               <div className="font-medium mt-1">{result.estimatedCost.toLocaleString()} KRW</div>
             </div>
           </div>
+          {(result.pathKey === "goal_in_korea_d10" || result.pathKey === "goal_in_korea_e7") && (
+            <Button asChild className="gap-2 md:col-span-2">
+              {/* Inline on purpose: importing the agent meta barrel would pull
+                  agent-only modules into this client bundle. */}
+              <a href={result.visaType === "D-10" || result.visaType === "E-7" ? `/docs?track=${result.visaType}` : "/docs"}>
+                {t("diagnose_cta_docs_workspace")}
+                <ArrowRight className="h-4 w-4" />
+              </a>
+            </Button>
+          )}
         </CardContent>
       </Card>
 

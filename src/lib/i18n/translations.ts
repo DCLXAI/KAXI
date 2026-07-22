@@ -110,6 +110,9 @@ export const t = {
   goal_transfer: { ko: "D-2 편입/대학원", vi: "D-2 Chuyển tiếp/Thạc sĩ", mn: "D-2 Шилжих/Магистр", en: "D-2 Transfer/Graduate" },
   goal_career: { ko: "요양보호사·직업계열", vi: "Chứng chỉ nghề", mn: "Мэргэжлийн сертификат", en: "Vocational/career" },
   goal_unsure: { ko: "잘 모름", vi: "Chưa rõ", mn: "Мэдэхгүй", en: "Not sure" },
+  // In-Korea post-graduation path labels. vi/mn are drafts pending native review.
+  goal_in_korea_d10: { ko: "졸업 후 구직(D-10) 준비", vi: "Chuẩn bị visa tìm việc (D-10) sau tốt nghiệp", mn: "Төгссөний дараах ажил хайх (D-10) бэлтгэл", en: "Post-graduation job-seeking (D-10)" },
+  goal_in_korea_e7: { ko: "취업 확정 후 E-7 전환", vi: "Chuyển sang E-7 sau khi có việc làm", mn: "Ажилд орсны дараа E-7 руу шилжих", en: "Switch to E-7 after a job offer" },
 
   region_seoul: { ko: "서울", vi: "Seoul", mn: "Сеул", en: "Seoul" },
   region_gyeonggi: { ko: "경기", vi: "Gyeonggi", mn: "Кёнги", en: "Gyeonggi" },

@@ -358,6 +358,7 @@ model DiagnosisLead {
   education   String // highschool, college, university, master
   koreanLevel String // none, topik1, topik2, topik3
   goal        String // language, degree, transfer, career, unsure
+  currentVisa String? // D-2, D-4, "" (in-Korea diagnosis paths only)
   budget      Int // KRW
   region      String // seoul, gyeonggi, ...
   usingBroker Boolean @default(false)

@@ -8,7 +8,7 @@ import { parseJsonBody } from "@/lib/api/validation";
 
 const EDUCATION_VALUES = ["highschool", "college", "university", "master"] as const;
 const KOREAN_VALUES = ["none", "topik1", "topik2", "topik3"] as const;
-const GOAL_VALUES = ["language", "degree", "transfer", "career", "unsure"] as const;
+const GOAL_VALUES = ["language", "degree", "transfer", "career", "unsure", "in_korea_job", "in_korea_employment"] as const;
 const REGION_VALUES = ["any", "seoul", "gyeonggi", "busan", "daegu", "gwangju", "other"] as const;
 
 // The following preprocessors reproduce the exact fallback/coercion behaviour

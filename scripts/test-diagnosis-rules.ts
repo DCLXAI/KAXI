@@ -267,6 +267,81 @@ function testD10CareerPathDeclaresRagOnlyCompliancePolicy() {
   assert(/D-10|rule engine|RAG/.test(JSON.stringify(result.warnings)), `D-10 warning should explain coverage limit: ${JSON.stringify(result.warnings)}`);
 }
 
+function testInKoreaD10PathDeclaresRagOnlyCompliancePolicy() {
+  const result = recommendPath({
+    ...base,
+    nationality: "other",
+    goal: "in_korea_job",
+    korean: "topik3",
+    budget: 20_000_000,
+  });
+
+  assert(result.pathKey === "goal_in_korea_d10", `in_korea_job goal should select the D-10 in-Korea path: ${JSON.stringify(result)}`);
+  assert(result.visaType === "D-10", `in-Korea D-10 path should expose D-10 visa type: ${JSON.stringify(result)}`);
+  assert(
+    JSON.stringify(result.requiredDocs) ===
+      JSON.stringify([
+        "docs_doc_d10_integrated_application",
+        "docs_doc_d10_graduation_certificate",
+        "docs_doc_d10_job_seeking_plan",
+        "docs_doc_d10_financial_proof",
+        "docs_doc_d10_residence_proof",
+      ]),
+    `in-Korea D-10 path should expose the exact Phase-A d10 doc keys: ${JSON.stringify(result.requiredDocs)}`
+  );
+  assert(
+    result.complianceCoverage.status === "rag_only" &&
+      result.complianceCoverage.unsupportedReason === "d10_compliance_rule_engine_not_implemented",
+    `in-Korea D-10 path should declare RAG-only compliance coverage: ${JSON.stringify(result.complianceCoverage)}`
+  );
+  assert(
+    result.appliedRules.includes("policy:d10-rag-only-compliance"),
+    `in-Korea D-10 path should record the explicit coverage policy: ${JSON.stringify(result.appliedRules)}`
+  );
+  assert(result.confidence === "medium", `in-Korea D-10 RAG-only policy should avoid high confidence: ${JSON.stringify(result)}`);
+  assert(result.estimatedCost === 1_500_000, `in-Korea D-10 base cost should be the application-scale 1.5M: ${JSON.stringify(result)}`);
+  assertSourceRefsExist(result);
+}
+
+function testInKoreaE7PathDeclaresRagOnlyCompliancePolicy() {
+  const result = recommendPath({
+    ...base,
+    nationality: "other",
+    goal: "in_korea_employment",
+    korean: "topik3",
+    budget: 20_000_000,
+  });
+
+  assert(result.pathKey === "goal_in_korea_e7", `in_korea_employment goal should select the E-7 in-Korea path: ${JSON.stringify(result)}`);
+  assert(result.visaType === "E-7", `in-Korea E-7 path should expose E-7 visa type: ${JSON.stringify(result)}`);
+  assert(
+    JSON.stringify(result.requiredDocs) ===
+      JSON.stringify([
+        "docs_doc_e7_employment_contract",
+        "docs_doc_e7_business_registration",
+        "docs_doc_e7_job_description",
+        "docs_doc_e7_degree_or_career",
+      ]),
+    `in-Korea E-7 path should expose the exact Phase-A e7 doc keys: ${JSON.stringify(result.requiredDocs)}`
+  );
+  assert(
+    result.complianceCoverage.status === "rag_only" &&
+      result.complianceCoverage.unsupportedReason === "e7_compliance_rule_engine_not_implemented",
+    `in-Korea E-7 path should declare RAG-only compliance coverage: ${JSON.stringify(result.complianceCoverage)}`
+  );
+  assert(
+    result.appliedRules.includes("policy:e7-rag-only-compliance"),
+    `in-Korea E-7 path should record the explicit E-7 coverage policy: ${JSON.stringify(result.appliedRules)}`
+  );
+  assert(
+    /E-7/.test(JSON.stringify(result.warnings)) && /고시|annual|thông báo|зарлиг/.test(JSON.stringify(result.warnings)),
+    `E-7 warning should fire and mention the annual wage-notice caution: ${JSON.stringify(result.warnings)}`
+  );
+  assert(result.confidence === "medium", `in-Korea E-7 RAG-only policy should avoid high confidence: ${JSON.stringify(result)}`);
+  assert(result.estimatedCost === 1_000_000, `in-Korea E-7 base cost should be the application-scale 1M: ${JSON.stringify(result)}`);
+  assertSourceRefsExist(result);
+}
+
 async function testDiagnoseToolReturnsComplianceMeta() {
   const output = await TOOL_MAP.diagnose_path.execute(
     {
@@ -460,6 +535,8 @@ testHistoryAndBrokerEscalateRisk();
 testUnsureGoalUsesLanguageBridgeForLowKorean();
 testComplianceEvaluationGroundsDiagnosisRecommendation();
 testD10CareerPathDeclaresRagOnlyCompliancePolicy();
+testInKoreaD10PathDeclaresRagOnlyCompliancePolicy();
+testInKoreaE7PathDeclaresRagOnlyCompliancePolicy();
 await testDiagnoseToolReturnsComplianceMeta();
 await testDiagnoseToolReturnsD10CoveragePolicy();
 await testDiagnosisApiReturnsPublicReadinessPayload();

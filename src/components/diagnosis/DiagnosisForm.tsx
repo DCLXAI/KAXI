@@ -12,8 +12,10 @@ import {
   CheckCircle2,
   CircleHelp,
   GraduationCap,
+  Handshake,
   Languages,
   RefreshCcw,
+  Search,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -27,7 +29,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { KaxiCat } from "@/components/brand/KaxiCat";
-import { EDUCATION_VALUES, isOneOf } from "./diagnosis-options";
+import { CURRENT_VISA_VALUES, EDUCATION_VALUES, isOneOf } from "./diagnosis-options";
 
 const FIELD_LABEL_CLASS = "text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground";
 
@@ -99,7 +101,14 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
     { value: "transfer", label: t("goal_transfer"), icon: BookOpen },
     { value: "career", label: t("goal_career"), icon: BriefcaseBusiness },
     { value: "unsure", label: t("goal_unsure"), icon: CircleHelp },
+    { value: "in_korea_job", label: t("goal_in_korea_job"), icon: Search },
+    { value: "in_korea_employment", label: t("goal_in_korea_employment"), icon: Handshake },
   ];
+  const currentVisaOptions: Array<{ value: Exclude<DiagnosisInput["currentVisa"], "" | undefined>; label: string }> = [
+    { value: "D-2", label: "D-2" },
+    { value: "D-4", label: "D-4" },
+  ];
+  const isInKoreaGoal = input.goal === "in_korea_job" || input.goal === "in_korea_employment";
   const educationOptions: Array<{ value: DiagnosisInput["education"]; label: string }> = [
     { value: "highschool", label: t("edu_highschool") },
     { value: "college", label: t("edu_college") },
@@ -144,7 +153,7 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
     style: "currency",
   });
   const currentStepValid = step === 0
-    ? goalConfirmed
+    ? goalConfirmed && (!isInKoreaGoal || isOneOf(input.currentVisa || "", CURRENT_VISA_VALUES))
     : step === 1
       ? ageValid
       : step === 2
@@ -238,19 +247,42 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
         transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
       >
         {step === 0 && (
-          <div role="group" aria-label={t("diagnose_q_goal")} className="grid gap-2 sm:grid-cols-2 sm:gap-3">
-            {goalOptions.map((option) => (
-              <ChoiceButton
-                key={option.value}
-                icon={option.icon}
-                label={option.label}
-                selected={goalConfirmed && input.goal === option.value}
-                onSelect={() => {
-                  setGoalConfirmed(true);
-                  onUpdate({ goal: option.value });
-                }}
-              />
-            ))}
+          <div className="space-y-5">
+            <div role="group" aria-label={t("diagnose_q_goal")} className="grid gap-2 sm:grid-cols-2 sm:gap-3">
+              {goalOptions.map((option) => (
+                <ChoiceButton
+                  key={option.value}
+                  icon={option.icon}
+                  label={option.label}
+                  selected={goalConfirmed && input.goal === option.value}
+                  onSelect={() => {
+                    setGoalConfirmed(true);
+                    // Leaving the in-Korea branch clears the sub-answer so a
+                    // stale currentVisa never rides along on a study-goal lead.
+                    onUpdate(
+                      option.value === "in_korea_job" || option.value === "in_korea_employment"
+                        ? { goal: option.value }
+                        : { goal: option.value, currentVisa: "" },
+                    );
+                  }}
+                />
+              ))}
+            </div>
+            {isInKoreaGoal && (
+              <div className="space-y-2.5 border-t border-border pt-5">
+                <Label className={FIELD_LABEL_CLASS}>{t("diagnose_current_visa_label")}</Label>
+                <div role="group" aria-label={t("diagnose_current_visa_label")} className="grid grid-cols-2 gap-3">
+                  {currentVisaOptions.map((option) => (
+                    <ChoiceButton
+                      key={option.value}
+                      label={option.label}
+                      selected={input.currentVisa === option.value}
+                      onSelect={() => onUpdate({ currentVisa: option.value })}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
