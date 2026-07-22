@@ -72,11 +72,6 @@ function reviewAfterText(source: SourceAnnotation, lang: Lang): string | null {
   return lang === "ko" ? `재검토 ${source.reviewAfter}` : `review after ${source.reviewAfter}`;
 }
 
-function sourceTypeText(source: SourceAnnotation): string | null {
-  if (!source.sourceType) return null;
-  return source.sourceType.replace(/_/g, " ");
-}
-
 function visibleSourceList(sources: SourceAnnotation[] | undefined, max: number): SourceAnnotation[] {
   return (sources || []).filter((source) => source?.title).slice(0, max);
 }
@@ -193,7 +188,6 @@ export function SourceAnnotations({
           const url = source.url && !source.url.startsWith("internal://") ? source.url : null;
           const checked = checkedText(source, lang);
           const reviewAfter = reviewAfterText(source, lang);
-          const sourceType = sourceTypeText(source);
           const basis = source.basis || source.excerpt;
           const showExcerpt = source.excerpt && source.excerpt !== basis;
 
@@ -226,7 +220,6 @@ export function SourceAnnotations({
 
               <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                 <span className="rounded bg-background px-1.5 py-0.5">{hostFromUrl(url)}</span>
-                {sourceType && <span className="rounded bg-background px-1.5 py-0.5">{sourceType}</span>}
                 {reviewAfter && <span className="rounded bg-background px-1.5 py-0.5">{reviewAfter}</span>}
                 {url && (
                   <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded bg-background px-1.5 py-0.5 hover:underline">
