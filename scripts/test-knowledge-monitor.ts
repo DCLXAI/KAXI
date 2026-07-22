@@ -149,7 +149,7 @@ try {
 
   const watchlistIds = new Set(OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST.map((item) => item.docId));
   const verifiedSources = OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST.filter((item) => item.evidenceKind);
-  assert(verifiedSources.length === 32, "verified official source expansion should contain 32 sources");
+  assert(verifiedSources.length === 35, "verified official source expansion should contain 35 sources");
   assert(
     verifiedSources.every((item) => (item.minimumExtractedChars || 0) >= 400),
     "verified official sources must reject implausibly short bodies",
