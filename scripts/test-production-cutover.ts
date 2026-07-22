@@ -18,7 +18,7 @@ import {
 } from "../src/lib/typebot/runtime-health";
 
 const expectedMigration = latestMigrationName();
-assert.equal(expectedMigration, "20260721210000_chat_session_user_link");
+assert.equal(expectedMigration, "20260722210000_diagnosis_current_visa");
 assert.equal(declaredRequiredMigration(), expectedMigration);
 
 const readyPayload = {

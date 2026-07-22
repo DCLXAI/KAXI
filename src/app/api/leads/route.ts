@@ -20,6 +20,7 @@ const leadSchema = z.object({
   education: z.string().optional().default(""),
   koreanLevel: z.string().optional().default(""),
   goal: z.string().optional().default(""),
+  currentVisa: z.enum(["D-2", "D-4", ""]).optional().default(""),
   budget: z.coerce.number().int().min(0).optional().default(0),
   region: z.string().optional().default(""),
   // NOTE: z.coerce.boolean() is JS-truthiness (Boolean(x)) — the STRING "false"
@@ -118,6 +119,7 @@ export async function POST(req: NextRequest) {
         education: data.education,
         koreanLevel: data.koreanLevel,
         goal: data.goal,
+        currentVisa: data.currentVisa,
         budget: data.budget,
         region: data.region,
         usingBroker: data.usingBroker,

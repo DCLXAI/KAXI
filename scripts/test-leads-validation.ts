@@ -79,6 +79,38 @@ console.log("PASS missing required field nickname -> 400");
 }
 console.log('PASS missing education stored as "" (regression guard: previously String(undefined) = "undefined")');
 
+// 6. In-Korea diagnosis paths capture the student's current visa; a valid
+// value persists and echoes back in the response.
+{
+  const res = await POST(req({ ...validBody, currentVisa: "D-2" }));
+  assert.equal(res.status, 201, `expected 201 for currentVisa:"D-2", got ${res.status}`);
+  const json = await res.json();
+  assert.equal(json.lead.currentVisa, "D-2", "currentVisa should echo back D-2");
+  const stored = await db.diagnosisLead.findUnique({ where: { id: json.lead.id } });
+  assert.equal(stored?.currentVisa, "D-2", "currentVisa should persist as D-2");
+}
+console.log('PASS currentVisa:"D-2" persists and echoes');
+
+// 7. Regression guard: an out-of-enum currentVisa must be rejected with 400,
+// not silently coerced or persisted.
+{
+  const res = await POST(req({ ...validBody, currentVisa: "C-3" }));
+  assert.equal(res.status, 400, `expected 400 for currentVisa:"C-3", got ${res.status}`);
+  const json = await res.json();
+  assert.ok(Array.isArray(json.issues), "expected a structured issues array in the 400 response");
+}
+console.log('PASS currentVisa:"C-3" is rejected with 400');
+
+// 8. Omitted currentVisa defaults to "" (matches the education/goal
+// omitted-optional-string convention).
+{
+  const res = await POST(req(validBody));
+  assert.equal(res.status, 201, `expected 201, got ${res.status}`);
+  const json = await res.json();
+  assert.equal(json.lead.currentVisa, "", 'omitted currentVisa should default to ""');
+}
+console.log('PASS omitted currentVisa defaults to ""');
+
 await db.$disconnect();
 
 console.log(
