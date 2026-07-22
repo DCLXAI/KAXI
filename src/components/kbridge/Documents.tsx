@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
   ArrowUpRight,
@@ -251,11 +251,16 @@ export function Documents({ onNavigate }: { onNavigate: (view: string) => void }
   const { lang } = useLangStore();
   const currentDiagnosis = useLeadStore((state) => state.currentDiagnosis);
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const trackParam = searchParams.get("track");
   const copy = UI_COPY[lang];
   const diagnosedTrack = currentDiagnosis?.recommendation.visaType === "D-4" ? "D-4" : "D-2";
+  const initialTrack: DocumentTrack = trackParam === "D-2" || trackParam === "D-4" ? trackParam : diagnosedTrack;
   const fileRef = useRef<HTMLInputElement>(null);
   const uploadTarget = useRef<StudentDocument | null>(null);
-  const [track, setTrack] = useState<DocumentTrack>(diagnosedTrack);
+  // The url `?track=` param wins once on mount; afterwards diagnosis sync / manual switching behave as before.
+  const trackParamAppliedRef = useRef(trackParam === "D-2" || trackParam === "D-4");
+  const [track, setTrack] = useState<DocumentTrack>(initialTrack);
   const [selectedStage, setSelectedStage] = useState<DocumentStage>("school");
   const [documents, setDocuments] = useState<StudentDocument[]>(FALLBACK_DOCS);
   const [loading, setLoading] = useState(true);
@@ -267,6 +272,10 @@ export function Documents({ onNavigate }: { onNavigate: (view: string) => void }
   const loginHref = `/login?next=${encodeURIComponent(pathname)}`;
 
   useEffect(() => {
+    if (trackParamAppliedRef.current) {
+      trackParamAppliedRef.current = false;
+      return;
+    }
     if (currentDiagnosis?.recommendation.visaType === "D-2" || currentDiagnosis?.recommendation.visaType === "D-4") {
       setTrack(currentDiagnosis.recommendation.visaType);
     }
