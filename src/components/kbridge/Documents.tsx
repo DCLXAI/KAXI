@@ -272,10 +272,11 @@ export function Documents({ onNavigate }: { onNavigate: (view: string) => void }
   const loginHref = `/login?next=${encodeURIComponent(pathname)}`;
 
   useEffect(() => {
-    if (trackParamAppliedRef.current) {
-      trackParamAppliedRef.current = false;
-      return;
-    }
+    // A valid ?track= deep link is an explicit user choice (e.g. a chat CTA):
+    // it permanently outranks diagnosis-driven syncing. Never cleared — a
+    // consume-once flag would be re-run by StrictMode's dev double-invoke and
+    // let a stored diagnosis stomp the deep link.
+    if (trackParamAppliedRef.current) return;
     if (currentDiagnosis?.recommendation.visaType === "D-2" || currentDiagnosis?.recommendation.visaType === "D-4") {
       setTrack(currentDiagnosis.recommendation.visaType);
     }
