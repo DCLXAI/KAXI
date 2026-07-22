@@ -19,6 +19,7 @@ const DEFAULT_INPUT: DiagnosisInput = {
   usingBroker: false,
   brokerCost: 0,
   hasHistory: false,
+  currentVisa: "",
 };
 
 export function useDiagnosisFlow() {
