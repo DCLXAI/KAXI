@@ -76,6 +76,8 @@ jobs:
             source_ids: mofa-vietnam-student-visa-vi,mofa-hochiminh-student-visa-vi,mofa-mongolia-visa-process-mn
           - batch: verified-consular-en
             source_ids: mofa-malaysia-d2-visa-2026-en,mofa-finland-d2-visa-2026-en,mofa-singapore-d2-visa-2025-en,mofa-seattle-d2-d4-visa-2026-en,mofa-hong-kong-d2-visa-2026-en
+          - batch: verified-hikorea-e7-f2-f5
+            source_ids: official-e7-employment-requirements,official-f2-points-residency,official-f5-permanent-residency
     env:
       KAXI_MONITOR_URL: https://kaxi.vercel.app/api/knowledge/monitor
       KAXI_ADMIN_API_KEY: ${{ secrets.KAXI_ADMIN_API_KEY }}
