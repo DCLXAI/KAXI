@@ -103,7 +103,9 @@ export function linkCitationMarkers(
   return markdown.replace(/\[(\d{1,2})\](?!\()/g, (match, rawIndex: string) => {
     const index = Number(rawIndex);
     if (!Number.isInteger(index) || index < 1 || index > visibleSources.length) return match;
-    return `[${index}](#${sourceAnnotationDomId(idPrefix, index - 1)} "${markdownTitle(visibleSources[index - 1])}")`;
+    const domId = sourceAnnotationDomId(idPrefix, index - 1);
+    const title = markdownTitle(visibleSources[index - 1]).replace(/"/g, '&quot;');
+    return `<a href="#${domId}" title="${title}" onclick="(() => { const t = document.getElementById('${domId}'); const c = t?.closest('details'); if (c && !c.open) c.open = true; })()">[${index}]</a>`;
   });
 }
 
@@ -161,7 +163,7 @@ export function SourceAnnotations({
         })}
       </div>
 
-      <details className="mt-2 group">
+      <details className="mt-2">
         <summary className="cursor-pointer text-xs text-muted-foreground select-none">
           {detailsLabelText(lang)}
         </summary>
