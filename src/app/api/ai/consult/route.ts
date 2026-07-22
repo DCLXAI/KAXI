@@ -605,7 +605,20 @@ function officialSummaryDocScore(question: string, doc: KnowledgeDoc, lang: Lang
   return score;
 }
 
-function buildOfficialSummaryFallback(
+const SOURCE_TYPE_LABELS: Record<string, Record<Lang, string>> = {
+  official_government: { ko: "정부 공식", vi: "Chính phủ", mn: "Засгийн газрын", en: "Government official" },
+  official_law: { ko: "법령", vi: "Pháp luật", mn: "Хууль", en: "Law" },
+  internal_analysis: { ko: "KAXI 분석", vi: "Phân tích KAXI", mn: "KAXI шинжилгээ", en: "KAXI analysis" },
+  internal_policy: { ko: "KAXI 정책", vi: "Chính sách KAXI", mn: "KAXI бодлого", en: "KAXI policy" },
+};
+
+function sourceDisplayLabel(source: string, lang: Lang): string {
+  return SOURCE_TYPE_LABELS[source]?.[lang] || source;
+}
+
+// Exported as a test seam, not a public API — same convention as
+// `normalizeExpertResponse` in unified/route.ts.
+export function buildOfficialSummaryFallback(
   question: string,
   docs: KnowledgeDoc[],
   lang: Lang,
@@ -620,22 +633,16 @@ function buildOfficialSummaryFallback(
   const sections = prioritized
     .map((doc, index) => {
       const meta = getRagDocumentMetadata(doc, lang);
-      const content = pickLangText(doc.content, lang).replace(/\s+/g, " ").trim();
+      const content = pickLangText(doc.content, lang)
+        .replace(/^#{1,6}\s.*$/gm, " ")
+        .replace(/\s+/g, " ")
+        .trim();
       const excerpt = content.length > 520 ? `${content.slice(0, 520)}...` : content;
       const checked = meta?.last_checked_at ? `\n확인일: ${meta.last_checked_at}` : "";
       const sourceUrl = meta?.source_url ? ` <${meta.source_url}>` : "";
-      return `### [${index + 1}] ${pickLangText(doc.title, lang)}\n\n${excerpt} [${index + 1}]\n\n출처: ${doc.source}${sourceUrl}${checked}`;
+      return `### [${index + 1}] ${pickLangText(doc.title, lang)}\n\n${excerpt} [${index + 1}]\n\n출처: ${sourceDisplayLabel(doc.source, lang)}${sourceUrl}${checked}`;
     })
     .join("\n\n");
-
-  const sourceList = prioritized
-    .map((doc, index) => {
-      const meta = getRagDocumentMetadata(doc, lang);
-      const sourceUrl = meta?.source_url ? ` <${meta.source_url}>` : "";
-      const checked = meta?.last_checked_at ? ` (확인일 ${meta.last_checked_at})` : "";
-      return `- [${index + 1}] ${pickLangText(doc.title, lang)} — ${doc.source}${sourceUrl}${checked}`;
-    })
-    .join("\n");
 
   const lead = buildOfficialSummaryLead({
     question,
@@ -653,9 +660,6 @@ ${lead ? `${lead}
 ` : ""}검색된 승인 문서를 기준으로 질문과 가까운 근거를 먼저 정리했습니다. 개별 체류 이력, 학교 상태, 만료일, 재정 상황에 따라 요구 서류가 달라질 수 있으므로 접수 전 원문 확인과 행정사 검토가 필요합니다.
 
 ${sections}
-
-📚 출처:
-${sourceList}
 
 ${sourceNotice}`;
 }
