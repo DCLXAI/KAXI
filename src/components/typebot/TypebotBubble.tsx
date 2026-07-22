@@ -27,6 +27,10 @@ export function TypebotBubble() {
         typebot="kaxi-rag-typebot"
         apiHost="https://typebot.io"
         theme={{ button: { backgroundColor: "#111827" } }}
+        // The bot's Locale router branches on {{locale}} ("en"/"vi"/"mn",
+        // default ko) — feed it the platform's active locale so the widget
+        // greets in the language the visitor already chose.
+        prefilledVariables={{ locale }}
         onOpen={() => trackProductEvent("chatbot_opened", {
           locale,
           surface: "typebot_bubble",
