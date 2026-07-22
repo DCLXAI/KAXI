@@ -250,6 +250,8 @@ export const t = {
   docs_track_label: { ko: "준비 경로", vi: "Lộ trình chuẩn bị", mn: "Бэлтгэлийн зам", en: "Preparation track" },
   docs_track_d2: { ko: "D-2 학위과정", vi: "D-2 Chương trình bằng cấp", mn: "D-2 Зэрэг олгох хөтөлбөр", en: "D-2 Degree" },
   docs_track_d4: { ko: "D-4 어학연수", vi: "D-4 Học tiếng", mn: "D-4 Хэлний сургалт", en: "D-4 Language" },
+  docs_track_d10: { ko: "D-10 구직", vi: "D-10 Tìm việc", mn: "D-10 Ажил хайх", en: "D-10 Job-seeking" },
+  docs_track_e7: { ko: "E-7 취업", vi: "E-7 Việc làm", mn: "E-7 Ажиллах", en: "E-7 Employment" },
   docs_stage_school: { ko: "학교 지원", vi: "Nộp đơn vào trường", mn: "Сургуульд өргөдөл", en: "School application" },
   docs_stage_school_desc: { ko: "지원서와 학력·언어 서류를 학교 모집요강에 맞춰 준비합니다.", vi: "Chuẩn bị đơn, học vấn và ngôn ngữ theo yêu cầu của trường.", mn: "Өргөдөл, боловсрол, хэлний баримтыг сургуулийн шаардлагаар бэлдэнэ.", en: "Prepare application, education, and language records to the school's requirements." },
   docs_stage_admission: { ko: "입학 확정", vi: "Xác nhận nhập học", mn: "Элсэлт баталгаажуулах", en: "Admission confirmation" },

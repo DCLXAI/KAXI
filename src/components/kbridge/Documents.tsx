@@ -20,7 +20,7 @@ import {
   Upload,
 } from "lucide-react";
 import { useLangStore, useLeadStore } from "@/store/kbridge";
-import { tr, type Lang } from "@/lib/i18n/translations";
+import { tr, type Lang, type TranslationKey } from "@/lib/i18n/translations";
 import { KaxiCat } from "@/components/brand/KaxiCat";
 import {
   DOCUMENT_WORKFLOW_ITEMS,
@@ -159,6 +159,18 @@ const STAGE_ICONS = {
 
 const COMPLETE_STATUSES = new Set(["APPROVED", "OCR_DONE"]);
 
+const TRACK_OPTIONS = ["D-4", "D-2", "D-10", "E-7"] as const;
+const TRACK_LABEL_KEYS: Record<DocumentTrack, TranslationKey> = {
+  "D-2": "docs_track_d2",
+  "D-4": "docs_track_d4",
+  "D-10": "docs_track_d10",
+  "E-7": "docs_track_e7",
+};
+
+function isDocumentTrack(value: string | null): value is DocumentTrack {
+  return value === "D-2" || value === "D-4" || value === "D-10" || value === "E-7";
+}
+
 const FALLBACK_DOCS: StudentDocument[] = DOCUMENT_WORKFLOW_ITEMS.map((item) => ({
   id: null,
   documentType: item.type,
@@ -257,11 +269,11 @@ export function Documents({ onNavigate }: { onNavigate: (view: string) => void }
   const trackParam = searchParams.get("track");
   const copy = UI_COPY[lang];
   const diagnosedTrack = currentDiagnosis?.recommendation.visaType === "D-4" ? "D-4" : "D-2";
-  const initialTrack: DocumentTrack = trackParam === "D-2" || trackParam === "D-4" ? trackParam : diagnosedTrack;
+  const initialTrack: DocumentTrack = isDocumentTrack(trackParam) ? trackParam : diagnosedTrack;
   const fileRef = useRef<HTMLInputElement>(null);
   const uploadTarget = useRef<StudentDocument | null>(null);
   // The url `?track=` param wins once on mount; afterwards diagnosis sync / manual switching behave as before.
-  const trackParamAppliedRef = useRef(trackParam === "D-2" || trackParam === "D-4");
+  const trackParamAppliedRef = useRef(isDocumentTrack(trackParam));
   const [track, setTrack] = useState<DocumentTrack>(initialTrack);
   const [selectedStage, setSelectedStage] = useState<DocumentStage>("school");
   const [documents, setDocuments] = useState<StudentDocument[]>(FALLBACK_DOCS);
@@ -394,9 +406,23 @@ export function Documents({ onNavigate }: { onNavigate: (view: string) => void }
   const requiredTypes = getRequiredDocumentTypes(track);
   const requiredDone = requiredTypes.filter(isComplete).length;
   const overallProgress = requiredTypes.length > 0 ? Math.round((requiredDone / requiredTypes.length) * 100) : 0;
-  const activeStage = DOCUMENT_WORKFLOW_STAGES.find((stage) => stage.id === selectedStage) ?? DOCUMENT_WORKFLOW_STAGES[0];
-  const stageRows = getStageItems(selectedStage, track);
-  const activeStageRequired = getRequiredDocumentTypes(track, selectedStage);
+  const visibleStages = useMemo(
+    () =>
+      DOCUMENT_WORKFLOW_STAGES.filter((stage) =>
+        DOCUMENT_WORKFLOW_ITEMS.some((item) =>
+          item.uses.some((use) => use.stage === stage.id && use.tracks.includes(track)),
+        ),
+      ),
+    [track],
+  );
+  useEffect(() => {
+    if (!visibleStages.some((stage) => stage.id === selectedStage)) {
+      setSelectedStage(visibleStages[0]?.id ?? DOCUMENT_WORKFLOW_STAGES[0].id);
+    }
+  }, [visibleStages, selectedStage]);
+  const activeStage = visibleStages.find((stage) => stage.id === selectedStage) ?? visibleStages[0] ?? DOCUMENT_WORKFLOW_STAGES[0];
+  const stageRows = getStageItems(activeStage.id, track);
+  const activeStageRequired = getRequiredDocumentTypes(track, activeStage.id);
   const activeStageDone = activeStageRequired.filter(isComplete).length;
 
   return (
@@ -416,7 +442,7 @@ export function Documents({ onNavigate }: { onNavigate: (view: string) => void }
         <div>
           <p className="text-xs font-semibold uppercase text-muted-foreground">{tr("docs_track_label", lang)}</p>
           <div className="mt-2 inline-flex rounded-md border bg-muted/50 p-1" role="group" aria-label={tr("docs_track_label", lang)}>
-            {(["D-2", "D-4"] as const).map((option) => (
+            {TRACK_OPTIONS.map((option) => (
               <button
                 key={option}
                 type="button"
@@ -427,7 +453,7 @@ export function Documents({ onNavigate }: { onNavigate: (view: string) => void }
                   track === option ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                {tr(option === "D-2" ? "docs_track_d2" : "docs_track_d4", lang)}
+                {tr(TRACK_LABEL_KEYS[option], lang)}
               </button>
             ))}
           </div>
@@ -471,9 +497,9 @@ export function Documents({ onNavigate }: { onNavigate: (view: string) => void }
         onChange={onFile}
       />
 
-      <Tabs value={selectedStage} onValueChange={(value) => setSelectedStage(value as DocumentStage)} className="gap-6">
+      <Tabs value={activeStage.id} onValueChange={(value) => setSelectedStage(value as DocumentStage)} className="gap-6">
         <TabsList className="grid h-auto w-full grid-cols-2 gap-2 bg-transparent p-0 lg:grid-cols-4">
-          {DOCUMENT_WORKFLOW_STAGES.map((stage, index) => {
+          {visibleStages.map((stage, index) => {
             const StageIcon = STAGE_ICONS[stage.id];
             const stageRequired = getRequiredDocumentTypes(track, stage.id);
             const stageDone = stageRequired.filter(isComplete).length;
@@ -504,7 +530,7 @@ export function Documents({ onNavigate }: { onNavigate: (view: string) => void }
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="max-w-3xl">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-primary-strong">STEP {DOCUMENT_WORKFLOW_STAGES.indexOf(activeStage) + 1}</span>
+                <span className="text-xs font-semibold text-primary-strong">STEP {visibleStages.indexOf(activeStage) + 1}</span>
                 <span className="text-xs text-muted-foreground">{activeStageDone}/{activeStageRequired.length} {copy.requiredReady}</span>
               </div>
               <h2 id={`stage-${activeStage.id}`} className="mt-1 font-serif text-xl font-bold sm:text-2xl">{tr(activeStage.titleKey, lang)}</h2>
@@ -527,7 +553,7 @@ export function Documents({ onNavigate }: { onNavigate: (view: string) => void }
               const Icon = statusIcon(doc.status) ?? FileText;
               const uploading = uploadingType === doc.documentType;
               const complete = COMPLETE_STATUSES.has(doc.status);
-              const reused = isReusedDocument(item, selectedStage, track);
+              const reused = isReusedDocument(item, activeStage.id, track);
               return (
                 <Card key={item.type} className={cn("rounded-md shadow-none", complete && "border-emerald-200 bg-emerald-50/30")}>
                   <CardContent className="flex h-full flex-col gap-4 p-4">

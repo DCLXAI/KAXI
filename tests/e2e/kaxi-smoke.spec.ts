@@ -205,4 +205,12 @@ test("docs workspace honors the track deep link for anonymous visitors", async (
   // Anonymous visitors keep the student-login banner; the page must not crash
   // and the deep link must survive the i18n proxy.
   await expect(page.getByText(/로그인/).first()).toBeVisible();
+
+  // D-10/E-7 lifecycle deep link: the checklist body renders for anonymous
+  // visitors too (only the upload action is auth-gated), so the new
+  // post-graduation stage title must be visible alongside the login banner.
+  await page.goto("/ko/docs?track=D-10");
+  await expect(page).toHaveURL(/\/ko\/docs\?track=D-10$/);
+  await expect(page.getByText(/로그인/).first()).toBeVisible();
+  await expect(page.getByText("졸업 후 비자 준비").first()).toBeVisible();
 });
