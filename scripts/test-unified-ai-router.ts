@@ -9,6 +9,7 @@ import {
   quickDiagnosisInput,
 } from "../src/lib/data/quick-diagnosis";
 import { normalizeExpertResponse } from "../src/app/api/ai/unified/route";
+import { buildAgentMeta, docsWorkspaceHref, DOCS_WORKSPACE_CTA_LABELS } from "../src/lib/agent/meta";
 
 assert.deepEqual(
   decideUnifiedAiRoute("서울 인증대학 3곳 찾아서 비용을 계산해줘"),
@@ -113,6 +114,49 @@ const llmNormalized = normalizeExpertResponse(
 );
 assert.equal(llmNormalized.meta.quality.answerSource, "llm", "LLM-backed answers must be labeled as model output");
 assert.equal(llmNormalized.meta.quality.intentConfidence, "high", "LLM-backed answers must keep the confidence chip");
+
+const documentsDecision = { capability: "expert" as const, mode: "documents" as const, reason: "safety_high_risk" as const };
+const documentsWithTrackNormalized = normalizeExpertResponse(
+  { answer: "서류 안내", backend: "kimi" },
+  documentsDecision,
+  "ko",
+  "D-4 비자 서류 알려줘",
+  120,
+);
+assert.equal(documentsWithTrackNormalized.meta.suggestions[0]?.kind, "documents", "documents-mode answers must lead with the workspace CTA");
+assert.equal(documentsWithTrackNormalized.meta.suggestions[0]?.href, "/docs?track=D-4", "the CTA must carry the detected visa track");
+assert.equal(documentsWithTrackNormalized.meta.suggestions[0]?.label, DOCS_WORKSPACE_CTA_LABELS.ko, "the CTA label must match the ko workspace copy");
+
+const documentsWithoutTrackNormalized = normalizeExpertResponse(
+  { answer: "서류 안내", backend: "kimi" },
+  documentsDecision,
+  "ko",
+  "유학 비자 서류가 뭐가 필요해요?",
+  120,
+);
+assert.equal(documentsWithoutTrackNormalized.meta.suggestions[0]?.href, "/docs", "a visa-code-free documents question must fall back to the general docs workspace");
+
+assert.equal(
+  llmNormalized.meta.suggestions.some((item) => item.href),
+  false,
+  "non-documents mode answers must not carry a workspace link suggestion",
+);
+
+assert.equal(docsWorkspaceHref("D-2"), "/docs?track=D-2", "docsWorkspaceHref must pin D-2 to its own track");
+assert.equal(docsWorkspaceHref("D-9"), "/docs", "docsWorkspaceHref must fall back for unsupported tracks");
+assert.equal(docsWorkspaceHref(undefined), "/docs", "docsWorkspaceHref must fall back when no track is known");
+
+const actionMetaWithDocuments = buildAgentMeta({
+  lang: "ko",
+  question: "D-4 서류 뭐가 필요해?",
+  backend: "action",
+  grounded: true,
+  toolResults: [
+    { tool: "get_documents", args: { visa_type: "D-4" }, result: [], summary: "documents", success: true },
+  ],
+});
+assert.equal(actionMetaWithDocuments.suggestions[0]?.kind, "documents", "the action path must also lead with the workspace CTA after get_documents");
+assert.equal(actionMetaWithDocuments.suggestions[0]?.href, "/docs?track=D-4", "the action path CTA must carry the tool call's visa_type");
 assert.match(consultPage, /redirect\(`\/\$\{locale\}\/agent`\)/, "legacy consult path must redirect to KAXI AI");
 assert.doesNotMatch(sitemap, /"\/consult"/, "legacy consult path must not be indexed as a separate product");
 assert.match(widget, /"\/agent"/, "the compact widget must be hidden on the full KAXI AI screen");

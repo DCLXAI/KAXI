@@ -11,6 +11,8 @@ import {
 } from "@/lib/ai/unified-router";
 import { CHAT_SESSION_COOKIE, verifyChatSessionToken } from "@/lib/chat/session-token";
 import { persistChatExchange } from "@/lib/chat/persistence";
+import { docsWorkspaceHref, DOCS_WORKSPACE_CTA_LABELS } from "@/lib/agent/meta";
+import type { AgentSuggestion } from "@/components/agent/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -117,11 +119,20 @@ export function normalizeExpertResponse(
       excerpt: text(doc.excerpt) || undefined,
     };
   });
-  const suggestions = stringArray(raw.suggestedFollowups).map((prompt) => ({
+  const suggestions: AgentSuggestion[] = stringArray(raw.suggestedFollowups).map((prompt) => ({
     kind: "followup" as const,
     label: prompt,
     prompt,
   }));
+  if (decision.mode === "documents") {
+    const trackMatch = question.match(/d\s*-?\s*(2|4)/i);
+    suggestions.unshift({
+      kind: "documents" as const,
+      label: DOCS_WORKSPACE_CTA_LABELS[lang],
+      prompt: "",
+      href: docsWorkspaceHref(trackMatch ? `D-${trackMatch[1]}` : undefined),
+    });
+  }
 
   return {
     answer: text(raw.answer),

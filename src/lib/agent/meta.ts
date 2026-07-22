@@ -24,6 +24,7 @@ export interface AgentSuggestion {
   kind: "school" | "cost" | "documents" | "partner";
   label: string;
   prompt: string;
+  href?: string;
 }
 
 export interface AgentClarifyingQuestion {
@@ -332,15 +333,38 @@ function buildPlan(toolResults: ToolResult[], lang: Lang): string[] {
   return plan.length > 0 ? plan : FALLBACK_PLAN[lang];
 }
 
+export const DOCS_WORKSPACE_CTA_LABELS: Record<Lang, string> = {
+  ko: "내 서류 워크스페이스에서 준비 상태 관리하기",
+  vi: "Quản lý hồ sơ trong không gian tài liệu của tôi",
+  mn: "Миний бичиг баримтын самбарт бэлтгэлээ удирдах",
+  en: "Track these documents in my workspace",
+};
+
+export function docsWorkspaceHref(track?: string): string {
+  return track === "D-2" || track === "D-4" ? `/docs?track=${track}` : "/docs";
+}
+
 function buildSuggestions(toolResults: ToolResult[], lang: Lang): AgentSuggestion[] {
   const used = new Set(toolResults.map((item) => item.tool));
-  const suggestions = SUGGESTION_LIBRARY[lang].filter((item) => {
+  const suggestions: AgentSuggestion[] = SUGGESTION_LIBRARY[lang].filter((item) => {
     if (item.kind === "school") return !used.has("search_schools");
     if (item.kind === "cost") return !used.has("calculate_cost");
     if (item.kind === "documents") return !used.has("get_documents");
     if (item.kind === "partner") return !used.has("request_partner");
     return true;
   });
+  if (used.has("get_documents")) {
+    const documentsCall = toolResults.find((item) => item.tool === "get_documents");
+    const visaType = typeof documentsCall?.args.visa_type === "string"
+      ? (documentsCall.args.visa_type as string)
+      : undefined;
+    suggestions.unshift({
+      kind: "documents",
+      label: DOCS_WORKSPACE_CTA_LABELS[lang],
+      prompt: "",
+      href: docsWorkspaceHref(visaType),
+    });
+  }
   return suggestions.slice(0, 3);
 }
 
