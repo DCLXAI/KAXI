@@ -341,7 +341,9 @@ export const DOCS_WORKSPACE_CTA_LABELS: Record<Lang, string> = {
 };
 
 export function docsWorkspaceHref(track?: string): string {
-  return track === "D-2" || track === "D-4" ? `/docs?track=${track}` : "/docs";
+  return track === "D-2" || track === "D-4" || track === "D-10" || track === "E-7"
+    ? `/docs?track=${track}`
+    : "/docs";
 }
 
 function buildSuggestions(toolResults: ToolResult[], lang: Lang): AgentSuggestion[] {
