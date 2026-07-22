@@ -53,7 +53,7 @@ jobs:
           [ -z "$DATABASE_URL" ] || echo "::add-mask::$DATABASE_URL"
           [ -z "$POSTGRES_URL" ] || echo "::add-mask::$POSTGRES_URL"
           [ -z "$PRISMA_DATABASE_URL" ] || echo "::add-mask::$PRISMA_DATABASE_URL"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
         with:
           # release:check:source requires an attached main branch; the next step
