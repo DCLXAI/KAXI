@@ -51,6 +51,8 @@
   "goal_transfer": "D-2 편입/대학원",
   "goal_career": "요양보호사·직업계열",
   "goal_unsure": "잘 모름",
+  "goal_in_korea_d10": "졸업 후 구직(D-10) 준비",
+  "goal_in_korea_e7": "취업 확정 후 E-7 전환",
   "region_seoul": "서울",
   "region_gyeonggi": "경기",
   "region_busan": "부산",
