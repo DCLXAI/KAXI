@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import type { Lang } from "@/lib/i18n/translations";
 import { BookOpen, ExternalLink, ShieldCheck } from "lucide-react";
 
@@ -103,9 +104,7 @@ export function linkCitationMarkers(
   return markdown.replace(/\[(\d{1,2})\](?!\()/g, (match, rawIndex: string) => {
     const index = Number(rawIndex);
     if (!Number.isInteger(index) || index < 1 || index > visibleSources.length) return match;
-    const domId = sourceAnnotationDomId(idPrefix, index - 1);
-    const title = markdownTitle(visibleSources[index - 1]).replace(/"/g, '&quot;');
-    return `<a href="#${domId}" title="${title}" onclick="(() => { const t = document.getElementById('${domId}'); const c = t?.closest('details'); if (c && !c.open) c.open = true; })()">[${index}]</a>`;
+    return `[${index}](#${sourceAnnotationDomId(idPrefix, index - 1)} "${markdownTitle(visibleSources[index - 1])}")`;
   });
 }
 
@@ -123,6 +122,28 @@ export function SourceAnnotations({
   idPrefix?: string;
 }) {
   const visibleSources = visibleSourceList(sources, max);
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+
+  // Citation [n] links target anchors inside the collapsed <details>. Modern
+  // browsers auto-reveal hidden fragment targets, but older embedded WebViews
+  // silently no-op — so open the disclosure ourselves whenever the URL hash
+  // points at one of our source anchors.
+  useEffect(() => {
+    const reveal = () => {
+      const hash = window.location.hash.slice(1);
+      if (!hash || !idPrefix || !hash.startsWith(`${idPrefix.replace(/[^A-Za-z0-9_-]/g, "-")}-source-`)) return;
+      const target = document.getElementById(hash);
+      const container = detailsRef.current;
+      if (target && container && container.contains(target)) {
+        if (!container.open) container.open = true;
+        requestAnimationFrame(() => target.scrollIntoView({ block: "start", behavior: "smooth" }));
+      }
+    };
+    reveal();
+    window.addEventListener("hashchange", reveal);
+    return () => window.removeEventListener("hashchange", reveal);
+  }, [idPrefix]);
+
   if (visibleSources.length === 0) return null;
 
   return (
