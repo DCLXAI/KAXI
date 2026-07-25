@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { sendOpsAlert, type OpsAlertResult } from "@/lib/ops/alerts";
+import { siteBaseUrl } from "@/lib/config/site-url";
 
 export type OpsEvent = {
   id: string;
@@ -141,7 +142,7 @@ export async function recordOpsEvent(input: RecordOpsEventInput): Promise<Record
       workflowId: input.workflowId || null,
       ...(input.payload || {}),
     },
-    adminUrl: input.adminUrl || `${process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://kaxi.vercel.app"}/admin`,
+    adminUrl: input.adminUrl || `${siteBaseUrl()}/admin`,
   });
 
   return { id: String(result.data.id), duplicate: false, alert };

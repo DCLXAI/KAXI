@@ -5,6 +5,7 @@ import { commitDocumentUpload } from "@/lib/documents/repository";
 import { processDocumentOcr } from "@/lib/documents/ocr";
 import { getDocumentWorkspaceIssue } from "@/lib/documents/workspace-availability";
 import { sendOpsAlert } from "@/lib/ops/alerts";
+import { siteBaseUrl } from "@/lib/config/site-url";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -77,7 +78,7 @@ export async function PUT(req: NextRequest) {
       message: "새 서류가 업로드되었습니다.",
       occurredAt: new Date().toISOString(),
       details: { documentItemId: processed.id, documentType: processed.documentType },
-      adminUrl: `${process.env.NEXT_PUBLIC_APP_URL || "https://kaxi.vercel.app"}/admin/documents`,
+      adminUrl: `${siteBaseUrl()}/admin/documents`,
     }).catch((err) => console.warn("[ops alert] document upload", err instanceof Error ? err.message : err));
 
     return NextResponse.json({

@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
+import { siteBaseUrl } from "@/lib/config/site-url";
 
-const BASE = "https://kaxi.vercel.app";
+const BASE = siteBaseUrl();
 const LOCALES = ["ko", "vi", "mn", "en"] as const;
 const VIEWS = ["", "/agent", "/diagnose", "/schools", "/cost", "/docs", "/partners", "/privacy", "/terms"] as const;
 

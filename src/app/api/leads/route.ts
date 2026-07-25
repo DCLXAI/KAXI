@@ -7,6 +7,7 @@ import { canPersistPiiValue, preparePiiField, retentionUntil } from "@/lib/priva
 import { serializeLeadForResponse } from "@/lib/privacy/serializers";
 import { getCurrentKaxiUser } from "@/lib/supabase/auth";
 import { sendOpsAlert } from "@/lib/ops/alerts";
+import { siteBaseUrl } from "@/lib/config/site-url";
 
 // Prisma's DiagnosisLead.age/budget/brokerCost/estimatedCost are all Int
 // columns, so every numeric field here is coerced and validated as an
@@ -148,7 +149,7 @@ export async function POST(req: NextRequest) {
       message: "새 진단 리드가 생성되었습니다.",
       occurredAt: new Date().toISOString(),
       details: { leadId: lead.id, pathKey: lead.pathKey, nationality: lead.nationality, linked: Boolean(lead.userId) },
-      adminUrl: `${process.env.NEXT_PUBLIC_APP_URL || "https://kaxi.vercel.app"}/admin/leads`,
+      adminUrl: `${siteBaseUrl()}/admin/leads`,
     }).catch((err) => console.warn("[ops alert] lead", err instanceof Error ? err.message : err));
 
     return NextResponse.json({ lead: serializeLeadForResponse(lead) }, { status: 201 });

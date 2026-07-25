@@ -1,4 +1,5 @@
 import type { Transporter } from "nodemailer";
+import { siteBaseUrl } from "@/lib/config/site-url";
 
 type SendInput = { to: string; subject: string; body: string; href?: string | null };
 type SendResult = { status: "sent" | "skipped" | "error" };
@@ -28,7 +29,7 @@ export async function sendNotificationEmail(input: SendInput): Promise<SendResul
   try {
     const transport = await getTransport();
     const text = input.href
-      ? `${input.body}\n\nhttps://kaxi.vercel.app${input.href}`
+      ? `${input.body}\n\n${siteBaseUrl()}${input.href}`
       : input.body;
     await transport.sendMail({
       from: process.env.SMTP_FROM,

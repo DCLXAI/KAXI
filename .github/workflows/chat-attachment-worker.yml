@@ -25,9 +25,11 @@ jobs:
           echo "KAXI_ADMIN_API_KEY is required for the attachment worker."
           exit 1
       - name: Drain attachment queue
+        env:
+          KAXI_BASE_URL: ${{ vars.PRODUCTION_BASE_URL || 'https://kaxi.vercel.app' }}
         run: |
           curl --fail-with-body --silent --show-error --max-time 70 \
-            --request POST https://kaxi.vercel.app/api/internal/chat-attachments/process \
+            --request POST "$KAXI_BASE_URL/api/internal/chat-attachments/process" \
             --header "authorization: Bearer $KAXI_ADMIN_API_KEY" \
             --header "content-type: application/json" \
             --data '{"limit":10}'

@@ -19,7 +19,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      KAXI_HEALTH_URL: https://kaxi.vercel.app/api/ops/health
+      KAXI_HEALTH_URL: ${{ vars.PRODUCTION_BASE_URL || 'https://kaxi.vercel.app' }}/api/ops/health
       KAXI_ADMIN_API_KEY: ${{ secrets.KAXI_ADMIN_API_KEY }}
     steps:
       - name: Require production monitor key

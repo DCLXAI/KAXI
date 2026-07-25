@@ -1,6 +1,7 @@
 import { createHmac } from "crypto";
 import type { OfficialKnowledgeMonitorSummary } from "./source-monitor";
 import { sendOpsAlert, type OpsAlertChannelResult } from "@/lib/ops/alerts";
+import { siteBaseUrl } from "@/lib/config/site-url";
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -65,13 +66,6 @@ function shouldAlert(summary: OfficialKnowledgeMonitorSummary): boolean {
   return summary.changed > 0 || summary.failed > 0 || summary.candidatesCreated > 0;
 }
 
-function appBaseUrl(): string {
-  const explicit = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
-  if (explicit?.trim()) return explicit.trim().replace(/\/+$/, "");
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL.replace(/\/+$/, "")}`;
-  return "https://kaxi.vercel.app";
-}
-
 function impactTotals(summary: OfficialKnowledgeMonitorSummary) {
   return summary.results.reduce(
     (acc, result) => {
@@ -116,7 +110,7 @@ export function buildKnowledgeMonitorAlertPayload(
       sourceUrl: result.sourceUrl,
       error: result.error,
     }));
-  const adminUrl = `${appBaseUrl()}/admin/knowledge`;
+  const adminUrl = `${siteBaseUrl()}/admin/knowledge`;
   const message = [
     `KARXY 공식 출처 감시: 변경 ${summary.changed}개, 실패 ${summary.failed}개, 후보 ${summary.candidatesCreated}개`,
     `영향 룰 ${totals.rules}개, 영향 대화 ${totals.users}개`,

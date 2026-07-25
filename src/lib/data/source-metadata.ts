@@ -1,5 +1,6 @@
 // KAXI RAG 지식 베이스 — 출처 메타데이터
 import type { SourceMetadata } from "./knowledge-types";
+import { siteBaseUrl } from "@/lib/config/site-url";
 
 export const DEFAULT_VERIFIED_AT = "2026-07-01";
 const DEFAULT_REVIEW_AFTER = "2026-10-01";
@@ -908,16 +909,21 @@ export const SOURCE_METADATA: Record<string, SourceMetadata> = {
     jurisdiction: "KR",
     validFrom: "2026-07-02",
   },
+  // NOTE: these url values are persisted verbatim into
+  // KnowledgeDocument.sourceUrl. Changing the site URL env at a domain
+  // cutover only affects newly-ingested rows here; re-run
+  // `knowledge:pgvector` then `rag:serving:sync` for already-stored rows to
+  // follow.
   "KARXY 분석 (공식 학사운영 지침 기반)": {
     label: "KARXY internal analysis",
-    url: "https://kaxi.vercel.app/sources/cost-analysis",
+    url: `${siteBaseUrl()}/sources/cost-analysis`,
     verifiedAt: DEFAULT_VERIFIED_AT,
     reviewAfter: DEFAULT_REVIEW_AFTER,
     owner: "internal",
   },
   "KARXY 안전 가이드라인": {
     label: "KARXY safety guideline",
-    url: "https://kaxi.vercel.app/sources/safety-guideline",
+    url: `${siteBaseUrl()}/sources/safety-guideline`,
     verifiedAt: DEFAULT_VERIFIED_AT,
     reviewAfter: DEFAULT_REVIEW_AFTER,
     owner: "internal",

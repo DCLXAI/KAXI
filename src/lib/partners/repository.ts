@@ -10,6 +10,7 @@ import {
 } from "@/lib/privacy/consent";
 import { notifyUsers } from "@/lib/notifications/repository";
 import { sendOpsAlert } from "@/lib/ops/alerts";
+import { siteBaseUrl } from "@/lib/config/site-url";
 
 export interface CreatePartnerRequestInput {
   leadId?: string | null;
@@ -193,7 +194,7 @@ export async function createPartnerRequest(input: CreatePartnerRequestInput): Pr
     message: "새 파트너 연결 요청이 접수되었습니다.",
     occurredAt: new Date().toISOString(),
     details: { requestId: request.id, partnerType, leadId: finalLeadId },
-    adminUrl: `${process.env.NEXT_PUBLIC_APP_URL || "https://kaxi.vercel.app"}/admin/leads`,
+    adminUrl: `${siteBaseUrl()}/admin/leads`,
   }).catch((err) => console.warn("[ops alert] partner request", err instanceof Error ? err.message : err));
 
   return request;

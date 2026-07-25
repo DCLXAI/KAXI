@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { createHighRiskEscalationCase } from "@/lib/cases/repository";
 import { sendOpsAlert } from "@/lib/ops/alerts";
+import { siteBaseUrl } from "@/lib/config/site-url";
 
 export interface HighRiskEscalationSignal {
   studentProfileId?: string | null;
@@ -47,7 +48,7 @@ export async function maybeCreateHighRiskEscalationCase(signal: HighRiskEscalati
     message: "고위험 에스컬레이션 케이스가 생성되었습니다.",
     occurredAt: new Date().toISOString(),
     details: { caseId: created.case.id, category: created.case.category, source: signal.source },
-    adminUrl: `${process.env.NEXT_PUBLIC_APP_URL || "https://kaxi.vercel.app"}/admin/cases`,
+    adminUrl: `${siteBaseUrl()}/admin/cases`,
   }).catch((err) => console.warn("[ops alert] high-risk case", err instanceof Error ? err.message : err));
 
   return created.case;

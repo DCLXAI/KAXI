@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
 import { getRagServingProjectionStatus } from "@/lib/knowledge/serving-projection";
 import { sendOpsAlert } from "@/lib/ops/alerts";
+import { siteBaseUrl } from "@/lib/config/site-url";
 import { extractRagProvenance, resolveRagProvenance } from "@/lib/n8n/provenance";
 import { signN8nPayload } from "@/lib/n8n/signature";
 import {
@@ -470,7 +471,7 @@ export async function runRagSystemHealth(triggerSource = "manual") {
         failedKeys: alertableFailed.map((item) => item.key),
         requiredFailedKeys: alertableRequiredFailed.map((item) => item.key),
       },
-      adminUrl: `${configured(process.env.NEXT_PUBLIC_APP_URL) || "https://kaxi.vercel.app"}/admin`,
+      adminUrl: `${siteBaseUrl()}/admin`,
     });
   }
   return { id: inserted.data.id, status, checkedAt: new Date().toISOString(), durationMs, checks, alert, ...provenance };

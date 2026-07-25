@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      KAXI_SLA_URL: https://kaxi.vercel.app/api/ops/sla
+      KAXI_SLA_URL: ${{ vars.PRODUCTION_BASE_URL || 'https://kaxi.vercel.app' }}/api/ops/sla
       KAXI_ADMIN_API_KEY: ${{ secrets.KAXI_ADMIN_API_KEY }}
     steps:
       - name: Require admin key
