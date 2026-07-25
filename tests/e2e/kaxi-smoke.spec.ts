@@ -69,7 +69,7 @@ test("home quick diagnosis uses three answers for its path result", async ({ pag
 
 test("landing -> diagnosis save -> admin lookup -> Agent question", async ({ page, request }) => {
   await page.goto("/ko");
-  await expect(page.getByText("KAXI").first()).toBeVisible();
+  await expect(page.getByText("KARXY").first()).toBeVisible();
   await expect(page.getByText(/브로커 없이|Broker-free/i).first()).toBeVisible();
 
   await page.goto("/diagnose");
@@ -146,7 +146,7 @@ test("RAG consult answers from the serving corpus (opt-in integration)", async (
   expect(Array.isArray(consultData.retrievedDocs)).toBe(true);
 });
 
-test("KAXI Typebot bubble loads the published flow and rejects a forged session", async ({ page, request }) => {
+test("KARXY Typebot bubble loads the published flow and rejects a forged session", async ({ page, request }) => {
   await page.goto("/ko");
   const launcher = page.getByRole("button", { name: "Open chatbot" });
   await expect(launcher).toBeVisible();
@@ -175,7 +175,7 @@ test("KAXI Typebot bubble loads the published flow and rejects a forged session"
   expect(forged.status()).toBe(401);
 });
 
-test("KAXI Typebot bubble stays usable on mobile and is hidden on account routes", async ({ page }) => {
+test("KARXY Typebot bubble stays usable on mobile and is hidden on account routes", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await page.goto("/en");
   const launcher = page.getByRole("button", { name: "Open chatbot" });

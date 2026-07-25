@@ -95,7 +95,7 @@ export function AgentResponseCard({
           <KaxiPawMark className="h-3 w-3" />
         </div>
         <span className="text-xs font-medium text-muted-foreground">
-          KAXI AI
+          KARXY AI
         </span>
         {message.routing && (
           <Badge variant={message.routing.capability === "expert" ? "default" : "outline"} className="text-[10px] gap-0.5">

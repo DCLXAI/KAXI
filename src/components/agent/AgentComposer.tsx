@@ -31,7 +31,7 @@ export function AgentComposer({
         <Card className="p-3 shadow-lg border-2 focus-within:border-primary-strong/50 transition-colors">
           <Textarea
             ref={inputRef}
-            aria-label={locale === "ko" ? "KAXI AI 후속 질문" : locale === "vi" ? "Câu hỏi tiếp theo cho KAXI AI" : locale === "mn" ? "KAXI AI-д дараагийн асуулт" : "Follow-up for KAXI AI"}
+            aria-label={locale === "ko" ? "KARXY AI 후속 질문" : locale === "vi" ? "Câu hỏi tiếp theo cho KARXY AI" : locale === "mn" ? "KARXY AI-д дараагийн асуулт" : "Follow-up for KARXY AI"}
             value={input}
             onChange={(event) => onInputChange(event.target.value)}
             onKeyDown={(event) => {

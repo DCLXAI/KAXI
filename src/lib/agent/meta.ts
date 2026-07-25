@@ -103,29 +103,29 @@ const TOOL_PLAN_LABELS: Record<string, Record<Lang, string>> = {
 };
 
 const FALLBACK_PLAN: Record<Lang, string[]> = {
-  ko: ["질문 분류", "KAXI 지식으로 답변 생성"],
-  vi: ["Phân loại câu hỏi", "Trả lời bằng kiến thức KAXI"],
-  mn: ["Асуултыг ангилах", "KAXI мэдлэгээр хариулах"],
-  en: ["Classify the request", "Answer with KAXI knowledge"],
+  ko: ["질문 분류", "KARXY 지식으로 답변 생성"],
+  vi: ["Phân loại câu hỏi", "Trả lời bằng kiến thức KARXY"],
+  mn: ["Асуултыг ангилах", "KARXY мэдлэгээр хариулах"],
+  en: ["Classify the request", "Answer with KARXY knowledge"],
 };
 
 const SUMMARIES: Record<Lang, (toolCount: number, sourceCount: number) => string> = {
   ko: (toolCount, sourceCount) =>
     toolCount > 0
       ? `${toolCount}개 도구 결과와 ${sourceCount}개 출처를 바탕으로 답변했습니다.`
-      : "KAXI 에이전트가 직접 답변했습니다.",
+      : "KARXY 에이전트가 직접 답변했습니다.",
   vi: (toolCount, sourceCount) =>
     toolCount > 0
       ? `Đã trả lời dựa trên ${toolCount} kết quả công cụ và ${sourceCount} nguồn.`
-      : "KAXI Agent answered directly.",
+      : "KARXY Agent answered directly.",
   mn: (toolCount, sourceCount) =>
     toolCount > 0
       ? `${toolCount} хэрэгслийн үр дүн, ${sourceCount} эх сурвалж дээр тулгуурлав.`
-      : "KAXI агент шууд хариуллаа.",
+      : "KARXY агент шууд хариуллаа.",
   en: (toolCount, sourceCount) =>
     toolCount > 0
       ? `Answered with ${toolCount} tool result${toolCount === 1 ? "" : "s"} and ${sourceCount} source${sourceCount === 1 ? "" : "s"}.`
-      : "KAXI Agent answered directly.",
+      : "KARXY Agent answered directly.",
 };
 
 const SUGGESTION_LIBRARY: Record<Lang, AgentSuggestion[]> = {
@@ -257,8 +257,8 @@ function extractSources(toolResults: ToolResult[]): AgentSource[] {
         const meta = doc?.sourceMeta;
         pushSource(sources, seen, {
           id: String(doc?.id || doc?.title || meta?.label || "knowledge"),
-          title: String(doc?.title || meta?.label || "KAXI knowledge"),
-          label: String(meta?.label || doc?.source || "KAXI knowledge"),
+          title: String(doc?.title || meta?.label || "KARXY knowledge"),
+          label: String(meta?.label || doc?.source || "KARXY knowledge"),
           url: typeof meta?.url === "string" ? meta.url : null,
           kind: meta?.owner === "internal" ? "internal" : "knowledge",
           owner: typeof meta?.owner === "string" ? meta.owner : undefined,

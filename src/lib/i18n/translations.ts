@@ -1,4 +1,4 @@
-// KAXI 다국어 사전 (KO / VI / MN / EN)
+// KARXY 다국어 사전 (KO / VI / MN / EN)
 
 export type Lang = "ko" | "vi" | "mn" | "en";
 
@@ -11,9 +11,9 @@ export const LANGS: { code: Lang; label: string; flag: string }[] = [
 
 export const t = {
   // 네비게이션
-  brand: { ko: "KAXI", vi: "KAXI", mn: "KAXI", en: "KAXI" },
+  brand: { ko: "KARXY", vi: "KARXY", mn: "KARXY", en: "KARXY" },
   nav_study_prep: { ko: "유학 준비", vi: "Chuẩn bị du học", mn: "Суралцах бэлтгэл", en: "Study Prep" },
-  nav_agent: { ko: "KAXI AI", vi: "KAXI AI", mn: "KAXI AI", en: "KAXI AI" },
+  nav_agent: { ko: "KARXY AI", vi: "KARXY AI", mn: "KARXY AI", en: "KARXY AI" },
   nav_diagnose: { ko: "유학 경로 진단", vi: "Đánh giá lộ trình", mn: "Маршрутын үнэлгээ", en: "Path Diagnosis" },
   nav_schools: { ko: "학교 비교", vi: "So sánh trường", mn: "Сургуулийн харьцуулалт", en: "Compare Schools" },
   nav_cost: { ko: "비용 계산기", vi: "Tính chi phí", mn: "Зардал тооцоолуур", en: "Cost Calculator" },
@@ -63,12 +63,12 @@ export const t = {
   hero_stat_schools: { ko: "검증 학교 DB", vi: "Trường đã xác minh", mn: "Шалгасан сургууль", en: "Verified schools" },
   hero_stat_accredited: { ko: "인증 {n}", vi: "Đã công nhận {n}", mn: "Гэрчлэгдсэн {n}", en: "{n} accredited" },
   hero_stat_langs: { ko: "지원 언어", vi: "Ngôn ngữ hỗ trợ", mn: "Дэмжих хэл", en: "Supported languages" },
-  hero_cta_agent: { ko: "KAXI AI 시작", vi: "Bắt đầu KAXI AI", mn: "KAXI AI эхлүүлэх", en: "Start KAXI AI" },
+  hero_cta_agent: { ko: "KARXY AI 시작", vi: "Bắt đầu KARXY AI", mn: "KARXY AI эхлүүлэх", en: "Start KARXY AI" },
 
   features_title: { ko: "브로커가 하던 일을 플랫폼이 대체합니다", vi: "Nền tảng thay thế những gì môi giới làm", mn: "Зуучлагчийн ажлыг платформ орлоно", en: "The platform replaces what brokers do" },
   features_subtitle: { ko: "불법 기능은 차단하고, 정상 기능은 더 투명하게 제공합니다.", vi: "Chặn chức năng bất hợp pháp, minh bạch hóa chức năng hợp pháp.", mn: "Хууль бус үйлдлийг хааж, хууль ёсны үйлдлийг ил тод болгоно.", en: "Block illegal functions, make legal ones more transparent." },
 
-  ai_banner_badge: { ko: "KAXI AI", vi: "KAXI AI", mn: "KAXI AI", en: "KAXI AI" },
+  ai_banner_badge: { ko: "KARXY AI", vi: "KARXY AI", mn: "KARXY AI", en: "KARXY AI" },
   ai_banner_title: { ko: "유학 준비와 비자 상담을 한곳에서", vi: "Chuẩn bị du học và tư vấn visa tại một nơi", mn: "Суралцах бэлтгэл ба визийн зөвлөгөө нэг дор", en: "Study preparation and visa guidance in one place" },
   ai_banner_desc: {
     ko: "학교 검색·비용 계산·서류 준비는 도구로 실행하고, 비자·체류 질문은 공식 문서 RAG와 위험 감지를 거쳐 답합니다.",
@@ -76,9 +76,9 @@ export const t = {
     mn: "Сургууль, зардал, баримтын ажлыг хэрэгслээр гүйцэтгэж, визийн асуултад албан RAG ба эрсдэлийн шалгалтаар хариулна.",
     en: "Runs school, cost, and document tasks with tools, then answers visa questions through official-source RAG and safety checks.",
   },
-  ai_banner_cta: { ko: "KAXI AI 시작", vi: "Bắt đầu KAXI AI", mn: "KAXI AI эхлүүлэх", en: "Start KAXI AI" },
+  ai_banner_cta: { ko: "KARXY AI 시작", vi: "Bắt đầu KARXY AI", mn: "KARXY AI эхлүүлэх", en: "Start KARXY AI" },
 
-  broker_compare_title: { ko: "브로커 vs KAXI, 이렇게 다릅니다", vi: "Môi giới và KAXI khác nhau thế nào", mn: "Зуучлагч ба KAXI ийм ялгаатай", en: "Broker vs. KAXI, here's the difference" },
+  broker_compare_title: { ko: "브로커 vs KARXY, 이렇게 다릅니다", vi: "Môi giới và KARXY khác nhau thế nào", mn: "Зуучлагч ба KARXY ийм ялгаатай", en: "Broker vs. KARXY, here's the difference" },
   broker_compare_subtitle: { ko: "비용 투명성부터 비자 안전까지, 항목별로 비교해보세요.", vi: "Từ minh bạch chi phí đến an toàn visa, hãy so sánh từng mục.", mn: "Зардлын ил тод байдлаас эхлээд визийн аюулгүй байдал хүртэл харьцуулна уу.", en: "Compare item by item, from cost transparency to visa safety." },
 
   // 경로 진단

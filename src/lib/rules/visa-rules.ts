@@ -465,7 +465,7 @@ export function evaluateVisaRules(input: VisaRuleInput): VisaRuleEvaluation {
     partnerEscalationReasons.push("행정기관 제출서류 작성·제출 대행은 행정사 등 자격 있는 전문가 영역입니다.");
   }
   if (blockedReasons.length > 0) {
-    warnings.push("불법·허위·보장성 요청은 KAXI에서 지원하지 않습니다.");
+    warnings.push("불법·허위·보장성 요청은 KARXY에서 지원하지 않습니다.");
   }
 
   // New rules from expanded seeds

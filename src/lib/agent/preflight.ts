@@ -178,11 +178,11 @@ function buildGroundedQuestion(question: string, groundingContext: string): stri
   const prefix = `Original user question:
 ${redactSensitiveText(question)}
 
-KAXI server-side tool context:
+KARXY server-side tool context:
 `;
   const suffix = `
 
-Answer the original question using the KAXI tool context above as the primary source. If the context is insufficient or time-sensitive, say so briefly.
+Answer the original question using the KARXY tool context above as the primary source. If the context is insufficient or time-sensitive, say so briefly.
 Add numeric citations like [1], [2] after factual/legal claims when the tool context provides numbered sources.
 Include source names/URLs when provided. Do not mention internal preflight implementation details.`;
 

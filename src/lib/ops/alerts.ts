@@ -134,19 +134,19 @@ export function getOpsAlertDiagnostics(env: NodeJS.ProcessEnv = process.env): Op
 function slackBody(payload: OpsAlertPayload) {
   const details = payload.details ? `\n\`\`\`${JSON.stringify(payload.details).slice(0, 2200)}\`\`\`` : "";
   return {
-    text: `[KAXI ${payload.severity.toUpperCase()}] ${payload.message}`,
+    text: `[KARXY ${payload.severity.toUpperCase()}] ${payload.message}`,
     blocks: [
       {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: `*KAXI ${payload.severity.toUpperCase()}* · ${payload.eventType}\n${payload.message}${details}`,
+          text: `*KARXY ${payload.severity.toUpperCase()}* · ${payload.eventType}\n${payload.message}${details}`,
         },
       },
       ...(payload.adminUrl
         ? [{
             type: "actions",
-            elements: [{ type: "button", text: { type: "plain_text", text: "KAXI 운영 확인" }, url: payload.adminUrl }],
+            elements: [{ type: "button", text: { type: "plain_text", text: "KARXY 운영 확인" }, url: payload.adminUrl }],
           }]
         : []),
     ],
@@ -158,7 +158,7 @@ function emailBody(payload: OpsAlertPayload, env: NodeJS.ProcessEnv) {
   return {
     from: configured(env.OPS_ALERT_EMAIL_FROM || env.NOTIFY_EMAIL_FROM),
     to: emailRecipients(env),
-    subject: `[KAXI ${payload.severity.toUpperCase()}] ${payload.eventType}`.slice(0, 180),
+    subject: `[KARXY ${payload.severity.toUpperCase()}] ${payload.eventType}`.slice(0, 180),
     text: [
       payload.message,
       `Source: ${payload.source}`,

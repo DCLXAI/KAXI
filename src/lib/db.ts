@@ -110,7 +110,7 @@ export function getRuntimeDatabaseInfo(env: NodeJS.ProcessEnv = process.env): Ru
       sharedWritable: false,
       postgresqlConfigured: false,
       activePrismaProvider: "postgresql",
-      reason: "KAXI Phase 0 requires Supabase/PostgreSQL; non-PostgreSQL database URLs are not supported.",
+      reason: "KARXY Phase 0 requires Supabase/PostgreSQL; non-PostgreSQL database URLs are not supported.",
     };
   }
 

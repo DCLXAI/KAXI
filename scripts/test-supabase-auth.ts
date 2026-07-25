@@ -73,8 +73,8 @@ assert(
   "admin UI access should depend on the linked PLATFORM_ADMIN role without an MFA enrollment gate"
 );
 assert(
-  adminShellSource.includes('href="/"') && adminShellSource.includes('aria-label="KAXI 홈으로 이동"'),
-  "admin brand link should return to the KAXI home page"
+  adminShellSource.includes('href="/"') && adminShellSource.includes('aria-label="KARXY 홈으로 이동"'),
+  "admin brand link should return to the KARXY home page"
 );
 assert(
   !apiSecuritySource.includes("MFA verification required") &&

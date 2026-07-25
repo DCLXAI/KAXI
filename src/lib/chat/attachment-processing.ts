@@ -71,7 +71,7 @@ async function extractImage(bytes: Buffer, mimeType: string): Promise<Extraction
       {
         role: "user",
         content: [
-          { type: "text", text: "Extract this KAXI consultation attachment for grounded document assistance." },
+          { type: "text", text: "Extract this KARXY consultation attachment for grounded document assistance." },
           { type: "image", source: { type: "base64", media_type: mimeType, data: bytes.toString("base64") } },
         ],
       },

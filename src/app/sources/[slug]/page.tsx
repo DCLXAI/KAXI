@@ -3,8 +3,8 @@ import { notFound } from "next/navigation";
 import { KNOWLEDGE_DOCS, getSourceMetadata } from "@/lib/data/knowledge";
 
 const SOURCE_BY_SLUG = {
-  "cost-analysis": "KAXI 분석 (공식 학사운영 지침 기반)",
-  "safety-guideline": "KAXI 안전 가이드라인",
+  "cost-analysis": "KARXY 분석 (공식 학사운영 지침 기반)",
+  "safety-guideline": "KARXY 안전 가이드라인",
 } as const;
 
 type SourceSlug = keyof typeof SOURCE_BY_SLUG;
@@ -23,8 +23,8 @@ export async function generateMetadata({ params }: SourcePageProps): Promise<Met
   if (!isSourceSlug(slug)) return {};
   const source = SOURCE_BY_SLUG[slug];
   return {
-    title: `${getSourceMetadata(source).label} | KAXI`,
-    description: "KAXI 상담 답변에 사용되는 내부 검토 자료와 검토 기준입니다.",
+    title: `${getSourceMetadata(source).label} | KARXY`,
+    description: "KARXY 상담 답변에 사용되는 내부 검토 자료와 검토 기준입니다.",
     robots: { index: false, follow: true },
   };
 }
@@ -42,7 +42,7 @@ export default async function SourcePage({ params }: SourcePageProps) {
     <main className="min-h-dvh bg-white px-5 py-12 text-neutral-900 sm:px-8 sm:py-16">
       <div className="mx-auto max-w-3xl">
         <a href="/ko" className="text-sm font-semibold text-neutral-500 hover:text-neutral-900">
-          KAXI
+          KARXY
         </a>
         <header className="mt-8 border-b border-neutral-200 pb-8">
           <p className="text-sm font-semibold text-neutral-500">상담 답변 출처</p>
@@ -58,7 +58,7 @@ export default async function SourcePage({ params }: SourcePageProps) {
             </div>
           </dl>
           <p className="mt-5 text-sm leading-6 text-neutral-600">
-            이 페이지는 KAXI의 내부 분석 또는 안전 정책입니다. 정부기관의 법률 해석이나 비자 발급 보장이
+            이 페이지는 KARXY의 내부 분석 또는 안전 정책입니다. 정부기관의 법률 해석이나 비자 발급 보장이
             아니며, 개인 상황에 따른 판단은 공식 기관 또는 자격 있는 전문가의 확인이 필요합니다.
           </p>
         </header>

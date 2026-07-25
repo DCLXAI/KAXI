@@ -10,7 +10,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { locale } = await params;
   if (!isLocale(locale)) return {};
   const copy = publicLegalCopy(locale);
-  return { title: `${copy.termsTitle} | KAXI`, description: copy.termsSummary };
+  return { title: `${copy.termsTitle} | KARXY`, description: copy.termsSummary };
 }
 
 export default async function TermsPage({ params }: PageProps) {

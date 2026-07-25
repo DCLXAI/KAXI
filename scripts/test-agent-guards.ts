@@ -382,7 +382,7 @@ async function testPreflightCarriesPlannerContext() {
   if (!result.groundingContext.includes("Detected signals") || !result.groundingContext.includes("Resolved slots")) {
     fail(`preflight should include planner evidence: ${JSON.stringify(result)}`);
   }
-  if (!result.groundedQuestion.includes("KAXI server-side tool context")) {
+  if (!result.groundedQuestion.includes("KARXY server-side tool context")) {
     fail(`grounded question should include tool context: ${result.groundedQuestion}`);
   }
 }

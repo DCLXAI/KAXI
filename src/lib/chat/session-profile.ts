@@ -29,7 +29,7 @@ export function normalizeVisaCode(value: unknown) {
 
 const VISA_CODE_PATTERN = /\b[cdef][-\s]?\d+(?:[-\s]?\d+)?\b/giu;
 
-// Country surface forms → ISO 3166-1 alpha-2, covering KAXI's serving locales.
+// Country surface forms → ISO 3166-1 alpha-2, covering KARXY's serving locales.
 const NATIONALITY_PATTERNS: Array<{ code: string; pattern: RegExp }> = [
   { code: "vn", pattern: /베트남|việt\s?nam|vietnam(?:ese)?|вьетнам/iu },
   { code: "mn", pattern: /몽골|mongolia(?:n)?|монгол/iu },

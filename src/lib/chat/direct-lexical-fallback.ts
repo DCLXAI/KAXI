@@ -211,15 +211,15 @@ const STOP_WORDS = new Set([
 ]);
 
 const FALLBACK_TITLES: Record<GuardrailLocale, string> = {
-  ko: "KAXI 승인 문서",
-  en: "KAXI approved source",
-  vi: "Nguồn KAXI đã duyệt",
-  mn: "KAXI баталгаажсан эх сурвалж",
+  ko: "KARXY 승인 문서",
+  en: "KARXY approved source",
+  vi: "Nguồn KARXY đã duyệt",
+  mn: "KARXY баталгаажсан эх сурвалж",
 };
 
 const HUMAN_REVIEW_REQUEST_PATTERN = /상담(?:원|사|자)?|담당자|사람(?:과|에게)?\s*(?:상담|문의|연결)|행정사|human\s+(?:agent|review|support)|talk\s+to\s+(?:a\s+)?person|nhân\s*viên|tư\s*vấn\s*viên|chuyên\s*viên|хүнтэй\s*(?:ярих|холбох)|мэргэжилтэн/iu;
 
-const NON_USER_FACING_EVIDENCE_PATTERN = /(?:\bKAXI\b|챗봇|AI\s*(?:에이전트|agent)|answering\s+system|chatbot).{0,80}(?:답하지\s*말|답변해야|응답해야|안내해야|분기해야|전환해야|should\s+(?:answer|respond|route|handoff)|must\s+(?:answer|respond|route|handoff)|do\s+not\s+(?:answer|respond))/iu;
+const NON_USER_FACING_EVIDENCE_PATTERN = /(?:\b(?:KAXI|KARXY)\b|챗봇|AI\s*(?:에이전트|agent)|answering\s+system|chatbot).{0,80}(?:답하지\s*말|답변해야|응답해야|안내해야|분기해야|전환해야|should\s+(?:answer|respond|route|handoff)|must\s+(?:answer|respond|route|handoff)|do\s+not\s+(?:answer|respond))/iu;
 
 const COPY = {
   ko: {
@@ -228,7 +228,7 @@ const COPY = {
     caution: "국적, 학교, 관할 기관과 현재 체류자격에 따라 조건이 달라질 수 있어요.",
     evidence: "근거",
     checked: "확인",
-    noContext: "관련된 KAXI 승인 문서를 충분히 찾지 못했어요. 추측해서 답하지 않고 상담원 검토로 넘길게요.",
+    noContext: "관련된 KARXY 승인 문서를 충분히 찾지 못했어요. 추측해서 답하지 않고 상담원 검토로 넘길게요.",
     noContextNext: "과정, 비자 종류, 현재 체류자격 또는 서류명을 포함해 다시 질문해 주세요.",
     next: {
       visa: "현재 체류자격, 만료일과 신청 예정 시점을 확인해 주세요.",
@@ -244,7 +244,7 @@ const COPY = {
     caution: "Requirements can vary by nationality, school, authority, and current stay status.",
     evidence: "Sources",
     checked: "checked",
-    noContext: "I could not find enough approved KAXI evidence to answer reliably. I will avoid guessing and route this for human review.",
+    noContext: "I could not find enough approved KARXY evidence to answer reliably. I will avoid guessing and route this for human review.",
     noContextNext: "Ask again with your program, visa type, current stay status, or document name.",
     next: {
       visa: "Confirm your current status, expiry date, and intended application date.",
@@ -260,7 +260,7 @@ const COPY = {
     caution: "Điều kiện có thể khác tùy quốc tịch, trường, cơ quan phụ trách và tư cách lưu trú hiện tại.",
     evidence: "Nguồn",
     checked: "kiểm tra",
-    noContext: "Tôi chưa tìm thấy đủ nguồn KAXI đã duyệt để trả lời đáng tin cậy. Tôi sẽ không phỏng đoán và chuyển nhân viên kiểm tra.",
+    noContext: "Tôi chưa tìm thấy đủ nguồn KARXY đã duyệt để trả lời đáng tin cậy. Tôi sẽ không phỏng đoán và chuyển nhân viên kiểm tra.",
     noContextNext: "Hãy hỏi lại kèm chương trình, loại visa, tình trạng lưu trú hiện tại hoặc tên giấy tờ.",
     next: {
       visa: "Hãy xác nhận tư cách lưu trú hiện tại, ngày hết hạn và thời điểm dự định nộp hồ sơ.",
@@ -276,7 +276,7 @@ const COPY = {
     caution: "Нөхцөл нь иргэншил, сургууль, хариуцсан байгууллага болон одоогийн статусаас хамаарч өөр байж болно.",
     evidence: "Эх сурвалж",
     checked: "шалгасан",
-    noContext: "Найдвартай хариулах хангалттай баталгаажсан KAXI эх сурвалж олдсонгүй. Таамаглахгүйгээр ажилтны хяналтад шилжүүлнэ.",
+    noContext: "Найдвартай хариулах хангалттай баталгаажсан KARXY эх сурвалж олдсонгүй. Таамаглахгүйгээр ажилтны хяналтад шилжүүлнэ.",
     noContextNext: "Хөтөлбөр, визний төрөл, одоогийн статус эсвэл баримтын нэрийг нэмээд дахин асууна уу.",
     next: {
       visa: "Одоогийн статус, дуусах огноо болон өргөдөл гаргах өдрөө шалгана уу.",

@@ -649,7 +649,7 @@ export async function POST(req: NextRequest) {
           provenance = n8nAttempt.provenance;
           reportOpsEventAsync(
             "direct_runtime_n8n_backup_succeeded",
-            "KAXI served the request through the signed n8n backup runtime.",
+            "KARXY served the request through the signed n8n backup runtime.",
             provenance,
             upstreamPayload.executionId,
             {
@@ -663,7 +663,7 @@ export async function POST(req: NextRequest) {
           await persistFailure("rag_runtime_unavailable", DIRECT_LEXICAL_PROVENANCE, directExecutionId);
           reportOpsEventAsync(
             "rag_runtime_unavailable",
-            "Both the KAXI direct runtime and n8n backup runtime failed.",
+            "Both the KARXY direct runtime and n8n backup runtime failed.",
             DIRECT_LEXICAL_PROVENANCE,
             directExecutionId,
             {
@@ -714,7 +714,7 @@ export async function POST(req: NextRequest) {
           provenance = resolveRagProvenance(upstreamPayload);
           reportOpsEventAsync(
             "n8n_runtime_fallback_succeeded",
-            "KAXI served the mediated request through its direct Supabase RAG fallback.",
+            "KARXY served the mediated request through its direct Supabase RAG fallback.",
             provenance,
             upstreamPayload.executionId,
             {
@@ -732,7 +732,7 @@ export async function POST(req: NextRequest) {
             provenance = n8nAttempt.provenance;
             reportOpsEventAsync(
               "n8n_no_context_canonical_retry_failed",
-              "The mediated canonical Supabase retry failed, so KAXI retained the n8n no-context response.",
+              "The mediated canonical Supabase retry failed, so KARXY retained the n8n no-context response.",
               provenance,
               fallbackExecutionId,
               {
@@ -747,7 +747,7 @@ export async function POST(req: NextRequest) {
             await persistFailure("rag_runtime_unavailable", DIRECT_LEXICAL_PROVENANCE, directExecutionId);
             reportOpsEventAsync(
               "rag_runtime_unavailable",
-              "Both the n8n runtime and KAXI direct Supabase fallback failed.",
+              "Both the n8n runtime and KARXY direct Supabase fallback failed.",
               DIRECT_LEXICAL_PROVENANCE,
               directExecutionId,
               {

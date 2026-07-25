@@ -21,7 +21,7 @@ export function AgentChatHeader({ agentStatus, locale, onReset }: AgentChatHeade
         </div>
         <div>
           <div className="font-semibold text-sm flex items-center gap-1.5">
-            KAXI AI
+            KARXY AI
           </div>
           <div className="text-xs text-muted-foreground flex items-center gap-1.5">
             <span className={`h-1.5 w-1.5 rounded-full ${statusDotClass(agentStatus)}`} />

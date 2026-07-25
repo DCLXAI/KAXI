@@ -273,10 +273,10 @@ const DIAGNOSIS_RULES: DiagnosisRule[] = [
     applies: (_input, profile) => profile.visaType === "D-10",
     riskDelta: 1,
     warning: () => ({
-      ko: "D-10 구직/창업 준비 경로는 현재 KAXI compliance rule engine의 실행 대상이 아닙니다. 법령·하이코리아 RAG 근거로 일반 원칙만 확인하고, 현재 체류자격·만료일·구직/창업 요건은 행정사 검토가 필요합니다.",
-      vi: "Lộ trình D-10 hiện chưa được chạy bằng compliance rule engine của KAXI. Chỉ dùng căn cứ luật/HiKorea RAG cho nguyên tắc chung; tình trạng hiện tại, ngày hết hạn và điều kiện tìm việc/khởi nghiệp cần chuyên gia hành chính rà soát.",
-      mn: "D-10 ажил хайх/стартап бэлтгэлийн зам одоогоор KAXI compliance rule engine-д хамрагдаагүй. Хууль болон HiKorea RAG эх сурвалжаар ерөнхий зарчмыг шалгаж, одоогийн ангилал, хугацаа, ажил хайх/стартап нөхцөлийг мэргэжлийн хүнээр шалгуулна.",
-      en: "The D-10 job-seeking/startup path is not yet executable in the KAXI compliance rule engine. Use law/HiKorea RAG only for general principles, and route current status, expiry, job-seeking, or startup eligibility facts to administrative-scrivener review.",
+      ko: "D-10 구직/창업 준비 경로는 현재 KARXY compliance rule engine의 실행 대상이 아닙니다. 법령·하이코리아 RAG 근거로 일반 원칙만 확인하고, 현재 체류자격·만료일·구직/창업 요건은 행정사 검토가 필요합니다.",
+      vi: "Lộ trình D-10 hiện chưa được chạy bằng compliance rule engine của KARXY. Chỉ dùng căn cứ luật/HiKorea RAG cho nguyên tắc chung; tình trạng hiện tại, ngày hết hạn và điều kiện tìm việc/khởi nghiệp cần chuyên gia hành chính rà soát.",
+      mn: "D-10 ажил хайх/стартап бэлтгэлийн зам одоогоор KARXY compliance rule engine-д хамрагдаагүй. Хууль болон HiKorea RAG эх сурвалжаар ерөнхий зарчмыг шалгаж, одоогийн ангилал, хугацаа, ажил хайх/стартап нөхцөлийг мэргэжлийн хүнээр шалгуулна.",
+      en: "The D-10 job-seeking/startup path is not yet executable in the KARXY compliance rule engine. Use law/HiKorea RAG only for general principles, and route current status, expiry, job-seeking, or startup eligibility facts to administrative-scrivener review.",
     }),
   },
   {
@@ -284,10 +284,10 @@ const DIAGNOSIS_RULES: DiagnosisRule[] = [
     applies: (_input, profile) => profile.visaType === "E-7",
     riskDelta: 1,
     warning: () => ({
-      ko: "E-7 취업 전환 경로는 현재 KAXI compliance rule engine의 실행 대상이 아닙니다. 법령·하이코리아 RAG 근거로 일반 원칙만 확인하고, 고용계약·직무 적합성·현재 체류자격은 행정사 검토가 필요합니다. 임금 요건은 연도별 고시 확인이 필요합니다.",
-      vi: "Lộ trình chuyển sang E-7 hiện chưa được chạy bằng compliance rule engine của KAXI. Chỉ dùng căn cứ luật/HiKorea RAG cho nguyên tắc chung; hợp đồng lao động, tính phù hợp công việc và tình trạng lưu trú hiện tại cần chuyên gia hành chính rà soát. Yêu cầu tiền lương phải kiểm tra theo thông báo hằng năm.",
-      mn: "E-7 ажилд шилжих зам одоогоор KAXI compliance rule engine-д хамрагдаагүй. Хууль болон HiKorea RAG эх сурвалжаар ерөнхий зарчмыг шалгаж, хөдөлмөрийн гэрээ, ажлын тохироо, одоогийн оршин суух ангиллыг мэргэжлийн хүнээр шалгуулна. Цалингийн шаардлагыг жил бүрийн зарлигаар шалгах шаардлагатай.",
-      en: "The E-7 employment-change path is not yet executable in the KAXI compliance rule engine. Use law/HiKorea RAG only for general principles, and route employment-contract, job-suitability, and current-status facts to administrative-scrivener review. The wage requirement must be checked against the annual official notice.",
+      ko: "E-7 취업 전환 경로는 현재 KARXY compliance rule engine의 실행 대상이 아닙니다. 법령·하이코리아 RAG 근거로 일반 원칙만 확인하고, 고용계약·직무 적합성·현재 체류자격은 행정사 검토가 필요합니다. 임금 요건은 연도별 고시 확인이 필요합니다.",
+      vi: "Lộ trình chuyển sang E-7 hiện chưa được chạy bằng compliance rule engine của KARXY. Chỉ dùng căn cứ luật/HiKorea RAG cho nguyên tắc chung; hợp đồng lao động, tính phù hợp công việc và tình trạng lưu trú hiện tại cần chuyên gia hành chính rà soát. Yêu cầu tiền lương phải kiểm tra theo thông báo hằng năm.",
+      mn: "E-7 ажилд шилжих зам одоогоор KARXY compliance rule engine-д хамрагдаагүй. Хууль болон HiKorea RAG эх сурвалжаар ерөнхий зарчмыг шалгаж, хөдөлмөрийн гэрээ, ажлын тохироо, одоогийн оршин суух ангиллыг мэргэжлийн хүнээр шалгуулна. Цалингийн шаардлагыг жил бүрийн зарлигаар шалгах шаардлагатай.",
+      en: "The E-7 employment-change path is not yet executable in the KARXY compliance rule engine. Use law/HiKorea RAG only for general principles, and route employment-contract, job-suitability, and current-status facts to administrative-scrivener review. The wage requirement must be checked against the annual official notice.",
     }),
   },
   {

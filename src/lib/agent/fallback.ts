@@ -129,8 +129,8 @@ function formatFallbackAnswer(
 
   lines.push(
     isKo
-      ? "KAXI 내장 도구로 확인한 결과입니다."
-      : "I checked this with KAXI's built-in tools."
+      ? "KARXY 내장 도구로 확인한 결과입니다."
+      : "I checked this with KARXY's built-in tools."
   );
 
   for (const item of toolResults) {

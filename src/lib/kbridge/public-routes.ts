@@ -46,10 +46,10 @@ const PUBLIC_DESCRIPTION_KEYS: Record<PublicViewKey, TranslationKey | null> = {
 };
 
 const AGENT_TITLES: Record<Locale, string> = {
-  ko: "KAXI AI",
-  vi: "KAXI AI",
-  mn: "KAXI AI",
-  en: "KAXI AI",
+  ko: "KARXY AI",
+  vi: "KARXY AI",
+  mn: "KARXY AI",
+  en: "KARXY AI",
 };
 
 export function isPublicViewKey(value: string): value is PublicViewKey {
@@ -78,12 +78,12 @@ export function publicViewMetadata(view: PublicViewKey, locale: Locale): Metadat
     ? AGENT_TITLES[locale]
     : titleKey
       ? tr(titleKey, locale)
-      : "KAXI";
+      : "KARXY";
   const description = descriptionKey ? tr(descriptionKey, locale) : tr("hero_subtitle", locale);
   const path = publicViewPath(view, locale);
 
   return {
-    title: `${rawTitle} · KAXI`,
+    title: `${rawTitle} · KARXY`,
     description,
     alternates: {
       canonical: path,
@@ -93,7 +93,7 @@ export function publicViewMetadata(view: PublicViewKey, locale: Locale): Metadat
       },
     },
     openGraph: {
-      title: `${rawTitle} · KAXI`,
+      title: `${rawTitle} · KARXY`,
       description,
       url: path,
       locale,

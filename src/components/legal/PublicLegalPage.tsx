@@ -18,7 +18,7 @@ export function PublicLegalPage({ locale, page }: { locale: Locale; page: "priva
           <ArrowLeft className="h-4 w-4" />{copy.home}
         </Link>
         <div className="mt-6 border-b pb-8">
-          <p className="text-sm font-medium text-primary-strong">KAXI</p>
+          <p className="text-sm font-medium text-primary-strong">KARXY</p>
           <h1 className="mt-2 text-3xl font-semibold tracking-normal sm:text-4xl">{isPrivacy ? copy.privacyTitle : copy.termsTitle}</h1>
           <p className="mt-3 max-w-2xl text-base leading-7 text-muted-foreground">{isPrivacy ? copy.privacySummary : copy.termsSummary}</p>
           <p className="mt-5 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-950">{copy.reviewNotice}</p>

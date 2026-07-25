@@ -80,7 +80,7 @@ export function KaxiPage({ view, locale }: { view: ViewKey; locale?: Lang }) {
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t">
               <div className="text-xs text-muted-foreground">
-                © 2026 KAXI · Broker-free Korea Study Preparation
+                © 2026 KARXY · Broker-free Korea Study Preparation
               </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
                 <Link href={`/${activeLang}/privacy`} className="hover:text-foreground hover:underline">{legalCopy.privacyLink}</Link>

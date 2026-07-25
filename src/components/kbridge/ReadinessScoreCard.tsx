@@ -149,16 +149,16 @@ export function ReadinessScoreCard({
             <Info className="h-4 w-4" />
             <AlertDescription className="text-xs leading-relaxed">
               {lang === "ko" && (
-                <>이 지수는 KAXI의 규칙 엔진과 공식 출처에 기반한 <strong>참고용 준비 지표</strong>이며, 실제 비자 심사 결과와 다를 수 있습니다. 개인 상황은 반드시 출입국사무소 또는 자격 있는 행정사와 확인하세요.</>
+                <>이 지수는 KARXY의 규칙 엔진과 공식 출처에 기반한 <strong>참고용 준비 지표</strong>이며, 실제 비자 심사 결과와 다를 수 있습니다. 개인 상황은 반드시 출입국사무소 또는 자격 있는 행정사와 확인하세요.</>
               )}
               {lang === "en" && (
-                <>This score is a <strong>reference preparation indicator</strong> based on KAXI's rule engine and official sources. Actual visa outcomes may differ. Always verify with immigration authorities or a qualified scrivener.</>
+                <>This score is a <strong>reference preparation indicator</strong> based on KARXY's rule engine and official sources. Actual visa outcomes may differ. Always verify with immigration authorities or a qualified scrivener.</>
               )}
               {lang === "vi" && (
-                <>Chỉ số này là <strong>chỉ báo tham khảo</strong> dựa trên công cụ quy tắc và nguồn chính thức của KAXI. Kết quả visa thực tế có thể khác. Luôn xác nhận với cơ quan nhập cư hoặc chuyên gia.</>
+                <>Chỉ số này là <strong>chỉ báo tham khảo</strong> dựa trên công cụ quy tắc và nguồn chính thức của KARXY. Kết quả visa thực tế có thể khác. Luôn xác nhận với cơ quan nhập cư hoặc chuyên gia.</>
               )}
               {lang === "mn" && (
-                <>Энэ оноо нь KAXI-ийн дүрмийн хөдөлгүүр ба албан ёсны эх сурвалжид суурилсан <strong>лавлагаа бэлтгэлийн үзүүлэлт</strong> юм. Бодит визний үр дүн өөр байж болно. Үргэлж цагаачлалын байгууллага эсвэл мэргэжилтэнтэй баталгаажуулна уу.</>
+                <>Энэ оноо нь KARXY-ийн дүрмийн хөдөлгүүр ба албан ёсны эх сурвалжид суурилсан <strong>лавлагаа бэлтгэлийн үзүүлэлт</strong> юм. Бодит визний үр дүн өөр байж болно. Үргэлж цагаачлалын байгууллага эсвэл мэргэжилтэнтэй баталгаажуулна уу.</>
               )}
             </AlertDescription>
           </Alert>

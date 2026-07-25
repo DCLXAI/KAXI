@@ -586,7 +586,7 @@ export async function mediateRagQuestion(
   }
 
   const language = LOCALE_NAMES[input.locale];
-  const systemPrompt = `You are KAXI's question mediation router for study in Korea and Korean immigration guidance.
+  const systemPrompt = `You are KARXY's question mediation router for study in Korea and Korean immigration guidance.
 
 You do not answer factual questions. You decide what verified information the system should retrieve and how the final answer should be framed.
 

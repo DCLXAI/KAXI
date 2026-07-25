@@ -178,9 +178,9 @@ const actionMetaWithDocuments = buildAgentMeta({
 });
 assert.equal(actionMetaWithDocuments.suggestions[0]?.kind, "documents", "the action path must also lead with the workspace CTA after get_documents");
 assert.equal(actionMetaWithDocuments.suggestions[0]?.href, "/docs?track=D-4", "the action path CTA must carry the tool call's visa_type");
-assert.match(consultPage, /redirect\(`\/\$\{locale\}\/agent`\)/, "legacy consult path must redirect to KAXI AI");
+assert.match(consultPage, /redirect\(`\/\$\{locale\}\/agent`\)/, "legacy consult path must redirect to KARXY AI");
 assert.doesNotMatch(sitemap, /"\/consult"/, "legacy consult path must not be indexed as a separate product");
-assert.match(widget, /"\/agent"/, "the compact widget must be hidden on the full KAXI AI screen");
+assert.match(widget, /"\/agent"/, "the compact widget must be hidden on the full KARXY AI screen");
 assert.doesNotMatch(widget, /publicPath === "\/"/, "Typebot must remain available on home");
 assert.match(widget, /kaxi-typebot-launcher/, "home must use the Typebot launcher");
 assert.match(widget, /<Bubble/, "home must use the published Typebot bubble runtime");
@@ -258,4 +258,4 @@ const consultFrontendFiles = existsSync("src/components/consult")
 assert.deepEqual(consultFrontendFiles, [], "a second consult frontend must not remain in the bundle");
 assert.equal(existsSync("src/app/api/ai/consult/route.ts"), true, "the expert backend must remain available behind the router");
 
-console.log("PASS unified KAXI AI routing and single-entry frontend");
+console.log("PASS unified KARXY AI routing and single-entry frontend");

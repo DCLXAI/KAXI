@@ -102,7 +102,7 @@ export function normalizeExpertResponse(
   const sources = docs.map((doc) => {
     const sourceMeta = record(doc.sourceMeta);
     const ragMeta = record(doc.ragMeta);
-    const source = text(doc.source, "KAXI knowledge");
+    const source = text(doc.source, "KARXY knowledge");
     return {
       id: text(doc.id, text(doc.title, source)),
       title: text(doc.title, source),

@@ -22,7 +22,7 @@ export interface SourceAnnotation {
 }
 
 function hostFromUrl(url?: string | null): string {
-  if (!url || url.startsWith("internal://")) return "KAXI";
+  if (!url || url.startsWith("internal://")) return "KARXY";
   try {
     return new URL(url).hostname.replace(/^www\./, "");
   } catch {
@@ -32,7 +32,7 @@ function hostFromUrl(url?: string | null): string {
 
 function sourceKind(source: SourceAnnotation, lang: Lang): string {
   if (source.kind === "school") return lang === "ko" ? "학교" : "School";
-  if (source.kind === "internal" || source.owner === "internal") return "KAXI";
+  if (source.kind === "internal" || source.owner === "internal") return "KARXY";
   if (source.sourceType?.includes("law")) return lang === "ko" ? "법령" : "Law";
   if (source.sourceType?.includes("government") || source.owner === "government") {
     return lang === "ko" ? "정부 공식" : "Gov";

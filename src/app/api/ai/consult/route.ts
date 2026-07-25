@@ -300,7 +300,7 @@ async function generateExpertAnswer(
         .join("\n\n---\n\n")
     : "(관련 공식 문서가 검색되지 않음 — 일반 지식으로 답변시 명확히 표시)";
 
-  const systemPrompt = `당신은 KAXI의 ${modeConfig.role}입니다. 한국 유학 준비생에게 전문적이고 정확한 행정·법률 정보를 제공합니다.
+  const systemPrompt = `당신은 KARXY의 ${modeConfig.role}입니다. 한국 유학 준비생에게 전문적이고 정확한 행정·법률 정보를 제공합니다.
 
 ## 전문 영역
 ${modeConfig.focus}
@@ -608,8 +608,8 @@ function officialSummaryDocScore(question: string, doc: KnowledgeDoc, lang: Lang
 const SOURCE_TYPE_LABELS: Record<string, Record<Lang, string>> = {
   official_government: { ko: "정부 공식", vi: "Chính phủ", mn: "Засгийн газрын", en: "Government official" },
   official_law: { ko: "법령", vi: "Pháp luật", mn: "Хууль", en: "Law" },
-  internal_analysis: { ko: "KAXI 분석", vi: "Phân tích KAXI", mn: "KAXI шинжилгээ", en: "KAXI analysis" },
-  internal_policy: { ko: "KAXI 정책", vi: "Chính sách KAXI", mn: "KAXI бодлого", en: "KAXI policy" },
+  internal_analysis: { ko: "KARXY 분석", vi: "Phân tích KARXY", mn: "KARXY шинжилгээ", en: "KARXY analysis" },
+  internal_policy: { ko: "KARXY 정책", vi: "Chính sách KARXY", mn: "KARXY бодлого", en: "KARXY policy" },
 };
 
 function sourceDisplayLabel(source: string, lang: Lang): string {

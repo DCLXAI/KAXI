@@ -315,7 +315,7 @@ function renderReadme(input: {
   visaDocumentCount: number;
   dbLoaded: boolean;
 }) {
-  return `# KAXI 자문 행정사 검수 패킷
+  return `# KARXY 자문 행정사 검수 패킷
 
 생성일: ${TODAY}
 

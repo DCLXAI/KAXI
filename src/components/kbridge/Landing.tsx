@@ -130,7 +130,7 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
 
       <HomeQuickDiagnosis lang={lang} onNavigate={onNavigate} />
 
-      <section id="kaxi-ai" aria-label="KAXI AI" className="mx-auto w-full max-w-3xl px-4">
+      <section id="kaxi-ai" aria-label="KARXY AI" className="mx-auto w-full max-w-3xl px-4">
         <AgentExperience embedded />
       </section>
 
@@ -218,7 +218,7 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
             <div className="grid grid-cols-3 gap-2 text-sm">
               <div className="font-medium text-muted-foreground"></div>
               <div className="font-medium text-destructive">Broker</div>
-              <div className="font-medium text-primary-strong">KAXI</div>
+              <div className="font-medium text-primary-strong">KARXY</div>
               {brokerComparison.map((row, i) => (
                 <div key={i} className="contents">
                   <div className="py-2 border-t text-muted-foreground">

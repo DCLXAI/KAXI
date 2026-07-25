@@ -163,7 +163,7 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
       "RAG gateway signing and endpoints",
       n8nUrlsReady && chatGatewaySecurityReady,
       n8nUrlsReady && chatGatewaySecurityReady
-        ? "All n8n entry points use HTTPS and KAXI owns strong webhook/session signing secrets."
+        ? "All n8n entry points use HTTPS and KARXY owns strong webhook/session signing secrets."
         : "Configure all n8n HTTPS webhook URLs plus separate 32-byte webhook and chat-session signing secrets.",
       { n8nUrlsReady, webhookSigningReady: strongSecret(env.N8N_WEBHOOK_SIGNING_SECRET), chatSessionSigningReady: strongSecret(env.CHAT_SESSION_SIGNING_SECRET) },
     ),
@@ -179,8 +179,8 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
       "Typebot gateway authentication",
       isTypebotGatewayAuthConfigured(env),
       isTypebotGatewayAuthConfigured(env)
-        ? "Typebot server-side webhooks authenticate to the KAXI gateway with a separate strong secret."
-        : "Configure a separate 32-byte TYPEBOT_GATEWAY_SECRET in KAXI and both Typebot webhook headers.",
+        ? "Typebot server-side webhooks authenticate to the KARXY gateway with a separate strong secret."
+        : "Configure a separate 32-byte TYPEBOT_GATEWAY_SECRET in KARXY and both Typebot webhook headers.",
       { gatewaySecretConfigured: isTypebotGatewayAuthConfigured(env) },
     ),
     check(
@@ -261,7 +261,7 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
       "n8n Error Workflow delivery",
       strongSecret(env.N8N_ERROR_REPORTING_SECRET) && configured(env.N8N_ERROR_WORKFLOW_ID),
       strongSecret(env.N8N_ERROR_REPORTING_SECRET) && configured(env.N8N_ERROR_WORKFLOW_ID)
-        ? "The published n8n Error Workflow is authenticated to KAXI operations alerts."
+        ? "The published n8n Error Workflow is authenticated to KARXY operations alerts."
         : "Publish KAXI Shared Error Handler, assign it to the RAG workflow, and configure matching N8N_ERROR_REPORTING_SECRET/KAXI_N8N_ERROR_TOKEN plus N8N_ERROR_WORKFLOW_ID.",
       {
         reportingSecretConfigured: strongSecret(env.N8N_ERROR_REPORTING_SECRET),

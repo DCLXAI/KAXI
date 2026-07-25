@@ -118,7 +118,7 @@ export function buildKnowledgeMonitorAlertPayload(
     }));
   const adminUrl = `${appBaseUrl()}/admin/knowledge`;
   const message = [
-    `KAXI 공식 출처 감시: 변경 ${summary.changed}개, 실패 ${summary.failed}개, 후보 ${summary.candidatesCreated}개`,
+    `KARXY 공식 출처 감시: 변경 ${summary.changed}개, 실패 ${summary.failed}개, 후보 ${summary.candidatesCreated}개`,
     `영향 룰 ${totals.rules}개, 영향 대화 ${totals.users}개`,
     `검토: ${adminUrl}`,
   ].join("\n");
@@ -172,7 +172,7 @@ function toSlackPayload(payload: KnowledgeMonitorAlertPayload) {
         elements: [
           {
             type: "button",
-            text: { type: "plain_text", text: "KAXI 검토" },
+            text: { type: "plain_text", text: "KARXY 검토" },
             url: payload.adminUrl,
           },
         ],

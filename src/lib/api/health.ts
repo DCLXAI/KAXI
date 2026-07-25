@@ -2,7 +2,7 @@ import packageJson from "../../../package.json";
 
 export function getHealthPayload() {
   return {
-    name: "KAXI API",
+    name: "KARXY API",
     status: "ok",
     version: packageJson.version,
     commit: process.env.VERCEL_GIT_COMMIT_SHA || process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || null,

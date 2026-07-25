@@ -176,7 +176,7 @@ export const generateGroundedRagAnswer: GroundedAnswerGenerator = async (request
 
   const context = buildContext(request.documents);
   const language = LOCALE_NAMES[request.locale];
-  const systemPrompt = `You are KAXI's grounded Korea study and immigration answer writer.
+  const systemPrompt = `You are KARXY's grounded Korea study and immigration answer writer.
 
 Rules:
 1. Answer the user's exact question first. Do not substitute a generic document checklist, visa overview, or school description for the requested answer.
@@ -204,7 +204,7 @@ Stored user profile: ${request.profile ? profilePromptBlock(request.profile) : "
 Verified context:
 ${context}`;
 
-  const retrySystemPrompt = `You write KAXI's grounded answer. Return ONLY one JSON object: {"supported": boolean, "answer": string, "nextStep": string, "usedSourceIndexes": number[]}. No prose, no code fences. Use only facts from the sources below; cite as [1], [2] and list every cited index in usedSourceIndexes. Write in ${language}. If the sources do not support the question, set supported=false with an empty answer and empty usedSourceIndexes.
+  const retrySystemPrompt = `You write KARXY's grounded answer. Return ONLY one JSON object: {"supported": boolean, "answer": string, "nextStep": string, "usedSourceIndexes": number[]}. No prose, no code fences. Use only facts from the sources below; cite as [1], [2] and list every cited index in usedSourceIndexes. Write in ${language}. If the sources do not support the question, set supported=false with an empty answer and empty usedSourceIndexes.
 
 Question focus: ${request.answerFocus || request.question}
 

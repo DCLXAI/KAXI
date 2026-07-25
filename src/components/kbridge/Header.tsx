@@ -11,6 +11,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
 import { KaxiPawMark } from "@/components/brand/KaxiPawMark";
 import { KaxiRunningCat } from "@/components/brand/KaxiRunningCat";
+import { KarxyWordmark } from "@/components/brand/KarxyWordmark";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,7 +48,7 @@ import {
 // The VISA QUEST game is a separate app (a fun funnel into the diagnosis flow).
 const GAME_URL = "https://mirror-rouge-sigma.vercel.app";
 
-// The game supports EN/KO/VI/RU; KAXI's Mongolian has no game equivalent, so it opens in English.
+// The game supports EN/KO/VI/RU; KARXY's Mongolian has no game equivalent, so it opens in English.
 const GAME_LANG: Record<Lang, string> = { ko: "KO", vi: "VI", mn: "EN", en: "EN" };
 
 function gameHref(activeLang: Lang): string {
@@ -219,7 +220,7 @@ function MobileNav({
       </SheetTrigger>
       <SheetContent side="right" className="w-[min(88vw,22rem)]">
         <SheetHeader className="border-b">
-          <SheetTitle>KAXI</SheetTitle>
+          <SheetTitle>KARXY</SheetTitle>
           <SheetDescription className="sr-only">{label}</SheetDescription>
         </SheetHeader>
         <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-4 pb-6" aria-label={label}>
@@ -360,11 +361,11 @@ export function Header({
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4">
         <Link
           href={viewToPath("home", locale)}
-          aria-label="KAXI"
+          aria-label="KARXY"
           className="flex items-center gap-2 font-bold"
         >
           <KaxiRunningCat size={32} />
-          <span className="hidden text-base xl:inline">KAXI</span>
+          <KarxyWordmark className="hidden h-[15px] w-auto xl:block" />
         </Link>
         <nav className="ml-4 hidden items-center gap-1 lg:flex" aria-label={tr("nav_menu", activeLang)}>
           {navGroups.map((group) => (

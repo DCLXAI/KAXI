@@ -723,8 +723,8 @@ function verificationBasis(input: {
   const sourceText = sourceLabels.length > 0 ? sourceLabels.join(" / ") : "기준치 이상으로 채택된 공식 RAG 출처 없음";
   const dateText = latestCheckedAt || requirementLastCheckedAt || "확인일 미상";
   const notice = officialSources.length > 0
-    ? `이 서류 검증은 ${dateText}에 확인된 공식 출처(${sourceText}) 및 KAXI 서류 매트릭스 기준입니다. 실제 접수 판단은 관할 출입국 또는 자격 있는 행정사 검토가 필요합니다.`
-    : `이 서류 검증은 KAXI 서류 매트릭스 기준이며, 기준치 이상으로 채택된 공식 RAG 출처가 없습니다. 접수 전 관할 출입국 또는 자격 있는 행정사 검토가 필요합니다.`;
+    ? `이 서류 검증은 ${dateText}에 확인된 공식 출처(${sourceText}) 및 KARXY 서류 매트릭스 기준입니다. 실제 접수 판단은 관할 출입국 또는 자격 있는 행정사 검토가 필요합니다.`
+    : `이 서류 검증은 KARXY 서류 매트릭스 기준이며, 기준치 이상으로 채택된 공식 RAG 출처가 없습니다. 접수 전 관할 출입국 또는 자격 있는 행정사 검토가 필요합니다.`;
 
   return {
     notice,

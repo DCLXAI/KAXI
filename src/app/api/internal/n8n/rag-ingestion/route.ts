@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     }
 
     // chunkEmbedding is top-level, OUTSIDE the receipt-bound payload: the
-    // verification receipt binds the payloadHash KAXI originally signed, and
+    // verification receipt binds the payloadHash KARXY originally signed, and
     // n8n attaches its computed vector alongside (same pattern as the
     // rag-runtime queryEmbedding). It is validated in the governed writer.
     return NextResponse.json(

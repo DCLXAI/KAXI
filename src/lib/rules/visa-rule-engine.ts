@@ -254,7 +254,7 @@ function applyOperation(
         state.partnerEscalationReasons.push("행정기관 제출서류 작성·제출 대행은 행정사 등 자격 있는 전문가 영역입니다.");
       }
       if (state.blockedReasons.length > previousBlockedCount) {
-        state.warnings.push("불법·허위·보장성 요청은 KAXI에서 지원하지 않습니다.");
+        state.warnings.push("불법·허위·보장성 요청은 KARXY에서 지원하지 않습니다.");
       }
       if (
         state.blockedReasons.length > previousBlockedCount ||

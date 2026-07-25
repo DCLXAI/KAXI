@@ -230,7 +230,7 @@ async function generateWithLLM(
       })
       .join("\n\n---\n\n");
 
-    const systemPrompt = `당신은 KAXI의 유학 준비 내비게이터입니다. 한국 유학 준비생에게 공식 정보 기반으로 답변합니다.
+    const systemPrompt = `당신은 KARXY의 유학 준비 내비게이터입니다. 한국 유학 준비생에게 공식 정보 기반으로 답변합니다.
 
 중요 규칙:
 1. 반드시 제공된 컨텍스트 문서만 근거로 답변하세요. 임의 정보를 생성하지 마세요.

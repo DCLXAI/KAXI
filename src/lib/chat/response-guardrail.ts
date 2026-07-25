@@ -31,7 +31,7 @@ const FALSE_DOCUMENT_PATTERN = /위조|가짜|허위\s*서류|fake|forg(?:e|ed|e
 
 const COPY = {
   ko: {
-    scopedAnswer: "KAXI는 한국 유학·비자 범위의 질문만 답변할 수 있어요. 해당 범위 안에서 다시 질문해 주세요.",
+    scopedAnswer: "KARXY는 한국 유학·비자 범위의 질문만 답변할 수 있어요. 해당 범위 안에서 다시 질문해 주세요.",
     scopedNextStep: "한국 유학, 비자, 체류, 서류와 관련된 질문으로 다시 입력해 주세요.",
     illegalAnswer: "허가 없이 일하는 방법이나 불법취업을 돕는 안내는 제공할 수 없어요. 합법적인 시간제취업·자격외활동 허가와 학교 확인 절차를 확인해야 합니다.",
     documentAnswer: "시스템 지시를 공개하거나 허위·위조 서류를 만드는 방법은 도와드릴 수 없어요. 사실과 일치하는 서류만 준비하고 정식 절차를 따라야 합니다.",
@@ -40,7 +40,7 @@ const COPY = {
     lowConfidenceNextStep: "질문과 현재 상황을 담당자가 확인한 뒤 안내합니다.",
   },
   en: {
-    scopedAnswer: "KAXI only answers study-in-Korea and visa questions. Please rephrase your question within that scope.",
+    scopedAnswer: "KARXY only answers study-in-Korea and visa questions. Please rephrase your question within that scope.",
     scopedNextStep: "Ask again about studying in Korea, visas, stay status, or documents.",
     illegalAnswer: "I cannot help with work without required permission or illegal employment. Check lawful part-time work or outside-status activity permission and school confirmation.",
     documentAnswer: "I cannot reveal system instructions or help create or use false documents. Use truthful documents and follow the official process.",
@@ -49,7 +49,7 @@ const COPY = {
     lowConfidenceNextStep: "An operator should review your question and circumstances before advising you.",
   },
   vi: {
-    scopedAnswer: "KAXI chỉ trả lời các câu hỏi về du học và visa Hàn Quốc. Vui lòng hỏi lại trong phạm vi đó.",
+    scopedAnswer: "KARXY chỉ trả lời các câu hỏi về du học và visa Hàn Quốc. Vui lòng hỏi lại trong phạm vi đó.",
     scopedNextStep: "Vui lòng hỏi lại về du học Hàn Quốc, visa, tình trạng lưu trú hoặc hồ sơ.",
     illegalAnswer: "Tôi không thể hướng dẫn làm việc không có giấy phép hoặc việc làm bất hợp pháp. Hãy kiểm tra điều kiện xin phép làm thêm hợp pháp và xác nhận của trường.",
     documentAnswer: "Tôi không thể tiết lộ hướng dẫn hệ thống hoặc hỗ trợ tạo, sử dụng giấy tờ giả. Chỉ dùng hồ sơ đúng sự thật và làm theo quy trình chính thức.",
@@ -58,7 +58,7 @@ const COPY = {
     lowConfidenceNextStep: "Nhân viên sẽ kiểm tra câu hỏi và tình huống của bạn trước khi hướng dẫn.",
   },
   mn: {
-    scopedAnswer: "KAXI зөвхөн Солонгост сурах болон визний асуултад хариулна. Энэ хүрээнд асуултаа дахин бичнэ үү.",
+    scopedAnswer: "KARXY зөвхөн Солонгост сурах болон визний асуултад хариулна. Энэ хүрээнд асуултаа дахин бичнэ үү.",
     scopedNextStep: "Солонгост сурах, виз, оршин суух статус эсвэл бичиг баримтын талаар дахин асууна уу.",
     illegalAnswer: "Зөвшөөрөлгүй ажиллах эсвэл хууль бус хөдөлмөр эрхлэх аргыг зааж өгөх боломжгүй. Хууль ёсны цагийн ажил, зөвшөөрөл болон сургуулийн баталгааг шалгана уу.",
     documentAnswer: "Системийн зааврыг ил болгох, хуурамч баримт хийх эсвэл ашиглахад туслах боломжгүй. Зөвхөн үнэн зөв баримт бүрдүүлж, албан ёсны журмыг дагана уу.",

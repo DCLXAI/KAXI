@@ -908,18 +908,26 @@ export const SOURCE_METADATA: Record<string, SourceMetadata> = {
     jurisdiction: "KR",
     validFrom: "2026-07-02",
   },
-  "KAXI 분석 (공식 학사운영 지침 기반)": {
-    label: "KAXI internal analysis",
+  "KARXY 분석 (공식 학사운영 지침 기반)": {
+    label: "KARXY internal analysis",
     url: "https://kaxi.vercel.app/sources/cost-analysis",
     verifiedAt: DEFAULT_VERIFIED_AT,
     reviewAfter: DEFAULT_REVIEW_AFTER,
     owner: "internal",
   },
-  "KAXI 안전 가이드라인": {
-    label: "KAXI safety guideline",
+  "KARXY 안전 가이드라인": {
+    label: "KARXY safety guideline",
     url: "https://kaxi.vercel.app/sources/safety-guideline",
     verifiedAt: DEFAULT_VERIFIED_AT,
     reviewAfter: DEFAULT_REVIEW_AFTER,
     owner: "internal",
   },
 };
+
+// Documents already ingested into the serving database still carry the
+// pre-rebrand "KAXI ..." source strings. Without these aliases those rows would
+// miss the lookup and fall back to the unregistered-source default, which
+// carries 1970 verifiedAt/reviewAfter dates and would make them look stale.
+// Keep the aliases until the corpus has been re-ingested under the new labels.
+SOURCE_METADATA["KAXI 분석 (공식 학사운영 지침 기반)"] = SOURCE_METADATA["KARXY 분석 (공식 학사운영 지침 기반)"];
+SOURCE_METADATA["KAXI 안전 가이드라인"] = SOURCE_METADATA["KARXY 안전 가이드라인"];

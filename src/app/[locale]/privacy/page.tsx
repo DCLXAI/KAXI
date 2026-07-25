@@ -10,7 +10,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { locale } = await params;
   if (!isLocale(locale)) return {};
   const copy = publicLegalCopy(locale);
-  return { title: `${copy.privacyTitle} | KAXI`, description: copy.privacySummary };
+  return { title: `${copy.privacyTitle} | KARXY`, description: copy.privacySummary };
 }
 
 export default async function PrivacyPage({ params }: PageProps) {
