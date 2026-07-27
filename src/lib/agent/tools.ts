@@ -8,6 +8,8 @@ import { withImmigrationLegalBasisDocs } from "../knowledge/legal-basis";
 import type { Lang } from "../i18n/translations";
 import { findSchoolById, listSchools } from "../schools/repository";
 import { createPartnerRequest } from "../partners/repository";
+import { hasActivePartnerRoutingConsent } from "../privacy/consent";
+import { viewToPath } from "../kbridge/views";
 import { redactSensitiveText } from "../privacy/pii";
 import { evaluateVisaRulesWithDbFallback } from "../rules/visa-rule-engine";
 import { VISA_DOCUMENT_REQUIREMENT_SEEDS } from "../documents/visa-document-matrix";
@@ -486,6 +488,13 @@ const diagnosePathTool: Tool = {
 };
 
 // ============ 도구 6: 파트너 상담 요청 ============
+const PARTNER_CONSENT_REQUIRED_SUMMARY: Record<Lang, string> = {
+  ko: "상담 연결에는 연락처와 개인정보 제공 동의가 필요합니다. 전문가 연결 화면에서 접수해 주세요.",
+  vi: "Cần thông tin liên hệ và sự đồng ý xử lý dữ liệu để kết nối tư vấn. Vui lòng gửi yêu cầu ở màn hình kết nối chuyên gia.",
+  mn: "Зөвлөгөө холбохын тулд холбоо барих мэдээлэл болон мэдээлэл боловсруулах зөвшөөрөл шаардлагатай. Мэргэжилтэн холбох хэсгээс илгээнэ үү.",
+  en: "Connecting you with a partner needs your contact details and data-processing consent. Please submit the request on the expert-connection screen.",
+};
+
 const requestPartnerTool: Tool = {
   name: "request_partner",
   description: "전문가 상담 요청 접수. 사용자가 명시적으로 상담 접수/연결을 요청한 경우에만 호출. 행정사/번역공증/어학원/입학처/정착 파트너 연결. 취업 매칭은 제외.",
@@ -507,22 +516,50 @@ const requestPartnerTool: Tool = {
     const safeQuestion = redactSensitiveText(question).slice(0, 500);
 
     if (ctx.dryRun) {
+      // The draft is what the user sees before confirming, so it must not
+      // preview a callback that the consent gate below would refuse.
+      const consented = await hasActivePartnerRoutingConsent(ctx.leadId || "anonymous");
       return {
         result: {
           request_id: "draft",
           partner_type: partnerType,
           question: safeQuestion,
           lead_id: ctx.leadId || "anonymous",
-          status: "draft",
+          status: consented ? "draft" : "consent_required",
           persisted: false,
-          eta: "상담 접수 확인 후 24시간 내 담당자 연락",
+          eta: consented ? "상담 접수 확인 후 24시간 내 담당자 연락" : null,
+          ...(consented ? {} : { next_step_href: viewToPath("partners", ctx.lang) }),
         },
-        summary: `${partnerType} 파트너 상담 요청 초안 준비 (사용자 확인 필요)`,
+        summary: consented
+          ? `${partnerType} 파트너 상담 요청 초안 준비 (사용자 확인 필요)`
+          : PARTNER_CONSENT_REQUIRED_SUMMARY[ctx.lang],
+      };
+    }
+
+    // A partner can only be assigned once the lead has granted all three
+    // routing consents, and an anonymous chat turn has no contact details at
+    // all. Creating a request here regardless used to return "we will call you
+    // within 24 hours" to someone we had no way to reach, and left the request
+    // unassignable in the operator queue. Send them to the form that collects
+    // contact and consent instead, and promise nothing.
+    const leadId = ctx.leadId || "anonymous";
+    if (!(await hasActivePartnerRoutingConsent(leadId))) {
+      return {
+        result: {
+          partner_type: partnerType,
+          question: safeQuestion,
+          lead_id: leadId,
+          status: "consent_required",
+          persisted: false,
+          eta: null,
+          next_step_href: viewToPath("partners", ctx.lang),
+        },
+        summary: PARTNER_CONSENT_REQUIRED_SUMMARY[ctx.lang],
       };
     }
 
     const request = await createPartnerRequest({
-      leadId: ctx.leadId || "anonymous",
+      leadId,
       partnerType,
       question,
     });
@@ -536,7 +573,7 @@ const requestPartnerTool: Tool = {
         lead_id: request.leadId,
         status: request.status,
         persisted,
-        eta: "24시간 내 담당자 연락",
+        eta: persisted ? "24시간 내 담당자 연락" : null,
       },
       summary: persisted
         ? `${partnerType} 파트너 상담 요청 접수 (24시간 내 연락)`

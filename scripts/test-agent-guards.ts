@@ -1057,3 +1057,45 @@ testAgentMetaDoesNotEchoPii();
 testAgentMetaClarifyingQuestions();
 testVercelModelCacheDefaultsToTmp();
 console.log("PASS agent guards");
+
+// --- request_partner must not promise a callback it cannot deliver ---------
+// The tool used to create a request and return "24시간 내 담당자 연락" for any
+// caller, including an anonymous chat turn with no contact details and no
+// consent. assignPartnerRequest then rejects those with 428, so the promise was
+// unkeepable and the request sat unassignable in the operator queue.
+{
+  const toolsSource = readFileSync("src/lib/agent/tools.ts", "utf8");
+  // Checking for the symbol alone is too weak — the import line satisfies it
+  // even if the call is deleted. What matters is that the gate runs before the
+  // request is created, so assert the ordering.
+  const gateAt = toolsSource.indexOf("hasActivePartnerRoutingConsent(leadId)");
+  const createAt = toolsSource.indexOf("await createPartnerRequest({");
+  if (gateAt < 0) {
+    fail("request_partner must check partner routing consent before creating a request");
+  }
+  if (createAt < 0 || gateAt > createAt) {
+    fail("the consent gate must run before createPartnerRequest, not after it");
+  }
+  if (!/status: "consent_required",[\s\S]{0,200}?eta: null/.test(toolsSource)) {
+    fail("the consent-required branch must return no ETA, since nobody can call the user back");
+  }
+
+  const consentSource = readFileSync("src/lib/privacy/consent.ts", "utf8");
+  if (!/export async function hasActivePartnerRoutingConsent/.test(consentSource)) {
+    fail("the consent check the tool relies on must exist");
+  }
+  if (!consentSource.includes("PARTNER_ROUTING_CONSENT_SCOPES")) {
+    fail("the read-only check should reuse the shared scope list rather than a second copy");
+  }
+
+  // The gate has to require exactly what assignment enforces, or the tool will
+  // promise something the assignment step still refuses.
+  const assignmentSource = readFileSync("src/lib/partners/assignment.ts", "utf8");
+  for (const scope of ["THIRD_PARTY_PROVISION", "PROCESSING_CONSIGNMENT", "OVERSEAS_TRANSFER"]) {
+    if (!assignmentSource.includes(scope)) {
+      fail(`assignment should still require ${scope}; update the tool's gate if this changed`);
+    }
+  }
+}
+
+console.log("PASS request_partner consent gate");
