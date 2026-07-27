@@ -13,10 +13,14 @@ import { Partners } from "@/components/kbridge/Partners";
 import { Admin } from "@/components/kbridge/Admin";
 import { Synonyms } from "@/components/kbridge/Synonyms";
 import { Agent } from "@/components/kbridge/Agent";
+import { KarxyWordmark } from "@/components/brand/KarxyWordmark";
+import { KaxiRunningCat } from "@/components/brand/KaxiRunningCat";
+import { KaxiPawMark } from "@/components/brand/KaxiPawMark";
 import { useLangStore } from "@/store/kbridge";
 import { tr, type Lang } from "@/lib/i18n/translations";
 import { isViewKey, viewToPath, type ViewKey } from "@/lib/kbridge/views";
 import { publicLegalCopy } from "@/lib/legal/public-legal-copy";
+import { smoothScrollTo } from "@/lib/ui/scroll";
 
 export function KaxiPage({ view, locale }: { view: ViewKey; locale?: Lang }) {
   const router = useRouter();
@@ -37,7 +41,7 @@ export function KaxiPage({ view, locale }: { view: ViewKey; locale?: Lang }) {
 
   const navigate = (nextView: string) => {
     router.push(viewToPath(nextView, locale));
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    smoothScrollTo(0);
   };
 
   return (
@@ -57,34 +61,44 @@ export function KaxiPage({ view, locale }: { view: ViewKey; locale?: Lang }) {
       </main>
 
       {view === "agent" ? (
-        <footer className="mt-auto border-t bg-muted/30">
+        <footer className="chat-surface dark mt-auto border-t border-border/70 bg-background">
           <div className="mx-auto max-w-7xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
             <span className="truncate">⚠️ {tr("footer_disclaimer", activeLang)}</span>
             <span className="flex flex-wrap items-center gap-x-4 gap-y-1 shrink-0">
-              <Link href={`/${activeLang}/privacy`} className="hover:text-foreground hover:underline">{legalCopy.privacyLink}</Link>
-              <Link href={`/${activeLang}/terms`} className="hover:text-foreground hover:underline">{legalCopy.termsLink}</Link>
+              <Link href={`/${activeLang}/privacy`} className="transition-colors hover:text-foreground hover:underline">{legalCopy.privacyLink}</Link>
+              <Link href={`/${activeLang}/terms`} className="transition-colors hover:text-foreground hover:underline">{legalCopy.termsLink}</Link>
             </span>
           </div>
         </footer>
       ) : (
-        <footer className="mt-auto border-t bg-muted/30">
-          <div className="mx-auto max-w-7xl px-4 py-6 space-y-3">
-            <div className="text-xs text-muted-foreground leading-relaxed">
-              ⚠️ {tr("footer_disclaimer", activeLang)}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              📚 {tr("footer_data_source", activeLang)}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              🏢 {tr("footer_company_info", activeLang)}
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t">
-              <div className="text-xs text-muted-foreground">
-                © 2026 KARXY · Broker-free Korea Study Preparation
+        <footer className="mt-auto border-t border-border/80 bg-card">
+          <div aria-hidden className="h-px w-full bg-gradient-to-r from-transparent via-primary/60 to-transparent dark:via-primary/30" />
+          <div className="mx-auto max-w-7xl px-4 py-10">
+            <div className="grid gap-8 md:grid-cols-[1.1fr_1.4fr]">
+              <div className="space-y-3">
+                <Link
+                  href={viewToPath("home", locale)}
+                  aria-label="KARXY"
+                  className="inline-flex items-center gap-2.5 text-foreground/80 transition-colors hover:text-foreground"
+                >
+                  <KaxiRunningCat size={28} />
+                  <KarxyWordmark className="h-[13px] w-auto" />
+                </Link>
+                <p className="text-xs text-muted-foreground">
+                  © 2026 KARXY · Broker-free Korea Study Preparation
+                </p>
               </div>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
-                <Link href={`/${activeLang}/privacy`} className="hover:text-foreground hover:underline">{legalCopy.privacyLink}</Link>
-                <Link href={`/${activeLang}/terms`} className="hover:text-foreground hover:underline">{legalCopy.termsLink}</Link>
+              <div className="space-y-2.5 text-xs leading-relaxed text-muted-foreground">
+                <p>⚠️ {tr("footer_disclaimer", activeLang)}</p>
+                <p>📚 {tr("footer_data_source", activeLang)}</p>
+                <p>🏢 {tr("footer_company_info", activeLang)}</p>
+              </div>
+            </div>
+            <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-5">
+              <KaxiPawMark className="h-4 w-4 opacity-70" />
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
+                <Link href={`/${activeLang}/privacy`} className="transition-colors hover:text-foreground hover:underline">{legalCopy.privacyLink}</Link>
+                <Link href={`/${activeLang}/terms`} className="transition-colors hover:text-foreground hover:underline">{legalCopy.termsLink}</Link>
               </div>
             </div>
           </div>

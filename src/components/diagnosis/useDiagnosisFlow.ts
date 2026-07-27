@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { defaultLocale, isLocale } from "@/i18n/routing";
 import { useLeadStore } from "@/store/kbridge";
 import { recommendPath, type DiagnosisInput } from "@/lib/data/diagnosis";
+import { smoothScrollIntoView } from "@/lib/ui/scroll";
 import { GOAL_VALUES, isOneOf } from "./diagnosis-options";
 
 const DEFAULT_INPUT: DiagnosisInput = {
@@ -76,7 +77,7 @@ export function useDiagnosisFlow() {
     setShowSave(false);
     setSaveError(null);
     setTimeout(() => {
-      document.getElementById("result-section")?.scrollIntoView({ behavior: "smooth" });
+      smoothScrollIntoView(document.getElementById("result-section"));
     }, 100);
   };
 

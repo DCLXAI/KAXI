@@ -214,14 +214,24 @@ export function HomeQuickDiagnosis({ lang, onNavigate }: { lang: Lang; onNavigat
           </div>
           <div className="grid grid-cols-3 gap-1.5" role="progressbar" aria-valuemin={1} aria-valuemax={3} aria-valuenow={step}>
             {[1, 2, 3].map((value) => (
-              <span key={value} className={`h-1.5 rounded-full ${value <= step ? "bg-icon-accent" : "bg-muted"}`} />
+              <span key={value} className={`relative h-1.5 rounded-full transition-colors duration-300 ${value <= step ? "bg-icon-accent" : "bg-muted"}`}>
+                {value === step && (
+                  <svg viewBox="0 0 24 24" aria-hidden="true" className="absolute -top-[5px] right-0 h-4 w-4 translate-x-1/2 fill-icon-accent animate-in fade-in zoom-in-75 duration-300 ease-snappy motion-reduce:animate-none">
+                    <ellipse cx="5.3" cy="9.2" rx="2.05" ry="3.05" transform="rotate(-28 5.3 9.2)" />
+                    <ellipse cx="9.7" cy="5.9" rx="2.15" ry="3.2" transform="rotate(-8 9.7 5.9)" />
+                    <ellipse cx="14.7" cy="5.9" rx="2.1" ry="3.05" transform="rotate(9 14.7 5.9)" />
+                    <ellipse cx="18.8" cy="9.5" rx="1.95" ry="2.85" transform="rotate(27 18.8 9.5)" />
+                    <path d="M5.1 17.1c0-2.1 1.55-3.25 3.05-4.6 1.35-1.22 2.2-2.7 4.05-2.7 1.9 0 2.8 1.45 4.15 2.72 1.48 1.39 3.05 2.55 3.05 4.62 0 2.35-2.02 3.75-4.22 3.56-1.25-.1-1.85-.67-3-.67-1.2 0-1.9.6-3.18.7-2.15.17-3.9-1.25-3.9-3.63Z" />
+                  </svg>
+                )}
+              </span>
             ))}
           </div>
         </div>
       )}
 
       {!goal && (
-        <div data-testid="quick-diagnosis-step-goal">
+        <div data-testid="quick-diagnosis-step-goal" className="animate-in fade-in slide-in-from-bottom-2 duration-300 ease-snappy motion-reduce:animate-none">
           <h3 className="mb-4 text-center text-lg font-bold">{localized(COPY.goalQuestion, lang)}</h3>
           <ul className="grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-3">
             {QUICK_DIAGNOSIS_IDS.map((id) => {
@@ -229,7 +239,7 @@ export function HomeQuickDiagnosis({ lang, onNavigate }: { lang: Lang; onNavigat
               const Icon = meta.icon;
               return (
                 <li key={id}>
-                  <button type="button" data-testid={`quick-diagnosis-option-${id}`} aria-pressed={goal === id} onClick={() => selectGoal(id)} className="h-full min-h-32 w-full rounded-lg border border-icon-accent/45 bg-card p-4 text-left transition hover:-translate-y-0.5 hover:border-icon-accent hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-icon-accent focus-visible:ring-offset-2">
+                  <button type="button" data-testid={`quick-diagnosis-option-${id}`} aria-pressed={goal === id} onClick={() => selectGoal(id)} className="h-full min-h-32 w-full rounded-lg border border-icon-accent/45 bg-card p-4 text-left transition hover:-translate-y-0.5 hover:border-icon-accent hover:shadow-md hover:shadow-icon-accent/10 active:translate-y-0 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-icon-accent focus-visible:ring-offset-2">
                     <span className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-icon-accent/15 text-icon-accent"><Icon className="h-[18px] w-[18px]" aria-hidden="true" /></span>
                     <span className="block text-sm font-semibold leading-snug sm:text-base">{tr(meta.title, lang)}</span>
                     <span className="mt-1.5 block text-xs leading-relaxed text-muted-foreground">{tr(meta.description, lang)}</span>
@@ -242,7 +252,7 @@ export function HomeQuickDiagnosis({ lang, onNavigate }: { lang: Lang; onNavigat
       )}
 
       {goal && !korean && (
-        <div data-testid="quick-diagnosis-step-korean">
+        <div data-testid="quick-diagnosis-step-korean" className="animate-in fade-in slide-in-from-bottom-2 duration-300 ease-snappy motion-reduce:animate-none">
           <h3 className="mb-4 text-center text-lg font-bold">{localized(COPY.koreanQuestion, lang)}</h3>
           <ul className="mx-auto grid max-w-3xl grid-cols-2 gap-2.5 md:grid-cols-4">
             {QUICK_KOREAN_IDS.map((id) => {
@@ -250,7 +260,7 @@ export function HomeQuickDiagnosis({ lang, onNavigate }: { lang: Lang; onNavigat
               const Icon = meta.icon;
               return (
                 <li key={id}>
-                  <button type="button" data-testid={`quick-diagnosis-korean-${id}`} aria-pressed={korean === id} onClick={() => selectKorean(id)} className="h-full min-h-28 w-full rounded-lg border border-icon-accent/45 bg-card p-4 text-left transition hover:-translate-y-0.5 hover:border-icon-accent hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-icon-accent focus-visible:ring-offset-2">
+                  <button type="button" data-testid={`quick-diagnosis-korean-${id}`} aria-pressed={korean === id} onClick={() => selectKorean(id)} className="h-full min-h-28 w-full rounded-lg border border-icon-accent/45 bg-card p-4 text-left transition hover:-translate-y-0.5 hover:border-icon-accent hover:shadow-md hover:shadow-icon-accent/10 active:translate-y-0 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-icon-accent focus-visible:ring-offset-2">
                     <Icon className="mb-3 size-5 text-icon-accent" aria-hidden="true" />
                     <span className="block text-sm font-semibold">{localized(meta.label, lang)}</span>
                     <span className="mt-1 block text-xs text-muted-foreground">{localized(meta.description, lang)}</span>
@@ -263,7 +273,7 @@ export function HomeQuickDiagnosis({ lang, onNavigate }: { lang: Lang; onNavigat
       )}
 
       {goal && korean && !budget && (
-        <div data-testid="quick-diagnosis-step-budget">
+        <div data-testid="quick-diagnosis-step-budget" className="animate-in fade-in slide-in-from-bottom-2 duration-300 ease-snappy motion-reduce:animate-none">
           <h3 className="mb-4 text-center text-lg font-bold">{localized(COPY.budgetQuestion, lang)}</h3>
           <ul className="mx-auto grid max-w-3xl grid-cols-2 gap-2.5 md:grid-cols-4">
             {QUICK_BUDGET_IDS.map((id) => {
@@ -271,7 +281,7 @@ export function HomeQuickDiagnosis({ lang, onNavigate }: { lang: Lang; onNavigat
               const Icon = meta.icon;
               return (
                 <li key={id}>
-                  <button type="button" data-testid={`quick-diagnosis-budget-${id}`} aria-pressed={budget === id} onClick={() => selectBudget(id)} className="h-full min-h-28 w-full rounded-lg border border-icon-accent/45 bg-card p-4 text-left transition hover:-translate-y-0.5 hover:border-icon-accent hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-icon-accent focus-visible:ring-offset-2">
+                  <button type="button" data-testid={`quick-diagnosis-budget-${id}`} aria-pressed={budget === id} onClick={() => selectBudget(id)} className="h-full min-h-28 w-full rounded-lg border border-icon-accent/45 bg-card p-4 text-left transition hover:-translate-y-0.5 hover:border-icon-accent hover:shadow-md hover:shadow-icon-accent/10 active:translate-y-0 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-icon-accent focus-visible:ring-offset-2">
                     <Icon className="mb-3 size-5 text-icon-accent" aria-hidden="true" />
                     <span className="block text-sm font-semibold">{localized(meta.label, lang)}</span>
                     <span className="mt-1 block text-xs text-muted-foreground">{localized(meta.description, lang)}</span>
@@ -285,7 +295,7 @@ export function HomeQuickDiagnosis({ lang, onNavigate }: { lang: Lang; onNavigat
 
       <div aria-live="polite" aria-atomic="true">
         {result && answers && (
-          <div data-testid="quick-diagnosis-result" className="rounded-lg border border-primary-strong/25 bg-primary-strong/5 p-5 sm:p-6">
+          <div data-testid="quick-diagnosis-result" className="animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-300 ease-snappy motion-reduce:animate-none rounded-lg border border-primary-strong/25 bg-primary-strong/5 p-5 shadow-md shadow-primary-strong/5 sm:p-6">
             <div className="flex flex-wrap items-center gap-2">
               <Badge>{tr("quick_result_badge", lang)}</Badge>
               {[tr(OPTION_META[answers.goal].title, lang), localized(KOREAN_META[answers.korean].label, lang), localized(BUDGET_META[answers.budget].label, lang)].map((label) => (

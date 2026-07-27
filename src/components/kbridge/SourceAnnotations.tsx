@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { Lang } from "@/lib/i18n/translations";
+import { smoothScrollIntoView } from "@/lib/ui/scroll";
 import { BookOpen, ExternalLink, ShieldCheck } from "lucide-react";
 
 export interface SourceAnnotation {
@@ -131,7 +132,7 @@ export function SourceAnnotations({
       const container = detailsRef.current;
       if (target && container && container.contains(target)) {
         if (!container.open) container.open = true;
-        requestAnimationFrame(() => target.scrollIntoView({ block: "start", behavior: "smooth" }));
+        requestAnimationFrame(() => smoothScrollIntoView(target, { block: "start" }));
       }
     };
     reveal();
@@ -154,7 +155,7 @@ export function SourceAnnotations({
           const label = `[${index + 1}] ${source.title}`;
           const kind = sourceKind(source, lang);
           const className =
-            "inline-flex max-w-full items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-xs hover:bg-muted";
+            "inline-flex max-w-full items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-xs transition-colors duration-150 ease-snappy hover:bg-muted hover:border-primary-strong/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-strong/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background";
           const content = (
             <>
               <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
@@ -180,7 +181,7 @@ export function SourceAnnotations({
       </div>
 
       <details className="mt-2">
-        <summary className="cursor-pointer text-xs text-muted-foreground select-none">
+        <summary className="cursor-pointer select-none rounded-sm text-xs text-muted-foreground transition-colors duration-150 ease-snappy hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-strong/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background">
           {detailsLabelText(lang)}
         </summary>
         <div className="mt-2 space-y-2">
@@ -202,7 +203,7 @@ export function SourceAnnotations({
                   <div className="flex items-center gap-1.5 font-medium">
                     <span className="rounded bg-primary-strong/10 px-1.5 py-0.5 text-[10px] text-primary-strong">[{index + 1}]</span>
                     {url ? (
-                      <a href={url} target="_blank" rel="noreferrer" className="truncate hover:underline">
+                      <a href={url} target="_blank" rel="noreferrer" className="truncate rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-strong/40">
                         {source.title}
                       </a>
                     ) : (
@@ -222,7 +223,7 @@ export function SourceAnnotations({
                 <span className="rounded bg-background px-1.5 py-0.5">{hostFromUrl(url)}</span>
                 {reviewAfter && <span className="rounded bg-background px-1.5 py-0.5">{reviewAfter}</span>}
                 {url && (
-                  <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded bg-background px-1.5 py-0.5 hover:underline">
+                  <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded bg-background px-1.5 py-0.5 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-strong/40">
                     {lang === "ko" ? "원문" : "Source"}
                     <ExternalLink className="h-3 w-3" />
                   </a>

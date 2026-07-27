@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { AlertTriangle, ArrowRight, CheckCircle2, Clock, FileText, Loader2, LogIn, Save } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, Clock, FileText, Info, Loader2, LogIn, Save, ShieldCheck } from "lucide-react";
 import { pickLang, recommendPath } from "@/lib/data/diagnosis";
 import type { Locale } from "@/i18n/routing";
+import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { ReadinessScoreCard } from "@/components/kbridge/ReadinessScoreCard";
 import { KaxiCat } from "@/components/brand/KaxiCat";
+import { KaxiPawMark } from "@/components/brand/KaxiPawMark";
 
 interface DiagnosisResultProps {
   locale: Locale;
@@ -48,10 +50,11 @@ export function DiagnosisResult({
   return (
     <div id="result-section" className="space-y-4">
       <Card
-        className="animate-in fade-in slide-in-from-bottom-2 duration-300 ease-snappy motion-reduce:animate-none"
+        className="relative overflow-hidden border-primary-strong/25 bg-gradient-to-br from-primary/20 via-card to-card dark:from-primary/10 animate-in fade-in slide-in-from-bottom-2 duration-300 ease-snappy motion-reduce:animate-none"
         style={{ animationDelay: "0ms", animationFillMode: "backwards" }}
       >
-        <CardHeader>
+        <KaxiPawMark className="pointer-events-none absolute -right-3 -top-3 h-24 w-24 rotate-12 text-icon-accent/[0.08] dark:text-icon-accent/10" />
+        <CardHeader className="relative">
           <div className="flex flex-wrap items-center gap-2">
             <Badge className="w-fit">{t("result_recommended")}</Badge>
             {/* Deliberately a badge beside the path, not another bullet in the
@@ -59,11 +62,23 @@ export function DiagnosisResult({
                 different kind of statement from "your budget looks short", and
                 burying it among the red warnings made the two look equally
                 severe. */}
-            <Badge variant={coverageStatus === "rule_engine" ? "secondary" : "outline"} className="w-fit font-normal">
+            <Badge
+              variant={coverageStatus === "rule_engine" ? "secondary" : "outline"}
+              className={cn(
+                "w-fit gap-1 font-normal",
+                coverageStatus === "rule_engine"
+                  ? "border-primary-strong/30 bg-primary-strong/10 text-primary-strong dark:bg-primary-strong/15"
+                  : "bg-background/60 text-muted-foreground",
+              )}
+            >
+              {coverageStatus === "rule_engine" ? <ShieldCheck className="h-3 w-3" /> : <Info className="h-3 w-3" />}
               {t("result_basis_label")} · {t(coverageLabelKey)}
             </Badge>
           </div>
-          <CardTitle className="font-serif text-2xl md:text-3xl mt-2">{pathLabel}</CardTitle>
+          <div className="mt-2 flex items-end justify-between gap-3">
+            <CardTitle className="font-serif text-3xl md:text-4xl">{pathLabel}</CardTitle>
+            <KaxiCat state="happy" size={48} className="shrink-0 animate-in fade-in zoom-in-75 duration-300 ease-snappy motion-reduce:animate-none" />
+          </div>
           {coverageStatus === "rag_only" && (
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               {t("result_basis_rag_only_detail")}
@@ -71,14 +86,14 @@ export function DiagnosisResult({
           )}
         </CardHeader>
         <CardContent className="grid md:grid-cols-2 gap-4">
-          <div className="flex items-start gap-3 rounded-lg bg-muted/30 p-4">
+          <div className="flex items-start gap-3 rounded-lg border border-primary-strong/15 bg-background/65 p-4 dark:bg-background/40">
             <Clock className="h-5 w-5 text-primary-strong mt-0.5" />
             <div>
               <div className="text-sm text-muted-foreground">{t("result_prep_time")}</div>
               <div className="font-medium mt-1">{pickLang(result.prepTime, locale)}</div>
             </div>
           </div>
-          <div className="flex items-start gap-3 rounded-lg bg-muted/30 p-4">
+          <div className="flex items-start gap-3 rounded-lg border border-primary-strong/15 bg-background/65 p-4 dark:bg-background/40">
             <ArrowRight className="h-5 w-5 text-primary-strong mt-0.5" />
             <div>
               <div className="text-sm text-muted-foreground">{t("result_estimated_cost")}</div>
@@ -113,14 +128,14 @@ export function DiagnosisResult({
       >
         <CardHeader>
           <CardTitle className="font-serif flex items-center gap-2 text-lg">
-            <FileText className="h-5 w-5" />
+            <span className="flex h-7 w-7 items-center justify-center rounded-md bg-icon-accent/15 text-icon-accent"><FileText className="h-4 w-4" /></span>
             {t("result_required_docs")}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-2">
             {result.requiredDocs.map((key) => (
-              <Badge key={key} variant="outline">{t(key)}</Badge>
+              <Badge key={key} variant="outline" className="border-icon-accent/40 bg-icon-accent/10 text-foreground">{t(key)}</Badge>
             ))}
           </div>
         </CardContent>
@@ -155,7 +170,9 @@ export function DiagnosisResult({
           <ol className="space-y-2">
             {result.nextActions.map((action, index) => (
               <li key={index} className="flex items-start gap-3">
-                <CheckCircle2 className="h-4 w-4 text-primary-strong mt-0.5 shrink-0" />
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/30 text-[11px] font-semibold tabular-nums text-primary-foreground dark:bg-primary/20 dark:text-primary">
+                  {index + 1}
+                </span>
                 <span className="text-sm">{pickLang(action, locale)}</span>
               </li>
             ))}
@@ -164,7 +181,7 @@ export function DiagnosisResult({
       </Card>
 
       <Card
-        className="animate-in fade-in slide-in-from-bottom-2 duration-300 ease-snappy motion-reduce:animate-none"
+        className="border-primary-strong/25 shadow-md shadow-primary-strong/5 animate-in fade-in slide-in-from-bottom-2 duration-300 ease-snappy motion-reduce:animate-none"
         style={{ animationDelay: "300ms", animationFillMode: "backwards" }}
       >
         <CardHeader>
