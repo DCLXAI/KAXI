@@ -350,7 +350,7 @@
         "path": "typebot-rag-runtime",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "https://kaxi.vercel.app",
+          "allowedOrigins": "https://kaxi.vercel.app,https://karxy.com",
           "ignoreBots": false
         }
       },
@@ -586,7 +586,7 @@
         "path": "rag-knowledge-ingest",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "https://kaxi.vercel.app",
+          "allowedOrigins": "https://kaxi.vercel.app,https://karxy.com",
           "ignoreBots": false
         }
       },
@@ -606,7 +606,7 @@
         "path": "typebot-handoff-update",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "https://kaxi.vercel.app",
+          "allowedOrigins": "https://kaxi.vercel.app,https://karxy.com",
           "ignoreBots": false
         }
       },
@@ -924,7 +924,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://kaxi.vercel.app/api/internal/n8n/verify",
+        "url": "https://karxy.com/api/internal/n8n/verify",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ { purpose: 'rag-ingestion', timestamp: $json.headers?.['x-kaxi-timestamp'] ?? '', nonce: $json.headers?.['x-kaxi-nonce'] ?? '', signature: $json.headers?.['x-kaxi-signature'] ?? '', payload: $json.body ?? {} } }}",
@@ -1033,7 +1033,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://kaxi.vercel.app/api/internal/n8n/verify",
+        "url": "https://karxy.com/api/internal/n8n/verify",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ { purpose: 'typebot-runtime', timestamp: $json.headers?.['x-kaxi-timestamp'] ?? '', nonce: $json.headers?.['x-kaxi-nonce'] ?? '', signature: $json.headers?.['x-kaxi-signature'] ?? '', payload: $json.body ?? {} } }}",
@@ -1059,7 +1059,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://kaxi.vercel.app/api/internal/n8n/verify",
+        "url": "https://karxy.com/api/internal/n8n/verify",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ { purpose: 'typebot-handoff', timestamp: $json.headers?.['x-kaxi-timestamp'] ?? '', nonce: $json.headers?.['x-kaxi-nonce'] ?? '', signature: $json.headers?.['x-kaxi-signature'] ?? '', payload: $json.body ?? {} } }}",
@@ -1140,7 +1140,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "https://kaxi.vercel.app/api/internal/n8n/rag-runtime",
+        "url": "https://karxy.com/api/internal/n8n/rag-runtime",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ { verificationToken: $('Verify Runtime Signature').item.json.verificationToken ?? '', payload: $('Typebot Runtime Webhook').item.json.body ?? {} } }}",

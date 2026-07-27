@@ -23,7 +23,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "https://kaxi.vercel.app/api/internal/n8n/error-report",
+        "url": "https://karxy.com/api/internal/n8n/error-report",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

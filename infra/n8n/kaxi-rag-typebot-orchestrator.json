@@ -3,7 +3,7 @@
   "name": "KAXI RAG Typebot Orchestrator",
   "nodes": [
     {
-      "id": "470f346f-00bb-40a9-9a86-55755fb3d6b9",
+      "id": "115a9c14-331f-4527-a50c-cc4f0c2d8d0b",
       "name": "Typebot Runtime Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -16,14 +16,14 @@
         "path": "typebot-rag-runtime",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "https://kaxi.vercel.app",
+          "allowedOrigins": "https://kaxi.vercel.app,https://karxy.com",
           "ignoreBots": false
         }
       },
-      "webhookId": "55ef10a3-c3cb-4c2a-9e29-c3d1b6f01eb0"
+      "webhookId": "993846c4-2ddf-41c7-8def-e440d765051d"
     },
     {
-      "id": "b472ce89-bcfb-415f-a66f-aea0c3457b3e",
+      "id": "7b0268a8-dc31-46c0-b5a6-ee085b1047ed",
       "name": "Verify Runtime Signature",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -33,7 +33,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "https://kaxi.vercel.app/api/internal/n8n/verify",
+        "url": "https://karxy.com/api/internal/n8n/verify",
         "authentication": "none",
         "sendBody": true,
         "contentType": "json",
@@ -51,7 +51,7 @@
       }
     },
     {
-      "id": "64c97cb9-cef1-41d6-8531-ff52e884a4d3",
+      "id": "b9efb714-da43-4685-b701-964cabbabb65",
       "name": "Runtime Signature Valid",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
@@ -83,7 +83,7 @@
       }
     },
     {
-      "id": "fb29bb0f-7985-445a-8ac5-a6da0975ef2d",
+      "id": "47bb6394-3580-4b75-a890-bf9ece808148",
       "name": "Compute Query Embedding",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -106,7 +106,7 @@
       "onError": "continueRegularOutput"
     },
     {
-      "id": "ea4dae39-d896-45e8-8d4f-7d7388e03bab",
+      "id": "f732c14b-b13e-4c8d-b41a-72f05670e061",
       "name": "Run KAXI RAG Core",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -116,7 +116,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "https://kaxi.vercel.app/api/internal/n8n/rag-runtime",
+        "url": "https://karxy.com/api/internal/n8n/rag-runtime",
         "authentication": "none",
         "sendBody": true,
         "contentType": "json",
@@ -135,7 +135,7 @@
       }
     },
     {
-      "id": "3c7e2cf6-995a-4c2d-bdf9-524ca1437ac7",
+      "id": "1ea1a78a-e73b-444b-9add-b8e43b5a6e1d",
       "name": "Respond to Typebot",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
@@ -164,7 +164,7 @@
       }
     },
     {
-      "id": "e1c2043c-579f-4f80-9a3e-a4515fdb4a3e",
+      "id": "c574c7b2-52d4-47d8-83a3-d79568212763",
       "name": "Respond Runtime Unauthorized",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
@@ -189,7 +189,7 @@
       }
     },
     {
-      "id": "66a8e7f8-9f48-4cc5-bfe9-a95dc975f18d",
+      "id": "96ad5143-0e1b-4f07-9fa9-8d880dfcd4d6",
       "name": "RAG Knowledge Ingestion Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -202,14 +202,14 @@
         "path": "rag-knowledge-ingest",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "https://kaxi.vercel.app",
+          "allowedOrigins": "https://kaxi.vercel.app,https://karxy.com",
           "ignoreBots": false
         }
       },
-      "webhookId": "c557e878-f648-430a-b4e7-2bcbd99c9622"
+      "webhookId": "358f1ca5-9a66-4458-a750-40aafe163e9b"
     },
     {
-      "id": "3e9c1026-6012-435a-b3df-85c0eeb3ff98",
+      "id": "024b0c97-7330-4e2e-85f8-0aeb982e7d88",
       "name": "Verify Ingestion Signature",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -219,7 +219,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "https://kaxi.vercel.app/api/internal/n8n/verify",
+        "url": "https://karxy.com/api/internal/n8n/verify",
         "authentication": "none",
         "sendBody": true,
         "contentType": "json",
@@ -237,7 +237,7 @@
       }
     },
     {
-      "id": "f41fc1af-1058-4167-860b-1ca953d0f675",
+      "id": "5d4a775f-93c5-4666-a433-857a0baf2ccb",
       "name": "Ingestion Signature Valid",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
@@ -269,7 +269,7 @@
       }
     },
     {
-      "id": "9343fd77-e80f-45c5-8d6c-b7a4e5f627a5",
+      "id": "16953178-5382-498c-9acd-cd5702913464",
       "name": "Compute Chunk Embedding",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -292,7 +292,7 @@
       "onError": "continueRegularOutput"
     },
     {
-      "id": "947c19de-3305-4ccd-8e0f-9a8480fca7ca",
+      "id": "626ac90e-30f1-44eb-abc1-07d72f5d8b9c",
       "name": "Run KAXI RAG Ingestion Core",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -302,7 +302,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "https://kaxi.vercel.app/api/internal/n8n/rag-ingestion",
+        "url": "https://karxy.com/api/internal/n8n/rag-ingestion",
         "authentication": "none",
         "sendBody": true,
         "contentType": "json",
@@ -324,7 +324,7 @@
       "waitBetweenTries": 750
     },
     {
-      "id": "162dd45e-6c5e-4486-8400-4a0621d942c6",
+      "id": "ff9f1291-8b40-4721-aed8-f3f85e5bc5cd",
       "name": "Respond Ingestion",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
@@ -353,7 +353,7 @@
       }
     },
     {
-      "id": "1cc9188a-088d-4293-942e-80c37b469951",
+      "id": "7280de6f-b7d6-4f52-b8f1-6897efa22da5",
       "name": "Respond Ingestion Unauthorized",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
@@ -378,7 +378,7 @@
       }
     },
     {
-      "id": "ea4c4c06-d741-44a1-9349-326cd38f44e2",
+      "id": "686a4c45-9f8f-4c15-aa6c-dd2f35aa47f5",
       "name": "Typebot Handoff Update Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -391,14 +391,14 @@
         "path": "typebot-handoff-update",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "https://kaxi.vercel.app",
+          "allowedOrigins": "https://kaxi.vercel.app,https://karxy.com",
           "ignoreBots": false
         }
       },
-      "webhookId": "781f9d17-857a-4a8c-b82a-e1e84affcf83"
+      "webhookId": "822b9552-6042-43d1-9a47-dab50624520e"
     },
     {
-      "id": "0d7fe136-1ddb-4871-a2e9-48dc783a08bd",
+      "id": "8d5f838e-32a5-4c96-930c-0f2b6a34064f",
       "name": "Verify Handoff Signature",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -408,7 +408,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "https://kaxi.vercel.app/api/internal/n8n/verify",
+        "url": "https://karxy.com/api/internal/n8n/verify",
         "authentication": "none",
         "sendBody": true,
         "contentType": "json",
@@ -426,7 +426,7 @@
       }
     },
     {
-      "id": "f4f0f13b-2892-4992-8473-faae27df4d04",
+      "id": "fb18b010-a450-4346-8705-c599379647a0",
       "name": "Handoff Signature Valid",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
@@ -458,7 +458,7 @@
       }
     },
     {
-      "id": "5e192a78-7126-4ec9-b750-c98a75c7bb72",
+      "id": "de711b62-009f-4458-a6bc-a11122cae03d",
       "name": "Run KAXI Handoff Core",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -468,7 +468,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "https://kaxi.vercel.app/api/internal/n8n/handoff-update",
+        "url": "https://karxy.com/api/internal/n8n/handoff-update",
         "authentication": "none",
         "sendBody": true,
         "contentType": "json",
@@ -490,7 +490,7 @@
       "waitBetweenTries": 500
     },
     {
-      "id": "1c2c5e8e-6749-4ef9-8c48-c878d0c8e1db",
+      "id": "1853884a-490f-4e3b-9356-260f579b5a3b",
       "name": "Respond Handoff Update",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
@@ -519,7 +519,7 @@
       }
     },
     {
-      "id": "b8072a26-9cbb-4f16-91d7-c5c2a17c799a",
+      "id": "6f0756bd-0feb-4f25-9f12-32c50e521dc2",
       "name": "Respond Handoff Unauthorized",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
@@ -544,7 +544,7 @@
       }
     },
     {
-      "id": "9e08c5ac-2c93-41c7-8f74-2a6b01088013",
+      "id": "8b593f21-699f-4a3a-b32f-57d9df821686",
       "name": "RAG Serving Capability Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -557,14 +557,14 @@
         "path": "rag-serving-capabilities",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "https://kaxi.vercel.app",
+          "allowedOrigins": "https://kaxi.vercel.app,https://karxy.com",
           "ignoreBots": false
         }
       },
-      "webhookId": "24078666-0ef9-4399-b808-44f1449aa75d"
+      "webhookId": "c0933228-f9d0-4279-bf97-e64ebf6c2d5b"
     },
     {
-      "id": "631bc5fa-f5c0-414e-93f1-5840f9b6bb5c",
+      "id": "b6773262-b2f2-499f-9f63-cf68de51a214",
       "name": "Respond RAG Serving Capability",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,

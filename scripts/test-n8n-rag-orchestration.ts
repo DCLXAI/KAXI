@@ -139,7 +139,7 @@ assert(
 );
 assert(core?.type === "n8n-nodes-base.httpRequest", "KAXI RAG core must be an HTTP node");
 assert(
-  core.parameters?.url === "https://kaxi.vercel.app/api/internal/n8n/rag-runtime",
+  core.parameters?.url === "https://karxy.com/api/internal/n8n/rag-runtime",
   "KAXI RAG core URL mismatch",
 );
 assert(
@@ -258,7 +258,7 @@ assert(
   "shared n8n Error Workflow must use Error Trigger and the KAXI alert gateway",
 );
 assert(
-  errorReporter?.parameters?.url === "https://kaxi.vercel.app/api/internal/n8n/error-report"
+  errorReporter?.parameters?.url === "https://karxy.com/api/internal/n8n/error-report"
     && JSON.stringify(errorReporter.parameters).includes("KAXI_N8N_ERROR_TOKEN"),
   "n8n errors must be authenticated into KAXI recordOpsEvent/Slack/email delivery",
 );
