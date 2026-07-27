@@ -70,6 +70,24 @@ function mapRiskLevel(score: number): "low" | "medium" | "high" {
   return "high";
 }
 
+/**
+ * Maps a diagnosis goal to the status the score should be reasoned about.
+ *
+ * The two post-graduation goals used to fall through to D-2, so an E-7
+ * employment conversion was scored as though it were an overseas degree
+ * application — the D-2 Korean-level penalty and a 12,000,000 KRW budget
+ * threshold, for a track that costs about a million won to prepare. Those are
+ * also the tracks the product elsewhere refuses to give a rule-engine verdict
+ * for, so getting a confident-looking number wrong there contradicts the whole
+ * honesty posture.
+ */
+function readinessVisaType(goal: DiagnosisInput["goal"]): "D-2" | "D-4" | "D-10" | "E-7" {
+  if (goal === "language") return "D-4";
+  if (goal === "career" || goal === "in_korea_job") return "D-10";
+  if (goal === "in_korea_employment") return "E-7";
+  return "D-2";
+}
+
 export function calculateReadinessScore(data: CalculateReadinessInput): ReadinessScore {
   const { input, visaRuleEvaluation, complianceSignals, selectedSchoolAccreditations } = data;
   let score = 75; // neutral starting point (good baseline)
@@ -85,12 +103,18 @@ export function calculateReadinessScore(data: CalculateReadinessInput): Readines
     provided: Boolean(visaRuleEvaluation || complianceSignals),
   };
 
-  const visaType = input.goal === "language" ? "D-4" : input.goal === "career" ? "D-10" : "D-2";
+  const visaType = readinessVisaType(input.goal);
+  // The post-graduation tracks are conversions for someone already living in
+  // Korea. Their costs, and the signals we hold about them, are nothing like an
+  // overseas study application's, so several branches below have to know.
+  const inKorea = input.goal === "in_korea_job" || input.goal === "in_korea_employment";
 
   // --- Internal diagnosis rules signals ---
 
-  // Korean level
-  if ((visaType === "D-2" || visaType === "D-10") && (input.korean === "none" || input.korean === "topik1")) {
+  // Korean level. The weight and the factor id below are both calibrated for
+  // degree study, so they are not applied to the in-Korea conversion tracks —
+  // a mis-labelled factor is worse than a missing one.
+  if (!inKorea && (visaType === "D-2" || visaType === "D-10") && (input.korean === "none" || input.korean === "topik1")) {
     const delta = READINESS_WEIGHTS.korean_low_d2;
     score += delta;
     factors.push({
@@ -111,7 +135,14 @@ export function calculateReadinessScore(data: CalculateReadinessInput): Readines
   }
 
   // Budget
-  const estimatedBase = visaType === "D-2" ? 12_000_000 : visaType === "D-4" ? 8_000_000 : 9_000_000;
+  // Study budgets (tuition + living) for the overseas tracks; preparation cost
+  // for the in-Korea conversions, matching PATH_PROFILES.baseCost in
+  // diagnosis.ts. Scoring an E-7 applicant against a 12M study budget was the
+  // bug this replaces — it flagged a budget gap for someone whose track costs
+  // about a million won to prepare.
+  const estimatedBase = inKorea
+    ? (visaType === "E-7" ? 1_000_000 : 1_500_000)
+    : visaType === "D-2" ? 12_000_000 : visaType === "D-4" ? 8_000_000 : 9_000_000;
   if (input.budget > 0 && input.budget < estimatedBase * 0.75) {
     const delta = READINESS_WEIGHTS.budget_gap;
     score += delta;
@@ -277,6 +308,13 @@ export function calculateReadinessScore(data: CalculateReadinessInput): Readines
   }
   if (hasBlocked || hasEscalation) {
     confidence = "medium"; // at most medium
+  }
+  // No compliance rule engine exists for D-10 or E-7, and the degree-oriented
+  // Korean factor is deliberately skipped for them, so the score rests on fewer
+  // signals than an overseas track's. Say so rather than presenting the same
+  // confidence for a weaker basis.
+  if (inKorea) {
+    confidence = "low";
   }
 
   const sortedFactors = factors.sort((a, b) => {
