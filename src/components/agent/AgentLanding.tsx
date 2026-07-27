@@ -88,7 +88,7 @@ export function AgentLanding({
           </div>
         )}
 
-        <Card className="p-4 shadow-lg border-2 focus-within:border-primary-strong/50 transition-colors">
+        <Card className="p-4 shadow-lg shadow-primary/10 border-2 border-primary/40 focus-within:border-primary-strong/50 focus-within:shadow-primary/20 transition-[border-color,box-shadow] duration-200 ease-snappy dark:border-primary/25 dark:shadow-black/20">
           <Textarea
             ref={inputRef}
             aria-label={locale === "ko" ? "KARXY AI에 질문하기" : locale === "vi" ? "Hỏi KARXY AI" : locale === "mn" ? "KARXY AI-аас асуух" : "Ask KARXY AI"}
@@ -125,7 +125,7 @@ export function AgentLanding({
               <button
                 key={prompt}
                 onClick={() => onSend(prompt)}
-                className="text-left text-sm p-3 rounded-lg border border-icon-accent/55 bg-card hover:bg-muted/50 hover:border-icon-accent transition-all flex items-start gap-2"
+                className="text-left text-sm p-3 rounded-lg border border-icon-accent/55 bg-card shadow-[0_1px_2px_rgba(31,30,29,0.04)] hover:bg-muted/50 hover:border-icon-accent hover:-translate-y-0.5 hover:shadow-sm transition-all flex items-start gap-2 dark:shadow-[0_1px_2px_rgba(0,0,0,0.3)]"
               >
                 <ArrowRight className="h-3.5 w-3.5 text-icon-accent shrink-0 mt-0.5" />
                 <span className="flex-1">{prompt}</span>

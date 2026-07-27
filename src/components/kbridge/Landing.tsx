@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { KaxiCat } from "@/components/brand/KaxiCat";
+import { KaxiPawMark } from "@/components/brand/KaxiPawMark";
 import { AgentExperience } from "@/components/agent/AgentExperience";
+import { smoothScrollIntoView } from "@/lib/ui/scroll";
 import { HomeQuickDiagnosis } from "@/components/diagnosis/HomeQuickDiagnosis";
 import { ArrowRight, Calculator, FileCheck, School as SchoolIcon, ShieldCheck, Users, Globe2, AlertTriangle } from "lucide-react";
 
@@ -107,16 +109,20 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
   ];
 
   const scrollToQuickDiagnosis = () => {
-    document.getElementById("quick-diagnosis")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    smoothScrollIntoView(document.getElementById("quick-diagnosis"), { block: "center" });
   };
 
   return (
     <div className="space-y-12 md:space-y-16">
       {/* Hero */}
       <section className="relative overflow-hidden animate-in fade-in duration-300 ease-snappy motion-reduce:animate-none">
-        <div className="mx-auto max-w-5xl px-4 pt-12 pb-0 text-center md:pt-16 md:pb-2">
-          <Badge variant="secondary" className="mb-4 gap-1.5">
-            <ShieldCheck className="h-3.5 w-3.5" />
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+          <div className="absolute left-1/2 top-[-16rem] h-[28rem] w-[44rem] -translate-x-1/2 rounded-full bg-primary/40 blur-3xl opacity-70 dark:opacity-25" />
+          <div className="absolute left-[10%] top-24 h-40 w-40 rounded-full bg-icon-accent/25 blur-3xl dark:bg-icon-accent/10" />
+        </div>
+        <div className="relative mx-auto max-w-5xl px-4 pt-12 pb-0 text-center md:pt-16 md:pb-2">
+          <Badge variant="secondary" className="mb-4 gap-1.5 border border-border/70 bg-card/80 shadow-sm">
+            <ShieldCheck className="h-3.5 w-3.5 text-primary-strong" />
             {tr("hero_badge", lang)}
           </Badge>
           <h1 className="font-serif text-4xl md:text-6xl font-extrabold tracking-tight leading-tight text-balance">
@@ -125,46 +131,75 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
           <p className="mt-6 text-base md:text-lg text-muted-foreground max-w-3xl mx-auto leading-relaxed text-pretty">
             {tr("hero_subtitle", lang)}
           </p>
+          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Button size="lg" className="gap-2 shadow-md shadow-primary/50 hover:shadow-lg hover:shadow-primary/40" onClick={scrollToQuickDiagnosis}>
+              {tr("quick_diagnosis_eyebrow", lang)}
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              className="gap-2 bg-card/70"
+              onClick={() => smoothScrollIntoView(document.getElementById("kaxi-ai"), { block: "start" })}
+            >
+              <KaxiPawMark className="h-4 w-4" />
+              {tr("hero_cta_agent", lang)}
+            </Button>
+          </div>
+          {/* Ground line only: "home must not show a decorative running cat"
+              is a pinned product decision (test-unified-ai-router.ts) — the
+              hero keeps its gradient wash, CTAs and paw motifs instead. */}
+          <div className="mt-10 md:mt-12" aria-hidden="true">
+            <div className="mx-auto flex max-w-3xl items-end justify-center gap-1.5 pb-1.5 text-icon-accent/50">
+              <KaxiPawMark className="h-3 w-3 -rotate-12" />
+              <KaxiPawMark className="h-4 w-4" />
+              <KaxiPawMark className="h-3 w-3 rotate-12" />
+            </div>
+            <div className="mx-auto h-px max-w-3xl bg-gradient-to-r from-transparent via-border to-transparent" />
+          </div>
         </div>
       </section>
 
       <HomeQuickDiagnosis lang={lang} onNavigate={onNavigate} />
 
       <section id="kaxi-ai" aria-label="KARXY AI" className="mx-auto w-full max-w-3xl px-4">
-        <AgentExperience embedded />
+        <div className="rounded-2xl border border-primary/50 bg-gradient-to-b from-primary/20 via-primary/10 to-transparent p-3 shadow-[0_16px_40px_-24px_rgba(79,93,179,0.45)] sm:p-5 dark:border-primary/25 dark:from-primary/15 dark:via-primary/5 dark:shadow-[0_16px_40px_-24px_rgba(0,0,0,0.5)]">
+          <AgentExperience embedded />
+        </div>
       </section>
 
       <section aria-label={tr("hero_stat_schools", lang)} className="mx-auto w-full max-w-2xl px-4">
-          <div className="grid grid-cols-3 gap-3 md:gap-4">
-            <div className="rounded-xl border border-border/70 bg-card p-4 md:p-5 shadow-sm">
-              <div className="font-serif text-2xl md:text-3xl font-semibold">{tr("hero_stat_students_value", lang)}</div>
-              <div className="text-xs text-muted-foreground mt-1">{tr("hero_stat_students", lang)}</div>
-            </div>
-            <div className="rounded-xl border border-border/70 bg-card p-4 md:p-5 shadow-sm">
-              <div className="font-serif text-2xl md:text-3xl font-semibold">
-                <span
-                  key={String(schoolStats.total)}
-                  className="inline-block animate-in fade-in duration-200 ease-snappy motion-reduce:animate-none"
-                >
-                  {schoolStats.total ?? "—"}
-                </span>
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">{tr("hero_stat_schools", lang)}</div>
-              {schoolStats.accredited !== null && (
-                <div className="mt-1 text-[10px] text-muted-foreground">
-                  {tr("hero_stat_accredited", lang).replace("{n}", String(schoolStats.accredited))}
-                </div>
-              )}
-            </div>
-            <div className="rounded-xl border border-border/70 bg-card p-4 md:p-5 shadow-sm">
-              <div className="font-serif text-2xl md:text-3xl font-semibold">4</div>
-              <div className="text-xs text-muted-foreground mt-1">{tr("hero_stat_langs", lang)}</div>
-            </div>
+        <div className="grid grid-cols-3 divide-x divide-border/60 overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[0_1px_2px_rgba(31,30,29,0.05),0_12px_32px_-20px_rgba(79,93,179,0.35)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.3),0_12px_32px_-20px_rgba(0,0,0,0.5)]">
+          <div className="p-4 text-center md:p-5">
+            <div className="font-serif text-2xl md:text-3xl font-semibold text-primary-strong">{tr("hero_stat_students_value", lang)}</div>
+            <div className="text-xs text-muted-foreground mt-1">{tr("hero_stat_students", lang)}</div>
           </div>
+          <div className="p-4 text-center md:p-5">
+            <div className="font-serif text-2xl md:text-3xl font-semibold text-primary-strong">
+              <span
+                key={String(schoolStats.total)}
+                className="inline-block animate-in fade-in duration-200 ease-snappy motion-reduce:animate-none"
+              >
+                {schoolStats.total ?? "—"}
+              </span>
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">{tr("hero_stat_schools", lang)}</div>
+            {schoolStats.accredited !== null && (
+              <div className="mt-1 text-[10px] text-muted-foreground">
+                {tr("hero_stat_accredited", lang).replace("{n}", String(schoolStats.accredited))}
+              </div>
+            )}
+          </div>
+          <div className="p-4 text-center md:p-5">
+            <div className="font-serif text-2xl md:text-3xl font-semibold text-primary-strong">4</div>
+            <div className="text-xs text-muted-foreground mt-1">{tr("hero_stat_langs", lang)}</div>
+          </div>
+        </div>
       </section>
 
       {/* Features */}
-      <section className="mx-auto max-w-7xl px-4">
+      <section className="border-y border-border/60 bg-card/70 py-12 md:py-16 dark:bg-card/40">
+        <div className="mx-auto max-w-7xl px-4">
         <div className="text-center mb-10">
           <h2 className="font-serif text-3xl font-bold tracking-tight">{tr("features_title", lang)}</h2>
           <p className="mt-3 text-muted-foreground">{tr("features_subtitle", lang)}</p>
@@ -181,26 +216,27 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
                 transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1], delay: i * 0.05 }}
               >
                 <Card
-                  className="cursor-pointer border-border/70 transition-[border-color,box-shadow,transform] duration-200 ease-snappy hover:border-primary-strong/40 hover:shadow-md hover:-translate-y-0.5"
+                  className="group cursor-pointer border-border/70 bg-card shadow-[0_1px_2px_rgba(31,30,29,0.04)] transition-[border-color,box-shadow,transform] duration-200 ease-snappy hover:border-primary-strong/40 hover:shadow-[0_12px_28px_-16px_rgba(79,93,179,0.45)] hover:-translate-y-0.5 dark:shadow-[0_1px_2px_rgba(0,0,0,0.3)] dark:hover:shadow-[0_12px_28px_-16px_rgba(0,0,0,0.6)]"
                   onClick={() => onNavigate(f.action)}
                 >
                   <CardHeader>
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-icon-accent/15">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-icon-accent/25 to-icon-accent/10 ring-1 ring-inset ring-icon-accent/30">
                       <Icon className="h-5 w-5 text-icon-accent" />
                     </div>
                     <CardTitle className="font-serif mt-2 text-lg">{f.title}</CardTitle>
                     <CardDescription className="text-sm leading-relaxed">{f.desc}</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <Button variant="ghost" size="sm" className="w-full justify-between">
+                    <Button variant="ghost" size="sm" className="w-full justify-between group-hover:text-primary-strong">
                       {tr("feature_open", lang)}
-                      <ArrowRight className="h-3.5 w-3.5" />
+                      <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 ease-snappy group-hover:translate-x-0.5" />
                     </Button>
                   </CardContent>
                 </Card>
               </motion.div>
             );
           })}
+        </div>
         </div>
       </section>
 
@@ -242,16 +278,19 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
 
       {/* CTA */}
       <motion.section className="mx-auto max-w-4xl px-4 pb-16" {...sectionReveal}>
-        <div className="rounded-2xl bg-primary p-8 md:p-12 text-primary-foreground text-center">
-          <div className="mb-4 flex justify-center">
-            <KaxiCat state="happy" size={44} />
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-primary to-[#b7c4fd] p-8 md:p-12 text-primary-foreground text-center shadow-[0_24px_48px_-24px_rgba(79,93,179,0.55)] ring-1 ring-inset ring-primary-foreground/10">
+          <KaxiPawMark aria-hidden="true" className="pointer-events-none absolute -bottom-10 -right-8 h-48 w-48 -rotate-12 text-primary-foreground/10" />
+          <div className="relative">
+            <div className="mb-4 flex justify-center">
+              <KaxiCat state="happy" size={44} />
+            </div>
+            <h2 className="font-serif text-2xl md:text-3xl font-bold mb-3">{tr("hero_title", lang)}</h2>
+            <p className="text-primary-foreground/80 mb-6 max-w-2xl mx-auto">{tr("hero_subtitle", lang)}</p>
+            <Button size="lg" className="gap-2 bg-primary-foreground text-[#eef2ff] hover:bg-[#3b4690] shadow-md" onClick={scrollToQuickDiagnosis}>
+              {tr("quick_diagnosis_return", lang)}
+              <ArrowRight className="h-4 w-4" />
+            </Button>
           </div>
-          <h2 className="font-serif text-2xl md:text-3xl font-bold mb-3">{tr("hero_title", lang)}</h2>
-          <p className="text-primary-foreground/80 mb-6 max-w-2xl mx-auto">{tr("hero_subtitle", lang)}</p>
-          <Button size="lg" className="gap-2 bg-primary-foreground text-[#eef2ff] hover:bg-[#3b4690]" onClick={scrollToQuickDiagnosis}>
-            {tr("quick_diagnosis_return", lang)}
-            <ArrowRight className="h-4 w-4" />
-          </Button>
         </div>
       </motion.section>
     </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useLangStore } from "@/store/kbridge";
@@ -47,6 +47,20 @@ import {
 
 // The VISA QUEST game is a separate app (a fun funnel into the diagnosis flow).
 const GAME_URL = "https://mirror-rouge-sigma.vercel.app";
+
+// Active desktop-nav treatment: lavender tint + a primary-strong underline bar
+// that sits exactly on the header's bottom hairline (h-8 button in h-16 header).
+const ACTIVE_NAV =
+  "relative bg-primary/25 text-primary-foreground hover:bg-primary/35 hover:text-primary-foreground dark:bg-primary/15 dark:text-primary-strong dark:hover:bg-primary/25 after:absolute after:inset-x-3 after:-bottom-4 after:h-[2px] after:rounded-full after:bg-primary-strong";
+
+// Active mobile-sheet treatment: same lavender tint with a left indicator bar.
+function mobileItemClass(active: boolean): string {
+  return `relative flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors hover:bg-accent ${
+    active
+      ? "bg-primary/20 text-primary-foreground hover:bg-primary/30 dark:bg-primary/15 dark:text-primary-strong before:absolute before:left-0 before:top-1/2 before:h-5 before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-primary-strong"
+      : "text-foreground"
+  }`;
+}
 
 // The game supports EN/KO/VI/RU; KARXY's Mongolian has no game equivalent, so it opens in English.
 const GAME_LANG: Record<Lang, string> = { ko: "KO", vi: "VI", mn: "EN", en: "EN" };
@@ -139,7 +153,7 @@ function DesktopNavGroup({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant={active ? "secondary" : "ghost"} size="sm" className="gap-1">
+        <Button variant="ghost" size="sm" className={active ? `gap-1 ${ACTIVE_NAV}` : "gap-1"}>
           {group.label}
           <ChevronDown className="h-3.5 w-3.5" />
         </Button>
@@ -176,7 +190,12 @@ function DesktopNavLink({ currentView, item }: { currentView: string; item: Head
   }
 
   return (
-    <Button variant={currentView === item.key ? "secondary" : "ghost"} size="sm" asChild>
+    <Button
+      variant="ghost"
+      size="sm"
+      asChild
+      className={currentView === item.key ? ACTIVE_NAV : undefined}
+    >
       <Link href={item.href} className="gap-1.5">
         <Icon className="h-3.5 w-3.5" />
         {item.label}
@@ -219,25 +238,24 @@ function MobileNav({
         </Button>
       </SheetTrigger>
       <SheetContent side="right" className="w-[min(88vw,22rem)]">
-        <SheetHeader className="border-b">
-          <SheetTitle>KARXY</SheetTitle>
+        <SheetHeader className="border-b border-border/70 bg-muted/50">
+          <SheetTitle className="flex items-center gap-2.5">
+            <KaxiRunningCat size={26} />
+            <KarxyWordmark className="h-3 w-auto" aria-label="KARXY" />
+          </SheetTitle>
           <SheetDescription className="sr-only">{label}</SheetDescription>
         </SheetHeader>
         <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-4 pb-6" aria-label={label}>
           {groups.map((group) => (
             <div key={group.key} className="space-y-1">
-              <p className="px-2 text-xs font-medium text-muted-foreground">{group.label}</p>
+              <p className="px-3 text-xs font-medium text-muted-foreground">{group.label}</p>
               {group.items.map((item) => {
                 const Icon = item.icon;
+                const active = currentView === item.key;
                 return (
                   <SheetClose key={item.key} asChild>
-                    <Link
-                      href={item.href}
-                      className={`flex h-10 items-center gap-3 rounded-md px-2 text-sm font-medium transition-colors hover:bg-accent ${
-                        currentView === item.key ? "bg-accent text-accent-foreground" : "text-foreground"
-                      }`}
-                    >
-                      <Icon className="h-4 w-4 text-muted-foreground" />
+                    <Link href={item.href} className={mobileItemClass(active)}>
+                      <Icon className={`h-4 w-4 ${active ? "text-primary-strong" : "text-muted-foreground"}`} />
                       {item.label}
                     </Link>
                   </SheetClose>
@@ -248,19 +266,19 @@ function MobileNav({
           <div className="space-y-1 border-t pt-4">
             {items.map((item) => {
               const Icon = item.icon;
-              const itemClass = `flex h-10 items-center gap-3 rounded-md px-2 text-sm font-medium transition-colors hover:bg-accent ${
-                currentView === item.key ? "bg-accent text-accent-foreground" : "text-foreground"
-              }`;
+              const active = currentView === item.key;
+              const itemClass = mobileItemClass(active);
+              const iconClass = `h-4 w-4 ${active ? "text-primary-strong" : "text-muted-foreground"}`;
               return (
                 <SheetClose key={item.key} asChild>
                   {item.external ? (
                     <a href={item.href} target="_blank" rel="noopener noreferrer" className={itemClass}>
-                      <Icon className="h-4 w-4 text-muted-foreground" />
+                      <Icon className={iconClass} />
                       {item.label}
                     </a>
                   ) : (
                     <Link href={item.href} className={itemClass}>
-                      <Icon className="h-4 w-4 text-muted-foreground" />
+                      <Icon className={iconClass} />
                       {item.label}
                     </Link>
                   )}
@@ -272,13 +290,13 @@ function MobileNav({
             {account.authenticated ? (
               <>
                 {account.email && (
-                  <p className="truncate px-2 text-xs text-muted-foreground">{account.email}</p>
+                  <p className="truncate px-3 text-xs text-muted-foreground">{account.email}</p>
                 )}
                 {account.isAdmin && (
                   <SheetClose asChild>
                     <Link
                       href={account.adminHref}
-                      className="flex h-10 items-center gap-3 rounded-md px-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+                      className="flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent"
                     >
                       <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
                       {account.adminLabel}
@@ -289,7 +307,7 @@ function MobileNav({
                   <button
                     type="button"
                     onClick={account.onLogout}
-                    className="flex h-10 w-full items-center gap-3 rounded-md px-2 text-left text-sm font-medium text-destructive transition-colors hover:bg-accent"
+                    className="flex h-10 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-medium text-destructive transition-colors hover:bg-accent"
                   >
                     <LogOut className="h-4 w-4" />
                     {account.logoutLabel}
@@ -300,7 +318,7 @@ function MobileNav({
               <SheetClose asChild>
                 <a
                   href={account.loginHref}
-                  className="flex h-10 items-center gap-3 rounded-md px-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+                  className="flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent"
                 >
                   <User className="h-4 w-4 text-muted-foreground" />
                   {account.loginLabel}
@@ -337,6 +355,17 @@ export function Header({
     router.refresh();
   };
 
+  // Scroll-aware elevation: transparent hairline at rest, border + soft shadow
+  // once content floats under the sticky header. Transition durations are
+  // clamped by the global prefers-reduced-motion rule in globals.css.
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   const publicHref = (key: string) => viewToPath(key, locale);
   const navGroups: HeaderNavGroup[] = [
     {
@@ -357,15 +386,21 @@ export function Header({
   ];
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header
+      className={`sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-[box-shadow,border-color] duration-300 ${
+        scrolled
+          ? "border-border/80 shadow-[0_6px_16px_-12px_rgb(31_30_29/0.25)] dark:shadow-[0_6px_16px_-12px_rgb(0_0_0/0.55)]"
+          : "border-transparent"
+      }`}
+    >
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4">
         <Link
           href={viewToPath("home", locale)}
           aria-label="KARXY"
-          className="flex items-center gap-2 font-bold"
+          className="group flex items-center gap-2 font-bold"
         >
           <KaxiRunningCat size={32} />
-          <KarxyWordmark className="hidden h-[15px] w-auto xl:block" />
+          <KarxyWordmark className="hidden h-[15px] w-auto min-[400px]:block lg:max-xl:hidden transition-colors duration-200 group-hover:text-primary-strong" />
         </Link>
         <nav className="ml-4 hidden items-center gap-1 lg:flex" aria-label={tr("nav_menu", activeLang)}>
           {navGroups.map((group) => (

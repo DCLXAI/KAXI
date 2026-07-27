@@ -15,15 +15,15 @@ interface ReadinessScoreCardProps {
 }
 
 function getScoreColor(score: number) {
-  if (score >= 75) return "text-green-600";
-  if (score >= 45) return "text-yellow-600";
-  return "text-red-600";
+  if (score >= 75) return "text-green-600 dark:text-green-400";
+  if (score >= 45) return "text-yellow-600 dark:text-yellow-400";
+  return "text-red-600 dark:text-red-400";
 }
 
 function getProgressColor(score: number) {
-  if (score >= 75) return "bg-green-500";
-  if (score >= 45) return "bg-yellow-500";
-  return "bg-red-500";
+  if (score >= 75) return "bg-green-500 dark:bg-green-400";
+  if (score >= 45) return "bg-yellow-500 dark:bg-yellow-400";
+  return "bg-red-500 dark:bg-red-400";
 }
 
 function getRiskLabel(score: number, lang: Lang = "ko") {
@@ -112,10 +112,10 @@ export function ReadinessScoreCard({
               {topFactors.map((factor, idx) => (
                 <div
                   key={idx}
-                  className="flex items-start justify-between gap-3 rounded-md border p-2 text-sm"
+                  className="flex items-start justify-between gap-3 rounded-md border border-border bg-muted/30 p-2 text-sm"
                 >
                   <div className="flex-1">
-                    <span className={factor.category === "positive" ? "text-green-700" : "text-red-700"}>
+                    <span className={factor.category === "positive" ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}>
                       {factor.category === "positive" ? "✓ " : "⚠ "}
                       {translateFactor(factor, lang)}
                     </span>
@@ -125,7 +125,7 @@ export function ReadinessScoreCard({
                   </div>
                   <div
                     className={`shrink-0 font-mono text-right tabular-nums ${
-                      factor.delta >= 0 ? "text-green-600" : "text-red-600"
+                      factor.delta >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
                     }`}
                   >
                     {factor.delta >= 0 ? "+" : ""}

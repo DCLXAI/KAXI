@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { smoothScrollIntoView } from "@/lib/ui/scroll";
 import { useLangStore } from "@/store/kbridge";
 import { tr, type Lang } from "@/lib/i18n/translations";
 import { Button } from "@/components/ui/button";
@@ -85,7 +86,7 @@ function AIAssistantPanel({ lang }: { lang: Lang }) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    smoothScrollIntoView(endRef.current);
   }, [msgs, open]);
 
   const send = async (text?: string) => {
@@ -253,7 +254,7 @@ function AIAssistantPanel({ lang }: { lang: Lang }) {
                 key={i}
                 onClick={() => send(q[lang])}
                 disabled={loading}
-                className="text-xs rounded-full border bg-background px-2.5 py-1 hover:bg-muted transition-colors disabled:opacity-50"
+                className="text-xs rounded-full border bg-background px-2.5 py-1 transition-colors duration-150 ease-snappy hover:bg-muted hover:border-primary-strong/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-strong/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-50"
               >
                 {q[lang]}
               </button>

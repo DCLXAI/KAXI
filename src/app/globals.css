@@ -35,6 +35,7 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -45,14 +46,27 @@
   --color-primary-strong: var(--primary-strong);
   --color-primary: var(--primary);
   --color-icon-accent: var(--icon-accent);
+  --color-clay: var(--clay);
+  --color-clay-foreground: var(--clay-foreground);
+  --color-clay-strong: var(--clay-strong);
+  --color-clay-soft: var(--clay-soft);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-card-elevated: var(--card-elevated);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --shadow-2xs: 0 1px 2px 0 var(--shadow-weak);
+  --shadow-xs: 0 1px 2px 0 var(--shadow-weak), 0 1px 1px -1px var(--shadow-tint);
+  --shadow-sm: 0 1px 3px 0 var(--shadow-tint), 0 1px 2px -1px var(--shadow-tint);
+  --shadow-md: 0 4px 6px -1px var(--shadow-tint), 0 2px 4px -2px var(--shadow-tint);
+  --shadow-lg: 0 10px 15px -3px var(--shadow-tint), 0 4px 6px -4px var(--shadow-tint);
+  --shadow-xl: 0 20px 25px -5px var(--shadow-tint), 0 8px 10px -6px var(--shadow-tint);
+  --shadow-2xl: 0 25px 50px -12px var(--shadow-strong);
+  --shadow-card: 0 1px 2px var(--shadow-weak), 0 8px 24px -8px var(--shadow-tint);
 }
 
 :root {
@@ -74,9 +88,10 @@
   --accent: #e4e0d3;
   --accent-foreground: #1f1e1d;
   --destructive: #b3261e;
+  --destructive-foreground: #fdf5f3;
   --border: #ddd9cc;
   --input: #ddd9cc;
-  --ring: #6366f1;
+  --ring: #4f5db3;
   --chart-1: #818cf8;
   --chart-2: #116466;
   --chart-3: #2563eb;
@@ -89,7 +104,15 @@
   --sidebar-accent: #e8e5db;
   --sidebar-accent-foreground: #1f1e1d;
   --sidebar-border: #ddd9cc;
-  --sidebar-ring: #6366f1;
+  --sidebar-ring: #4f5db3;
+  --card-elevated: #fffefa;
+  --clay: #c96442;
+  --clay-foreground: #fdf6f2;
+  --clay-strong: #9d4a2e;
+  --clay-soft: color-mix(in oklch, #c96442 14%, #faf9f5);
+  --shadow-weak: rgb(72 60 34 / 0.05);
+  --shadow-tint: rgb(72 60 34 / 0.1);
+  --shadow-strong: rgb(58 46 22 / 0.18);
 }
 
 .dark,
@@ -111,9 +134,10 @@
   --accent: #3a3831;
   --accent-foreground: #f0eee6;
   --destructive: #e2574a;
+  --destructive-foreground: #fdf5f3;
   --border: #3a3831;
   --input: #3a3831;
-  --ring: #6366f1;
+  --ring: #a5b4fc;
   --chart-1: #818cf8;
   --chart-2: #2d9d94;
   --chart-3: #60a5fa;
@@ -126,7 +150,15 @@
   --sidebar-accent: #33312c;
   --sidebar-accent-foreground: #f0eee6;
   --sidebar-border: #3a3831;
-  --sidebar-ring: #6366f1;
+  --sidebar-ring: #a5b4fc;
+  --card-elevated: #35332d;
+  --clay: #d97757;
+  --clay-foreground: #2a1a12;
+  --clay-strong: #e8967a;
+  --clay-soft: color-mix(in oklch, #d97757 16%, #2d2b26);
+  --shadow-weak: rgb(0 0 0 / 0.25);
+  --shadow-tint: rgb(0 0 0 / 0.4);
+  --shadow-strong: rgb(0 0 0 / 0.55);
 }
 
 @layer base {
@@ -135,6 +167,8 @@
   }
   body {
     @apply bg-background text-foreground;
+    word-break: keep-all;
+    overflow-wrap: break-word;
   }
 }
 
@@ -165,6 +199,55 @@
   .kaxi-cited-answer a[href^="#"][title]:focus-visible {
     outline: 2px solid color-mix(in oklch, var(--primary) 60%, transparent);
     outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .bg-hero-wash {
+    background-image:
+      radial-gradient(
+        1200px 560px at 50% -160px,
+        color-mix(in oklch, var(--primary) 32%, transparent),
+        transparent 70%
+      ),
+      radial-gradient(
+        880px 460px at 88% 4%,
+        color-mix(in oklch, var(--icon-accent) 14%, transparent),
+        transparent 62%
+      ),
+      radial-gradient(
+        720px 420px at 8% 22%,
+        color-mix(in oklch, var(--clay, #c96442) 8%, transparent),
+        transparent 60%
+      );
+  }
+
+  .bg-card-wash {
+    background-image: linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--primary) 16%, var(--card)) 0%,
+      var(--card) 58%
+    );
+  }
+
+  .texture-grain {
+    position: relative;
+    isolation: isolate;
+  }
+  .texture-grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 160px 160px;
+  }
+  .dark .texture-grain::after,
+  .chat-surface .texture-grain::after {
+    opacity: 0.05;
   }
 }
 

@@ -9,7 +9,6 @@ import {
   BookOpen,
   BriefcaseBusiness,
   Check,
-  CheckCircle2,
   CircleHelp,
   GraduationCap,
   Handshake,
@@ -60,8 +59,8 @@ function ChoiceButton({ icon: Icon, label, onSelect, selected }: ChoiceButtonPro
       onClick={onSelect}
       className={cn(
         "relative flex min-h-14 w-full items-center gap-3 rounded-lg border border-border bg-background px-4 py-3.5 text-left text-sm font-medium text-foreground transition-[border-color,background-color,box-shadow,transform] duration-150 ease-snappy active:scale-[0.98] sm:min-h-16 sm:px-5",
-        "hover:border-foreground/25 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-        selected && "border-primary-strong bg-primary-strong/[0.06] shadow-sm ring-1 ring-primary-strong",
+        "hover:border-primary-strong/40 hover:bg-primary/10 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        selected && "border-primary-strong bg-primary/20 shadow-md ring-2 ring-primary-strong/60 ring-offset-1 ring-offset-card dark:bg-primary/10",
       )}
     >
       {Icon && (
@@ -71,7 +70,9 @@ function ChoiceButton({ icon: Icon, label, onSelect, selected }: ChoiceButtonPro
       )}
       <span className="min-w-0 flex-1 leading-snug">{label}</span>
       {selected && (
-        <CheckCircle2 className="h-4 w-4 shrink-0 animate-in zoom-in-75 text-primary-strong duration-150 ease-snappy motion-reduce:animate-none" />
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-strong text-background animate-in zoom-in-75 duration-150 ease-snappy motion-reduce:animate-none">
+          <Check className="h-3 w-3" strokeWidth={3} />
+        </span>
       )}
     </button>
   );
@@ -211,18 +212,29 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
           <span className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
             {step + 1} / {TOTAL_STEPS}
           </span>
-          <div className="flex items-center gap-2.5">
-            <span className="text-xs font-medium tabular-nums text-muted-foreground">
-              {Math.round(((step + 1) / TOTAL_STEPS) * 100)}%
-            </span>
-            <KaxiCat state="running" size={22} className="hidden opacity-90 sm:block" />
+          <span className="text-xs font-medium tabular-nums text-muted-foreground">
+            {Math.round(((step + 1) / TOTAL_STEPS) * 100)}%
+          </span>
+        </div>
+        <div className="relative sm:pt-6">
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute top-0 hidden -translate-x-1/2 transition-[left] duration-300 ease-snappy motion-reduce:transition-none sm:block"
+            style={{ left: `${((step + 1) / TOTAL_STEPS) * 100}%` }}
+          >
+            <KaxiCat state="running" size={20} className="opacity-90" />
+          </span>
+          <Progress
+            value={((step + 1) / TOTAL_STEPS) * 100}
+            aria-label={`${step + 1} / ${TOTAL_STEPS}`}
+            className="h-2 bg-primary/25 dark:bg-primary/15"
+          />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-2 items-stretch justify-between" aria-hidden="true">
+            {Array.from({ length: TOTAL_STEPS + 1 }).map((_, index) => (
+              <span key={index} className={index === 0 || index === TOTAL_STEPS ? "w-0" : "w-px bg-card"} />
+            ))}
           </div>
         </div>
-        <Progress
-          value={((step + 1) / TOTAL_STEPS) * 100}
-          aria-label={`${step + 1} / ${TOTAL_STEPS}`}
-          className="h-1.5 bg-muted"
-        />
         <div className="pt-5 sm:pt-6">
           <h2
             ref={headingRef}

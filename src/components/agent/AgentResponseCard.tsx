@@ -291,7 +291,7 @@ export function AgentResponseCard({
                 <a
                   key={`${suggestion.kind}-${suggestion.label}`}
                   href={suggestion.href}
-                  className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-icon-accent/55 bg-background px-2.5 py-1.5 text-left text-xs hover:border-icon-accent hover:bg-muted"
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-icon-accent/55 bg-background px-2.5 py-1.5 text-left text-xs transition-colors duration-150 ease-snappy hover:border-icon-accent hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-strong/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
                   <ArrowRight className="h-3 w-3 text-icon-accent" />
                   <span className="font-medium">{suggestion.label}</span>
@@ -302,7 +302,7 @@ export function AgentResponseCard({
                   type="button"
                   disabled={loading}
                   onClick={() => onSend(suggestion.prompt)}
-                  className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-icon-accent/55 bg-background px-2.5 py-1.5 text-left text-xs hover:border-icon-accent hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-icon-accent/55 bg-background px-2.5 py-1.5 text-left text-xs transition-colors duration-150 ease-snappy hover:border-icon-accent hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-strong/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <ArrowRight className="h-3 w-3 text-icon-accent" />
                   <span className="font-medium">{suggestion.label}</span>

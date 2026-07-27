@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useLocale } from "next-intl";
+import { smoothScrollIntoView } from "@/lib/ui/scroll";
 import { defaultLocale, isLocale } from "@/i18n/routing";
 import {
   AgentSessionResponseCache,
@@ -130,9 +131,9 @@ export function useAgentChat() {
   const responseCacheRef = useRef(new AgentSessionResponseCache<AgentMessage>());
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    smoothScrollIntoView(endRef.current, { block: "end" });
     const timer = window.setTimeout(() => {
-      endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      smoothScrollIntoView(endRef.current, { block: "end" });
     }, 120);
     return () => window.clearTimeout(timer);
   }, [messages, loading]);
