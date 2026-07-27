@@ -15,7 +15,6 @@ import { Synonyms } from "@/components/kbridge/Synonyms";
 import { Agent } from "@/components/kbridge/Agent";
 import { KarxyWordmark } from "@/components/brand/KarxyWordmark";
 import { KaxiRunningCat } from "@/components/brand/KaxiRunningCat";
-import { KaxiPawMark } from "@/components/brand/KaxiPawMark";
 import { useLangStore } from "@/store/kbridge";
 import { tr, type Lang } from "@/lib/i18n/translations";
 import { isViewKey, viewToPath, type ViewKey } from "@/lib/kbridge/views";
@@ -63,7 +62,7 @@ export function KaxiPage({ view, locale }: { view: ViewKey; locale?: Lang }) {
       {view === "agent" ? (
         <footer className="chat-surface dark mt-auto border-t border-border/70 bg-background">
           <div className="mx-auto max-w-7xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-            <span className="truncate">⚠️ {tr("footer_disclaimer", activeLang)}</span>
+            <span className="truncate">{tr("footer_disclaimer", activeLang)}</span>
             <span className="flex flex-wrap items-center gap-x-4 gap-y-1 shrink-0">
               <Link href={`/${activeLang}/privacy`} className="transition-colors hover:text-foreground hover:underline">{legalCopy.privacyLink}</Link>
               <Link href={`/${activeLang}/terms`} className="transition-colors hover:text-foreground hover:underline">{legalCopy.termsLink}</Link>
@@ -89,13 +88,12 @@ export function KaxiPage({ view, locale }: { view: ViewKey; locale?: Lang }) {
                 </p>
               </div>
               <div className="space-y-2.5 text-xs leading-relaxed text-muted-foreground">
-                <p>⚠️ {tr("footer_disclaimer", activeLang)}</p>
-                <p>📚 {tr("footer_data_source", activeLang)}</p>
-                <p>🏢 {tr("footer_company_info", activeLang)}</p>
+                <p>{tr("footer_disclaimer", activeLang)}</p>
+                <p>{tr("footer_data_source", activeLang)}</p>
+                <p>{tr("footer_company_info", activeLang)}</p>
               </div>
             </div>
             <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-5">
-              <KaxiPawMark className="h-4 w-4 opacity-70" />
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
                 <Link href={`/${activeLang}/privacy`} className="transition-colors hover:text-foreground hover:underline">{legalCopy.privacyLink}</Link>
                 <Link href={`/${activeLang}/terms`} className="transition-colors hover:text-foreground hover:underline">{legalCopy.termsLink}</Link>
