@@ -13,6 +13,7 @@ import { CHAT_SESSION_COOKIE, verifyChatSessionToken } from "@/lib/chat/session-
 import { persistChatExchange } from "@/lib/chat/persistence";
 import { docsWorkspaceHref, DOCS_WORKSPACE_CTA_LABELS } from "@/lib/agent/meta";
 import type { AgentSuggestion } from "@/components/agent/types";
+import { guardAnswerFields } from "@/lib/chat/response-guardrail";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -84,6 +85,40 @@ function expertPlan(lang: Lang): string[] {
     mn: ["Аюулгүй ангилал", "Албан эх сурвалж хайх", "Хуулийн хязгаар шалгах"],
     en: ["Safety classification", "Official-source search", "Legal boundary check"],
   }[lang];
+}
+
+/**
+ * Applies the shared chat guardrail to whichever delegate answered.
+ *
+ * Both branches expose `answer` at the top level and carry retrieval under
+ * `meta.sources` / `meta.quality`, so one adapter covers them. When the
+ * guardrail refuses, the sources go with the answer — shipping the documents
+ * behind a refused claim would still present it as researched.
+ */
+function guardUnifiedResponse(delegated: unknown, question: string, lang: Lang) {
+  const base = record(delegated);
+  const meta = record(base.meta);
+  const guarded = guardAnswerFields({
+    answer: text(base.answer),
+    sources: Array.isArray(meta.sources) ? meta.sources : [],
+    searchMeta: meta.quality,
+    question,
+    locale: lang,
+  });
+  if (!guarded.intervened) return delegated;
+
+  return {
+    ...base,
+    answer: guarded.answer,
+    needsHumanExpert: true,
+    meta: {
+      ...meta,
+      sources: guarded.sources,
+      quality: guarded.searchMeta,
+      sourceNotice: undefined,
+      safetyFlags: [humanReviewText(lang)],
+    },
+  };
 }
 
 export function normalizeExpertResponse(
@@ -244,9 +279,16 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const normalized = decision.capability === "expert"
+  const delegated = decision.capability === "expert"
     ? normalizeExpertResponse(data, decision, lang, question, Date.now() - startedAt)
     : { ...data, routing: decision };
+
+  // Guard both capabilities here rather than only inside the delegates: the
+  // action (agent) branch has no guardrail of its own, and applying it at the
+  // boundary the client actually reads means a new capability cannot ship
+  // unguarded by omission. Re-guarding the expert branch is harmless — the
+  // guardrail keys off the question, so it reaches the same verdict twice.
+  const normalized = guardUnifiedResponse(delegated, question, lang);
 
   const chatSession = verifyChatSessionToken(req.cookies.get(CHAT_SESSION_COOKIE)?.value);
   if (chatSession?.sessionId) {
