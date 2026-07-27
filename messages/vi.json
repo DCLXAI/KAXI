@@ -313,5 +313,10 @@
   "ai_assistant_title": "Trợ lý du học",
   "ai_placeholder": "Nhập câu hỏi",
   "ai_send": "Gửi",
-  "ai_disclaimer": "AI chỉ hướng dẫn chung. Tư vấn visa cần chuyên gia."
+  "ai_disclaimer": "AI chỉ hướng dẫn chung. Tư vấn visa cần chuyên gia.",
+  "result_basis_label": "Cơ sở đánh giá",
+  "result_basis_rule_engine": "Đã kiểm tra bằng bộ quy tắc",
+  "result_basis_rag_only": "Dựa trên tài liệu chính thức · chưa có phán định",
+  "result_basis_not_evaluated": "Chưa đánh giá",
+  "result_basis_rag_only_detail": "Tư cách này chưa có quy tắc thực thi, nên đây là tóm tắt hướng dẫn chính thức chứ không phải phán định trường hợp của bạn. Hãy để chuyên gia hành chính xem xét chi tiết."
 }

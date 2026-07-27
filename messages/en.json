@@ -313,5 +313,10 @@
   "ai_assistant_title": "Study prep assistant",
   "ai_placeholder": "Ask a question",
   "ai_send": "Send",
-  "ai_disclaimer": "AI gives general info only. Visa cases need expert."
+  "ai_disclaimer": "AI gives general info only. Visa cases need expert.",
+  "result_basis_label": "Basis",
+  "result_basis_rule_engine": "Checked by rule engine",
+  "result_basis_rag_only": "From official documents · no rule verdict",
+  "result_basis_not_evaluated": "Not assessed",
+  "result_basis_rag_only_detail": "No executable rules exist for this status, so this summarizes official guidance rather than judging your case. Have an administrative scrivener review the specifics."
 }

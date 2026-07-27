@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { AlertTriangle, Banknote, ExternalLink, Home, MapPin, School as SchoolIcon, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Locale } from "@/i18n/routing";
+import { viewToPath } from "@/lib/kbridge/views";
 import type { School } from "@/lib/data/schools";
 import { PROGRAM_LABELS, REGION_LABELS } from "./school-labels";
 
@@ -95,7 +97,14 @@ export function SchoolCard({ isSelected, locale, onToggle, school }: SchoolCardP
               </a>
             </Button>
           )}
-          <Button size="sm" className="min-w-[7rem] flex-1">{t("school_apply")}</Button>
+          {/* This used to read "지원하기" with no handler at all — a dead click
+              sitting between two working buttons, which reads as broken rather
+              than as a feature we do not have. KARXY does not process school
+              applications; its answer to "I want to apply" is a verified
+              partner, so the button now goes where that actually happens. */}
+          <Button size="sm" className="min-w-[7rem] flex-1" asChild>
+            <Link href={viewToPath("partners", locale)}>{t("partner_request")}</Link>
+          </Button>
         </div>
       </CardContent>
     </Card>
