@@ -165,17 +165,31 @@ export function buildRagServingEmbeddingProjection(input: {
   throw new Error("RAG_EMBEDDING_LOCALE_SECTION_MISSING");
 }
 
-function servingRowProjectionMetadataMatches(row: ServingRow | null, projection: ReturnType<typeof buildRagServingEmbeddingProjection>) {
+// `expectedSourceUrl` catches document-level drift. The embedding hashes only
+// cover chunk text, so a change that touches document metadata alone — a domain
+// move being the obvious one — would otherwise look fresh forever and leave the
+// projected citation pointing at the old URL. Optional so callers without the
+// document in hand keep the previous behaviour.
+function servingRowProjectionMetadataMatches(
+  row: ServingRow | null,
+  projection: ReturnType<typeof buildRagServingEmbeddingProjection>,
+  expectedSourceUrl?: string,
+) {
   if (!row) return false;
+  if (expectedSourceUrl !== undefined && row.metadata?.source_url !== expectedSourceUrl) return false;
   return row.metadata?.embedding_content_strategy === projection.strategy
     && row.metadata?.embedding_content_locale === projection.locale
     && row.metadata?.embedding_content_hash === projection.contentHash;
 }
 
-function servingRowMatchesProjection(row: ServingRow | null, projection: ReturnType<typeof buildRagServingEmbeddingProjection>) {
+function servingRowMatchesProjection(
+  row: ServingRow | null,
+  projection: ReturnType<typeof buildRagServingEmbeddingProjection>,
+  expectedSourceUrl?: string,
+) {
   return row?.status === "ready"
     && Boolean(row.embedding)
-    && servingRowProjectionMetadataMatches(row, projection);
+    && servingRowProjectionMetadataMatches(row, projection, expectedSourceUrl);
 }
 
 async function findServingRow(
@@ -446,7 +460,7 @@ export async function getRagServingProjectionStatus(): Promise<RagServingProject
   const projectionState = data.chunks.map((chunk) => {
     const document = eligibleDocumentById.get(chunk.documentId);
     const row = servingRowByChunk.get(`${chunk.id}:${chunk.contentHash}`) || null;
-    if (!document) return { row, projection: null };
+    if (!document) return { row, projection: null, expectedSourceUrl: undefined };
     try {
       return {
         row,
@@ -454,24 +468,25 @@ export async function getRagServingProjectionStatus(): Promise<RagServingProject
           content: chunk.content,
           documentLanguage: document.language,
         }),
+        expectedSourceUrl: document.sourceUrl,
       };
     } catch {
-      return { row, projection: null };
+      return { row, projection: null, expectedSourceUrl: document.sourceUrl };
     }
   });
-  const readyChunks = projectionState.filter(({ row, projection }) =>
+  const readyChunks = projectionState.filter(({ row, projection, expectedSourceUrl }) =>
     projection
     && row?.status === "ready"
     && row.embedding_model === RAG_QUERY_EMBEDDING_MODEL
-    && servingRowProjectionMetadataMatches(row, projection)
+    && servingRowProjectionMetadataMatches(row, projection, expectedSourceUrl)
   ).length;
-  const vectorReadyChunks = projectionState.filter(({ row, projection }) =>
+  const vectorReadyChunks = projectionState.filter(({ row, projection, expectedSourceUrl }) =>
     projection
     && row?.embedding_model === RAG_QUERY_EMBEDDING_MODEL
-    && servingRowMatchesProjection(row, projection)
+    && servingRowMatchesProjection(row, projection, expectedSourceUrl)
   ).length;
-  const outdatedEmbeddingChunks = projectionState.filter(({ row, projection }) =>
-    Boolean(row) && (!projection || !servingRowProjectionMetadataMatches(row, projection))
+  const outdatedEmbeddingChunks = projectionState.filter(({ row, projection, expectedSourceUrl }) =>
+    Boolean(row) && (!projection || !servingRowProjectionMetadataMatches(row, projection, expectedSourceUrl))
   ).length;
   const canonicalVectorReadyChunks = data.chunks.filter((chunk) => Boolean(chunk.embedding)).length;
   const citationReadyChunks = data.chunks.filter((chunk) => {
@@ -527,6 +542,7 @@ export async function syncRagServingProjection(options: { limit?: number; force?
       return !servingRowMatchesProjection(
         servingRowByChunk.get(`${chunk.id}:${chunk.contentHash}`) || null,
         projection,
+        document.sourceUrl,
       );
     })
     .sort((left, right) => left.documentId.localeCompare(right.documentId) || left.chunkIndex - right.chunkIndex)
