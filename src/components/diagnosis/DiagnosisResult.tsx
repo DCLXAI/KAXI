@@ -38,6 +38,12 @@ export function DiagnosisResult({
 }: DiagnosisResultProps) {
   const t = useTranslations();
   const pathLabel = t(result.pathKey || "goal_language");
+  const coverageStatus = result.complianceCoverage?.status ?? "not_evaluated";
+  const coverageLabelKey = coverageStatus === "rule_engine"
+    ? "result_basis_rule_engine"
+    : coverageStatus === "rag_only"
+      ? "result_basis_rag_only"
+      : "result_basis_not_evaluated";
 
   return (
     <div id="result-section" className="space-y-4">
@@ -46,8 +52,23 @@ export function DiagnosisResult({
         style={{ animationDelay: "0ms", animationFillMode: "backwards" }}
       >
         <CardHeader>
-          <Badge className="w-fit">{t("result_recommended")}</Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className="w-fit">{t("result_recommended")}</Badge>
+            {/* Deliberately a badge beside the path, not another bullet in the
+                warnings list: "no rule engine ran for this status" is a
+                different kind of statement from "your budget looks short", and
+                burying it among the red warnings made the two look equally
+                severe. */}
+            <Badge variant={coverageStatus === "rule_engine" ? "secondary" : "outline"} className="w-fit font-normal">
+              {t("result_basis_label")} · {t(coverageLabelKey)}
+            </Badge>
+          </div>
           <CardTitle className="font-serif text-2xl md:text-3xl mt-2">{pathLabel}</CardTitle>
+          {coverageStatus === "rag_only" && (
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              {t("result_basis_rag_only_detail")}
+            </p>
+          )}
         </CardHeader>
         <CardContent className="grid md:grid-cols-2 gap-4">
           <div className="flex items-start gap-3 rounded-lg bg-muted/30 p-4">

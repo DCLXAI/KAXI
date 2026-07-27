@@ -166,6 +166,28 @@ async function activeConsentScopes(userId: string, now = new Date()): Promise<Se
   return new Set(consents.map((consent) => consent.scope as PartnerRoutingConsentScope));
 }
 
+/**
+ * Read-only check for the consent `assignPartnerRequest` demands.
+ *
+ * The predicate is deliberately identical to the one enforced there: all three
+ * routing scopes granted and unexpired for this lead. Anything that promises a
+ * partner will make contact should ask this first, so the promise and what the
+ * assignment step will actually accept cannot drift apart.
+ */
+export async function hasActivePartnerRoutingConsent(leadId: string): Promise<boolean> {
+  if (!leadId || leadId === "anonymous") return false;
+  const rows = await db.consent.findMany({
+    where: {
+      user: { zaloUid: `lead:${leadId}` },
+      scope: { in: [...PARTNER_ROUTING_CONSENT_SCOPES] },
+      status: ConsentStatus.GRANTED,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+    },
+    select: { scope: true },
+  });
+  return new Set(rows.map((row) => row.scope)).size === PARTNER_ROUTING_CONSENT_SCOPES.length;
+}
+
 export async function ensurePartnerRoutingConsentForLead(input: {
   leadId: string;
   partnerType: string;

@@ -162,7 +162,6 @@ export default async function StudentMyPage() {
                 <div key={diag.id} className="rounded-md border bg-background px-3 py-2 text-sm">
                   <div className="flex items-center justify-between gap-2">
                     <div className="font-medium">{tr(translationKey(diag.pathKey, "goal_language"), locale)}</div>
-                    <Badge variant="outline">{tr("diagnosis_view", locale)}</Badge>
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">
                     {money.format(diag.estimatedCost)} KRW · {formatDate(diag.createdAt, locale)}

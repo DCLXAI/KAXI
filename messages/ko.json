@@ -313,5 +313,10 @@
   "ai_assistant_title": "유학 준비 도우미",
   "ai_placeholder": "질문을 입력하세요 (예: D-2와 D-4 차이?)",
   "ai_send": "전송",
-  "ai_disclaimer": "AI는 공식 정보 기반 안내만 제공합니다. 개별 비자 판단은 행정사 상담 필요."
+  "ai_disclaimer": "AI는 공식 정보 기반 안내만 제공합니다. 개별 비자 판단은 행정사 상담 필요.",
+  "result_basis_label": "판정 근거",
+  "result_basis_rule_engine": "규칙 엔진 검증",
+  "result_basis_rag_only": "공식 문서 기반 · 규칙 판정 없음",
+  "result_basis_not_evaluated": "판정하지 않음",
+  "result_basis_rag_only_detail": "이 자격은 실행형 판정 규칙이 없어 공식 문서 안내를 요약한 결과입니다. 개별 사안은 행정사 검토를 권장합니다."
 }
