@@ -1,34 +1,50 @@
-# Domain cutover runbook — kaxi.vercel.app → karxy
+# Domain cutover runbook — kaxi.vercel.app → karxy.com
 
-Status: **not started.** The KAXI→KARXY rebrand shipped in `ce73280`; the domain
-was deliberately left alone. This document records what a cutover touches, what
-breaks if a step is skipped, and in what order to do it.
+Status: **in progress — waiting on DNS.** `karxy.com` was registered at Gabia
+(expires 2027-07-27) and both `karxy.com` and `www.karxy.com` are attached to
+the Vercel project. The DNS records are not set yet, so the domain does not
+resolve. `kaxi.vercel.app` is unaffected and still serving.
 
 Everything below was verified against the repository and the live project on
 2026-07-25, not assumed.
 
-## The core constraint
+## Why the custom domain is the right path
 
 `kaxi.vercel.app` is not a domain we hold separately — it is derived from the
-Vercel **project name** (`kaxi`, see `.vercel/project.json`). Vercel only serves
-`<project>.vercel.app`, so:
+Vercel **project name** (`kaxi`, see `.vercel/project.json`). Renaming the
+project to get `karxy.vercel.app` would be a **hard cutover**: the old hostname
+stops serving the moment it takes effect, with no overlap window. Creating a
+second Vercel project is also blocked, because the production database
+credentials are Vercel Sensitive Environment Variables that cannot be read back
+after creation — that path forces a full database password rotation.
 
-- To get `karxy.vercel.app`, the Vercel project must be **renamed**.
-- A rename is a **hard cutover**: the old hostname stops serving the moment it
-  takes effect. There is no overlap window.
-- `karxy.vercel.app` is currently unclaimed (returns Vercel's 404) and is not
-  under our account.
+A custom domain avoids all of it. `karxy.com` serves **alongside**
+`kaxi.vercel.app`, so the switch of the canonical hostname is gradual and
+reversible, and no step below requires an outage window.
 
-Creating a second Vercel project named `karxy` instead is **blocked**: the
-production database credentials are Vercel Sensitive Environment Variables,
-which are non-readable after creation. A new project would need those values
-re-entered, and per `CLAUDE.md` no operator copy is guaranteed to exist — that
-path forces a full database password rotation.
+## Immediate next step: DNS at Gabia
 
-**A custom domain (e.g. `karxy.com`) does not have this problem.** It can be
-added alongside `kaxi.vercel.app`, both serve simultaneously, and the switch of
-the canonical hostname becomes reversible. If a custom domain is an option,
-prefer it over renaming the Vercel project.
+Vercel asked for a plain A record (its `[recommended]` option; changing the
+nameservers to Vercel is the alternative and is not needed):
+
+| Host | Type | Value |
+|---|---|---|
+| `@` | A | `76.76.21.21` |
+| `www` | A | `76.76.21.21` |
+
+`www` may instead be a `CNAME` to `cname.vercel-dns.com`, which is the more
+conventional choice for a subdomain; either works.
+
+Leave the Gabia nameservers as they are. Vercel re-verifies on its own and
+issues the TLS certificate once the record resolves; a freshly registered domain
+can take several hours to appear in public DNS.
+
+Check progress with:
+
+```bash
+dig @8.8.8.8 +short karxy.com A
+curl -fsS https://karxy.com/api/health
+```
 
 ## What breaks, and who can fix it
 
@@ -72,33 +88,39 @@ the application's own links; no code change is needed for them.
 
 ## Order of operations
 
-Do not start until the Supabase and n8n legs have an owner — those are the two
-that cannot be done from a Claude session and are also the two that take the
-product down.
+Because both hosts serve at once, these can be done one at a time and verified
+individually. Nothing here needs a maintenance window. Steps 3 and 5 are the two
+that cannot be done from a Claude session — Supabase and n8n MCP are not
+authenticated — so they need an owner before step 4 flips the canonical host.
 
-1. Decide the target host. Prefer a custom domain; only rename the Vercel
-   project if a `*.vercel.app` host is genuinely required.
-2. Add the new host to Vercel and confirm it serves. With a custom domain both
-   hosts serve at once; with a rename there is no overlap, so schedule a window.
-3. Add the new origin to the Supabase Auth redirect allowlist **before** the
-   switch. Keep the old origin listed until the cutover is confirmed.
-4. Set `NEXT_PUBLIC_APP_URL` to the new origin in Vercel production, and set the
-   `PRODUCTION_BASE_URL` GitHub repository variable to the same value.
+1. ~~Register the domain and attach it to Vercel.~~ Done: `karxy.com` and
+   `www.karxy.com` are on the project.
+2. **Set the Gabia DNS records above** and wait for `karxy.com` to serve. Until
+   this lands, everything below is blocked.
+3. Add `https://karxy.com` to the Supabase Auth redirect allowlist. **Keep the
+   old origin listed** — the app builds `emailRedirectTo` from the request
+   origin, so whichever host a user arrives on must be allowed.
+4. Set `NEXT_PUBLIC_APP_URL=https://karxy.com` in Vercel production, and the
+   `PRODUCTION_BASE_URL` GitHub repository variable to the same value. This is
+   what moves the application's own links; no code change is needed.
 5. Update and republish the n8n workflows, update `infra/n8n/*` and the URL pins
    in `scripts/test-n8n-rag-orchestration.ts` in one commit, and let CI verify.
+   Until this is done the n8n callbacks keep using `kaxi.vercel.app`, which is
+   fine while that host still serves.
 6. Point the Typebot gateway at the new origin.
 7. Re-ingest so stored document URLs follow: `bun run knowledge:pgvector`, then
    `bun run scripts/sync-rag-serving-projection.ts --execute --confirm-contract 2026-07-14.v4`.
    Skipping the second command leaves the serving projection stale — that failure
    mode is real and was hit during the rebrand corpus update.
-8. Verify, then decide whether to keep the old host redirecting.
+8. Verify, then decide whether `kaxi.vercel.app` should redirect to `karxy.com`.
+   Keep it resolving for as long as anything external still points at it.
 
 ## Verification after cutover
 
 ```bash
-curl -fsS https://<new-host>/api/health
-curl -fsS https://<new-host>/api/readiness
-curl -sS -o /dev/null -w '%{http_code}\n' https://<new-host>/api/documents   # expect 401
+curl -fsS https://karxy.com/api/health
+curl -fsS https://karxy.com/api/readiness
+curl -sS -o /dev/null -w '%{http_code}\n' https://karxy.com/api/documents   # expect 401
 ```
 
 Beyond the standard probes, confirm specifically:
