@@ -1,12 +1,28 @@
 # Domain cutover runbook — kaxi.vercel.app → karxy.com
 
-Status: **in progress — waiting on DNS.** `karxy.com` was registered at Gabia
-(expires 2027-07-27) and both `karxy.com` and `www.karxy.com` are attached to
-the Vercel project. The DNS records are not set yet, so the domain does not
-resolve. `kaxi.vercel.app` is unaffected and still serving.
+Status: **done, with the old host deliberately kept alive.** Every step is
+complete. `karxy.com` (Gabia, expires 2027-07-27) serves the product, and
+`kaxi.vercel.app` keeps serving alongside it by decision — see step 8.
 
 Everything below was verified against the repository and the live project on
-2026-07-25, not assumed.
+2026-07-25 and 2026-07-27, not assumed.
+
+## Decision on the old host (step 8)
+
+`kaxi.vercel.app` **stays resolving.** It is not redirected and not removed.
+
+That is the safe end state, not an unfinished one:
+
+- The n8n webhook CORS allowlists carry **both** origins, so traffic arriving on
+  either host is accepted.
+- Outside links — bookmarks, anything already shared, search-engine indexes —
+  still point at the old host and would break on removal.
+- Nothing costs anything to keep it: it is the Vercel project's own default
+  hostname, serving the same deployment.
+
+Revisit only after the old host has gone quiet in traffic for a stretch. When
+that happens the change is a redirect to `karxy.com`, and the thing to re-check
+first is whether any signed integration still resolves the old hostname.
 
 ## Why the custom domain is the right path
 
@@ -82,38 +98,44 @@ The base URL now resolves through one function, `siteBaseUrl()` in
 NEXT_PUBLIC_APP_URL || APP_URL  →  https://$VERCEL_URL  →  https://kaxi.vercel.app
 ```
 
-`NEXT_PUBLIC_APP_URL` is **not** currently set in Vercel production, so the
-hardcoded default is the live value today. Setting that variable is what moves
-the application's own links; no code change is needed for them.
+`NEXT_PUBLIC_APP_URL` is now set to `https://karxy.com` in Vercel production,
+and `PRODUCTION_BASE_URL` to the same value as a GitHub repository variable.
+Those two are what move the application's own links; no code change was needed.
 
-## Order of operations
+## What was done
 
-Because both hosts serve at once, these can be done one at a time and verified
-individually. Nothing here needs a maintenance window. Steps 3 and 5 are the two
-that cannot be done from a Claude session — Supabase and n8n MCP are not
-authenticated — so they need an owner before step 4 flips the canonical host.
+Because both hosts serve at once, each step was applied and verified on its own.
+No step needed a maintenance window.
 
-1. ~~Register the domain and attach it to Vercel.~~ Done: `karxy.com` and
-   `www.karxy.com` are on the project.
-2. **Set the Gabia DNS records above** and wait for `karxy.com` to serve. Until
-   this lands, everything below is blocked.
-3. Add `https://karxy.com` to the Supabase Auth redirect allowlist. **Keep the
-   old origin listed** — the app builds `emailRedirectTo` from the request
-   origin, so whichever host a user arrives on must be allowed.
-4. Set `NEXT_PUBLIC_APP_URL=https://karxy.com` in Vercel production, and the
-   `PRODUCTION_BASE_URL` GitHub repository variable to the same value. This is
-   what moves the application's own links; no code change is needed.
-5. Update and republish the n8n workflows, update `infra/n8n/*` and the URL pins
-   in `scripts/test-n8n-rag-orchestration.ts` in one commit, and let CI verify.
-   Until this is done the n8n callbacks keep using `kaxi.vercel.app`, which is
-   fine while that host still serves.
-6. Point the Typebot gateway at the new origin.
-7. Re-ingest so stored document URLs follow: `bun run knowledge:pgvector`, then
-   `bun run scripts/sync-rag-serving-projection.ts --execute --confirm-contract 2026-07-14.v4`.
-   Skipping the second command leaves the serving projection stale — that failure
-   mode is real and was hit during the rebrand corpus update.
-8. Verify, then decide whether `kaxi.vercel.app` should redirect to `karxy.com`.
-   Keep it resolving for as long as anything external still points at it.
+1. **Domain attached.** `karxy.com` and `www.karxy.com` added to the Vercel
+   project.
+2. **DNS.** Gabia A records per the table above; Vercel issued the certificate
+   automatically. Nameservers stayed at Gabia.
+3. **Supabase Auth.** `https://karxy.com` added to the redirect allowlist with
+   the old origin kept — the app builds `emailRedirectTo` from the request
+   origin, so whichever host a user arrives on has to be allowed.
+4. **Env.** `NEXT_PUBLIC_APP_URL` and `PRODUCTION_BASE_URL` set, then redeployed.
+   The built sitemap emitting 36 `karxy.com` URLs is the proof it took effect.
+5. **n8n.** The five callbacks moved to `karxy.com` on the live Railway
+   workflows, mirrored into `infra/n8n/*` by editing the `.mjs` source and
+   recompiling, with the URL pins in `scripts/test-n8n-rag-orchestration.ts` in
+   the same commit. The webhook CORS allowlists **gained** `karxy.com` and kept
+   `kaxi.vercel.app` — replacing the origin there would reject requests still
+   arriving on the old host.
+   Two things worth remembering: the n8n public API rejects `settings` keys
+   outside its schema, and it *merges* the subset you send rather than replacing,
+   so sending only the documented keys is safe. Verify that on the inactive
+   workflow before touching an active one.
+6. **Typebot.** Webhook and privacy-link URLs moved, and the bot's own copy was
+   rebranded at the same time — it had still been greeting users as KAXI.
+7. **Corpus.** `knowledge:pgvector` then the serving projection sync. The
+   re-ingest script reads the *local* environment, so it needs
+   `NEXT_PUBLIC_APP_URL=https://karxy.com` passed explicitly or it rewrites the
+   old host straight back.
+   This exposed a real defect: the projection freshness check only compared
+   chunk-content hashes, so document-metadata-only drift looked fresh forever.
+   Fixed in `59a75c7` by also comparing `source_url`.
+8. **Old host kept.** See the decision at the top.
 
 ## Verification after cutover
 
@@ -123,11 +145,29 @@ curl -fsS https://karxy.com/api/readiness
 curl -sS -o /dev/null -w '%{http_code}\n' https://karxy.com/api/documents   # expect 401
 ```
 
-Beyond the standard probes, confirm specifically:
+Beyond the standard probes, these were confirmed:
 
-- a magic-link login completes end to end (this is the Supabase allowlist check);
-- an agent answer returns citations, which exercises the n8n or direct RAG path;
-- `/sitemap.xml` emits the new host;
-- one scheduled workflow run succeeds against the new host;
-- `rag_serving_chunks` has no `ready` rows still carrying the old host in their
-  metadata.
+- `/sitemap.xml` emits 36 `karxy.com` URLs — checked;
+- `rag_serving_chunks` has no `ready` row carrying the old host, and none whose
+  `source_url` has drifted from its document — checked;
+- the live Typebot widget opens on `karxy.com` and greets as KARXY — checked;
+- the n8n capability webhook answers with the governed contract
+  (`2026-07-14.v4`, `rag_serving_chunks`, `hybrid-rrf-v3-openai-required`) —
+  checked;
+- the repo mirror and the live workflows agree on every node's `url` and
+  `allowedOrigins` — checked.
+
+Still worth an operator's own eyes, because neither can be proven from here:
+
+- a magic-link login completing end to end — the real test of the Supabase
+  allowlist;
+- one scheduled GitHub workflow run succeeding against the new host, since those
+  now read `PRODUCTION_BASE_URL`.
+
+## Rollback
+
+Each leg is independent and reversible. Backups of all three n8n workflows as
+they were before the change are at `.local/n8n-backup-20260727-*.json`; the
+Typebot's previous state is at `.local/typebot-backup-20260727-pre-domain.json`.
+Unsetting `NEXT_PUBLIC_APP_URL` returns the application's links to the old host,
+since the code default is still `https://kaxi.vercel.app`.
