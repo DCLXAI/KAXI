@@ -83,6 +83,46 @@ function searchMetaWithNoContext(value: unknown) {
   };
 }
 
+/**
+ * Route-shape-agnostic wrapper over {@link applyChatResponseGuardrail}.
+ *
+ * The guardrail was only ever wired into the Typebot and n8n runtimes, which
+ * left the landing-page chat (`/api/ai/unified`, `/api/ai/unified/stream`,
+ * `/api/ai/chat`) answering with no refusal for illegal work, false documents,
+ * prompt injection or low-confidence retrieval. Those routes each carry their
+ * own response shape, so they cannot pass their payload to the guardrail
+ * directly — this adapter takes just the three fields the guardrail reasons
+ * about and reports whether it intervened, letting each caller merge the
+ * verdict back into its own shape.
+ */
+export function guardAnswerFields(input: {
+  answer: string;
+  sources: unknown[];
+  searchMeta?: unknown;
+  question: string;
+  locale: string;
+}): {
+  answer: string;
+  sources: unknown[];
+  searchMeta: unknown;
+  needsHuman: boolean;
+  intervened: boolean;
+} {
+  const guarded = applyChatResponseGuardrail(
+    { answer: input.answer, sources: input.sources, searchMeta: input.searchMeta },
+    input.question,
+    input.locale,
+  );
+  const answer = typeof guarded.answer === "string" ? guarded.answer : input.answer;
+  return {
+    answer,
+    sources: Array.isArray(guarded.sources) ? guarded.sources : input.sources,
+    searchMeta: guarded.searchMeta ?? input.searchMeta,
+    needsHuman: guarded.needsHuman === true,
+    intervened: answer !== input.answer,
+  };
+}
+
 export function applyChatResponseGuardrail(
   response: GuardedChatResponse,
   question: string,

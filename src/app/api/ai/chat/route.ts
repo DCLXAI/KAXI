@@ -18,6 +18,7 @@ import {
 } from "@/lib/chat/shared-openai-rag";
 import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
 import { ensureGroundedCitationAnswer } from "@/lib/knowledge/citations";
+import { guardAnswerFields } from "@/lib/chat/response-guardrail";
 import {
   AI_CHAT_DEFAULT_DAILY_QUOTA,
   AI_CHAT_DEFAULT_RATE_LIMIT,
@@ -120,7 +121,18 @@ export async function POST(req: NextRequest) {
       answer = AI_DEFAULT_REPLY[lang];
     }
 
-    answer = ensureGroundedCitationAnswer({ answer, docs, lang, sourceNotice, maxSources: 3 });
+    const cited = ensureGroundedCitationAnswer({ answer, docs, lang, sourceNotice, maxSources: 3 });
+    // An answer the model never cited is not a sourced answer, so it is handed
+    // to the guardrail as retrieval-free and gets the low-confidence treatment.
+    const guarded = guardAnswerFields({
+      answer: cited.answer,
+      sources: cited.grounded ? docs : [],
+      searchMeta: cited.grounded ? searchMeta : [],
+      question,
+      locale: lang,
+    });
+    answer = guarded.answer;
+    const guardrailIntervened = guarded.intervened;
 
     // 5. 로그 저장 (비동기, 실패 무시)
     try {
@@ -148,7 +160,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       answer,
       source,
-      retrievedDocs: docs.map((d) => ({
+      // A refused answer must not ship the documents it refused to rely on.
+      retrievedDocs: (guardrailIntervened ? [] : docs).map((d) => ({
         id: d.id,
         title: pickLangText(d.title, lang),
         category: d.category,

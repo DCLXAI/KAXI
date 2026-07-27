@@ -26,6 +26,7 @@ import { maybeCreateHighRiskEscalationCase } from "@/lib/cases/high-risk-hook";
 import { currentAuthenticatedStudentProfileId } from "@/lib/cases/current-student";
 import { reportLlmFallback } from "@/lib/ops/llm-fallback-events";
 import { buildOfficialSummaryLead } from "@/lib/chat/official-summary-lead";
+import { guardAnswerFields } from "@/lib/chat/response-guardrail";
 
 // POST /api/ai/consult - 행정사 전문 AI 에이전트 상담 채팅
 // 일반 AI 도우미보다 더 깊이 있는 법적/행정적 답변 제공
@@ -149,13 +150,25 @@ export async function POST(req: NextRequest) {
       parsePositiveInt(process.env.AI_LLM_TIMEOUT_MS, 55_000),
       "Expert LLM generation"
     );
-    const answer = ensureGroundedCitationAnswer({
+    const cited = ensureGroundedCitationAnswer({
       answer: result.answer,
       docs,
       lang,
       sourceNotice,
       maxSources: 8,
     });
+    // An answer the model never cited is not a sourced answer: it goes to the
+    // guardrail with no retrieval behind it, which yields the low-confidence
+    // response instead of prose that reads as grounded.
+    const guarded = guardAnswerFields({
+      answer: cited.answer,
+      sources: cited.grounded ? docs : [],
+      searchMeta: cited.grounded ? searchMeta : [],
+      question,
+      locale: lang,
+    });
+    const answer = guarded.answer;
+    const guardrailIntervened = guarded.intervened;
 
     // 4. ChatLog 저장
     try {
@@ -211,7 +224,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       answer,
       disclaimer: result.disclaimer,
-      retrievedDocs: docs.map((d) => ({
+      // A refused answer must not ship the documents it refused to rely on.
+      retrievedDocs: (guardrailIntervened ? [] : docs).map((d) => ({
         id: d.id,
         title: pickLangText(d.title, lang),
         category: d.category,
@@ -222,7 +236,7 @@ export async function POST(req: NextRequest) {
         excerpt: pickLangText(d.content, lang).replace(/\s+/g, " ").trim().slice(0, 260),
       })),
       suggestedFollowups: result.suggestedFollowups,
-      needsHumanExpert: result.needsHumanExpert,
+      needsHumanExpert: result.needsHumanExpert || guarded.needsHuman,
       escalationCaseCreated,
       backend: result.backend,
       model: result.backend === "kimi" || result.backend === "claude" ? getLlmModel() : null,
