@@ -77,12 +77,22 @@ const normalized = ensureGroundedCitationAnswer({
   maxSources: 1,
 });
 
+// An uncited answer must never be dressed up as a sourced one. We used to
+// staple a "[1]" onto the first line here, which made an ungrounded claim read
+// as a cited legal statement next to a government URL.
+// Check the answer body only — the rendered source list legitimately numbers
+// its entries "- [1] ...", and that is not a claim about any sentence.
+const normalizedBody = normalized.answer.split("📚 출처:")[0];
 assert(
-  normalized.startsWith("D-4 체류기간 연장은 공식 기준 확인이 필요합니다. [1]"),
-  `uncited answer should receive a citation marker: ${normalized}`
+  !normalizedBody.includes("[1]"),
+  `uncited answer must not be given a fabricated citation marker: ${normalizedBody}`
 );
-assert(normalized.includes("📚 출처:"), `normalized answer should include source list: ${normalized}`);
-assert(normalized.includes("이 안내는 테스트 출처 기준입니다."), `normalized answer should include source notice: ${normalized}`);
+assert(
+  normalized.grounded === false,
+  "an answer the model never cited must be reported as ungrounded"
+);
+assert(normalized.answer.includes("📚 출처:"), `normalized answer should include source list: ${normalized.answer}`);
+assert(normalized.answer.includes("이 안내는 테스트 출처 기준입니다."), `normalized answer should include source notice: ${normalized.answer}`);
 
 const sourceListOnly = ensureGroundedCitationAnswer({
   answer: "요건은 원문 확인이 필요합니다.\n\n📚 출처:\n- [1] 기존 출처",
@@ -90,9 +100,23 @@ const sourceListOnly = ensureGroundedCitationAnswer({
   lang: "ko",
   maxSources: 1,
 });
+// A "[1]" that only appears inside the source list is not the model citing its
+// own claim, so this still counts as ungrounded.
 assert(
-  sourceListOnly.startsWith("요건은 원문 확인이 필요합니다. [1]"),
-  `source-list-only citations should not satisfy answer-body citation check: ${sourceListOnly}`
+  sourceListOnly.grounded === false,
+  `source-list-only citations must not count as the answer citing a source: ${sourceListOnly.answer}`
 );
+assert(
+  sourceListOnly.answer.startsWith("요건은 원문 확인이 필요합니다."),
+  `answer body should be left untouched: ${sourceListOnly.answer}`
+);
+
+const trulyCited = ensureGroundedCitationAnswer({
+  answer: "D-4 체류기간은 원문 기준으로 확인됩니다. [1]",
+  docs: [doc],
+  lang: "ko",
+  maxSources: 1,
+});
+assert(trulyCited.grounded === true, "an answer that cites a source must be reported as grounded");
 
 console.log("PASS source citation links");

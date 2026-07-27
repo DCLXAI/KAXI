@@ -214,3 +214,34 @@ test("docs workspace honors the track deep link for anonymous visitors", async (
   await expect(page.getByText(/로그인/).first()).toBeVisible();
   await expect(page.getByText("졸업 후 비자 준비").first()).toBeVisible();
 });
+
+test("an anonymous diagnosis survives a reload", async ({ page }) => {
+  // The wizard result is the funnel's core artifact. useLeadStore used to be the
+  // one client store without persist, so closing the tab meant redoing every
+  // step. This drives the quick diagnosis because it writes the same
+  // currentDiagnosis the full wizard does, through stable test ids.
+  await page.goto("/ko");
+  await page.getByTestId("quick-diagnosis-option-language").click();
+  await page.getByTestId("quick-diagnosis-korean-none").click();
+  await page.getByTestId("quick-diagnosis-budget-8to12").click();
+  const result = page.getByTestId("quick-diagnosis-result");
+  await expect(result).toBeVisible();
+  // The store is written when the user carries the result forward, not when it
+  // renders, so the run has to reach that CTA.
+  await result.getByRole("button", { name: "이 경로로 학교 찾기" }).click();
+
+  const stored = await page.evaluate(() => localStorage.getItem("kb-lead"));
+  expect(stored, "the diagnosis should be written to storage").not.toBeNull();
+
+  const persisted = JSON.parse(stored as string).state as Record<string, unknown>;
+  expect(persisted.currentDiagnosis, "the diagnosis itself must be kept").toBeTruthy();
+  // `leads` holds records fetched from the server and has no business on disk.
+  expect(Object.prototype.hasOwnProperty.call(persisted, "leads")).toBe(false);
+
+  await page.reload();
+  const afterReload = await page.evaluate(() => {
+    const raw = localStorage.getItem("kb-lead");
+    return raw ? (JSON.parse(raw).state as Record<string, unknown>).currentDiagnosis : null;
+  });
+  expect(afterReload, "the diagnosis must still be there after a reload").toBeTruthy();
+});

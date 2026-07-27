@@ -67,6 +67,20 @@ function appendCitationToFirstAnswerLine(answer: string, citation = "[1]"): stri
   return lines.join("\n");
 }
 
+/**
+ * Attaches the retrieved-source list to an answer, and reports whether the
+ * model actually cited anything.
+ *
+ * This used to staple a `[1]` onto the first line when the model had not cited
+ * — which made an ungrounded answer read as a sourced legal statement next to a
+ * law.go.kr URL. On an immigration product that is the worst artifact we can
+ * emit, so the marker is never invented now. The source list still renders,
+ * because "these are the documents we retrieved" is true either way; only the
+ * per-sentence attribution was a claim we could not support.
+ *
+ * `grounded` is false when the model produced no citation. Callers should treat
+ * that as low confidence rather than presenting the answer as sourced.
+ */
 export function ensureGroundedCitationAnswer({
   answer,
   docs,
@@ -79,13 +93,10 @@ export function ensureGroundedCitationAnswer({
   lang: Lang;
   sourceNotice?: string;
   maxSources?: number;
-}): string {
+}): { answer: string; grounded: boolean } {
   let next = answer.trim();
   const visibleDocs = docs.slice(0, maxSources);
-
-  if (visibleDocs.length > 0 && !hasNumericCitation(next)) {
-    next = appendCitationToFirstAnswerLine(next);
-  }
+  const grounded = visibleDocs.length === 0 || hasNumericCitation(next);
 
   if (visibleDocs.length > 0 && !hasSourceSection(next)) {
     next = `${next}\n\n${buildKnowledgeSourceList(visibleDocs, lang, maxSources)}`;
@@ -95,5 +106,5 @@ export function ensureGroundedCitationAnswer({
     next = `${next}\n\n${sourceNotice}`;
   }
 
-  return next;
+  return { answer: next, grounded };
 }

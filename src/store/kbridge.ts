@@ -76,139 +76,155 @@ function complianceSignalsFromRecommendation(recommendation: PathRecommendation)
     : null;
 }
 
-export const useLeadStore = create<LeadState>()((set, get) => ({
-  currentDiagnosis: null,
-  currentLeadId: null,
-  leads: [],
-  loading: false,
-  savingDiagnosis: false,
-  selectedSchoolsForReadiness: [],
+// Persisted because the six-step wizard result is the funnel's core artifact:
+// without this an anonymous user who closes the tab loses it and must redo
+// every step. Only the user's own diagnosis is kept — `leads` holds records
+// fetched from the server and has no business in localStorage.
+export const useLeadStore = create<LeadState>()(
+  persist(
+    (set, get) => ({
+      currentDiagnosis: null,
+      currentLeadId: null,
+      leads: [],
+      loading: false,
+      savingDiagnosis: false,
+      selectedSchoolsForReadiness: [],
 
-  saveDiagnosis: async (nickname, input, recommendation) => {
-    set({ savingDiagnosis: true });
-    try {
-      const res = await fetch("/api/leads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nickname: nickname || "익명",
-          nationality: input.nationality,
-          age: Number(input.age) || 0,
-          education: input.education,
-          koreanLevel: input.korean,
-          goal: input.goal,
-          budget: input.budget,
-          region: input.region,
-          usingBroker: input.usingBroker,
-          brokerCost: input.brokerCost,
-          hasHistory: input.hasHistory,
-          pathKey: recommendation.pathKey,
-          estimatedCost: recommendation.estimatedCost,
-          prepTime: recommendation.prepTime.en,
-          requiredDocs: recommendation.requiredDocs,
-          warnings: recommendation.warnings,
-          nextActions: recommendation.nextActions,
-        }),
-      });
-      if (!res.ok) throw new Error("Failed to save lead");
-      const { lead } = await res.json();
-      set({
-        currentDiagnosis: { input, recommendation },
-        currentLeadId: lead.id,
-        leads: [lead, ...get().leads].slice(0, 100),
-      });
-      return lead.id;
-    } catch (e) {
-      console.error("[saveDiagnosis]", e);
-      // fallback: 로컬 상태에만 저장
-      const localLead: Lead = {
-        id: `local-${Date.now()}`,
-        createdAt: new Date().toISOString(),
-        nickname: nickname || "익명",
-        nationality: input.nationality,
-        goal: input.goal,
-        pathKey: recommendation.pathKey,
-        budget: input.budget,
-        brokerCost: input.brokerCost,
-        usingBroker: input.usingBroker,
-        hasHistory: input.hasHistory,
-        age: Number(input.age) || 0,
-        education: input.education,
-        koreanLevel: input.korean,
-        region: input.region,
-        estimatedCost: recommendation.estimatedCost,
-        prepTime: recommendation.prepTime.en,
-        requiredDocs: recommendation.requiredDocs,
-        warnings: recommendation.warnings,
-        nextActions: recommendation.nextActions,
-      };
-      set({
-        currentDiagnosis: { input, recommendation },
-        currentLeadId: localLead.id,
-        leads: [localLead, ...get().leads].slice(0, 100),
-      });
-      return localLead.id;
-    } finally {
-      set({ savingDiagnosis: false });
-    }
-  },
-
-  fetchLeads: async () => {
-    set({ loading: true });
-    try {
-      const res = await fetch("/api/leads");
-      if (!res.ok) throw new Error("Failed to fetch leads");
-      const { leads } = await res.json();
-      set({ leads });
-    } catch (e) {
-      console.error("[fetchLeads]", e);
-    } finally {
-      set({ loading: false });
-    }
-  },
-
-  clearCurrent: () => set({ currentDiagnosis: null, currentLeadId: null }),
-
-  toggleSchoolForReadiness: (school) => {
-    const current = get().selectedSchoolsForReadiness;
-    const exists = current.some((s) => s.id === school.id);
-    const next = exists
-      ? current.filter((s) => s.id !== school.id)
-      : [...current, school];
-    set({ selectedSchoolsForReadiness: next });
-    get().recomputeReadinessWithSelectedSchools();
-  },
-
-  clearSelectedSchoolsForReadiness: () => {
-    set({ selectedSchoolsForReadiness: [] });
-    get().recomputeReadinessWithSelectedSchools();
-  },
-
-  recomputeReadinessWithSelectedSchools: () => {
-    const diag = get().currentDiagnosis;
-    if (!diag) return;
-    const accs = get().selectedSchoolsForReadiness.map((s) => s.accreditation);
-    const readiness = calculateReadinessScore({
-      input: diag.input,
-      complianceSignals: complianceSignalsFromRecommendation(diag.recommendation),
-      selectedSchoolAccreditations: accs,
-    });
-    set({
-      currentDiagnosis: {
-        ...diag,
-        recommendation: {
-          ...diag.recommendation,
-          readiness,
-        },
+      saveDiagnosis: async (nickname, input, recommendation) => {
+        set({ savingDiagnosis: true });
+        try {
+          const res = await fetch("/api/leads", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              nickname: nickname || "익명",
+              nationality: input.nationality,
+              age: Number(input.age) || 0,
+              education: input.education,
+              koreanLevel: input.korean,
+              goal: input.goal,
+              budget: input.budget,
+              region: input.region,
+              usingBroker: input.usingBroker,
+              brokerCost: input.brokerCost,
+              hasHistory: input.hasHistory,
+              pathKey: recommendation.pathKey,
+              estimatedCost: recommendation.estimatedCost,
+              prepTime: recommendation.prepTime.en,
+              requiredDocs: recommendation.requiredDocs,
+              warnings: recommendation.warnings,
+              nextActions: recommendation.nextActions,
+            }),
+          });
+          if (!res.ok) throw new Error("Failed to save lead");
+          const { lead } = await res.json();
+          set({
+            currentDiagnosis: { input, recommendation },
+            currentLeadId: lead.id,
+            leads: [lead, ...get().leads].slice(0, 100),
+          });
+          return lead.id;
+        } catch (e) {
+          console.error("[saveDiagnosis]", e);
+          // fallback: 로컬 상태에만 저장
+          const localLead: Lead = {
+            id: `local-${Date.now()}`,
+            createdAt: new Date().toISOString(),
+            nickname: nickname || "익명",
+            nationality: input.nationality,
+            goal: input.goal,
+            pathKey: recommendation.pathKey,
+            budget: input.budget,
+            brokerCost: input.brokerCost,
+            usingBroker: input.usingBroker,
+            hasHistory: input.hasHistory,
+            age: Number(input.age) || 0,
+            education: input.education,
+            koreanLevel: input.korean,
+            region: input.region,
+            estimatedCost: recommendation.estimatedCost,
+            prepTime: recommendation.prepTime.en,
+            requiredDocs: recommendation.requiredDocs,
+            warnings: recommendation.warnings,
+            nextActions: recommendation.nextActions,
+          };
+          set({
+            currentDiagnosis: { input, recommendation },
+            currentLeadId: localLead.id,
+            leads: [localLead, ...get().leads].slice(0, 100),
+          });
+          return localLead.id;
+        } finally {
+          set({ savingDiagnosis: false });
+        }
       },
-    });
-  },
 
-  updateCurrentDiagnosisRecommendation: (input, recommendation) => {
-    set({ currentDiagnosis: { input, recommendation } });
-    get().recomputeReadinessWithSelectedSchools();
-  },
-}));
+      fetchLeads: async () => {
+        set({ loading: true });
+        try {
+          const res = await fetch("/api/leads");
+          if (!res.ok) throw new Error("Failed to fetch leads");
+          const { leads } = await res.json();
+          set({ leads });
+        } catch (e) {
+          console.error("[fetchLeads]", e);
+        } finally {
+          set({ loading: false });
+        }
+      },
+
+      clearCurrent: () => set({ currentDiagnosis: null, currentLeadId: null }),
+
+      toggleSchoolForReadiness: (school) => {
+        const current = get().selectedSchoolsForReadiness;
+        const exists = current.some((s) => s.id === school.id);
+        const next = exists
+          ? current.filter((s) => s.id !== school.id)
+          : [...current, school];
+        set({ selectedSchoolsForReadiness: next });
+        get().recomputeReadinessWithSelectedSchools();
+      },
+
+      clearSelectedSchoolsForReadiness: () => {
+        set({ selectedSchoolsForReadiness: [] });
+        get().recomputeReadinessWithSelectedSchools();
+      },
+
+      recomputeReadinessWithSelectedSchools: () => {
+        const diag = get().currentDiagnosis;
+        if (!diag) return;
+        const accs = get().selectedSchoolsForReadiness.map((s) => s.accreditation);
+        const readiness = calculateReadinessScore({
+          input: diag.input,
+          complianceSignals: complianceSignalsFromRecommendation(diag.recommendation),
+          selectedSchoolAccreditations: accs,
+        });
+        set({
+          currentDiagnosis: {
+            ...diag,
+            recommendation: {
+              ...diag.recommendation,
+              readiness,
+            },
+          },
+        });
+      },
+
+      updateCurrentDiagnosisRecommendation: (input, recommendation) => {
+        set({ currentDiagnosis: { input, recommendation } });
+        get().recomputeReadinessWithSelectedSchools();
+      },
+    }),
+    {
+      name: "kb-lead",
+      partialize: (state) => ({
+        currentDiagnosis: state.currentDiagnosis,
+        currentLeadId: state.currentLeadId,
+        selectedSchoolsForReadiness: state.selectedSchoolsForReadiness,
+      }),
+    }
+  )
+);
 
 // --- 파트너 요청 (서버 동기화) ---
 interface PartnerState {

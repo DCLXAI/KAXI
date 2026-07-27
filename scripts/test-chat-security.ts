@@ -1,4 +1,5 @@
 import { strict as assert } from "assert";
+import { readFileSync } from "fs";
 import { JsonBodyError, readJsonBody } from "../src/lib/api/json-body";
 import { CHAT_ATTACHMENT_MIME_TYPES, detectChatAttachmentMimeType } from "../src/lib/chat/attachment-files";
 import sharp from "sharp";
@@ -428,3 +429,42 @@ assert.equal(parseLimit(undefined, AI_CHAT_DEFAULT_DAILY_QUOTA), 100);
 assert.equal(parseLimit("unlimited", AI_CHAT_DEFAULT_RATE_LIMIT), 0);
 
 console.log("PASS chat security: provenance, signed ownership, Typebot gateway auth, bounded JSON, category inference, expiry, tamper protection, and magic-byte allowlist");
+
+// --- Guardrail coverage on every client-facing answer path ---------------
+// The guardrail used to be wired into the Typebot and n8n runtimes only, which
+// left the landing-page chat answering with no refusal for illegal work, false
+// documents or prompt injection. These assertions fail if a client-facing
+// answer path ships without it again.
+{
+  const answerRoutes = [
+    "src/app/api/ai/unified/route.ts",
+    "src/app/api/ai/chat/route.ts",
+    "src/app/api/ai/consult/route.ts",
+    "src/app/api/typebot-rag/route.ts",
+    "src/app/api/internal/n8n/rag-runtime/route.ts",
+  ];
+  for (const route of answerRoutes) {
+    const source = readFileSync(route, "utf8");
+    assert(
+      /applyChatResponseGuardrail|guardAnswerFields/.test(source),
+      `${route} returns answers to users and must run the chat guardrail`
+    );
+  }
+
+  // The stream route is exempt only because it delegates to unified, which is
+  // guarded. If that delegation ever goes away this assertion should too.
+  const streamSource = readFileSync("src/app/api/ai/unified/stream/route.ts", "utf8");
+  assert(
+    /runUnifiedAi/.test(streamSource),
+    "the stream route inherits the guardrail via unified; it must keep delegating there"
+  );
+
+  // The citation helper must never invent an attribution marker again.
+  const citationSource = readFileSync("src/lib/knowledge/citations.ts", "utf8");
+  assert(
+    !/appendCitationToFirstAnswerLine\(next\)/.test(citationSource),
+    "ensureGroundedCitationAnswer must not staple a citation onto an uncited answer"
+  );
+}
+
+console.log("PASS chat guardrail coverage on every client-facing answer path");
