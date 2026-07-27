@@ -519,14 +519,19 @@ const requestPartnerTool: Tool = {
       // The draft is what the user sees before confirming, so it must not
       // preview a callback that the consent gate below would refuse.
       const consented = await hasActivePartnerRoutingConsent(ctx.leadId || "anonymous");
+      // `status` stays "draft" whether or not consent is on file: it means
+      // "nothing was persisted", which is true either way, and a guard test
+      // rightly pins that. Whether we can promise a callback is a separate
+      // question, carried by `eta` and `consent_required`.
       return {
         result: {
           request_id: "draft",
           partner_type: partnerType,
           question: safeQuestion,
           lead_id: ctx.leadId || "anonymous",
-          status: consented ? "draft" : "consent_required",
+          status: "draft",
           persisted: false,
+          consent_required: !consented,
           eta: consented ? "상담 접수 확인 후 24시간 내 담당자 연락" : null,
           ...(consented ? {} : { next_step_href: viewToPath("partners", ctx.lang) }),
         },
