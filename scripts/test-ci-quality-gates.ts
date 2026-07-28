@@ -72,6 +72,10 @@ assert(
   "production deploy must reject a dirty or mismatched source checkout",
 );
 assert(
+  deploymentWorkflow.includes("bun run rag:check:projection"),
+  "production deploy must detect RAG serving projection drift before paying for a build and canary",
+);
+assert(
   deploymentWorkflow.includes("--skip-domain"),
   "production deploy must verify a canary before assigning production domains",
 );
