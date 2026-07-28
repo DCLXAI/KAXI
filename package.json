@@ -97,6 +97,7 @@
     "release:check:typebot": "bun run scripts/check-production-cutover.ts --stage typebot",
     "rag:serving:sync": "bun run scripts/sync-rag-serving-projection.ts",
     "rag:serving:cutover": "bun run scripts/finalize-rag-serving-cutover.ts",
+    "rag:check:projection": "bun run scripts/check-rag-serving-drift.ts",
     "knowledge:metadata": "bun run scripts/enrich-knowledge-metadata.ts",
     "knowledge:quality": "bun run scripts/audit-knowledge-quality.ts",
     "knowledge:pgvector": "bun run scripts/ingest-knowledge-pgvector.ts",

@@ -75,6 +75,14 @@ jobs:
       - name: Verify reproducible release source
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
         run: bun run release:check:source -- --expected-sha "$EXPECTED_SHA"
+      # Serving-projection drift makes production readiness report 503, which the canary
+      # gate below rejects — but only after a build, a migration and a canary deployment
+      # have been paid for. The projection is shared Supabase state that can already be
+      # drifted before this release starts, so read it from the live production readiness
+      # endpoint first. Needs no credentials, so it runs ahead of every costly step.
+      - name: Check RAG serving projection drift
+        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
+        run: bun run rag:check:projection -- --base-url "${{ vars.PRODUCTION_BASE_URL || 'https://kaxi.vercel.app' }}"
       - name: Pull Vercel production environment
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
         run: bunx vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
