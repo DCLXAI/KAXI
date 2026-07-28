@@ -26,8 +26,15 @@ const datasetPath = "quality/multilingual-eval-cases.json";
 // live Postgres knowledge store, the OpenAI embedding key, and the Supabase
 // serving credentials, so this stays an opt-in integration run rather than a
 // unit test — it is not expected to execute in the standard local/CI gates.
+// Skip cleanly rather than fail when the RAG runtime is absent. This eval now
+// scores the real serving path (OpenAI 1536d + Supabase hybrid_v3), which needs
+// production-like credentials the standard CI gate does not carry. A hard throw
+// here would turn an opt-in integration eval into a red unit gate — exactly the
+// contradiction above. It runs for real wherever the credentials exist (a
+// credentialed eval job, or locally with DATABASE_URL + OpenAI/Supabase set).
 if (!/^postgres(?:ql)?:\/\//i.test(process.env.DATABASE_URL || "")) {
-  throw new Error("quality dataset evaluation requires DATABASE_URL=postgresql://...");
+  console.log("SKIP quality dataset evaluation: DATABASE_URL=postgresql://... is not set (opt-in integration run).");
+  process.exit(0);
 }
 
 const ragRuntime = sharedOpenAiRagRuntimeInfo();
@@ -40,9 +47,8 @@ if (!ragRuntime.ready) {
   ]
     .filter(Boolean)
     .join(" and ");
-  throw new Error(
-    `quality dataset evaluation requires the OpenAI + Supabase RAG runtime; missing ${missing}`,
-  );
+  console.log(`SKIP quality dataset evaluation: missing ${missing} (opt-in integration run).`);
+  process.exit(0);
 }
 
 const cases = JSON.parse(readFileSync(datasetPath, "utf-8")) as QualityCase[];
