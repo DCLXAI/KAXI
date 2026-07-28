@@ -1,5 +1,3 @@
-import { embedText } from "@/lib/embeddings/transformer-embedder";
-
 export const RAG_QUERY_EMBEDDING_MODEL = "text-embedding-3-small";
 export const RAG_QUERY_EMBEDDING_DIMENSIONS = 1536;
 export const CANONICAL_QUERY_EMBEDDING_MODEL = "Xenova/multilingual-e5-small";
@@ -15,9 +13,6 @@ export type QueryEmbeddingResult = {
   dimensions: number | null;
   failureReason: string | null;
   latencyMs: number;
-  strategy?: RagEmbeddingStrategy;
-  fallbackFrom?: "openai" | "e5" | null;
-  primaryFailureReason?: string | null;
 };
 
 type QueryEmbeddingOptions = {
@@ -78,20 +73,6 @@ function result(
   const dimensions = input.dimensions
     ?? (input.model === RAG_QUERY_EMBEDDING_MODEL ? RAG_QUERY_EMBEDDING_DIMENSIONS : null);
   return { ...input, dimensions, latencyMs: Date.now() - startedAt };
-}
-
-function withStrategy(
-  embedding: QueryEmbeddingResult,
-  strategy: RagEmbeddingStrategy,
-  fallbackFrom?: "openai" | "e5",
-  primaryFailureReason?: string | null,
-): QueryEmbeddingResult {
-  return {
-    ...embedding,
-    strategy,
-    fallbackFrom: fallbackFrom || null,
-    primaryFailureReason: primaryFailureReason || null,
-  };
 }
 
 export function isOpenAiQueryEmbedding(embedding: QueryEmbeddingResult) {
@@ -215,95 +196,4 @@ export async function createRagQueryEmbedding(
       failureReason: timeout ? "embedding_provider_timeout" : "embedding_provider_unavailable",
     });
   }
-}
-
-export async function createCanonicalRagQueryEmbedding(
-  question: string,
-  options: Pick<QueryEmbeddingOptions, "env"> = {},
-): Promise<QueryEmbeddingResult> {
-  const startedAt = Date.now();
-  const env = options.env || process.env;
-  if (
-    env.KAXI_QUERY_EMBEDDINGS_ENABLED === "false"
-    || env.KAXI_CANONICAL_QUERY_EMBEDDINGS_ENABLED === "false"
-  ) {
-    return result(startedAt, {
-      vector: null,
-      status: "disabled",
-      provider: "none",
-      model: CANONICAL_QUERY_EMBEDDING_MODEL,
-      dimensions: CANONICAL_QUERY_EMBEDDING_DIMENSIONS,
-      failureReason: "embedding_disabled",
-    });
-  }
-
-  try {
-    const embedded = await embedText(`query: ${question.slice(0, 4_000)}`);
-    const vector = Array.from(embedded.vector);
-    if (
-      embedded.method !== "transformer"
-      || vector.length !== CANONICAL_QUERY_EMBEDDING_DIMENSIONS
-      || vector.some((value) => !Number.isFinite(value))
-    ) {
-      return result(startedAt, {
-        vector: null,
-        status: "failed",
-        provider: "local-transformer",
-        model: CANONICAL_QUERY_EMBEDDING_MODEL,
-        dimensions: CANONICAL_QUERY_EMBEDDING_DIMENSIONS,
-        failureReason: "canonical_embedding_invalid_vector",
-      });
-    }
-    return result(startedAt, {
-      vector,
-      status: "ready",
-      provider: "local-transformer",
-      model: CANONICAL_QUERY_EMBEDDING_MODEL,
-      dimensions: CANONICAL_QUERY_EMBEDDING_DIMENSIONS,
-      failureReason: null,
-    });
-  } catch {
-    return result(startedAt, {
-      vector: null,
-      status: "failed",
-      provider: "local-transformer",
-      model: CANONICAL_QUERY_EMBEDDING_MODEL,
-      dimensions: CANONICAL_QUERY_EMBEDDING_DIMENSIONS,
-      failureReason: "canonical_embedding_unavailable",
-    });
-  }
-}
-
-export async function createRagQueryEmbeddingWithLocalFallback(
-  question: string,
-  options: QueryEmbeddingOptions = {},
-): Promise<QueryEmbeddingResult> {
-  const env = options.env || process.env;
-  const strategy = getRagEmbeddingStrategy(env);
-
-  if (strategy === "openai-only") {
-    return withStrategy(await createRagQueryEmbedding(question, options), strategy);
-  }
-
-  const openAiPrimary = strategy === "openai-primary";
-  const primary = openAiPrimary
-    ? await createRagQueryEmbedding(question, options)
-    : await createCanonicalRagQueryEmbedding(question, { env });
-  if (primary.status === "ready" || primary.status === "disabled") {
-    return withStrategy(primary, strategy);
-  }
-
-  const fallback = openAiPrimary
-    ? await createCanonicalRagQueryEmbedding(question, { env })
-    : await createRagQueryEmbedding(question, options);
-  if (fallback.status === "ready") {
-    return withStrategy(
-      fallback,
-      strategy,
-      openAiPrimary ? "openai" : "e5",
-      primary.failureReason || primary.status,
-    );
-  }
-
-  return withStrategy(primary, strategy);
 }

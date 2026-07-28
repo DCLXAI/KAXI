@@ -3,9 +3,7 @@ import { createSupabaseChatClient } from "@/lib/chat/persistence";
 import type { GuardedChatResponse, GuardrailLocale } from "@/lib/chat/response-guardrail";
 import { RETRIEVAL_CONFIDENCE_POLICY_VERSION } from "@/lib/chat/retrieval-confidence";
 import {
-  createRagQueryEmbeddingWithLocalFallback,
-  getRagEmbeddingStrategy,
-  isCanonicalQueryEmbedding,
+  createRagQueryEmbedding,
   isOpenAiQueryEmbedding,
   type QueryEmbeddingResult,
 } from "@/lib/chat/query-embedding";
@@ -21,11 +19,6 @@ import {
 } from "@/lib/chat/question-mediator";
 import type { RagProvenance } from "@/lib/n8n/provenance";
 import type { SessionProfile } from "@/lib/chat/session-profile";
-import { pickLangText } from "@/lib/data/knowledge";
-import {
-  searchPgvectorKnowledgeWithEmbedding,
-  type PgvectorSearchResult,
-} from "@/lib/embeddings/pgvector-rag";
 import {
   LANGUAGE_STUDY_PATTERN,
   LANGUAGE_STUDY_QUERY_HINTS,
@@ -78,17 +71,9 @@ export type DirectHybridRpc = (input: {
   filter: Record<string, unknown>;
 }) => Promise<DirectLexicalRpcResult>;
 
-export type DirectCanonicalHybridSearch = (input: {
-  query: string;
-  queryEmbedding: number[];
-  matchCount: number;
-  locale: GuardrailLocale;
-}) => Promise<DirectLexicalRpcResult>;
-
 export type DirectRagSearchDependencies = {
   rpc?: DirectHybridRpc;
   createEmbedding?: (question: string) => Promise<QueryEmbeddingResult>;
-  canonicalSearch?: DirectCanonicalHybridSearch;
 };
 
 export type DirectRagDependencies = DirectRagSearchDependencies & {
@@ -671,61 +656,6 @@ async function defaultHybridRpc(input: {
   return { data: result.data, error: result.error };
 }
 
-function canonicalSearchRows(results: PgvectorSearchResult[], locale: GuardrailLocale) {
-  return results.map((result) => {
-    const metadata = result.doc.ragMeta;
-    return {
-      id: result.chunkId,
-      content: pickLangText(result.doc.content, locale),
-      metadata: {
-        doc_id: metadata?.doc_id || result.doc.id,
-        title: pickLangText(result.doc.title, locale),
-        source: metadata?.source_label || result.doc.source,
-        source_label: metadata?.source_label || result.doc.source,
-        source_url: metadata?.source_url || result.doc.source,
-        source_type: metadata?.source_type || "internal_analysis",
-        last_checked_at: metadata?.last_checked_at,
-        checked_by: metadata?.checked_by,
-        category: result.doc.category,
-        language: metadata?.language || locale,
-        retrieval_type: "hybrid-canonical-e5",
-        retrieval_mode: "hybrid-canonical",
-        score_version: "canonical-score-fusion-v1",
-        embedding_source: "canonical-query",
-        vector_search_available: true,
-        stored_vector_search: true,
-        vector_seed_count: 0,
-        hybrid_score: result.score,
-        vector_score: result.vectorScore,
-        keyword_score: result.keywordScore,
-        rrf_score: result.rrf,
-        lexical_rank: result.keywordRank,
-        vector_rank: result.vectorRank,
-        lexical_candidate_count: results.length,
-        vector_candidate_count: results.length,
-      },
-    };
-  });
-}
-
-async function defaultCanonicalHybridSearch(input: {
-  query: string;
-  queryEmbedding: number[];
-  matchCount: number;
-  locale: GuardrailLocale;
-}) {
-  try {
-    const results = await searchPgvectorKnowledgeWithEmbedding(
-      input.query,
-      input.queryEmbedding,
-      { topK: input.matchCount, languages: [input.locale] },
-    );
-    return { data: canonicalSearchRows(results, input.locale) };
-  } catch (error) {
-    return { data: null, error };
-  }
-}
-
 function rpcErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
   if (error && typeof error === "object" && "message" in error) return String(error.message);
@@ -1038,9 +968,6 @@ export function buildDirectLexicalResponseFromRows(
     embeddingDimensions: input.embedding?.dimensions ?? null,
     embeddingFailureReason: input.embedding?.failureReason || null,
     embeddingLatencyMs: input.embedding?.latencyMs ?? null,
-    embeddingStrategy: input.embedding?.strategy || getRagEmbeddingStrategy(),
-    embeddingFallbackFrom: input.embedding?.fallbackFrom || null,
-    embeddingPrimaryFailureReason: input.embedding?.primaryFailureReason || null,
     vectorStrategy: firstText(firstMetadata.embedding_source) || "none",
     vectorSearchAvailable: booleanValue(firstMetadata.vector_search_available),
     storedVectorSearch: booleanValue(firstMetadata.stored_vector_search),
@@ -1146,7 +1073,7 @@ async function retrieveDirectRagCandidates(
   let embedding: QueryEmbeddingResult;
   const embeddingQuestion = input.retrievalQuery || input.question;
   try {
-    embedding = await (dependencies.createEmbedding || createRagQueryEmbeddingWithLocalFallback)(embeddingQuestion);
+    embedding = await (dependencies.createEmbedding || createRagQueryEmbedding)(embeddingQuestion);
   } catch {
     embedding = {
       vector: null,
@@ -1158,12 +1085,16 @@ async function retrieveDirectRagCandidates(
       latencyMs: 0,
     };
   }
-  const canonicalEmbedding = isCanonicalQueryEmbedding(embedding);
   const openAiEmbedding = isOpenAiQueryEmbedding(embedding);
-  if ((input.requireOpenAiEmbedding || getRagEmbeddingStrategy() === "openai-only") && !openAiEmbedding) {
+  // Safe-by-default: fail closed unless a caller EXPLICITLY opts out with
+  // requireOpenAiEmbedding: false. Correctness must not rest on every future
+  // caller remembering to pass `true` — all production callers already require
+  // it (typebot-rag, n8n rag-runtime, shared-openai-rag), and a forgotten flag
+  // now fails closed rather than silently degrading to lexical retrieval.
+  if (input.requireOpenAiEmbedding !== false && !openAiEmbedding) {
     throw new Error(`OPENAI_QUERY_EMBEDDING_REQUIRED: ${embedding.failureReason || embedding.status}`);
   }
-  const queryEmbedding = embedding.vector && !canonicalEmbedding
+  const queryEmbedding = openAiEmbedding && embedding.vector
     ? `[${embedding.vector.map((value) => Number(value).toFixed(8)).join(",")}]`
     : null;
   const exactVisaScope = normalizedVisaCodes([
@@ -1176,35 +1107,27 @@ async function retrieveDirectRagCandidates(
     && !exactVisaScope
     && process.env.KAXI_STORED_VECTOR_EXPANSION_ENABLED !== "false";
   const queryText = buildDirectLexicalQuery(input);
-  const result = canonicalEmbedding
-    ? await (dependencies.canonicalSearch || defaultCanonicalHybridSearch)({
-        query: queryText,
-        queryEmbedding: embedding.vector as number[],
-        matchCount: 24,
-        locale: input.locale,
-      })
-    : await runIntentScopedRpc(input, (category) => (dependencies.rpc || defaultHybridRpc)({
-      queryEmbedding,
-      matchCount: 12,
-      filter: {
-        tenant_id: input.tenantId,
-        category,
-        category_mode: "strict",
-        locale: input.locale,
-        query_text: queryText,
-        embedding_failure_reason: embedding.failureReason || undefined,
-        allow_seeded_vector: allowSeededVector,
-        vector_seed_count: 3,
-      },
-    }));
+  const result = await runIntentScopedRpc(input, (category) => (dependencies.rpc || defaultHybridRpc)({
+    queryEmbedding,
+    matchCount: 12,
+    filter: {
+      tenant_id: input.tenantId,
+      category,
+      category_mode: "strict",
+      locale: input.locale,
+      query_text: queryText,
+      embedding_failure_reason: embedding.failureReason || undefined,
+      allow_seeded_vector: allowSeededVector,
+      vector_seed_count: 3,
+    },
+  }));
   if (result.error) {
     throw new Error(`DIRECT_RAG_RPC_FAILED: ${rpcErrorMessage(result.error)}`);
   }
   const firstRow = Array.isArray(result.data) ? metadataRecord(result.data[0]) : {};
   const firstMetadata = metadataRecord(firstRow.metadata);
   const retrievalMode = firstText(firstMetadata.retrieval_mode);
-  const runtimePath: DirectRagRuntimePath = canonicalEmbedding
-    || queryEmbedding
+  const runtimePath: DirectRagRuntimePath = queryEmbedding
     || retrievalMode === "hybrid-provider"
     || retrievalMode === "hybrid-seeded"
     || retrievalMode === "vector-only"

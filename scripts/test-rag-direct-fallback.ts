@@ -23,7 +23,6 @@ import {
   CANONICAL_QUERY_EMBEDDING_DIMENSIONS,
   CANONICAL_QUERY_EMBEDDING_MODEL,
   createRagQueryEmbedding,
-  createRagQueryEmbeddingWithLocalFallback,
   getRagEmbeddingStrategy,
   isOpenAiQueryEmbedding,
   RAG_QUERY_EMBEDDING_DIMENSIONS,
@@ -222,12 +221,16 @@ assert.equal(
   getRagEmbeddingStrategy({ KAXI_RAG_EMBEDDING_STRATEGY: "e5-primary" } as NodeJS.ProcessEnv),
   "e5-primary",
 );
-const openAiOnlyMissing = await createRagQueryEmbeddingWithLocalFallback("D-10 documents", {
-  env: { KAXI_RAG_EMBEDDING_STRATEGY: "openai-only" } as NodeJS.ProcessEnv,
+// The retrieval embedding path is OpenAI-only and fail-closed. createRagQueryEmbedding
+// ignores KAXI_RAG_EMBEDDING_STRATEGY (now diagnostic-only): setting "e5-primary" no longer
+// selects a local/E5 corpus. Without a key it reports not_configured/none and never
+// silently produces a local-transformer (384d) embedding.
+const strategyInertEmbedding = await createRagQueryEmbedding("D-10 documents", {
+  env: { KAXI_RAG_EMBEDDING_STRATEGY: "e5-primary" } as NodeJS.ProcessEnv,
 });
-assert.equal(openAiOnlyMissing.status, "not_configured");
-assert.equal(openAiOnlyMissing.strategy, "openai-only");
-assert.equal(openAiOnlyMissing.provider, "none");
+assert.equal(strategyInertEmbedding.status, "not_configured");
+assert.equal(strategyInertEmbedding.provider, "none");
+assert.notEqual(strategyInertEmbedding.provider, "local-transformer");
 
 assert.equal(
   shouldRetryN8nNoContext({ searchMeta: { noContext: true, runtimePath: "n8n-workflow" } }),
@@ -880,6 +883,11 @@ await assert.rejects(
   /OPENAI_QUERY_EMBEDDING_REQUIRED/,
 );
 
+// A canonical (non-OpenAI, 384d local-transformer) embedding now FAILS CLOSED under
+// requireOpenAiEmbedding instead of silently retrieving from a separate 384d corpus.
+// The old canonical hybrid branch has been removed: retrieval never reroutes to a
+// different corpus for a non-OpenAI embedding. The RPC guard proves the throw happens
+// before any corpus is touched.
 const canonicalEmbedding = {
   vector: Array.from({ length: CANONICAL_QUERY_EMBEDDING_DIMENSIONS }, (_, index) => index === 0 ? 1 : 0),
   status: "ready" as const,
@@ -889,48 +897,27 @@ const canonicalEmbedding = {
   failureReason: null,
   latencyMs: 12,
 };
-let canonicalSearchCalled = false;
-const canonicalHybridResponse = await runDirectRagFallback(input, {
-  createEmbedding: async () => canonicalEmbedding,
-  canonicalSearch: async ({ queryEmbedding, matchCount, locale }) => {
-    canonicalSearchCalled = true;
-    assert.equal(queryEmbedding.length, CANONICAL_QUERY_EMBEDDING_DIMENSIONS);
-    assert.equal(matchCount, 24);
-    assert.equal(locale, "ko");
-    return {
-      data: [{
-        ...validRow,
-        metadata: {
-          ...validRow.metadata,
-          retrieval_type: "hybrid-canonical-e5",
-          retrieval_mode: "hybrid-canonical",
-          score_version: "canonical-score-fusion-v1",
-          embedding_source: "canonical-query",
-          vector_search_available: true,
-          stored_vector_search: true,
-          vector_score: 0.88,
-          keyword_score: 0.4,
-          vector_candidate_count: 24,
-        },
-      }],
-    };
-  },
-  rpc: async () => {
-    throw new Error("1536d serving RPC must not receive a 384d canonical embedding");
-  },
-});
-assert.equal(canonicalSearchCalled, true);
-assert.equal(canonicalHybridResponse.runtimePath, DIRECT_HYBRID_RUNTIME_PATH);
-assert.equal((canonicalHybridResponse.searchMeta as Record<string, unknown>).retrievalMode, "hybrid-canonical");
-assert.equal((canonicalHybridResponse.searchMeta as Record<string, unknown>).embeddingProvider, "local-transformer");
-assert.equal((canonicalHybridResponse.searchMeta as Record<string, unknown>).embeddingDimensions, 384);
-assert.equal((canonicalHybridResponse.searchMeta as Record<string, unknown>).vectorStrategy, "canonical-query");
+await assert.rejects(
+  () => runDirectRagFallback({
+    ...input,
+    requireOpenAiEmbedding: true,
+  }, {
+    createEmbedding: async () => canonicalEmbedding,
+    rpc: async () => {
+      throw new Error("retrieval must not run for a non-OpenAI embedding");
+    },
+  }),
+  /OPENAI_QUERY_EMBEDDING_REQUIRED/,
+);
 
 let seededVectorAllowed = false;
 const seededHybridResponse = await runDirectRagFallback({
   ...input,
   question: "한국 유학 체류기간 연장 준비 시기를 알려주세요.",
   allowStoredVectorExpansion: true,
+  // Explicit opt-out: this case deliberately exercises the non-required
+  // lexical-degrade path. Without this, safe-by-default would fail closed.
+  requireOpenAiEmbedding: false,
 }, {
   createEmbedding: async () => missingEmbeddingProvider,
   rpc: async ({ queryEmbedding, filter }) => {
@@ -970,6 +957,7 @@ let exactVisaSeededVectorAllowed = true;
 const exactVisaLexicalResponse = await runDirectRagFallback({
   ...input,
   allowStoredVectorExpansion: true,
+  requireOpenAiEmbedding: false, // deliberate lexical-degrade path
 }, {
   createEmbedding: async () => missingEmbeddingProvider,
   rpc: async ({ queryEmbedding, filter }) => {
@@ -990,6 +978,7 @@ const failedEmbeddingProvider = {
 const providerFailureResponse = await runDirectRagFallback({
   ...input,
   allowStoredVectorExpansion: true,
+  requireOpenAiEmbedding: false, // deliberate lexical-degrade path
 }, {
   createEmbedding: async () => failedEmbeddingProvider,
   rpc: async ({ filter }) => {
@@ -1003,25 +992,70 @@ assert.equal(
   "embedding_provider_http_503",
 );
 
+// Fail-closed is driven solely by requireOpenAiEmbedding now. A failed OpenAI embedding
+// throws OPENAI_QUERY_EMBEDDING_REQUIRED before any retrieval RPC runs.
+await assert.rejects(
+  () => runDirectRagFallback({
+    ...input,
+    requireOpenAiEmbedding: true,
+  }, {
+    createEmbedding: async () => failedEmbeddingProvider,
+    rpc: async () => {
+      throw new Error("requireOpenAiEmbedding must not invoke retrieval without an OpenAI vector");
+    },
+  }),
+  /OPENAI_QUERY_EMBEDDING_REQUIRED/,
+);
+
+// Safe-by-default: a caller that OMITS requireOpenAiEmbedding entirely must still
+// fail closed on a non-OpenAI embedding — correctness cannot depend on remembering
+// the flag. A future caller that forgets it gets the throw, not a silent reroute.
+await assert.rejects(
+  () => runDirectRagFallback(input, {
+    createEmbedding: async () => failedEmbeddingProvider,
+    rpc: async () => {
+      throw new Error("omitted requireOpenAiEmbedding must fail closed, not retrieve");
+    },
+  }),
+  /OPENAI_QUERY_EMBEDDING_REQUIRED/,
+);
+
+// Positive invariant: a ready 384d canonical embedding must NEVER be serialized into
+// the 1536d RPC. With the OpenAI requirement explicitly opted out, it degrades to
+// lexical (queryEmbedding === null) on the same serving corpus, never a 384d reroute.
+let canonical1536Leak: string | null | undefined = "unset";
+const readyCanonicalLexical = await runDirectRagFallback({ ...input, requireOpenAiEmbedding: false }, {
+  createEmbedding: async () => canonicalEmbedding,
+  rpc: async ({ queryEmbedding }) => {
+    canonical1536Leak = queryEmbedding;
+    return { data: [validRow] };
+  },
+});
+assert.equal(canonical1536Leak, null);
+assert.equal(readyCanonicalLexical.runtimePath, DIRECT_LEXICAL_RUNTIME_PATH);
+
+// KAXI_RAG_EMBEDDING_STRATEGY is now inert for the retrieval path: setting "openai-only"
+// no longer forces a throw and never reroutes to a different corpus. Without
+// requireOpenAiEmbedding, a failed OpenAI embedding degrades to lexical retrieval on the
+// SAME corpus (queryEmbedding is null, not a rerouted vector).
 const originalEmbeddingStrategy = process.env.KAXI_RAG_EMBEDDING_STRATEGY;
 try {
   process.env.KAXI_RAG_EMBEDDING_STRATEGY = "openai-only";
-  await assert.rejects(
-    () => runDirectRagFallback(input, {
-      createEmbedding: async () => failedEmbeddingProvider,
-      rpc: async () => {
-        throw new Error("openai-only mode must not invoke lexical retrieval");
-      },
-    }),
-    /OPENAI_QUERY_EMBEDDING_REQUIRED/,
-  );
+  const strategyEnvInertResponse = await runDirectRagFallback({ ...input, requireOpenAiEmbedding: false }, {
+    createEmbedding: async () => failedEmbeddingProvider,
+    rpc: async ({ queryEmbedding }) => {
+      assert.equal(queryEmbedding, null);
+      return { data: [validRow] };
+    },
+  });
+  assert.equal(strategyEnvInertResponse.runtimePath, DIRECT_LEXICAL_RUNTIME_PATH);
 } finally {
   if (originalEmbeddingStrategy === undefined) delete process.env.KAXI_RAG_EMBEDDING_STRATEGY;
   else process.env.KAXI_RAG_EMBEDDING_STRATEGY = originalEmbeddingStrategy;
 }
 
 let lexicalOnlyVector: string | null | undefined;
-const lexicalOnlyResponse = await runDirectRagFallback(input, {
+const lexicalOnlyResponse = await runDirectRagFallback({ ...input, requireOpenAiEmbedding: false }, {
   createEmbedding: async () => missingEmbeddingProvider,
   rpc: async ({ queryEmbedding, filter }) => {
     lexicalOnlyVector = queryEmbedding;
@@ -1164,7 +1198,7 @@ assert.match(partialMultiIntentResponse.answer, /비용.*확인하지 못했어�
 assert.equal(partialMultiIntentResponse.needsHuman, false);
 
 let partialGenerationCalls = 0;
-const generatedPartialMultiIntent = await runDirectRagFallback(partialMultiIntentInput, {
+const generatedPartialMultiIntent = await runDirectRagFallback({ ...partialMultiIntentInput, requireOpenAiEmbedding: false }, {
   createEmbedding: async () => missingEmbeddingProvider,
   rpc: async () => ({ data: [validRow] }),
   generateAnswer: async (request) => {
@@ -1222,7 +1256,7 @@ const failedCanonicalEmbedding = {
 };
 const hybridCategoryCalls: string[] = [];
 let scopedGenerationTitles: string[] = [];
-const scopedHybridD10 = await runDirectRagFallback(mixedD10Input, {
+const scopedHybridD10 = await runDirectRagFallback({ ...mixedD10Input, requireOpenAiEmbedding: false }, {
   createEmbedding: async () => failedCanonicalEmbedding,
   rpc: async ({ filter }) => {
     const category = String(filter.category);
@@ -1277,7 +1311,7 @@ const editorialFiltered = buildDirectLexicalResponseFromRows([internalEditorialR
 assert.doesNotMatch(editorialFiltered.answer, /KAXI는/);
 assert.match(editorialFiltered.answer, /여권, 외국인등록증, 재학증명서/);
 let groundedRequestDocumentTitle = "";
-const groundedD10 = await runDirectRagFallback(wrongD10DocumentInput, {
+const groundedD10 = await runDirectRagFallback({ ...wrongD10DocumentInput, requireOpenAiEmbedding: false }, {
   createEmbedding: async () => missingEmbeddingProvider,
   rpc: async () => ({ data: [d10DocumentRow] }),
   generateAnswer: async (request) => {
@@ -1302,7 +1336,7 @@ assert.equal((groundedD10.searchMeta as Record<string, unknown>).answerMode, "gr
 assert.equal((groundedD10.searchMeta as Record<string, unknown>).noContext, false);
 assert.equal(groundedD10.modelVersion, "grounded-test-model");
 
-const generatedNoContext = await runDirectRagFallback(wrongD10DocumentInput, {
+const generatedNoContext = await runDirectRagFallback({ ...wrongD10DocumentInput, requireOpenAiEmbedding: false }, {
   createEmbedding: async () => missingEmbeddingProvider,
   rpc: async () => ({ data: [d10DocumentRow] }),
   generateAnswer: async () => ({
@@ -1344,7 +1378,7 @@ const genericDocumentRow = {
     category: "documents",
   },
 };
-const genericGeneratedNoContext = await runDirectRagFallback(genericDocumentInput, {
+const genericGeneratedNoContext = await runDirectRagFallback({ ...genericDocumentInput, requireOpenAiEmbedding: false }, {
   createEmbedding: async () => missingEmbeddingProvider,
   rpc: async () => ({ data: [genericDocumentRow] }),
   generateAnswer: async () => ({
@@ -1388,7 +1422,7 @@ const d4LanguageRow = {
     language: "en",
   },
 };
-const groundedD4NoContext = await runDirectRagFallback(d4LanguageInput, {
+const groundedD4NoContext = await runDirectRagFallback({ ...d4LanguageInput, requireOpenAiEmbedding: false }, {
   createEmbedding: async () => missingEmbeddingProvider,
   rpc: async () => ({ data: [d4LanguageRow] }),
   generateAnswer: async () => ({
@@ -1448,7 +1482,7 @@ const profileTestRow = {
   },
 };
 let observedProfileBlock = "";
-const profileResult = await runDirectRagFallback(profileTestInput, {
+const profileResult = await runDirectRagFallback({ ...profileTestInput, requireOpenAiEmbedding: false }, {
   createEmbedding: async () => missingEmbeddingProvider,
   rpc: async () => ({ data: [profileTestRow] }),
   generateAnswer: async (request) => {
