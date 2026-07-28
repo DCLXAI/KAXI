@@ -29,9 +29,13 @@
 export {};
 
 const DEFAULT_BASE_URL = "https://kaxi.vercel.app";
-const ATTEMPTS = 3;
-const RETRY_DELAY_MS = 3000;
-const TIMEOUT_MS = 15000;
+// /api/readiness paginates the whole serving projection out of Supabase before it
+// answers, so it routinely takes 5-11s and a cold start takes longer. These match
+// scripts/check-production-cutover.ts:187, which polls the same endpoint at 30s.
+// A tighter budget just turns a healthy production into a skipped check.
+const ATTEMPTS = 4;
+const RETRY_DELAY_MS = 5000;
+const TIMEOUT_MS = 30000;
 
 function argument(name: string): string | undefined {
   const index = process.argv.indexOf(`--${name}`);
