@@ -29,7 +29,6 @@ export const t = {
   nav_logout: { ko: "로그아웃", vi: "Đăng xuất", mn: "Гарах", en: "Sign out" },
 
   // 랜딩
-  hero_badge: { ko: "공식 정보 기반 · 브로커 없이 준비", vi: "Dựa trên thông tin chính thức · Không cần môi giới", mn: "Албан ёсны мэдээлэлд үндэслэсэн · Зуучлагчгүй", en: "Official info based · No broker needed" },
   hero_title: { ko: "브로커 없이 준비하는 한국 유학", vi: "Du học Hàn Quốc không cần môi giới", mn: "Зуучлагчгүйгээр Солонгос улсад суралцах", en: "Study in Korea without a broker" },
   hero_subtitle: {
     ko: "학교 선택, 비용 계산, 서류 준비, 입학 지원, 비자 준비까지 한곳에서 시작하세요.",
