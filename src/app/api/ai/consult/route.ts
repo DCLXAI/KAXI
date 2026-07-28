@@ -91,7 +91,8 @@ export async function POST(req: NextRequest) {
   try {
     const limited = await rateLimit(req, {
       key: "ai:consult",
-      limit: parseLimit(process.env.AI_CONSULT_RATE_LIMIT, 0),
+      // Default matches /api/ai/agent so an unset env can't silently disable the rate limit.
+      limit: parseLimit(process.env.AI_CONSULT_RATE_LIMIT, 6),
       windowMs: 60 * 1000,
     });
     if (limited) return limited;
@@ -99,7 +100,8 @@ export async function POST(req: NextRequest) {
     const quotaExceeded = await consumeDailyQuota(
       req,
       "ai:consult",
-      parseLimit(process.env.AI_CONSULT_DAILY_QUOTA, 0)
+      // Default matches /api/ai/agent so an unset env can't silently disable the daily quota.
+      parseLimit(process.env.AI_CONSULT_DAILY_QUOTA, 30)
     );
     if (quotaExceeded) return quotaExceeded;
 
