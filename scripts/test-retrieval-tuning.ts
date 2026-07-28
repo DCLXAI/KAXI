@@ -54,6 +54,12 @@ async function scores(question: string, rows: unknown[], category: "visa" | "doc
       requestId: "11111111-1111-4111-8111-111111111111",
       fallbackReason: "characterization",
       maxDocuments: 6,
+      // Characterization harness: injects noEmbedding + fixed rpc rows to score
+      // the lexical/rerank path directly. It never has an OpenAI query embedding,
+      // so it must opt out of the safe-by-default fail-closed guard (production
+      // callers pass requireOpenAiEmbedding: true; this one deliberately exercises
+      // the lexical branch).
+      requireOpenAiEmbedding: false,
     },
     {
       createEmbedding: async () => noEmbedding,
@@ -75,6 +81,12 @@ async function orderedIds(question: string, rows: unknown[], category: "visa" | 
       requestId: "11111111-1111-4111-8111-111111111111",
       fallbackReason: "characterization",
       maxDocuments: 6,
+      // Characterization harness: injects noEmbedding + fixed rpc rows to score
+      // the lexical/rerank path directly. It never has an OpenAI query embedding,
+      // so it must opt out of the safe-by-default fail-closed guard (production
+      // callers pass requireOpenAiEmbedding: true; this one deliberately exercises
+      // the lexical branch).
+      requireOpenAiEmbedding: false,
     },
     {
       createEmbedding: async () => noEmbedding,
