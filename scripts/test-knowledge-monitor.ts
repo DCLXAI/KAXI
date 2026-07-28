@@ -276,6 +276,103 @@ try {
   assert(stableHashA.contentHash === stableHashA.bodyHash, "monitor content hash should use the stable body hash");
   assert(stableHashA.content !== stableHashB.content, "raw byte metadata should remain available for audit evidence");
 
+  // law.go.kr returns a transient 404/5xx for live documents, so a retryable status
+  // must not fail the batch on the first blip.
+  let transientAttempts = 0;
+  const recoveredFromTransient = await fetchOfficialKnowledgeSource(source, {
+    fetchImpl: async () => {
+      transientAttempts += 1;
+      if (transientAttempts < 3) return new Response("not found", { status: 404 });
+      return new Response("<html><body><p>일시 장애 후 정상 본문</p></body></html>", {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    },
+  });
+  assert(transientAttempts === 3, "monitor should retry a retryable status before giving up");
+  assert(
+    recoveredFromTransient.content.includes("일시 장애 후 정상 본문"),
+    "monitor should return the body recovered by a retry",
+  );
+
+  let exhaustedAttempts = 0;
+  await assertRejects(
+    () =>
+      fetchOfficialKnowledgeSource(source, {
+        fetchImpl: async () => {
+          exhaustedAttempts += 1;
+          return new Response("not found", { status: 404 });
+        },
+      }),
+    /HTTP 404/,
+    "persistent retryable status should still fail",
+  );
+  assert(exhaustedAttempts === 3, "monitor should stop after the bounded retry budget");
+
+  let forbiddenAttempts = 0;
+  await assertRejects(
+    () =>
+      fetchOfficialKnowledgeSource(source, {
+        fetchImpl: async () => {
+          forbiddenAttempts += 1;
+          return new Response("forbidden", { status: 403 });
+        },
+      }),
+    /HTTP 403/,
+    "non-retryable status should fail",
+  );
+  assert(forbiddenAttempts === 1, "monitor should not retry a non-retryable status");
+
+  // A slow 5xx is a stall wearing a status code: each retry would cost another full
+  // fetch timeout, which is the same hazard as retrying an abort.
+  let slowStatusAttempts = 0;
+  await assertRejects(
+    () =>
+      fetchOfficialKnowledgeSource(source, {
+        fetchImpl: async () => {
+          slowStatusAttempts += 1;
+          await new Promise((resolve) => setTimeout(resolve, 2_100));
+          return new Response("gateway timeout", { status: 504 });
+        },
+      }),
+    /HTTP 504/,
+    "slow retryable status should fail",
+  );
+  assert(slowStatusAttempts === 1, "monitor must not retry a slow retryable status");
+
+  // No attempt may be started that could run past the batch deadline.
+  let deadlineAttempts = 0;
+  await assertRejects(
+    () =>
+      fetchOfficialKnowledgeSource(source, {
+        timeoutMs: 8_000,
+        retryDeadlineAt: Date.now() + 1_000,
+        fetchImpl: async () => {
+          deadlineAttempts += 1;
+          return new Response("not found", { status: 404 });
+        },
+      }),
+    /HTTP 404/,
+    "exhausted retry deadline should fail",
+  );
+  assert(deadlineAttempts === 1, "monitor must not retry past the batch retry deadline");
+
+  // Safety property: the monitor route fetches 11 sources at concurrency 2 with an 8s
+  // budget inside a 60s maxDuration, so retrying a stalled upstream would trade failed
+  // sources for a killed invocation. Timeouts must stay single-attempt.
+  let abortedAttempts = 0;
+  await assertRejects(
+    () =>
+      fetchOfficialKnowledgeSource(source, {
+        fetchImpl: async () => {
+          abortedAttempts += 1;
+          throw new Error("This operation was aborted");
+        },
+      }),
+    /aborted/,
+    "aborted fetch should fail",
+  );
+  assert(abortedAttempts === 1, "monitor must not retry a timed-out fetch");
+
   const validatedSource: OfficialKnowledgeSource = {
     docId: "monitor-validated-source",
     title: "검증된 공식 본문",

@@ -194,9 +194,64 @@ async function fetchWithTimeout(
   }
 }
 
+// law.go.kr intermittently answers an otherwise-live document with 404 or a 5xx:
+// the failing document set differs on every run and the same URLs succeed on the
+// next pass, so a single blip was enough to fail a whole batch and turn the
+// scheduled monitor red. Retry those.
+//
+// The retry must never cost more than the run can afford. The monitor route fetches
+// with an 8s budget at concurrency 2 inside a 60s maxDuration, and the largest batch
+// holds 11 sources, so a stalled upstream already spends ~48s of that 60s. Blowing the
+// ceiling is strictly worse than a failed source: Vercel kills the invocation, and the
+// per-document error list the operator actually debugs from is never returned. Three
+// rules keep the added cost bounded:
+//
+//   1. Timeouts and network errors are not retried at all. Each attempt would take a
+//      fresh full timeout, and a stall lasting minutes — the other observed failure
+//      mode — is not recoverable inside one invocation anyway. The next scheduled run
+//      is the real retry.
+//   2. Only a status that came back promptly is retried. A slow 5xx (a gateway giving
+//      up on a stalled origin) is a stall wearing a status code, and retrying it costs
+//      the same as retrying a timeout.
+//   3. No attempt is started that could run past the batch deadline, so retries are a
+//      bonus taken from genuine slack rather than a risk charged to the ceiling.
+const RETRYABLE_FETCH_STATUSES = new Set([404, 408, 425, 429, 500, 502, 503, 504]);
+const FETCH_ATTEMPTS = 3;
+const FETCH_RETRY_BACKOFF_MS = [500, 1_000];
+const FETCH_RETRY_MAX_LATENCY_MS = 2_000;
+const FETCH_RETRY_BATCH_BUDGET_MS = 25_000;
+
+async function fetchOfficialSourceWithRetry(
+  fetchImpl: FetchLike,
+  url: string,
+  timeoutMs: number,
+  retryDeadlineAt?: number
+): Promise<Response> {
+  for (let attempt = 1; ; attempt += 1) {
+    const attemptStartedAt = Date.now();
+    const response = await fetchWithTimeout(fetchImpl, url, timeoutMs);
+    if (response.ok) return response;
+
+    const statusError = new Error(`HTTP ${response.status} ${response.statusText}`.trim());
+    if (attempt >= FETCH_ATTEMPTS || !RETRYABLE_FETCH_STATUSES.has(response.status)) {
+      throw statusError;
+    }
+    if (Date.now() - attemptStartedAt > FETCH_RETRY_MAX_LATENCY_MS) {
+      throw statusError;
+    }
+
+    const backoffMs = FETCH_RETRY_BACKOFF_MS[attempt - 1] ?? FETCH_RETRY_BACKOFF_MS[FETCH_RETRY_BACKOFF_MS.length - 1];
+    if (retryDeadlineAt !== undefined && Date.now() + backoffMs + timeoutMs > retryDeadlineAt) {
+      throw statusError;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, backoffMs));
+  }
+}
+
 export async function fetchOfficialKnowledgeSource(
   source: OfficialKnowledgeSource,
-  options: { fetchImpl?: FetchLike; timeoutMs?: number; maxChars?: number } = {}
+  options: { fetchImpl?: FetchLike; timeoutMs?: number; maxChars?: number; retryDeadlineAt?: number } = {}
 ): Promise<{
   content: string;
   contentHash: string;
@@ -217,10 +272,12 @@ export async function fetchOfficialKnowledgeSource(
   const fetchImpl = options.fetchImpl || fetch;
   const timeoutMs = options.timeoutMs || 15_000;
   const maxChars = options.maxChars || 80_000;
-  const response = await fetchWithTimeout(fetchImpl, source.sourceUrl, timeoutMs);
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status} ${response.statusText}`.trim());
-  }
+  const response = await fetchOfficialSourceWithRetry(
+    fetchImpl,
+    source.sourceUrl,
+    timeoutMs,
+    options.retryDeadlineAt,
+  );
   let transportDowngraded = false;
   if (response.url && !hasOfficialKnowledgeSourceUrl(response.url)) {
     if (isOfficialProtocolDowngrade(source.sourceUrl, response.url)) {
@@ -442,6 +499,10 @@ export async function runOfficialKnowledgeSourceMonitor(
     Math.max(options.concurrency || configuredConcurrency, 1),
     MAX_MONITOR_CONCURRENCY,
   );
+  // Retries are only taken from slack near the start of the batch. Once the run is
+  // this far in, the remaining sources still need their own fetches inside the route's
+  // 60s maxDuration, so no further retry is started.
+  const retryDeadlineAt = Date.now() + FETCH_RETRY_BATCH_BUDGET_MS;
 
   const inspectSource = async (source: OfficialKnowledgeSource): Promise<OfficialKnowledgeMonitorResult> => {
     try {
@@ -449,6 +510,7 @@ export async function runOfficialKnowledgeSourceMonitor(
         fetchImpl: options.fetchImpl,
         timeoutMs: options.timeoutMs,
         maxChars: options.maxChars,
+        retryDeadlineAt,
       });
       const diff = await analyzeKnowledgeDocumentDiff({
         docId: source.docId,
