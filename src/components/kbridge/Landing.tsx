@@ -7,13 +7,11 @@ import { tr } from "@/lib/i18n/translations";
 import type { School } from "@/lib/data/schools";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { KaxiCat } from "@/components/brand/KaxiCat";
-import { KaxiPawMark } from "@/components/brand/KaxiPawMark";
 import { AgentExperience } from "@/components/agent/AgentExperience";
 import { smoothScrollIntoView } from "@/lib/ui/scroll";
 import { HomeQuickDiagnosis } from "@/components/diagnosis/HomeQuickDiagnosis";
-import { ArrowRight, Calculator, FileCheck, School as SchoolIcon, ShieldCheck, Users, Globe2, AlertTriangle } from "lucide-react";
+import { ArrowRight, Calculator, FileCheck, School as SchoolIcon, Users, Globe2, AlertTriangle } from "lucide-react";
 
 export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
   const { lang } = useLangStore();
@@ -121,10 +119,6 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
           <div className="absolute left-[10%] top-24 h-40 w-40 rounded-full bg-icon-accent/25 blur-3xl dark:bg-icon-accent/10" />
         </div>
         <div className="relative mx-auto max-w-5xl px-4 pt-12 pb-0 text-center md:pt-16 md:pb-2">
-          <Badge variant="secondary" className="mb-4 gap-1.5 border border-border/70 bg-card/80 shadow-sm">
-            <ShieldCheck className="h-3.5 w-3.5 text-primary-strong" />
-            {tr("hero_badge", lang)}
-          </Badge>
           <h1 className="font-serif text-4xl md:text-6xl font-extrabold tracking-tight leading-tight text-balance">
             {tr("hero_title", lang)}
           </h1>
@@ -142,21 +136,10 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
               className="gap-2 bg-card/70"
               onClick={() => smoothScrollIntoView(document.getElementById("kaxi-ai"), { block: "start" })}
             >
-              <KaxiPawMark className="h-4 w-4" />
               {tr("hero_cta_agent", lang)}
             </Button>
           </div>
-          {/* Ground line only: "home must not show a decorative running cat"
-              is a pinned product decision (test-unified-ai-router.ts) — the
-              hero keeps its gradient wash, CTAs and paw motifs instead. */}
-          <div className="mt-10 md:mt-12" aria-hidden="true">
-            <div className="mx-auto flex max-w-3xl items-end justify-center gap-1.5 pb-1.5 text-icon-accent/50">
-              <KaxiPawMark className="h-3 w-3 -rotate-12" />
-              <KaxiPawMark className="h-4 w-4" />
-              <KaxiPawMark className="h-3 w-3 rotate-12" />
-            </div>
-            <div className="mx-auto h-px max-w-3xl bg-gradient-to-r from-transparent via-border to-transparent" />
-          </div>
+          <div className="mx-auto mt-10 h-px max-w-3xl bg-gradient-to-r from-transparent via-border to-transparent md:mt-12" aria-hidden="true" />
         </div>
       </section>
 
@@ -279,7 +262,6 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
       {/* CTA */}
       <motion.section className="mx-auto max-w-4xl px-4 pb-16" {...sectionReveal}>
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-primary to-[#b7c4fd] p-8 md:p-12 text-primary-foreground text-center shadow-[0_24px_48px_-24px_rgba(79,93,179,0.55)] ring-1 ring-inset ring-primary-foreground/10">
-          <KaxiPawMark aria-hidden="true" className="pointer-events-none absolute -bottom-10 -right-8 h-48 w-48 -rotate-12 text-primary-foreground/10" />
           <div className="relative">
             <div className="mb-4 flex justify-center">
               <KaxiCat state="happy" size={44} />

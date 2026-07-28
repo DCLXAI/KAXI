@@ -13,7 +13,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { ReadinessScoreCard } from "@/components/kbridge/ReadinessScoreCard";
 import { KaxiCat } from "@/components/brand/KaxiCat";
-import { KaxiPawMark } from "@/components/brand/KaxiPawMark";
 
 interface DiagnosisResultProps {
   locale: Locale;
@@ -53,7 +52,6 @@ export function DiagnosisResult({
         className="relative overflow-hidden border-primary-strong/25 bg-gradient-to-br from-primary/20 via-card to-card dark:from-primary/10 animate-in fade-in slide-in-from-bottom-2 duration-300 ease-snappy motion-reduce:animate-none"
         style={{ animationDelay: "0ms", animationFillMode: "backwards" }}
       >
-        <KaxiPawMark className="pointer-events-none absolute -right-3 -top-3 h-24 w-24 rotate-12 text-icon-accent/[0.08] dark:text-icon-accent/10" />
         <CardHeader className="relative">
           <div className="flex flex-wrap items-center gap-2">
             <Badge className="w-fit">{t("result_recommended")}</Badge>
