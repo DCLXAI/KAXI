@@ -1,4 +1,5 @@
 import { strict as assert } from "assert";
+import { readFileSync } from "fs";
 import { evaluateRagQualityRun } from "../src/lib/ops/rag-system-health";
 
 // The rag.quality_evaluation check held /api/ops/health at `degraded` every day
@@ -104,3 +105,28 @@ assert.equal(tooFewCases.ok, false, "a partial suite must not satisfy the full-s
 assert.equal(tooFewCases.unverified, false, "an undersized suite is a measurement defect, not staleness");
 
 console.log("PASS rag quality gate: measured regressions page, unmeasured quality warns");
+
+// The readiness probe used to select the 1536-dimension vectors for every
+// knowledge chunk and serving row purely to ask Boolean(embedding), shipping
+// megabytes of Supabase egress on an unauthenticated endpoint that the deploy
+// gate polls every 30 seconds. Measured against production: 5.1s -> 2.3s median.
+// Keep the vectors out of the projection status path.
+{
+  const projection = readFileSync("src/lib/knowledge/serving-projection.ts", "utf8");
+  const loadProjectionData = projection.slice(
+    projection.indexOf("async function loadProjectionData"),
+    projection.indexOf("export async function getRagServingProjectionStatus"),
+  );
+  assert.doesNotMatch(
+    loadProjectionData,
+    /"[^"]*,embedding[,"]/,
+    "loadProjectionData must not select embedding vectors — presence comes from loadRowsWithValue"
+  );
+  assert.match(
+    loadProjectionData,
+    /loadRowsWithValue/,
+    "loadProjectionData must derive vector presence without transferring vectors"
+  );
+}
+
+console.log("PASS readiness projection keeps embedding vectors off the probe path");
