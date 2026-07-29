@@ -203,6 +203,30 @@
 }
 
 @layer utilities {
+  /* Hero watercolor bleed: the drift animates only the composited SVG raster
+     (translate/scale), so the turbulence filter rasterizes once and never
+     re-runs per frame. Alternate direction makes the ink slowly breathe. */
+  @keyframes karxy-ink-spread {
+    from {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    to {
+      transform: translate3d(0, 0.75rem, 0) scale(1.06);
+    }
+  }
+  .animate-ink-spread {
+    animation: karxy-ink-spread 52s ease-in-out infinite alternate;
+  }
+  .animate-ink-spread-slow {
+    animation: karxy-ink-spread 74s ease-in-out infinite alternate-reverse;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .animate-ink-spread,
+    .animate-ink-spread-slow {
+      animation: none;
+    }
+  }
+
   .bg-hero-wash {
     background-image:
       radial-gradient(
