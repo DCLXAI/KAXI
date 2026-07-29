@@ -73,7 +73,14 @@ export function evaluateRagQualityRun(
   expected = resolveRagProvenance(),
   now = Date.now(),
 ) {
-  if (!row) return { ok: false, detail: "No complete full-suite RAG evaluation run exists.", metadata: {} };
+  if (!row) {
+    return {
+      ok: false,
+      unverified: true,
+      detail: "No complete full-suite RAG evaluation run exists. Run `bun run rag:evaluation:full` to establish the quality baseline.",
+      metadata: {},
+    };
+  }
   const completedAt = row.completed_at ? new Date(row.completed_at).getTime() : Number.NaN;
   const ageHours = Number.isFinite(completedAt) ? Math.max(0, (now - completedAt) / 3_600_000) : null;
   const thresholds = {
@@ -97,11 +104,24 @@ export function evaluateRagQualityRun(
   if (row.status !== "passed") failures.push("status");
   if ((row.case_count || 0) < 64) failures.push("caseCount");
   if (ageHours === null || ageHours > 24 * 7) failures.push("freshness");
+  // "We measured quality and it regressed" and "nobody has measured quality
+  // lately" are different operational facts, and only the first one means
+  // production is serving worse answers. Reporting both as a required failure
+  // held /api/ops/health at `degraded` every day for weeks over an evaluation
+  // that has no scheduled runner at all — which is how a real n8n/Typebot
+  // outage came to look like just another line in the same daily alert.
+  // Staleness and provenance drift still surface, as a warning.
+  const measuredFailures = failures.filter((key) => key !== "freshness" && key !== "provenance");
+  const unverified = measuredFailures.length === 0 && failures.length > 0;
+
   return {
     ok: failures.length === 0,
+    unverified,
     detail: failures.length === 0
       ? `Latest ${row.case_count}-case RAG evaluation meets the production quality gate.`
-      : `Latest full-suite RAG evaluation failed: ${failures.join(", ")}.`,
+      : unverified
+        ? `No trustworthy recent RAG evaluation: ${failures.join(", ")}. The last run's measured quality passed; re-run \`bun run rag:evaluation:full\` against the production provenance to restore the signal.`
+        : `Latest full-suite RAG evaluation failed: ${failures.join(", ")}.`,
     metadata: {
       runId: row.id || null,
       caseCount: row.case_count || 0,
@@ -113,15 +133,27 @@ export function evaluateRagQualityRun(
   };
 }
 
-async function timed(key: string, required: boolean, run: () => Promise<Omit<SystemHealthCheck, "key" | "required" | "latencyMs">>) {
+type TimedResult = Omit<SystemHealthCheck, "key" | "required" | "latencyMs"> & { unverified?: boolean };
+
+async function timed(
+  key: string,
+  // A predicate lets a check decide, from its own result, whether the failure
+  // means production is broken (required) or merely unmeasured (warning).
+  required: boolean | ((result: TimedResult) => boolean),
+  run: () => Promise<TimedResult>,
+) {
   const started = Date.now();
   try {
-    const result = await run();
-    return { key, required, latencyMs: Date.now() - started, ...result };
+    const { unverified: _unverified, ...result } = await run() as TimedResult;
+    const resolved = typeof required === "function"
+      ? required({ ...result, unverified: _unverified })
+      : required;
+    return { key, required: resolved, latencyMs: Date.now() - started, ...result };
   } catch (error) {
     return {
       key,
-      required,
+      // An exception is a real failure, never a "not measured yet".
+      required: typeof required === "function" ? true : required,
       ok: false,
       detail: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
       latencyMs: Date.now() - started,
@@ -359,7 +391,7 @@ export async function runRagSystemHealth(triggerSource = "manual") {
         },
       };
     }),
-    timed("rag.quality_evaluation", true, async () => {
+    timed("rag.quality_evaluation", (result) => !result.unverified, async () => {
       const result = await supabase
         .from("rag_evaluation_runs")
         .select("id,status,case_count,passed_count,metrics,workflow_id,workflow_version_id,model_version,prompt_version,completed_at")
