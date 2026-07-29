@@ -159,15 +159,17 @@ export async function POST(req: NextRequest) {
       sourceNotice,
       maxSources: 8,
     });
-    // An answer the model never cited is not a sourced answer: it goes to the
-    // guardrail with no retrieval behind it, which yields the low-confidence
-    // response instead of prose that reads as grounded.
+    // An answer the model never cited is not a sourced answer, so the guardrail
+    // refuses it outright. Passing `sources: []` used to be the signal, but an
+    // empty source count makes the low-confidence check return false — the
+    // uncited answer shipped with the official source list still attached.
     const guarded = guardAnswerFields({
       answer: cited.answer,
-      sources: cited.grounded ? docs : [],
-      searchMeta: cited.grounded ? searchMeta : [],
+      sources: docs,
+      searchMeta,
       question,
       locale: lang,
+      grounded: cited.grounded,
     });
     const answer = guarded.answer;
     const guardrailIntervened = guarded.intervened;
