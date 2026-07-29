@@ -400,6 +400,30 @@ async function loadAllRows<T>(supabase: SupabaseClient, table: string, columns: 
   }
 }
 
+// Same pagination, but returns only the key columns of rows whose `column` is
+// populated. Used to learn which chunks/serving rows have a vector without
+// transferring the vectors themselves.
+async function loadRowsWithValue<T>(
+  supabase: SupabaseClient,
+  table: string,
+  keyColumns: string,
+  column: string,
+): Promise<T[]> {
+  const pageSize = 1_000;
+  const rows: T[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const result = await supabase
+      .from(table)
+      .select(keyColumns)
+      .not(column, "is", null)
+      .range(offset, offset + pageSize - 1);
+    if (result.error) throw result.error;
+    const page = (result.data || []) as T[];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}
+
 function eligibleDocument(document: CanonicalDocument, now: Date) {
   const validFrom = new Date(document.validFrom);
   const validTo = document.validTo ? new Date(document.validTo) : null;
@@ -416,25 +440,51 @@ function eligibleDocument(document: CanonicalDocument, now: Date) {
 
 async function loadProjectionData() {
   const supabase = serviceClient();
-  const [documents, chunks, servingRows, legacyResult] = await Promise.all([
+  const [documents, chunks, servingRows, legacyResult, embeddedChunks, embeddedServingRows] = await Promise.all([
     loadAllRows<CanonicalDocument>(
       supabase,
       "KnowledgeDocument",
       "id,docId,title,sourceUrl,sourceType,language,topic,validFrom,validTo,lastCheckedAt,checkedBy,reviewStatus,supersededBy",
     ),
+    // The 1536-dimension vectors are never read here — both consumers only ask
+    // Boolean(embedding) — but selecting them shipped megabytes of Supabase
+    // egress on every /api/readiness probe, which the deploy gate polls every
+    // 30s and any anonymous visitor can trigger. Fetch the keys of the rows
+    // that HAVE a vector instead, and mark presence below.
     loadAllRows<CanonicalChunk>(
       supabase,
       "KnowledgeChunk",
-      "id,documentId,chunkIndex,content,contentHash,keywords,embedding",
+      "id,documentId,chunkIndex,content,contentHash,keywords",
     ),
     loadAllRows<ServingRow>(
       supabase,
       "rag_serving_chunks",
-      "canonical_chunk_id,content_hash,embedding_model,embedding,status,metadata",
+      "canonical_chunk_id,content_hash,embedding_model,status,metadata",
     ),
     supabase.from("knowledge_chunks").select("id", { count: "exact", head: true }),
+    loadRowsWithValue<{ id: string }>(supabase, "KnowledgeChunk", "id", "embedding"),
+    loadRowsWithValue<{ canonical_chunk_id: string | null; content_hash: string | null }>(
+      supabase,
+      "rag_serving_chunks",
+      "canonical_chunk_id,content_hash",
+      "embedding",
+    ),
   ]);
   if (legacyResult.error) throw legacyResult.error;
+
+  // `embedding` becomes a presence marker rather than the vector itself. Both
+  // readers (servingRowMatchesProjection, canonicalVectorReadyChunks) test only
+  // truthiness; the ingest paths still carry real vectors on their own rows.
+  const embeddedChunkIds = new Set(embeddedChunks.map((row) => row.id));
+  for (const chunk of chunks) {
+    chunk.embedding = embeddedChunkIds.has(chunk.id) || undefined;
+  }
+  const embeddedServingKeys = new Set(
+    embeddedServingRows.map((row) => `${row.canonical_chunk_id}:${row.content_hash}`),
+  );
+  for (const row of servingRows) {
+    row.embedding = embeddedServingKeys.has(`${row.canonical_chunk_id}:${row.content_hash}`) || undefined;
+  }
 
   const now = new Date();
   const eligibleDocuments = documents.filter((document) => eligibleDocument(document, now));
