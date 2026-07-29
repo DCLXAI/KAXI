@@ -14,8 +14,6 @@ import {
 import { cn } from "@/lib/utils";
 import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";
-import { math } from "@streamdown/math";
-import { mermaid } from "@streamdown/mermaid";
 import type { UIMessage } from "ai";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
@@ -321,7 +319,13 @@ export const MessageBranchPage = ({
 
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
-const streamdownPlugins = { cjk, code, math, mermaid };
+// mermaid pulls mermaid.min.js (~3.5MB) and math pulls katex, and both landed
+// in the landing route's client bundle because the home page embeds the chat.
+// No prompt in this product asks for a diagram or an equation — answers are
+// visa-guidance prose with citations — so the capability was never exercised,
+// only downloaded. cjk stays (Korean/Vietnamese/Mongolian line breaking) and
+// code stays for the occasional fenced block.
+const streamdownPlugins = { cjk, code };
 
 // Answers quote official documents whose markdown headings would otherwise
 // render at page scale inside a chat bubble. Chat-scale sizes, semantic tags
