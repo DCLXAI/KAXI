@@ -1,6 +1,8 @@
 "use client";
 
 import { useKaxiSession } from "@/hooks/useKaxiSession";
+import { localePath } from "@/i18n/routing";
+import { loginHref } from "@/lib/ui/login-href";
 import type { AgentLocale } from "./types";
 
 const NUDGE_COPY: Record<AgentLocale, string> = {
@@ -25,7 +27,10 @@ export function AgentLoginNudge({
 
   return (
     <p className="px-1 text-center text-xs text-muted-foreground">
-      <a href="/login" className="underline underline-offset-2 hover:text-foreground">
+      <a
+        href={loginHref(locale, localePath(locale, "/agent"))}
+        className="underline underline-offset-2 hover:text-foreground"
+      >
         {NUDGE_COPY[locale]}
       </a>
     </p>
