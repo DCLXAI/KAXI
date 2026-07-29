@@ -189,8 +189,9 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
               </g>
             </svg>
           </div>
-          {/* 데스크톱 + 파인 포인터 + 모션 허용 환경에서만 실제 유체역학이
-              위 정적 워터컬러 위로 페이드인한다. 나머지 환경은 SVG가 배경. */}
+          {/* 모션 허용 + WebGL + 충분한 메모리 환경에서 실제 유체역학이 위
+              정적 워터컬러 위로 페이드인한다 (모바일은 경량 프로파일). 그 외
+              환경은 SVG가 배경. */}
           <HeroFluidInk />
         </div>
         <div className="relative mx-auto max-w-5xl px-4 pt-12 pb-0 text-center md:pt-16 md:pb-2">

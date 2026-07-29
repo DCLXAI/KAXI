@@ -4,10 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import type { FluidSim } from "@/lib/fluid/webgl-fluid";
 
 // Real fluid dynamics for the hero ink, layered over the static SVG watercolor.
-// The SVG stays the instant, zero-JS base and the only background users get on
-// touch devices, small screens, reduced motion, low memory, or missing WebGL —
-// this component simply never activates there, so the fallback needs no code.
-// The engine chunk is imported after idle so it never competes with LCP.
+// The SVG stays the instant, zero-JS base and the only background users get
+// under reduced motion, low memory, or missing WebGL — this component simply
+// never activates there, so the fallback needs no code. Coarse-pointer devices
+// run a lighter simulation profile; scrolling is never intercepted (passive
+// listeners, no touch-action changes), so on phones the ink mostly lives off
+// ambient drops and taps. The engine chunk is imported after idle so it never
+// competes with LCP.
 
 // Pinned palette literals as a fallback when computed styles are unavailable.
 const FALLBACK_HEX = ["#c7d2fe", "#e5a0b3", "#4f5db3"] as const;
@@ -46,10 +49,14 @@ export function HeroFluidInk() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    if (!window.matchMedia("(pointer: fine)").matches) return;
-    if (window.innerWidth < 768) return;
     const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
     if (memory !== undefined && memory < 4) return;
+    // Phones and tablets run the sim too, on a lighter profile. The dye/sim
+    // grid options are the real cost knobs (advection and the Jacobi passes
+    // run at those fixed resolutions regardless of DPR); the tighter DPR cap
+    // only trims the final display pass, whose upscale is invisible at hero
+    // size on a DPR-3 screen.
+    const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
 
     let sim: FluidSim | null = null;
     let cancelled = false;
@@ -58,7 +65,10 @@ export function HeroFluidInk() {
     const start = async () => {
       const { createFluidSim } = await import("@/lib/fluid/webgl-fluid");
       if (cancelled) return;
-      sim = createFluidSim(canvas, { palette: readPalette() });
+      sim = createFluidSim(canvas, {
+        palette: readPalette(),
+        ...(coarsePointer ? { maxDpr: 1.25, simResolution: 96, dyeResolution: 384 } : {}),
+      });
       if (!sim) return; // WebGL/half-float unavailable → SVG watercolor stands
       setActive(true);
 
@@ -66,6 +76,11 @@ export function HeroFluidInk() {
       let lastX: number | null = null;
       let lastY: number | null = null;
       const onPointerMove = (event: PointerEvent) => {
+        // Two resting fingers interleave their moves through this one shared
+        // last-position, which would turn dx into the inter-finger distance —
+        // a splat ~20x stronger than any real swipe. Follow the primary
+        // pointer only.
+        if (!event.isPrimary) return;
         const rect = canvas.getBoundingClientRect();
         const x = event.clientX - rect.left;
         const y = event.clientY - rect.top;
@@ -73,12 +88,29 @@ export function HeroFluidInk() {
         lastX = x;
         lastY = y;
       };
-      const onPointerLeave = () => {
+      const onPointerReset = () => {
         lastX = null;
         lastY = null;
       };
+      // Tap = a blot of paint. On touch screens a drag belongs to scrolling
+      // (passive listener, touch-action untouched), so the tap is the primary
+      // mobile interaction; on desktop a click drops ink too. Re-seeding the
+      // last position here keeps the first move of a new touch from bridging
+      // the gap from wherever the previous touch ended — scroll takeovers end
+      // in pointercancel, not pointerleave.
+      const onPointerDown = (event: PointerEvent) => {
+        if (!event.isPrimary) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        lastX = x;
+        lastY = y;
+        sim?.tap(x, y);
+      };
       section?.addEventListener("pointermove", onPointerMove, { passive: true });
-      section?.addEventListener("pointerleave", onPointerLeave, { passive: true });
+      section?.addEventListener("pointerleave", onPointerReset, { passive: true });
+      section?.addEventListener("pointercancel", onPointerReset, { passive: true });
+      section?.addEventListener("pointerdown", onPointerDown, { passive: true });
 
       // The simulation only spends GPU time while the hero is actually on
       // screen in a visible tab. Canvas size changes are picked up by the
@@ -95,7 +127,9 @@ export function HeroFluidInk() {
       teardown = () => {
         teardown = null;
         section?.removeEventListener("pointermove", onPointerMove);
-        section?.removeEventListener("pointerleave", onPointerLeave);
+        section?.removeEventListener("pointerleave", onPointerReset);
+        section?.removeEventListener("pointercancel", onPointerReset);
+        section?.removeEventListener("pointerdown", onPointerDown);
         document.removeEventListener("visibilitychange", applyPause);
         intersection.disconnect();
         motionQuery.removeEventListener("change", onMotionChange);
