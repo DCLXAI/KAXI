@@ -15,11 +15,17 @@ export interface FluidSimOptions {
   palette: Array<[number, number, number]>;
   /** Cap on device pixel ratio for the dye canvas. */
   maxDpr?: number;
+  /** Velocity grid resolution (default 128); lower on mobile GPUs. */
+  simResolution?: number;
+  /** Dye grid resolution (default 512); lower on mobile GPUs. */
+  dyeResolution?: number;
 }
 
 export interface FluidSim {
   /** Inject ink + momentum at canvas-relative coordinates (px). */
   pointerMove(x: number, y: number, dx: number, dy: number): void;
+  /** Drop a blot of paint at canvas-relative coordinates (px) — tap/click. */
+  tap(x: number, y: number): void;
   setPaused(paused: boolean): void;
   destroy(): void;
 }
@@ -302,6 +308,8 @@ function compileShader(gl: WebGLRenderingContext, type: number, source: string, 
 export function createFluidSim(canvas: HTMLCanvasElement, options: FluidSimOptions): FluidSim | null {
   const palette = options.palette;
   const maxDpr = options.maxDpr ?? 1.5;
+  const simResolution = options.simResolution ?? SIM_RESOLUTION;
+  const dyeResolution = options.dyeResolution ?? DYE_RESOLUTION;
 
   const params: WebGLContextAttributes = { alpha: true, depth: false, stencil: false, antialias: false, preserveDrawingBuffer: false };
   let gl = canvas.getContext("webgl2", params) as WebGL2RenderingContext | null;
@@ -482,8 +490,8 @@ export function createFluidSim(canvas: HTMLCanvasElement, options: FluidSimOptio
 
   function initFramebuffers() {
     disposeTargets();
-    const simRes = getResolution(SIM_RESOLUTION);
-    const dyeRes = getResolution(DYE_RESOLUTION);
+    const simRes = getResolution(simResolution);
+    const dyeRes = getResolution(dyeResolution);
     dye = createDoubleFBO(dyeRes.width, dyeRes.height, formatRGBA!.internalFormat, formatRGBA!.format, texFilter);
     velocity = createDoubleFBO(simRes.width, simRes.height, formatRG!.internalFormat, formatRG!.format, texFilter);
     divergence = trackFBO(createFBO(simRes.width, simRes.height, formatR!.internalFormat, formatR!.format, ctx.NEAREST));
@@ -700,6 +708,22 @@ export function createFluidSim(canvas: HTMLCanvasElement, options: FluidSimOptio
         palette[pointerPalette % palette.length],
         Math.min(0.14, 0.02 + speed * 0.003),
         POINTER_RADIUS,
+      );
+    },
+    tap(x: number, y: number) {
+      if (destroyed || paused) return;
+      const u = x / Math.max(1, canvas.clientWidth);
+      const v = 1 - y / Math.max(1, canvas.clientHeight);
+      if (u < 0 || u > 1 || v < 0 || v > 1) return;
+      pointerPalette += 1;
+      splat(
+        u,
+        v,
+        (Math.random() - 0.5) * 140,
+        (Math.random() - 0.5) * 140,
+        palette[pointerPalette % palette.length],
+        0.16,
+        DROP_RADIUS,
       );
     },
     setPaused(next: boolean) {
