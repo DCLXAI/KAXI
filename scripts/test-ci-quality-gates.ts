@@ -88,4 +88,13 @@ assert(
   "production deploy must promote only after the canary passes",
 );
 
+// The health alert commented on every run, so 17 days of identical "degraded"
+// lines buried a real n8n/Typebot outage. It must stay quiet while the failing
+// set is unchanged, or the alert is decoration.
+const healthAlertWorkflow = readFileSync(".github/workflows/ops-health-alert.yml", "utf8");
+assert(
+  /Failed checks/.test(healthAlertWorkflow) && /previous/.test(healthAlertWorkflow),
+  "the ops health alert must compare the failing checks against the previous notice before commenting again",
+);
+
 console.log(`PASS CI quality gates: ${testScripts.length} test scripts covered by bun run ci`);

@@ -94,6 +94,22 @@ jobs:
             "" \
             "[Open health workflow run]($run_url)")"
           if [ -n "$issue_number" ]; then
+            # Only speak when something changed. Commenting on every run buried a
+            # real n8n/Typebot outage as one more identical line in a stream of
+            # 19 daily "degraded" comments, which is the same as not alerting at
+            # all. A standing failure stays visible in the open issue; a NEW
+            # failing check earns a fresh comment.
+            previous="$(gh issue view "$issue_number" --json comments \
+              --jq '[.comments[].body] | last // ""' | sed -n 's/^Failed checks: `\(.*\)`$/\1/p' | head -1)"
+            if [ -z "$previous" ]; then
+              previous="$(gh issue view "$issue_number" --json body \
+                --jq '.body' | sed -n 's/^Failed checks: `\(.*\)`$/\1/p' | head -1)"
+            fi
+            current="${FAILED_KEYS:-unavailable}"
+            if [ "$current" = "$previous" ]; then
+              echo "Health still degraded on the same checks (\`$current\`); issue #$issue_number already open, not commenting again."
+              exit 1
+            fi
             gh issue comment "$issue_number" --body "$body"
           else
             gh issue create \
