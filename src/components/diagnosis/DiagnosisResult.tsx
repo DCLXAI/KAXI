@@ -223,7 +223,10 @@ export function DiagnosisResult({
                 <CheckCircle2 className="h-4 w-4 shrink-0 text-primary-strong" />
                 {t("diagnose_save_success")}
               </p>
-              <Button onClick={() => onNavigate("consult")} className="shrink-0 gap-2">
+              {/* "consult" is not a ViewKey, so viewToPath() resolved it to the
+                  landing page. 전문가 상담 is the partner queue — the AI surface
+                  is a separate entry point. */}
+              <Button onClick={() => onNavigate("partners")} className="shrink-0 gap-2">
                 {t("diagnose_cta_consult")}
                 <ArrowRight className="h-4 w-4" />
               </Button>
@@ -236,9 +239,9 @@ export function DiagnosisResult({
             </Alert>
           )}
           <div className="flex flex-wrap gap-2 pt-2">
-            {showSave && (
-              <Button variant="outline" onClick={() => onNavigate("partners")}>{t("partner_request")} →</Button>
-            )}
+            {/* The success card above already offers the partner queue under the
+                same showSave condition; a second button to the same place read
+                as two competing consultation CTAs. */}
             <Button variant="outline" onClick={() => onNavigate("schools")}>{t("nav_schools")} →</Button>
             <Button variant="outline" onClick={() => onNavigate("cost")}>{t("nav_cost")} →</Button>
             <Button variant="outline" onClick={() => onNavigate("docs")}>{t("nav_docs")} →</Button>

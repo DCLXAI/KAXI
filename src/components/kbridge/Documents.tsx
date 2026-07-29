@@ -20,6 +20,7 @@ import {
   Upload,
 } from "lucide-react";
 import { useLangStore, useLeadStore } from "@/store/kbridge";
+import { loginHref } from "@/lib/ui/login-href";
 import { tr, type Lang, type TranslationKey } from "@/lib/i18n/translations";
 import { KaxiCat } from "@/components/brand/KaxiCat";
 import {
@@ -283,7 +284,7 @@ export function Documents({ onNavigate }: { onNavigate: (view: string) => void }
   const [serverBacked, setServerBacked] = useState(false);
   const [workspaceIssue, setWorkspaceIssue] = useState<DocumentWorkspaceIssue | null>(null);
   const [authRequired, setAuthRequired] = useState(false);
-  const loginHref = `/login?next=${encodeURIComponent(pathname)}`;
+  const loginUrl = loginHref(lang, pathname);
 
   useEffect(() => {
     // A valid ?track= deep link is an explicit user choice (e.g. a chat CTA):
@@ -340,7 +341,7 @@ export function Documents({ onNavigate }: { onNavigate: (view: string) => void }
 
   const triggerUpload = (document: StudentDocument) => {
     if (authRequired) {
-      window.location.href = loginHref;
+      window.location.href = loginUrl;
       return;
     }
     uploadTarget.current = document;
@@ -476,7 +477,7 @@ export function Documents({ onNavigate }: { onNavigate: (view: string) => void }
             <KaxiCat state="nap" size={40} />
             <p className="font-medium">{copy.loginRequired}</p>
           </div>
-          <Button size="sm" onClick={() => { window.location.href = loginHref; }} className="self-center sm:self-auto">
+          <Button size="sm" onClick={() => { window.location.href = loginUrl; }} className="self-center sm:self-auto">
             {copy.login}
           </Button>
         </div>

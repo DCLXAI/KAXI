@@ -212,7 +212,9 @@ export function AgentResponseCard({
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" asChild>
-              <Link href={localePath(locale, "/student")}>
+              {/* /student and /login live outside app/[locale], so localePath()
+                  would point at a route that does not exist. */}
+              <Link href="/student">
                 {locale === "ko" ? "마이페이지에서 보기" : locale === "vi" ? "Xem tại trang cá nhân" : locale === "mn" ? "Хувийн хуудаснаас харах" : "View in My Page"}
                 <ArrowRight className="h-4 w-4" />
               </Link>
@@ -253,7 +255,10 @@ export function AgentResponseCard({
               </span>
             </p>
             <Button size="sm" variant="outline" asChild>
-              <Link href={localePath(locale, "/login")}>
+              {/* Carry the locale so the auth screen is not Korean-only, and the
+                  return path so signing in resumes the chat instead of landing
+                  on the student dashboard. */}
+              <Link href={`/login?lang=${locale}&next=${encodeURIComponent(localePath(locale, "/agent"))}`}>
                 {locale === "ko" ? "로그인" : locale === "vi" ? "Đăng nhập" : locale === "mn" ? "Нэвтрэх" : "Log in"}
               </Link>
             </Button>
