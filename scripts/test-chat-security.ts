@@ -12,7 +12,9 @@ import {
 } from "../src/lib/chat/attachment-security";
 import { inferChatCategory } from "../src/lib/chat/category";
 import { createChatRequestIdentity } from "../src/lib/chat/request-identity";
-import { applyChatResponseGuardrail } from "../src/lib/chat/response-guardrail";
+import { applyChatResponseGuardrail, guardAnswerFields } from "../src/lib/chat/response-guardrail";
+import { ensureGroundedCitationAnswer } from "../src/lib/knowledge/citations";
+import type { KnowledgeDoc } from "../src/lib/data/knowledge-types";
 import {
   DEFAULT_RAG_PROVENANCE,
   extractRagProvenance,
@@ -465,6 +467,80 @@ console.log("PASS chat security: provenance, signed ownership, Typebot gateway a
     !/appendCitationToFirstAnswerLine\(next\)/.test(citationSource),
     "ensureGroundedCitationAnswer must not staple a citation onto an uncited answer"
   );
+
+  // Calling the guardrail is not the same as being refused by it. consult/chat
+  // used to signal "the model never cited anything" by passing `sources: []`,
+  // but isLowConfidenceRetrieval() returns false for an empty source count, so
+  // the uncited answer shipped unchanged with the official source list still
+  // attached — prose that reads as a grounded legal statement. Assert the
+  // behaviour, not the call.
+  const uncitedDocs: KnowledgeDoc[] = [{
+    id: "immigration-act-stay-extension",
+    category: "visa",
+    title: { ko: "체류기간 연장", vi: "Gia hạn lưu trú", mn: "Оршин суух хугацаа", en: "Stay extension" },
+    keywords: ["체류", "연장"],
+    content: { ko: "체류기간 연장 허가 규정.", vi: "x", mn: "x", en: "x" },
+    source: "출입국관리법",
+  }];
+
+  const uncited = ensureGroundedCitationAnswer({
+    answer: "체류기간은 만료 4개월 전부터 연장 신청이 가능합니다.",
+    docs: uncitedDocs,
+    lang: "ko",
+    maxSources: 8,
+  });
+  assert(uncited.grounded === false, "an answer without [n] markers must report grounded=false");
+
+  const refused = guardAnswerFields({
+    answer: uncited.answer,
+    sources: uncitedDocs,
+    searchMeta: { type: "hybrid", topScore: 0.9 },
+    question: "체류기간 연장 언제 신청하나요?",
+    locale: "ko",
+    grounded: uncited.grounded,
+  });
+  assert(refused.intervened, "an uncited answer must be intervened on, not passed through");
+  assert(
+    !/출처/.test(refused.answer),
+    "an uncited answer must not ship with the official source list attached"
+  );
+  assert(refused.sources.length === 0, "a refused answer must not carry retrieved documents");
+  assert(refused.needsHuman, "a refused answer must route to human review");
+
+  // The grounded path must keep working: cite properly and the sources stay.
+  const properlyCited = ensureGroundedCitationAnswer({
+    answer: "체류기간 연장은 [1]에 따라 신청합니다.",
+    docs: uncitedDocs,
+    lang: "ko",
+    maxSources: 8,
+  });
+  const kept = guardAnswerFields({
+    answer: properlyCited.answer,
+    sources: uncitedDocs,
+    searchMeta: { type: "hybrid", topScore: 0.9 },
+    question: "체류기간 연장 언제 신청하나요?",
+    locale: "ko",
+    grounded: properlyCited.grounded,
+  });
+  assert(properlyCited.grounded, "an answer with [n] markers must report grounded=true");
+  assert(!kept.intervened, "a properly cited answer must pass through untouched");
+  assert(/출처/.test(kept.answer), "a properly cited answer must keep its source list");
+
+  // The refusal has to be readable by the audience it protects.
+  for (const [locale, needle] of [["vi", "phỏng đoán"], ["mn", "Таамаглах"], ["en", "avoid guessing"]] as const) {
+    const localized = guardAnswerFields({
+      answer: "Some uncited claim.",
+      sources: uncitedDocs,
+      searchMeta: {},
+      question: "q",
+      locale,
+      grounded: false,
+    });
+    assert(
+      localized.answer.includes(needle),
+      `the uncited-answer refusal must be localized for ${locale}`
+    );
+  }
 }
 
 console.log("PASS chat guardrail coverage on every client-facing answer path");

@@ -101,6 +101,15 @@ export function guardAnswerFields(input: {
   searchMeta?: unknown;
   question: string;
   locale: string;
+  /**
+   * False when retrieval returned documents but the model never cited them.
+   * Callers used to signal this by passing `sources: []`, which does the
+   * opposite of what they intended: isLowConfidenceRetrieval() returns false
+   * for an empty source count, so an uncited answer sailed through with the
+   * official source list still stapled to it — prose that reads as a grounded
+   * legal statement. Uncited means unsupported, so refuse here.
+   */
+  grounded?: boolean;
 }): {
   answer: string;
   sources: unknown[];
@@ -108,6 +117,17 @@ export function guardAnswerFields(input: {
   needsHuman: boolean;
   intervened: boolean;
 } {
+  if (input.grounded === false) {
+    const copy = localeCopy(input.locale);
+    return {
+      answer: copy.lowConfidenceAnswer,
+      sources: [],
+      searchMeta: input.searchMeta,
+      needsHuman: true,
+      intervened: copy.lowConfidenceAnswer !== input.answer,
+    };
+  }
+
   const guarded = applyChatResponseGuardrail(
     { answer: input.answer, sources: input.sources, searchMeta: input.searchMeta },
     input.question,
