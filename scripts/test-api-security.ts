@@ -1,4 +1,5 @@
 import { strict as assert } from "assert";
+import { readFileSync } from "fs";
 
 // This is a pure logic test — no DB, no Supabase session. We explicitly
 // clear any Supabase public config so getAdminContext's session lookup
@@ -153,3 +154,34 @@ assert.deepEqual(
 );
 
 console.log("PASS sanitizeAiBody: maxHistoryItems caps the most recent user turns after dropping assistant items");
+
+// Two authentication paths shipped with no throttling at all: no admin route
+// called rateLimit (a bearer key could be guessed at network speed, and one hit
+// returns decrypted lead contact details), and the magic-link endpoint was the
+// only public POST with no limit — scriptable to enumerate accounts and to burn
+// the operator's Supabase sending quota. Pin both, plus the anti-enumeration
+// reply and the origin allowlist behind the emailed link.
+{
+  const adminAuth = readFileSync("src/lib/api/security.ts", "utf8");
+  const requireAdminBody = adminAuth.slice(adminAuth.indexOf("export async function requireAdmin"));
+  assert.match(
+    requireAdminBody.slice(0, requireAdminBody.indexOf("\n}")),
+    /rateLimit\(/,
+    "requireAdmin must throttle failed admin authentication attempts"
+  );
+
+  const otpRoute = readFileSync("src/app/api/auth/supabase/otp/route.ts", "utf8");
+  assert.match(otpRoute, /rateLimit\(/, "the magic-link endpoint must be rate limited");
+  assert.doesNotMatch(
+    otpRoute,
+    /error:\s*result\.error\.message/,
+    "the magic-link endpoint must not reflect Supabase's error — it reveals whether an account exists"
+  );
+  assert.match(
+    otpRoute,
+    /siteBaseUrl\(\)/,
+    "the magic-link redirect must fall back to our own base URL, not a caller-supplied Origin"
+  );
+}
+
+console.log("PASS admin auth throttling, magic-link rate limit, and non-enumerating OTP replies");

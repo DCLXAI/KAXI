@@ -4,8 +4,9 @@
 // NEXT_PUBLIC_APP_URL (or APP_URL) rather than hunting for hardcoded
 // "https://kaxi.vercel.app" strings.
 //
-// As of writing, NEXT_PUBLIC_APP_URL is NOT set in Vercel production, so
-// this resolves to DEFAULT_SITE_BASE_URL there today.
+// Since the karxy.com cutover NEXT_PUBLIC_APP_URL IS set in Vercel production:
+// verified live, the production sitemap is built from https://karxy.com. Do not
+// assume the DEFAULT_SITE_BASE_URL branch is what production sees.
 //
 // Dependency-free by design so both server code and standalone scripts can
 // import it without pulling in the rest of the app.

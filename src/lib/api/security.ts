@@ -115,6 +115,17 @@ export async function requireAdmin(
     if (!process.env.ADMIN_API_KEY && !getSupabasePublicConfig()) {
       return jsonError("Admin credentials are not configured", 503);
     }
+    // Nothing else throttled admin authentication — no admin route calls
+    // rateLimit — so the bearer key could be guessed at network speed, and one
+    // hit returns decrypted lead and partner-request contact details. Only
+    // FAILED attempts consume the budget, so an admin holding a valid key never
+    // meets this; a guesser gets ten tries a minute per client.
+    const throttled = await rateLimit(req, {
+      key: "admin:auth",
+      limit: parseLimit(process.env.ADMIN_AUTH_FAILURE_RATE_LIMIT, 10),
+      windowMs: 60 * 1000,
+    });
+    if (throttled) return throttled;
     return jsonError("Unauthorized", 401);
   }
   const allowed = options.roles || ["owner", "admin"];
