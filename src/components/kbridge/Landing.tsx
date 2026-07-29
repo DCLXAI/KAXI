@@ -11,6 +11,7 @@ import { KaxiCat } from "@/components/brand/KaxiCat";
 import { AgentExperience } from "@/components/agent/AgentExperience";
 import { smoothScrollIntoView } from "@/lib/ui/scroll";
 import { HomeQuickDiagnosis } from "@/components/diagnosis/HomeQuickDiagnosis";
+import { HeroFluidInk } from "@/components/kbridge/HeroFluidInk";
 import { ArrowRight, Calculator, FileCheck, School as SchoolIcon, Users, Globe2, AlertTriangle } from "lucide-react";
 
 export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
@@ -115,8 +116,82 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
       {/* Hero */}
       <section className="relative overflow-hidden animate-in fade-in duration-300 ease-snappy motion-reduce:animate-none">
         <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-          <div className="absolute left-1/2 top-[-16rem] h-[28rem] w-[44rem] -translate-x-1/2 rounded-full bg-primary/40 blur-3xl opacity-70 dark:opacity-25" />
-          <div className="absolute left-[10%] top-24 h-40 w-40 rounded-full bg-icon-accent/25 blur-3xl dark:bg-icon-accent/10" />
+          {/* 물감 번짐: feTurbulence가 블롭 경계를 일그러뜨려 물에 푼 물감의
+              가장자리를 만든다. 필터는 SVG 내부 셰이프에만 적용되어 한 번만
+              래스터라이즈되고(사파리의 HTML filter:url() 이슈도 회피), 퍼짐
+              드리프트는 svg 요소의 transform만 움직여 합성기에서 처리된다. */}
+          {/* 필터 영역은 userSpaceOnUse로 명시한다: 퍼센트 영역은 콘텐츠 bbox
+              기준이라 변위(±scale/2)+블러(≈3σ)로 밀려난 픽셀이 경계에서 직선으로
+              잘린다. 타원 배치도 그 여유(≈82px/53px)가 viewBox 안에 들어오도록
+              잡아 뷰포트 클리핑의 직선 모서리를 없앤다. */}
+          <div className="absolute left-1/2 top-[-14rem] h-[36rem] w-[52rem] -translate-x-1/2">
+            <svg
+              className="animate-ink-spread h-full w-full overflow-visible opacity-70 motion-reduce:animate-none dark:opacity-25"
+              viewBox="0 0 832 576"
+              preserveAspectRatio="xMidYMid meet"
+            >
+              <defs>
+                {/* 물감의 농도 감쇠: 플랫 불투명도 도형은 가장자리를 일그러뜨려도
+                    "잘린 종이"처럼 읽힌다. 중심이 진하고 밖으로 0까지 빠지는
+                    radial gradient가 물에 푼 안료의 층을 만든다. stop-color는
+                    presentation attribute라 var()를 못 받으므로 style로 넣는다. */}
+                <radialGradient id="karxy-ink-g1">
+                  <stop offset="0%" style={{ stopColor: "var(--primary)", stopOpacity: 0.55 }} />
+                  <stop offset="55%" style={{ stopColor: "var(--primary)", stopOpacity: 0.32 }} />
+                  <stop offset="100%" style={{ stopColor: "var(--primary)", stopOpacity: 0 }} />
+                </radialGradient>
+                <radialGradient id="karxy-ink-g2">
+                  <stop offset="0%" style={{ stopColor: "var(--primary)", stopOpacity: 0.34 }} />
+                  <stop offset="100%" style={{ stopColor: "var(--primary)", stopOpacity: 0 }} />
+                </radialGradient>
+                <radialGradient id="karxy-ink-g3">
+                  <stop offset="0%" style={{ stopColor: "var(--primary-strong)", stopOpacity: 0.16 }} />
+                  <stop offset="100%" style={{ stopColor: "var(--primary-strong)", stopOpacity: 0 }} />
+                </radialGradient>
+              </defs>
+              <filter id="karxy-ink-primary" filterUnits="userSpaceOnUse" x="-60" y="-60" width="952" height="696">
+                <feTurbulence type="fractalNoise" baseFrequency="0.012 0.016" numOctaves="3" seed="7" result="ink" />
+                <feDisplacementMap in="SourceGraphic" in2="ink" scale="110" xChannelSelector="R" yChannelSelector="G" />
+                <feGaussianBlur stdDeviation="6" />
+              </filter>
+              <g filter="url(#karxy-ink-primary)">
+                <ellipse cx="416" cy="250" rx="250" ry="150" fill="url(#karxy-ink-g1)" />
+                <ellipse cx="300" cy="330" rx="160" ry="100" fill="url(#karxy-ink-g2)" />
+                <ellipse cx="545" cy="320" rx="130" ry="84" fill="url(#karxy-ink-g3)" />
+              </g>
+            </svg>
+          </div>
+          <div className="absolute left-[8%] top-16 h-64 w-64">
+            <svg
+              className="animate-ink-spread-slow h-full w-full overflow-visible motion-reduce:animate-none dark:opacity-40"
+              viewBox="0 0 256 256"
+              preserveAspectRatio="xMidYMid meet"
+            >
+              <defs>
+                <radialGradient id="karxy-ink-ga1">
+                  <stop offset="0%" style={{ stopColor: "var(--icon-accent)", stopOpacity: 0.38 }} />
+                  <stop offset="60%" style={{ stopColor: "var(--icon-accent)", stopOpacity: 0.22 }} />
+                  <stop offset="100%" style={{ stopColor: "var(--icon-accent)", stopOpacity: 0 }} />
+                </radialGradient>
+                <radialGradient id="karxy-ink-ga2">
+                  <stop offset="0%" style={{ stopColor: "var(--icon-accent)", stopOpacity: 0.2 }} />
+                  <stop offset="100%" style={{ stopColor: "var(--icon-accent)", stopOpacity: 0 }} />
+                </radialGradient>
+              </defs>
+              <filter id="karxy-ink-accent" filterUnits="userSpaceOnUse" x="-40" y="-40" width="336" height="336">
+                <feTurbulence type="fractalNoise" baseFrequency="0.02 0.024" numOctaves="3" seed="11" result="ink" />
+                <feDisplacementMap in="SourceGraphic" in2="ink" scale="64" xChannelSelector="R" yChannelSelector="G" />
+                <feGaussianBlur stdDeviation="5" />
+              </filter>
+              <g filter="url(#karxy-ink-accent)">
+                <ellipse cx="124" cy="118" rx="60" ry="48" fill="url(#karxy-ink-ga1)" />
+                <ellipse cx="150" cy="150" rx="40" ry="32" fill="url(#karxy-ink-ga2)" />
+              </g>
+            </svg>
+          </div>
+          {/* 데스크톱 + 파인 포인터 + 모션 허용 환경에서만 실제 유체역학이
+              위 정적 워터컬러 위로 페이드인한다. 나머지 환경은 SVG가 배경. */}
+          <HeroFluidInk />
         </div>
         <div className="relative mx-auto max-w-5xl px-4 pt-12 pb-0 text-center md:pt-16 md:pb-2">
           <h1 className="font-serif text-4xl md:text-6xl font-extrabold tracking-tight leading-tight text-balance">
