@@ -78,8 +78,55 @@ function compactBasisText(value: string, max = 220): string {
 }
 
 function checkedLabel(lang: Lang, checkedAt: string): string {
-  return lang === "ko" ? `확인일 ${checkedAt}` : `checked ${checkedAt}`;
+  return {
+    ko: `확인일 ${checkedAt}`,
+    vi: `kiểm tra ${checkedAt}`,
+    mn: `шалгасан ${checkedAt}`,
+    en: `checked ${checkedAt}`,
+  }[lang];
 }
+
+// When the answer LLM is unavailable this fallback is the whole answer, so its
+// scaffolding has to speak the user's language too. The document excerpts and
+// buildRagBasisNotice() were already localized; the heading, the labels and the
+// "verify the original before filing" paragraph were not, which left a
+// Vietnamese reader with Vietnamese content wrapped in Korean chrome exactly
+// when the product was already degraded.
+const OUTAGE_SUMMARY_COPY: Record<Lang, {
+  heading: string;
+  intro: string;
+  source: string;
+  checked: string;
+}> = {
+  ko: {
+    heading: "공식 근거 기반 요약",
+    intro:
+      "검색된 승인 문서를 기준으로 질문과 가까운 근거를 먼저 정리했습니다. 개별 체류 이력, 학교 상태, 만료일, 재정 상황에 따라 요구 서류가 달라질 수 있으므로 접수 전 원문 확인과 행정사 검토가 필요합니다.",
+    source: "출처",
+    checked: "확인일",
+  },
+  vi: {
+    heading: "Tóm tắt dựa trên căn cứ chính thức",
+    intro:
+      "Chúng tôi sắp xếp trước những căn cứ gần nhất với câu hỏi, dựa trên các tài liệu đã được phê duyệt. Hồ sơ yêu cầu có thể khác nhau tùy lịch sử lưu trú, tình trạng trường, ngày hết hạn và điều kiện tài chính, nên cần đối chiếu bản gốc và nhờ chuyên gia hành chính kiểm tra trước khi nộp.",
+    source: "Nguồn",
+    checked: "Ngày kiểm tra",
+  },
+  mn: {
+    heading: "Албан эх сурвалжид үндэслэсэн хураангуй",
+    intro:
+      "Батлагдсан баримтуудаас асуултад хамгийн нийцэх үндэслэлүүдийг эхэлж эмхэтгэв. Оршин суух түүх, сургуулийн байдал, хүчинтэй хугацаа, санхүүгийн нөхцөлөөс шалтгаалан шаардах баримт өөр байж болох тул мэдүүлэхээс өмнө эх бичгийг шалгаж, мэргэжлийн зөвлөгөө авна уу.",
+    source: "Эх сурвалж",
+    checked: "Шалгасан өдөр",
+  },
+  en: {
+    heading: "Summary based on official sources",
+    intro:
+      "These are the approved documents closest to your question, ordered by relevance. Required paperwork can differ with your stay history, school status, expiry date, and finances, so check the originals and have an administrative scrivener review them before filing.",
+    source: "Source",
+    checked: "Checked",
+  },
+};
 
 function buildAnswerBasis(doc: KnowledgeDoc, lang: Lang): string {
   const meta = getRagDocumentMetadata(doc, lang);
@@ -642,6 +689,7 @@ export function buildOfficialSummaryFallback(
   lang: Lang,
   sourceNotice: string
 ): string {
+  const copy = OUTAGE_SUMMARY_COPY[lang];
   const prioritized = docs
     .map((doc) => ({ doc, score: officialSummaryDocScore(question, doc, lang) }))
     .sort((a, b) => b.score - a.score)
@@ -656,9 +704,9 @@ export function buildOfficialSummaryFallback(
         .replace(/\s+/g, " ")
         .trim();
       const excerpt = content.length > 520 ? `${content.slice(0, 520)}...` : content;
-      const checked = meta?.last_checked_at ? `\n확인일: ${meta.last_checked_at}` : "";
+      const checked = meta?.last_checked_at ? `\n${copy.checked}: ${meta.last_checked_at}` : "";
       const sourceUrl = meta?.source_url ? ` <${meta.source_url}>` : "";
-      return `### [${index + 1}] ${pickLangText(doc.title, lang)}\n\n${excerpt} [${index + 1}]\n\n출처: ${sourceDisplayLabel(doc.source, lang)}${sourceUrl}${checked}`;
+      return `### [${index + 1}] ${pickLangText(doc.title, lang)}\n\n${excerpt} [${index + 1}]\n\n${copy.source}: ${sourceDisplayLabel(doc.source, lang)}${sourceUrl}${checked}`;
     })
     .join("\n\n");
 
@@ -671,11 +719,11 @@ export function buildOfficialSummaryFallback(
     lang,
   });
 
-  return `## 공식 근거 기반 요약
+  return `## ${copy.heading}
 
 ${lead ? `${lead}
 
-` : ""}검색된 승인 문서를 기준으로 질문과 가까운 근거를 먼저 정리했습니다. 개별 체류 이력, 학교 상태, 만료일, 재정 상황에 따라 요구 서류가 달라질 수 있으므로 접수 전 원문 확인과 행정사 검토가 필요합니다.
+` : ""}${copy.intro}
 
 ${sections}
 
