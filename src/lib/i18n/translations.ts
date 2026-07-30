@@ -112,6 +112,8 @@ export const t = {
   // In-Korea post-graduation path labels. vi/mn are drafts pending native review.
   goal_in_korea_d10: { ko: "졸업 후 구직(D-10) 준비", vi: "Chuẩn bị visa tìm việc (D-10) sau tốt nghiệp", mn: "Төгссөний дараах ажил хайх (D-10) бэлтгэл", en: "Post-graduation job-seeking (D-10)" },
   goal_in_korea_e7: { ko: "취업 확정 후 E-7 전환", vi: "Chuyển sang E-7 sau khi có việc làm", mn: "Ажилд орсны дараа E-7 руу шилжих", en: "Switch to E-7 after a job offer" },
+  goal_in_korea_job: { ko: "졸업 후 한국에서 구직할 거예요", vi: "Tôi sẽ tìm việc tại Hàn Quốc sau tốt nghiệp", mn: "Төгсөөд Солонгост ажил хайна", en: "I'll look for a job in Korea after graduating" },
+  goal_in_korea_employment: { ko: "채용이 확정됐어요 (E-7 전환)", vi: "Tôi đã có việc làm (chuyển E-7)", mn: "Ажилд орох нь батлагдсан (E-7)", en: "I have a job offer (E-7 switch)" },
 
   region_seoul: { ko: "서울", vi: "Seoul", mn: "Сеул", en: "Seoul" },
   region_gyeonggi: { ko: "경기", vi: "Gyeonggi", mn: "Кёнги", en: "Gyeonggi" },
@@ -120,6 +122,7 @@ export const t = {
   region_gwangju: { ko: "광주", vi: "Gwangju", mn: "Кванчжу", en: "Gwangju" },
   region_other: { ko: "기타 지방", vi: "Khu vực khác", mn: "Бусад бүс", en: "Other regions" },
   region_any: { ko: "상관없음", vi: "Bất kỳ", mn: "Хамаагүй", en: "Any" },
+  nationality_other: { ko: "기타", vi: "Khác", mn: "Бусад", en: "Other" },
 
   yes: { ko: "예", vi: "Có", mn: "Тийм", en: "Yes" },
   no: { ko: "아니오", vi: "Không", mn: "Үгүй", en: "No" },
@@ -139,7 +142,10 @@ export const t = {
     mn: "Үр дүн хадгалагдлаа. Мэргэжилтэн хэрэгтэй бол зөвлөгөөний хүсэлт илгээнэ үү.",
     en: "Your result is saved. Submit a consultation request if you need an expert connection.",
   },
+  diagnose_save_error: { ko: "저장 중 오류가 발생했습니다. 다시 시도해주세요.", vi: "Đã xảy ra lỗi khi lưu. Vui lòng thử lại.", mn: "Хадгалахад алдаа гарлаа. Дахин оролдоно уу.", en: "Save error. Please retry." },
   diagnose_cta_consult: { ko: "전문가 상담 요청", vi: "Yêu cầu tư vấn chuyên gia", mn: "Мэргэжлийн зөвлөгөө хүсэх", en: "Request expert consultation" },
+  diagnose_cta_docs_workspace: { ko: "내 서류 워크스페이스에서 준비 시작", vi: "Bắt đầu chuẩn bị trong không gian tài liệu", mn: "Бичиг баримтын самбартаа бэлтгэлээ эхлүүлэх", en: "Start preparing in my documents workspace" },
+  diagnose_current_visa_label: { ko: "현재 비자", vi: "Visa hiện tại", mn: "Одоогийн виз", en: "Current visa" },
   diagnose_login_nudge: {
     ko: "로그인하면 진단 이력이 내 계정에 자동으로 저장됩니다.",
     vi: "Đăng nhập để tự động lưu lịch sử đánh giá vào tài khoản của bạn.",
@@ -428,6 +434,11 @@ export const t = {
   ai_placeholder: { ko: "질문을 입력하세요 (예: D-2와 D-4 차이?)", vi: "Nhập câu hỏi", mn: "Асуулт оруул", en: "Ask a question" },
   ai_send: { ko: "전송", vi: "Gửi", mn: "Илгээх", en: "Send" },
   ai_disclaimer: { ko: "AI는 공식 정보 기반 안내만 제공합니다. 개별 비자 판단은 행정사 상담 필요.", vi: "AI chỉ hướng dẫn chung. Tư vấn visa cần chuyên gia.", mn: "AI ерөнхий заавар өгнө. Виз зөвлөгөө шаардлагатай.", en: "AI gives general info only. Visa cases need expert." },
+  result_basis_label: { ko: "판정 근거", vi: "Cơ sở đánh giá", mn: "Үндэслэл", en: "Basis" },
+  result_basis_rule_engine: { ko: "규칙 엔진 검증", vi: "Đã kiểm tra bằng bộ quy tắc", mn: "Дүрмийн хөдөлгүүрээр шалгасан", en: "Checked by rule engine" },
+  result_basis_rag_only: { ko: "공식 문서 기반 · 규칙 판정 없음", vi: "Dựa trên tài liệu chính thức · chưa có phán định", mn: "Албан баримтад тулгуурласан · дүгнэлт гараагүй", en: "From official documents · no rule verdict" },
+  result_basis_not_evaluated: { ko: "판정하지 않음", vi: "Chưa đánh giá", mn: "Үнэлээгүй", en: "Not assessed" },
+  result_basis_rag_only_detail: { ko: "이 자격은 실행형 판정 규칙이 없어 공식 문서 안내를 요약한 결과입니다. 개별 사안은 행정사 검토를 권장합니다.", vi: "Tư cách này chưa có quy tắc thực thi, nên đây là tóm tắt hướng dẫn chính thức chứ không phải phán định trường hợp của bạn. Hãy để chuyên gia hành chính xem xét chi tiết.", mn: "Энэ статуст хэрэгжих дүрэм байхгүй тул энэ нь албан ёсны заавраас гаргасан хураангуй бөгөөд таны хэргийг дүгнэсэн зүйл биш. Тодорхой асуудлыг мэргэжлийн зөвлөхөөр шалгуулна уу.", en: "No executable rules exist for this status, so this summarizes official guidance rather than judging your case. Have an administrative scrivener review the specifics." },
 } as const;
 
 export type TranslationKey = keyof typeof t;
