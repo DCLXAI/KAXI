@@ -39,9 +39,17 @@ export class UnifiedAiStreamError extends Error {
   }
 }
 
+// The ceiling the server's own generation budget can be raised to. Exported so
+// the client's abort budget can be derived from it: whichever side times out
+// first owns the error the user sees, and the server's is the localized,
+// retryable one, so the client must always sit above this.
+export const UNIFIED_AI_STREAM_TIMEOUT_MAX_MS = 30_000;
+
 export function unifiedAiStreamTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
   const configured = Number.parseInt(env.UNIFIED_AI_STREAM_TIMEOUT_MS || "", 10);
-  return Number.isFinite(configured) ? Math.min(Math.max(configured, 8_000), 30_000) : 20_000;
+  return Number.isFinite(configured)
+    ? Math.min(Math.max(configured, 8_000), UNIFIED_AI_STREAM_TIMEOUT_MAX_MS)
+    : 20_000;
 }
 
 export function encodeUnifiedAiStreamEvent(event: UnifiedAiStreamEvent): Uint8Array {

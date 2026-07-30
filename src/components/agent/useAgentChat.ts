@@ -9,8 +9,10 @@ import {
   agentResponseCacheKey,
   isCacheableAgentQuestion,
 } from "@/lib/ai/agent-response-cache";
+import { createStreamWatchdog } from "@/lib/ai/stream-watchdog";
 import {
   readUnifiedAiEventStream,
+  UNIFIED_AI_STREAM_TIMEOUT_MAX_MS,
   UnifiedAiStreamError,
   type UnifiedAiStreamEvent,
 } from "@/lib/ai/unified-stream";
@@ -20,7 +22,28 @@ import {
 } from "./agent-config";
 import type { AgentLocale, AgentMessage, AgentProgress, AgentStatus, ClarifyDraft } from "./types";
 
-const CLIENT_STREAM_TIMEOUT_MS = 25_000;
+// The old budget was a single 25s timer armed at request start and never reset,
+// which broke in two ways.
+//
+// createUnifiedAiEventStream() resolves the whole answer first and only then
+// replays it as deltas at 12ms per ~42-char chunk — 0.3s to 1.7s of replay for a
+// realistic answer. That replay runs after the server's generation budget has
+// already been cleared, so it was fully exposed to the client's fixed deadline:
+// a request that spent its generation budget and then started delivering could
+// be aborted mid-replay, throwing away an answer the server had already produced
+// in full. Inactivity cannot do that — an event every 12ms keeps feeding it.
+//
+// The other half is who owns the timeout. The server governs generation with
+// unifiedAiStreamTimeoutMs() (20s by default, raisable to
+// UNIFIED_AI_STREAM_TIMEOUT_MAX_MS) and fails with a localized, retryable error
+// of its own. During generation it goes quiet after the 650ms "generating"
+// progress event, so a client deadline below that ceiling pre-empts the server's
+// better error with a generic client abort. Derive from the ceiling instead of
+// hardcoding, so raising the server budget cannot silently reintroduce this.
+const CLIENT_STREAM_INACTIVITY_MS = UNIFIED_AI_STREAM_TIMEOUT_MAX_MS + 5_000;
+// Pure backstop for a stream that trickles events forever. It sits near the
+// route's maxDuration = 60 platform ceiling and should never be what fires.
+const CLIENT_STREAM_TOTAL_MS = 70_000;
 
 async function fetchAgent(payload: unknown, signal: AbortSignal): Promise<Response> {
   return fetch("/api/ai/unified/stream", {
@@ -220,7 +243,11 @@ export function useAgentChat() {
     activeRequestIdRef.current = requestId;
     const controller = new AbortController();
     abortRef.current = controller;
-    const clientTimeout = window.setTimeout(() => controller.abort(), CLIENT_STREAM_TIMEOUT_MS);
+    const watchdog = createStreamWatchdog({
+      onExpire: () => controller.abort(),
+      inactivityMs: CLIENT_STREAM_INACTIVITY_MS,
+      totalMs: CLIENT_STREAM_TOTAL_MS,
+    });
 
     try {
       const usableMessages = messages.filter((message) => message.state !== "error");
@@ -240,6 +267,9 @@ export function useAgentChat() {
 
       const completedData = await readUnifiedAiEventStream(res, (event: UnifiedAiStreamEvent) => {
         if (activeRequestIdRef.current !== requestId) return;
+        // Any event proves the stream is alive, including progress-only stages
+        // like retrieval that legitimately produce no tokens for a while.
+        watchdog.noteActivity();
         if (event.type === "progress") {
           setProgress({ stage: event.stage, capability: event.capability });
           return;
@@ -277,20 +307,26 @@ export function useAgentChat() {
       const retryable = aborted || streamError?.retryable !== false;
       console.error("[agent stream]", code, status);
       setMessages((current) => {
-        const withoutPartial = current.filter((message) => message.requestId !== requestId);
+        // Whatever already streamed is text the user has read. Discarding it
+        // made a failure look like nothing had happened; keep it, but hand it
+        // to the card as partialText so it renders as visibly unfinished
+        // instead of masquerading as a complete, cited answer.
+        const streamed = current.find((message) => message.requestId === requestId);
+        const partialText = streamed?.state === "streaming" ? streamed.text.trim() : "";
         return [
-          ...withoutPartial,
+          ...current.filter((message) => message.requestId !== requestId),
           {
             role: "agent",
             requestId,
             state: "error",
             text: errorCopy(locale, code, status),
+            partialText: partialText || undefined,
             retry: retryable ? { question: userMsg, code } : undefined,
           },
         ];
       });
     } finally {
-      window.clearTimeout(clientTimeout);
+      watchdog.stop();
       if (activeRequestIdRef.current === requestId) {
         activeRequestIdRef.current = null;
         abortRef.current = null;

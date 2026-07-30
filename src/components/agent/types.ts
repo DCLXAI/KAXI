@@ -46,6 +46,10 @@ export interface AgentMessage {
   needsHumanExpert?: boolean;
   escalationCaseCreated?: boolean;
   restored?: boolean;
+  // Text that had already streamed in when the request failed. Kept separate
+  // from `text` (which holds the error notice) so the card can show it as
+  // explicitly unfinished rather than as a completed, cited answer.
+  partialText?: string;
 }
 
 export interface AgentProgress {
