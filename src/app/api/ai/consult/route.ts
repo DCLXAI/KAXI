@@ -440,7 +440,7 @@ function buildOfficialSummaryExpertResult({
     ? buildOfficialSummaryFallback(question, docs, lang, sourceNotice)
     : {
         ko: "관련 공식 문서를 충분히 찾지 못했습니다. 비자·체류, 서류, 거절 대응, 유학원 운영 중 어느 영역인지 조금 더 구체적으로 알려주세요. 개별 사례의 판단·서류 작성·제출 대행은 행정사 상담을 권장합니다.",
-        vi: "Chưa tìm thấy đủ tài liệu chính thức liên quan. Hãy cho biết rõ hơn về visa/lưu trú, hồ sơ, kháng từ chối, hoặc vận hành tư vấn du học. Trường hợp cá nhân nên tư vấn luật sư hành chính.",
+        vi: "Chưa tìm thấy đủ tài liệu chính thức liên quan. Hãy cho biết rõ hơn về visa/lưu trú, hồ sơ, kháng từ chối, hoặc vận hành tư vấn du học. Trường hợp cá nhân nên tư vấn chuyên gia hành chính.",
         mn: "Холбогдох албан эх сурвалж хангалттай олдсонгүй. Виз/байршил, баримт бичиг, татгалзлын хариу, эсвэл сургалтын зөвлөгөөний үйл ажиллагааны аль хэсэг болохыг тодруулна уу. Тусгай тохиолдолд мэргэжлийн зөвлөгөө авна уу.",
         en: "I could not find enough relevant official source material. Please specify whether this is about visa/stay, documents, refusal response, or study-agency operations. Individual case decisions and filing work should go through an administrative scrivener.",
       }[lang];
@@ -735,7 +735,7 @@ function generateFollowups(question: string, lang: Lang, mode: string): string[]
       "Cho tôi danh sách hồ sơ chi tiết",
       "Chi phí dự kiến là bao nhiêu?",
       "Thời gian xử lý mất bao lâu?",
-      "Có cần luật sư hành chính không?",
+      "Có cần chuyên gia hành chính không?",
     ],
     mn: [
       "Шаардлагатай баримтын жагсаалт",
@@ -747,7 +747,7 @@ function generateFollowups(question: string, lang: Lang, mode: string): string[]
       "What documents do I need?",
       "What's the estimated cost?",
       "How long does processing take?",
-      "Do I need an admin lawyer?",
+      "Do I need an administrative scrivener?",
     ],
   };
   return followups[lang].slice(0, 3);

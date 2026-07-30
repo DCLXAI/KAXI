@@ -113,3 +113,26 @@ console.log(
 }
 
 console.log("PASS crawler routes build their host from siteBaseUrl()");
+
+// The partner modal described queue intake while its success alert promised a
+// hard "contact within 24h" that a solo-operator queue cannot honour — the same
+// unkeepable promise already removed from the request_partner agent tool. And
+// the confirmation wiped itself after 2s, too fast to finish reading in a second
+// language.
+{
+  const partners = readFileSync("src/components/kbridge/Partners.tsx", "utf8");
+  assert(
+    !/24\s*시간\s*내|within\s*24h|trong\s*24h|24\s*цагийн\s*дотор/i.test(partners),
+    "the partner request flow must not promise a fixed-hour callback the queue cannot guarantee"
+  );
+  assert(
+    !/setTimeout\([^)]*\n?[\s\S]{0,400}?setSubmitted\(false\)[\s\S]{0,200}?\}, *2000\)/.test(partners),
+    "the partner confirmation must not auto-dismiss — the user closes it"
+  );
+  assert(
+    /closeModal/.test(partners),
+    "closing the partner modal must reset the form, since the auto-reset that did it is gone"
+  );
+}
+
+console.log("PASS partner request flow promises only what the queue delivers");

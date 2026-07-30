@@ -138,6 +138,20 @@ export function Partners() {
   const [error, setError] = useState<string | null>(null);
   const consentReady = thirdPartyProvision && processingConsignment && overseasTransfer;
 
+  // The removed 2s auto-reset doubled as the form cleanup, so closing has to do
+  // it now — otherwise reopening the modal shows the previous confirmation.
+  const closeModal = () => {
+    setOpen(null);
+    setSubmitted(false);
+    setError(null);
+    setName("");
+    setContact("");
+    setQuestion("");
+    setThirdPartyProvision(false);
+    setProcessingConsignment(false);
+    setOverseasTransfer(false);
+  };
+
   const submit = async () => {
     setError(null);
     setSubmitted(false);
@@ -181,17 +195,9 @@ export function Partners() {
       }
     );
     if (ok) {
+      // The confirmation used to wipe itself after 2s, which is not long enough
+      // to finish reading it in a second language. The user closes it.
       setSubmitted(true);
-      setTimeout(() => {
-        setOpen(null);
-        setSubmitted(false);
-        setName("");
-        setContact("");
-        setQuestion("");
-        setThirdPartyProvision(false);
-        setProcessingConsignment(false);
-        setOverseasTransfer(false);
-      }, 2000);
     } else {
       setError(
         lang === "ko"
@@ -259,7 +265,7 @@ export function Partners() {
 
       {/* 신청 모달 (간단 inline) */}
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setOpen(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={closeModal}>
           <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <CardHeader>
               <CardTitle className="text-lg">
@@ -277,12 +283,21 @@ export function Partners() {
                 <Alert>
                   <CheckCircle2 className="h-4 w-4" />
                   <AlertDescription>
-                    {lang === "ko" && "요청이 접수되었습니다! 담당자가 24시간 내 연락드립니다."}
-                    {lang === "vi" && "Đã gửi! Liên hệ trong 24h."}
-                    {lang === "mn" && "Илгээгдлээ! 24 цагийн дотор."}
-                    {lang === "en" && "Submitted! Contact within 24h."}
+                    {/* The modal above promises queue intake, not a callback SLA, and a
+                        solo-operator queue cannot guarantee 24 hours — the same
+                        unkeepable promise already removed from the request_partner
+                        tool. Say what actually happens. */}
+                    {lang === "ko" && "요청이 접수되었습니다. 운영자 인입 큐에 등록되었고, 배정된 파트너가 상태를 갱신하면 알려드립니다."}
+                    {lang === "vi" && "Đã tiếp nhận yêu cầu. Yêu cầu đã vào hàng chờ và bạn sẽ được thông báo khi đối tác được giao cập nhật trạng thái."}
+                    {lang === "mn" && "Хүсэлт хүлээн авлаа. Дараалалд орсон бөгөөд хуваарилагдсан түнш төлөвийг шинэчлэхэд танд мэдэгдэнэ."}
+                    {lang === "en" && "Request received. It is in the operations queue, and you will be notified when the assigned partner updates its status."}
                   </AlertDescription>
                 </Alert>
+              ) : null}
+              {submitted ? (
+                <Button variant="outline" className="w-full" onClick={closeModal}>
+                  {lang === "ko" ? "닫기" : lang === "vi" ? "Đóng" : lang === "mn" ? "Хаах" : "Close"}
+                </Button>
               ) : (
                 <>
                   <div className="space-y-2">
