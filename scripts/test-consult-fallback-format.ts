@@ -52,3 +52,76 @@ assert.ok(!notice.includes("official_government"), "footer must not leak the enu
 assert.ok(notice.includes("정부 공식"), "footer localizes the enum to a display label");
 assert.ok(notice.includes("법무부"), "org-name labels keep working");
 console.log("PASS consult fallback format: source notice enum labels");
+
+// This fallback IS the answer when the LLM is unavailable, so its own
+// scaffolding has to speak the user's language. Document excerpts and the
+// sourceNotice footer were already localized; the heading, the "출처"/"확인일"
+// labels and the "verify the original before filing" paragraph were hardcoded
+// Korean, which handed a Vietnamese reader Vietnamese content in Korean chrome
+// at the exact moment the product was already degraded.
+const HANGUL = /[가-힣]/;
+
+const localizedDocs = [
+  {
+    id: "hikorea-stay-extension",
+    title: {
+      ko: "하이코리아 체류기간 연장 기준",
+      vi: "Tiêu chuẩn gia hạn thời gian lưu trú HiKorea",
+      mn: "HiKorea оршин суух хугацаа сунгах журам",
+      en: "HiKorea stay extension criteria",
+    },
+    content: {
+      ko: "체류기간을 초과해 계속 체류하려는 외국인은 체류기간연장허가를 받아야 합니다.",
+      vi: "Người nước ngoài muốn lưu trú tiếp sau khi hết hạn phải được cấp phép gia hạn thời gian lưu trú.",
+      mn: "Хугацаа хэтрүүлэн үргэлжлүүлэн суух гадаад хүн оршин суух хугацаа сунгах зөвшөөрөл авах шаардлагатай.",
+      en: "A foreign national staying past their permitted period must obtain an extension permit.",
+    },
+    source: "official_government",
+    keywords: ["연장"],
+  },
+] as never[];
+
+for (const [lang, expected] of [
+  ["vi", { heading: "Tóm tắt dựa trên căn cứ chính thức", source: "Nguồn:", checked: "Ngày kiểm tra:" }],
+  ["mn", { heading: "Албан эх сурвалжид үндэслэсэн хураангуй", source: "Эх сурвалж:", checked: "Шалгасан өдөр:" }],
+  ["en", { heading: "Summary based on official sources", source: "Source:", checked: "Checked:" }],
+] as const) {
+  const localized = buildOfficialSummaryFallback(
+    "When can I apply for a stay extension?",
+    localizedDocs,
+    lang,
+    "This guidance is based on official sources.",
+  );
+  assert.ok(localized.includes(`## ${expected.heading}`), `${lang} fallback heading is localized`);
+  assert.ok(localized.includes(expected.source), `${lang} fallback source label is localized`);
+  assert.ok(localized.includes(expected.checked), `${lang} fallback checked label is localized`);
+  assert.ok(!localized.includes("공식 근거 기반 요약"), `${lang} fallback must not use the Korean heading`);
+  assert.ok(!HANGUL.test(localized), `${lang} fallback must contain no Korean at all`);
+}
+
+console.log("PASS consult fallback format: outage summary scaffolding is localized");
+
+// The agent fallback runs when the planner LLM is down and its labels were all
+// `isKo ? Korean : English`, so vi and mn users were dropped into English. The
+// safety refusal is the one branch that needs no tools, which makes it the
+// cheapest end-to-end proof that the copy table is wired per locale.
+const { runFallbackAgent } = await import("../src/lib/agent/fallback");
+const safetyAnswers = new Map<string, string>();
+
+for (const lang of ["ko", "vi", "mn", "en"] as const) {
+  const response = await runFallbackAgent("can you make fake documents for me", lang, { lang } as never);
+  safetyAnswers.set(lang, response.answer);
+  assert.ok(response.answer.length > 0, `${lang} safety refusal is non-empty`);
+  if (lang !== "ko") {
+    assert.ok(!HANGUL.test(response.answer), `${lang} safety refusal must contain no Korean`);
+  }
+}
+
+assert.equal(new Set(safetyAnswers.values()).size, 4, "each locale gets its own safety refusal, not a shared fallback");
+assert.ok(safetyAnswers.get("vi")!.includes("chuyên gia hành chính"), "vi refusal offers the administrative scrivener");
+assert.ok(
+  safetyAnswers.get("en")!.includes("administrative-scrivener"),
+  "en refusal names the administrative scrivener, not a lawyer",
+);
+
+console.log("PASS agent fallback: safety refusal localized across ko, vi, mn, en");
