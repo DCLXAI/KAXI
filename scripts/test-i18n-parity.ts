@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
+import { t } from "../src/lib/i18n/translations";
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -37,6 +38,57 @@ for (const locale of LOCALES.slice(1)) {
 if (broken) fail("locale message files are out of sync with ko.json");
 
 console.log(`PASS i18n parity: ${base.size} keys aligned across ${LOCALES.join(", ")}`);
+
+// The check above only compares the locale files against EACH OTHER, which is
+// how the two sources of truth drifted apart unnoticed: messages/*.json is
+// generated from translations.ts by `bun run i18n:export`, but all four files
+// were equally stale, so locale-vs-locale parity kept passing while the
+// generated artifact fell 45 keys behind its source — and 11 keys that the
+// diagnosis wizard renders through next-intl existed ONLY in the generated file,
+// having been hand-written into it instead of into translations.ts.
+//
+// Both directions matter, because both files are live:
+//   - tr(key, lang) reads translations.ts directly
+//   - useTranslations() reads messages/<locale>.json
+// A key present in one and absent from the other is broken on one of those
+// paths. use-intl does not throw on a missing message: it logs and renders the
+// key name, so the failure ships silently as `result_basis_label` on screen.
+{
+  const drift: string[] = [];
+
+  for (const locale of LOCALES) {
+    const generated = JSON.parse(readFileSync(`messages/${locale}.json`, "utf8")) as Record<string, string>;
+
+    for (const [key, value] of Object.entries(t)) {
+      const expected = (value as Record<string, string>)[locale];
+      if (!(key in generated)) {
+        drift.push(`${locale}: "${key}" is in translations.ts but missing from messages/${locale}.json`);
+      } else if (generated[key] !== expected) {
+        drift.push(
+          `${locale}: "${key}" differs — source ${JSON.stringify(expected)} vs generated ${JSON.stringify(generated[key])}`,
+        );
+      }
+    }
+
+    for (const key of Object.keys(generated)) {
+      if (!(key in t)) {
+        drift.push(
+          `${locale}: "${key}" exists only in messages/${locale}.json — add it to translations.ts (i18n:export would delete it)`,
+        );
+      }
+    }
+  }
+
+  if (drift.length > 0) {
+    for (const line of drift.slice(0, 30)) console.error(`  ${line}`);
+    if (drift.length > 30) console.error(`  ... and ${drift.length - 30} more`);
+    fail(
+      `messages/*.json has drifted from translations.ts in ${drift.length} place(s) — run \`bun run i18n:export\`, and if a key exists only in the generated file, add it to translations.ts first`,
+    );
+  }
+}
+
+console.log(`PASS i18n parity: messages/*.json matches translations.ts (${Object.keys(t).length} keys × ${LOCALES.length} locales)`);
 
 // 행정사 is a licensed administrative scrivener, not a lawyer. The product's
 // whole position is legal accuracy, and it repeatedly mistranslated its own core
