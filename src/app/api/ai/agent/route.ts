@@ -17,6 +17,7 @@ import {
   sanitizeAiBody,
   withTimeout,
 } from "@/lib/api/security";
+import { guardAnswerFields } from "@/lib/chat/response-guardrail";
 import { canPersistChatQuestion, protectChatQuestion } from "@/lib/privacy/chat-log";
 import { isPiiEncryptionConfigured } from "@/lib/privacy/pii";
 import { isEnvFalse, isEnvTrue } from "@/lib/env";
@@ -364,8 +365,23 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({
+    // This route returns model prose straight to callers, and it was the one
+    // client-facing answer path with no guardrail — the illegal-work, false
+    // document and prompt-injection refusals that every other route enforces
+    // (typebot-rag, n8n rag-runtime, chat, unified, consult) simply did not
+    // apply here, and test:chat-security's route list did not name it. The
+    // unified wrapper guards its own copy of the answer, so calling /api/ai/agent
+    // directly was the way around the whole refusal set.
+    const guarded = guardAnswerFields({
       answer: result.answer,
+      sources: preflight.toolResults,
+      searchMeta: { grounded, groundingContextChars: preflight.groundingContext.length },
+      question,
+      locale: lang,
+    });
+
+    return NextResponse.json({
+      answer: guarded.answer,
       backend,
       steps,
       toolResults,
@@ -373,7 +389,11 @@ export async function POST(req: NextRequest) {
       durationMs: Date.now() - requestStartedAt,
       grounded,
       preflightMs,
-      needsHumanExpert,
+      // A guardrail refusal is also a hand-off: the client should offer the
+      // human path rather than leaving the user at a dead end. The escalation
+      // case above is left alone — changing when cases get created is a product
+      // decision, not a side effect of adding the guardrail.
+      needsHumanExpert: needsHumanExpert || guarded.needsHuman,
       escalationCaseCreated,
       meta: buildAgentMeta({
         lang,

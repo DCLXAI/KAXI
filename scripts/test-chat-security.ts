@@ -442,6 +442,9 @@ console.log("PASS chat security: provenance, signed ownership, Typebot gateway a
     "src/app/api/ai/unified/route.ts",
     "src/app/api/ai/chat/route.ts",
     "src/app/api/ai/consult/route.ts",
+    // Omitting this one is how the raw agent endpoint kept returning
+    // unguarded model prose while every sibling enforced the refusals.
+    "src/app/api/ai/agent/route.ts",
     "src/app/api/typebot-rag/route.ts",
     "src/app/api/internal/n8n/rag-runtime/route.ts",
   ];
