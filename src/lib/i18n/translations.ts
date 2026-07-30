@@ -344,12 +344,12 @@ export const t = {
   status_translation: { ko: "번역 필요", vi: "Cần dịch", mn: "Орчуулга хэрэгтэй", en: "Translation needed" },
   status_notarization: { ko: "공증 필요", vi: "Cần công chứng", mn: "Гэрчилгээ хэрэгтэй", en: "Notarization needed" },
   status_school_check: { ko: "학교 확인 필요", vi: "Cần xác nhận trường", mn: "Сургууль шалгах", en: "School verification" },
-  status_admin_help: { ko: "행정사 상담 필요", vi: "Cần luật sư hành chính", mn: "Зөвлөгөө хэрэгтэй", en: "Admin lawyer needed" },
+  status_admin_help: { ko: "행정사 상담 필요", vi: "Cần chuyên gia hành chính", mn: "Зөвлөгөө хэрэгтэй", en: "Administrative scrivener needed" },
   status_pending: { ko: "준비 대기", vi: "Đang chờ", mn: "Хүлээгдэж байгаа", en: "Pending" },
   status_not_yet: { ko: "미해당", vi: "Không áp dụng", mn: "Хамаарахгүй", en: "Not applicable" },
   docs_upload: { ko: "업로드", vi: "Tải lên", mn: "Байршуулах", en: "Upload" },
   docs_change_status: { ko: "상태 변경", vi: "Đổi trạng thái", mn: "Төлөв өөрчлөх", en: "Change status" },
-  docs_connect_admin: { ko: "행정사 연결", vi: "Kết nối luật sư", mn: "Зөвлөгөө холбох", en: "Connect admin lawyer" },
+  docs_connect_admin: { ko: "행정사 연결", vi: "Kết nối chuyên gia hành chính", mn: "Зөвлөгөө холбох", en: "Connect administrative scrivener" },
 
   // 파트너
   partners_title: { ko: "검증 파트너 연결", vi: "Kết nối đối tác", mn: "Шалгагдсан түнш", en: "Verified partners" },
