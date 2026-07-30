@@ -69,6 +69,25 @@ export function AgentResponseCard({
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
           <div className="min-w-0 flex-1">
             <p className="text-sm leading-relaxed">{message.text}</p>
+            {message.partialText && (
+              // Rendered as plain preformatted text, not markdown: this is an
+              // answer that stopped mid-sentence with no sources attached, and
+              // it must not look like a finished cited answer.
+              <div className="mt-3 rounded-md border border-border/45 bg-background/60 p-3">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {locale === "ko"
+                    ? "중단 시점까지 받은 미완성 답변 — 출처가 확인되지 않았습니다"
+                    : locale === "vi"
+                      ? "Phần trả lời chưa hoàn tất tính đến lúc dừng — chưa xác minh nguồn"
+                      : locale === "mn"
+                        ? "Зогссон хүртэлх бүрэн бус хариу — эх сурвалж батлагдаагүй"
+                        : "Unfinished answer up to the point it stopped — sources not verified"}
+                </p>
+                <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground">
+                  {message.partialText}
+                </p>
+              </div>
+            )}
             {message.retry && (
               <Button
                 type="button"
