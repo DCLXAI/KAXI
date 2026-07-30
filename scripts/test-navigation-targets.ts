@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from "fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import { VIEW_KEYS } from "../src/lib/kbridge/views";
 
@@ -89,3 +89,27 @@ for (const file of sourceFiles) {
 console.log(
   `PASS navigation targets: localePath routes exist, ${viewKeys.size} view keys pinned, /login links carry locale`,
 );
+
+// robots.txt was a static file in public/, so the karxy.com cutover left its
+// Sitemap line on kaxi.vercel.app while sitemap.xml itself emitted karxy.com —
+// crawlers were handed the old host for weeks. Both must come from the one
+// helper, and no route may hardcode a site host again.
+{
+  assert(
+    !existsSync("public/robots.txt"),
+    "public/robots.txt must not come back — a static file cannot follow a domain cutover"
+  );
+  for (const route of ["src/app/robots.ts", "src/app/sitemap.ts"]) {
+    const source = readFileSync(route, "utf8");
+    assert(
+      /siteBaseUrl\(\)/.test(source),
+      `${route} must build its URLs from siteBaseUrl() so they cannot drift apart`
+    );
+    assert(
+      !/https:\/\/(kaxi\.vercel\.app|karxy\.com)/.test(source),
+      `${route} must not hardcode a site host — that is exactly what drifted`
+    );
+  }
+}
+
+console.log("PASS crawler routes build their host from siteBaseUrl()");
