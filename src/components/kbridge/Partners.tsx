@@ -41,7 +41,7 @@ const PARTNERS: PartnerType[] = [
       ko: "비자·체류자격 판단, 행정기관 제출서류 작성·제출 대행, 체류자격 변경. 행정사법 영역.",
       vi: "Quyết định visa, hồ sơ hành chính, thay đổi tư cách lưu trú. Theo luật hành chính.",
       mn: "Виз, байршлын шийдвэр. Зөвлөгөөний хуулийн талбар.",
-      en: "Visa decisions, administrative submissions, stay status changes. Admin lawyer scope.",
+      en: "Visa decisions, administrative submissions, stay status changes. Administrative Scrivener Act scope.",
     },
     example: {
       ko: "비자 거절 이력, D-4→D-2 전환, 체류기간 연장",
