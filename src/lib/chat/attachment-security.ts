@@ -1,4 +1,4 @@
-import sharp, { type Metadata } from "sharp";
+import sharp from "sharp";
 import { createHash } from "crypto";
 import { isEnvTrue } from "@/lib/env";
 import { detectChatAttachmentMimeType } from "@/lib/chat/attachment-files";
@@ -84,7 +84,7 @@ function assertPdfSafe(bytes: Buffer) {
 }
 
 async function assertImageSafe(bytes: Buffer, mimeType: string) {
-  let metadata: Metadata;
+  let metadata: sharp.Metadata;
   try {
     metadata = await sharp(bytes, { failOn: "warning", limitInputPixels: MAX_IMAGE_PIXELS }).metadata();
   } catch {
