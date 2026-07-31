@@ -14,7 +14,7 @@ import { verifyLeadAccessToken } from "@/lib/leads/ownership";
 // What replaces it: the set of records to act on is DERIVED from a proof the
 // caller presented, never from an identifier they typed. The request body
 // cannot widen the scope, because nothing in the body reaches these queries.
-export type DeletionProof = "session" | "lead_access";
+export type DeletionProof = "session" | "lead_access" | "contact_token";
 
 /**
  * The records a verified requester may act on.
@@ -37,6 +37,8 @@ export interface DeletionSubjectLookup {
   findSessionKeysForUser: (userId: string) => Promise<string[]>;
   /** Handoff sessions reachable from these leads. */
   findSessionKeysForLeads: (leadIds: string[]) => Promise<string[]>;
+  /** Diagnosis leads reachable from a contact address the requester verified. */
+  findLeadIdsForContactHash: (contactHash: string) => Promise<string[]>;
 }
 
 export interface ResolveDeletionSubjectInput {
@@ -49,6 +51,15 @@ export interface ResolveDeletionSubjectInput {
    * against.
    */
   leadAccessToken?: string | null;
+  /**
+   * The HMAC of a contact address whose owner has just redeemed a one-time
+   * verification link.
+   *
+   * Set ONLY by the verify route, after the token check passed. It is a hash
+   * rather than the address because nothing downstream needs the address, and a
+   * value that never exists in plaintext cannot be logged by accident.
+   */
+  verifiedContactHash?: string | null;
   now?: number;
   env?: NodeJS.ProcessEnv;
 }
@@ -94,6 +105,19 @@ export async function resolveDeletionSubject(
     };
   }
 
+  // Possession of the address, proved by redeeming the link sent to it. This
+  // arrives last because a caller who is signed in should get their whole
+  // account footprint, not just the records that happen to share one address.
+  if (input.verifiedContactHash) {
+    const leadIds = await lookup.findLeadIdsForContactHash(input.verifiedContactHash);
+    return {
+      proof: "contact_token",
+      userId: null,
+      leadIds: unique(leadIds),
+      sessionKeys: leadIds.length > 0 ? unique(await lookup.findSessionKeysForLeads(leadIds)) : [],
+    };
+  }
+
   return null;
 }
 
@@ -104,10 +128,9 @@ function unique(values: string[]): string[] {
 /**
  * The ownership proofs the deletion endpoint can currently accept.
  *
- * Reported through readiness so the gap is visible rather than implied: a
- * person who is not signed in and no longer holds their lead cookie has no way
- * to prove a contact address is theirs, so their request is recorded and
- * audited but performs nothing. P0-1b adds "contact_token" here together with
- * the verification route that earns it.
+ * Reported through readiness. "contact_token" is possession of the address
+ * itself, proved by redeeming the one-time link sent to it — the only proof
+ * available to someone who is neither signed in nor still holding their lead
+ * cookie, which used to leave their request recorded but unhonoured.
  */
-export const SUPPORTED_DELETION_PROOFS: readonly DeletionProof[] = ["session", "lead_access"];
+export const SUPPORTED_DELETION_PROOFS: readonly DeletionProof[] = ["session", "lead_access", "contact_token"];

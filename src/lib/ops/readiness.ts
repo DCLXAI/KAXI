@@ -114,6 +114,7 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
   const schoolAudit = await getSchoolSourceAudit();
   const privacyReadiness = getPrivacyRuntimeReadiness(env);
   const deletionProofs = [...SUPPORTED_DELETION_PROOFS];
+  const deletionMailReady = configured(env.SMTP_HOST) && configured(env.SMTP_FROM);
   const sharedRagRuntime = sharedOpenAiRagRuntimeInfo(env);
   const servingProjection = await getRagServingProjectionStatus().catch((error) => ({
     error: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
@@ -365,25 +366,29 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
       credentialRotation,
       production ? "required" : "warning",
     ),
-    // P0-1a. /api/privacy/delete-request now derives what it touches from a proof
-    // the caller presented, so this reports which proofs exist rather than the
-    // state of a switch — there is no switch left to flip, and a flag that can
-    // never legitimately be true is worse than no flag.
+    // /api/privacy/delete-request derives what it touches from a proof the caller
+    // presented, so this reports which proofs exist rather than the state of a
+    // switch — there is no switch left to flip, and a flag that can never
+    // legitimately be true is worse than no flag.
     //
-    // Reported as OK because the covered paths work and the uncovered one is
-    // contained, not silently dropped. What this makes visible is the gap: a
-    // person who is neither signed in nor still holding their lead cookie has no
-    // way to prove a contact address is theirs, so their request is recorded and
-    // audited but performs nothing until P0-1b's verification channel lands.
+    // P0-1b closed the last gap: a person who is neither signed in nor still
+    // holding their lead cookie proves possession of their contact address by
+    // redeeming a one-time link mailed to it. That channel needs SMTP, so this
+    // also surfaces the case where contact_token is advertised but no mail can
+    // actually be sent — otherwise the link is issued into nothing and the
+    // request is never honoured.
     check(
       "privacy.deletion_ownership_proofs",
       "Deletion request ownership proofs",
-      deletionProofs.length > 0,
-      deletionProofs.length > 0
-        ? `Deletion requests act only on records proven by: ${deletionProofs.join(", ")}. `
-          + "Requests carrying no proof are recorded and audited but mutate nothing."
-        : "No ownership proof is implemented, so no deletion request can be honoured.",
-      { supportedProofs: deletionProofs },
+      deletionProofs.length > 0 && (!deletionProofs.includes("contact_token") || deletionMailReady),
+      deletionProofs.length === 0
+        ? "No ownership proof is implemented, so no deletion request can be honoured."
+        : deletionProofs.includes("contact_token") && !deletionMailReady
+          ? "Deletion requests from an unauthenticated contact need SMTP_HOST and SMTP_FROM to send the "
+            + "one-time verification link. Without it the request is recorded but the link never arrives."
+          : `Deletion requests act only on records proven by: ${deletionProofs.join(", ")}. `
+            + "A request carrying no proof and no contact is recorded and audited but mutates nothing.",
+      { supportedProofs: deletionProofs, verificationMailConfigured: deletionMailReady },
       production ? "required" : "warning",
     ),
     check(

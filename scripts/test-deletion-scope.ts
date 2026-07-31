@@ -33,6 +33,8 @@ const ALICE = "user-alice";
 const ALICE_LEADS = ["lead-alice-1", "lead-alice-2"];
 const ALICE_SESSIONS = ["session-alice-chat"];
 const BOB_LEAD = "lead-bob";
+const ALICE_CONTACT_HASH = "hmac-of-alice-address";
+const UNKNOWN_CONTACT_HASH = "hmac-of-an-address-nobody-used";
 
 const calls: { name: string; arg: unknown }[] = [];
 
@@ -44,6 +46,10 @@ const lookup: DeletionSubjectLookup = {
   async findSessionKeysForUser(userId) {
     calls.push({ name: "findSessionKeysForUser", arg: userId });
     return userId === ALICE ? [...ALICE_SESSIONS] : [];
+  },
+  async findLeadIdsForContactHash(contactHash) {
+    calls.push({ name: "findLeadIdsForContactHash", arg: contactHash });
+    return contactHash === ALICE_CONTACT_HASH ? [...ALICE_LEADS] : [];
   },
   async findSessionKeysForLeads(leadIds) {
     calls.push({ name: "findSessionKeysForLeads", arg: [...leadIds] });
@@ -108,6 +114,33 @@ const lookup: DeletionSubjectLookup = {
   );
 }
 
+// 3b. Possession of the address, proved by redeeming the mailed link. This is
+//     set ONLY by the verify route, and only after the token check passed.
+{
+  const subject = await resolveDeletionSubject(lookup, { verifiedContactHash: ALICE_CONTACT_HASH, env });
+  assertOk(subject, "a verified contact address must resolve the records reachable from it");
+  assert.equal(subject.proof, "contact_token");
+  assert.equal(subject.userId, null);
+  assert.deepEqual(subject.leadIds.sort(), [...ALICE_LEADS].sort());
+
+  // Verified, but nothing is stored under it. That is an empty subject, not a
+  // failed proof: the person proved who they are and there was nothing to erase.
+  const empty = await resolveDeletionSubject(lookup, { verifiedContactHash: UNKNOWN_CONTACT_HASH, env });
+  assertOk(empty, "a verified address that matches nothing still proved ownership");
+  assert.equal(empty.proof, "contact_token");
+  assert.deepEqual(empty.leadIds, []);
+  assert.deepEqual(empty.sessionKeys, []);
+
+  // A signed-in caller must get their whole account footprint, not just the
+  // records sharing one address, so session identity has to win.
+  const both = await resolveDeletionSubject(lookup, {
+    sessionUserId: ALICE,
+    verifiedContactHash: ALICE_CONTACT_HASH,
+    env,
+  });
+  assert.equal(both!.proof, "session", "session identity is the stronger proof and must take precedence");
+}
+
 console.log("PASS deletion scope: a proven caller gets their own records, and only those");
 
 // 4. No proof, no subject. Each of these used to be enough to delete data.
@@ -119,6 +152,8 @@ console.log("PASS deletion scope: a proven caller gets their own records, and on
     ["a missing cookie", { leadAccessToken: null }],
     ["a junk cookie", { leadAccessToken: "not-a-token" }],
     ["a cookie with a broken signature", { leadAccessToken: `${issueLeadAccessToken(BOB_LEAD, Date.now(), env)}x` }],
+    ["an empty verified contact hash", { verifiedContactHash: "" }],
+    ["a null verified contact hash", { verifiedContactHash: null }],
   ] as const) {
     const subject = await resolveDeletionSubject(lookup, { ...input, env });
     assertOk(subject === null, `${label} must not resolve a deletion subject`);
@@ -150,8 +185,8 @@ console.log("PASS deletion scope: an unproven caller resolves to nothing, in eve
 {
   assert.deepEqual(
     [...SUPPORTED_DELETION_PROOFS].sort(),
-    ["lead_access", "session"],
-    "the advertised proofs must be exactly the two that are implemented",
+    ["contact_token", "lead_access", "session"],
+    "the advertised proofs must be exactly the three that are implemented",
   );
 }
 

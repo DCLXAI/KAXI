@@ -68,8 +68,13 @@ This makes blocked transfers, consent capture, actual partner routing, user dele
 | --- | --- |
 | `session` | a signed-in user — their leads, their partner requests, their chat sessions |
 | `lead_access` | an anonymous person still holding the signed `kaxi_lead_access` cookie issued when they saved a diagnosis — that one lead and the sessions reachable from it |
+| `contact_token` | anyone else, by redeeming a one-time link mailed to the contact address they named — the records reachable from that address |
 
-Nothing in the request body selects records. The old `question` selector matched `hashPii(question)` across every row, and a question like "비자 연장 서류" is typed by many people, so one anonymous request scheduled strangers' records for deletion; it is refused with `400` rather than verified, because a shared string cannot identify one person's data. A request carrying no proof is recorded and audited but mutates nothing — the contact-verification channel that will honour those is not built yet.
+Nothing in the request body selects records. The old `question` selector matched `hashPii(question)` across every row, and a question like "비자 연장 서류" is typed by many people, so one anonymous request scheduled strangers' records for deletion; it is refused with `400` rather than verified, because a shared string cannot identify one person's data. A request that names a contact opens a `PrivacyDeletionRequest` row and mails a one-time link to that address. **Nothing is marked until the link comes back**: typing an address is not a proof, possession of it is. The link lasts 24 hours, works once, and a second request for the same address supersedes the first so an old mail cannot be redeemed after a newer one.
+
+Neither the address nor the token is stored. The row keeps `hashPii(contact)` and `sha256(token)`, so a database copy is neither a list of people who asked to be deleted nor a set of redeemable links. Sending requires `SMTP_HOST` and `SMTP_FROM`; readiness fails `privacy.deletion_ownership_proofs` when the channel is advertised but no mail can go out.
+
+A request carrying no proof and no contact is recorded and audited but mutates nothing.
 
 Every outcome returns the same `202` with the same body, so the endpoint cannot be used to probe whether a record exists. Active consent rows for the proven leads are marked `WITHDRAWN`.
 

@@ -3,19 +3,27 @@ import { randomUUID } from "crypto";
 import { canWriteRuntimeDatabase, db } from "@/lib/db";
 import { JsonBodyError, readJsonBody } from "@/lib/api/json-body";
 import { recordRequestAudit } from "@/lib/audit";
-import { withdrawLeadConsentsForPrivacyRequest } from "@/lib/privacy/consent";
 import { LEAD_ACCESS_COOKIE } from "@/lib/leads/ownership";
-import { resolveDeletionSubject, type DeletionSubject } from "@/lib/privacy/deletion-scope";
+import { applyDeletionSubject, deletionSubjectLookup } from "@/lib/privacy/deletion-apply";
+import { resolveDeletionSubject } from "@/lib/privacy/deletion-scope";
+import {
+  DELETION_TOKEN_TTL_MS,
+  deletionVerificationCopy,
+  deletionVerifyPath,
+  issueDeletionToken,
+} from "@/lib/privacy/deletion-verification";
+import { hashPii } from "@/lib/privacy/pii";
+import { sendNotificationEmail } from "@/lib/notifications/email";
 import { getCurrentKaxiUser } from "@/lib/supabase/auth";
 import { getClientIp, jsonError, rateLimit } from "@/lib/api/security";
 
 /**
  * The one response this endpoint gives.
  *
- * It cannot depend on whether anything was found, or on whether the caller
- * proved anything, because a caller who could tell those apart could use this
- * endpoint to ask "does a record for this person exist?" — which is the
- * disclosure the whole design is built to avoid.
+ * It cannot depend on whether anything was found, on whether the caller proved
+ * anything, or on whether a verification mail went out — a caller who could tell
+ * those apart could use this endpoint to ask "does a record for this person
+ * exist?", which is the disclosure the whole design is built to avoid.
  */
 function accepted(requestId: string) {
   return NextResponse.json(
@@ -51,47 +59,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // leadId and contact in the body are deliberately NOT read. The subject is
-    // derived from the caller's proof below; anything they type here would be an
-    // unverified claim about someone's data, and the previous version of this
-    // endpoint acted on exactly that.
+    // leadId in the body is deliberately NOT read: it would be an unverified
+    // claim about someone's data, which is what the original endpoint acted on.
+    // contact is read only as a destination to send a confirmation link TO, never
+    // as a selector — nothing is deleted on the strength of typing an address.
+    const contact = typeof body.contact === "string" ? body.contact.trim() : "";
+    const locale = typeof body.locale === "string" ? body.locale.trim() : "ko";
 
-    const subject = await resolveDeletionSubject(
-      {
-        findLeadIdsForUser: async (userId) =>
-          (await db.diagnosisLead.findMany({ where: { userId }, select: { id: true } })).map((row) => row.id),
-        findSessionKeysForUser: async (userId) =>
-          (await db.chatSession.findMany({ where: { userId }, select: { sessionKey: true } })).map(
-            (row) => row.sessionKey,
-          ),
-        findSessionKeysForLeads: async (leadIds) => {
-          const [handoffLeads, handoffContacts] = await Promise.all([
-            db.handoffLead.findMany({ where: { id: { in: leadIds } }, select: { sessionKey: true } }),
-            db.handoffLeadContact.findMany({ where: { leadId: { in: leadIds } }, select: { sessionKey: true } }),
-          ]);
-          return [...handoffLeads, ...handoffContacts].map((row) => row.sessionKey);
-        },
-      },
-      {
-        sessionUserId: (await getCurrentKaxiUser().catch(() => null))?.id ?? null,
-        leadAccessToken: req.cookies.get(LEAD_ACCESS_COOKIE)?.value ?? null,
-      },
-    );
-
-    if (!subject) {
-      // Nothing was proven, so nothing is touched. The request is still recorded:
-      // a person who cannot prove ownership today still asked, and P0-1b's
-      // verification channel is what will let that request be honoured.
-      await recordRequestAudit(req, {
-        actor: "public-user",
-        actorRole: "user",
-        action: "privacy.delete.request.unproven",
-        targetType: "UserData",
-        targetId: null,
-        metadata: { requestId, proof: null },
-      });
-      return accepted(requestId);
-    }
+    const subject = await resolveDeletionSubject(deletionSubjectLookup, {
+      sessionUserId: (await getCurrentKaxiUser().catch(() => null))?.id ?? null,
+      leadAccessToken: req.cookies.get(LEAD_ACCESS_COOKIE)?.value ?? null,
+    });
 
     if (!canWriteRuntimeDatabase()) {
       await recordRequestAudit(req, {
@@ -99,31 +77,54 @@ export async function POST(req: NextRequest) {
         actorRole: "user",
         action: "privacy.delete.request.deferred",
         targetType: "UserData",
-        targetId: subject.userId,
-        metadata: { requestId, proof: subject.proof, reason: "database_not_writable" },
+        targetId: subject?.userId ?? null,
+        metadata: { requestId, proof: subject?.proof ?? null, reason: "database_not_writable" },
       });
       return accepted(requestId);
     }
 
-    const result = await markSubjectForDeletion(subject, req);
+    if (subject) {
+      const result = await applyDeletionSubject(subject, {
+        actor: subject.userId || "public-user",
+        ip: getClientIp(req),
+        userAgent: req.headers.get("user-agent"),
+      });
+
+      await recordRequestAudit(req, {
+        actor: subject.userId || "public-user",
+        actorRole: "user",
+        action: "privacy.delete.request",
+        targetType: "UserData",
+        targetId: subject.userId,
+        metadata: {
+          requestId,
+          proof: subject.proof,
+          // Counts, never identifiers. An audit row is not a place to accumulate
+          // the ids of the records a person asked to have erased.
+          leads: subject.leadIds.length,
+          sessions: subject.sessionKeys.length,
+          ...result,
+        },
+      });
+
+      return accepted(requestId);
+    }
+
+    // No proof, but an address to send one to. P0-1a recorded this case and did
+    // nothing; now the address itself becomes the proof, if its owner confirms.
+    if (contact) {
+      await openContactVerification(req, { requestId, contact, locale });
+      return accepted(requestId);
+    }
 
     await recordRequestAudit(req, {
-      actor: subject.userId || "public-user",
+      actor: "public-user",
       actorRole: "user",
-      action: "privacy.delete.request",
-      targetType: "UserData",
-      targetId: subject.userId,
-      metadata: {
-        requestId,
-        proof: subject.proof,
-        // Counts, never identifiers. An audit row is not a place to accumulate
-        // the ids of the records a person asked to have erased.
-        leads: subject.leadIds.length,
-        sessions: subject.sessionKeys.length,
-        ...result,
-      },
+      action: "privacy.delete.request.unproven",
+      targetType: "PrivacyDeletionRequest",
+      targetId: null,
+      metadata: { requestId, proof: null, reason: "no_proof_and_no_contact" },
     });
-
     return accepted(requestId);
   } catch (err) {
     if (err instanceof JsonBodyError) {
@@ -135,44 +136,73 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * Marks everything in the proven subject, and nothing else.
+ * Opens a pending request and mails a one-time link to the address.
  *
- * Each `where` clause is keyed on an id that came out of resolveDeletionSubject.
- * Re-running it is harmless: setting deleteRequestedAt to a fresh timestamp on
- * rows that already carry one changes nothing about what the retention sweep
- * will do.
+ * Nothing is marked for deletion here — that is the point. The address is a
+ * destination, and only redeeming the link proves the person asking is the
+ * person who owns it.
  */
-async function markSubjectForDeletion(subject: DeletionSubject, req: NextRequest) {
-  const now = new Date();
-  const { leadIds, sessionKeys } = subject;
-
-  const [leads, partnerRequests, sessions] = await Promise.all([
-    leadIds.length > 0
-      ? db.diagnosisLead.updateMany({ where: { id: { in: leadIds } }, data: { deleteRequestedAt: now } })
-      : Promise.resolve({ count: 0 }),
-    leadIds.length > 0
-      ? db.partnerRequest.updateMany({ where: { leadId: { in: leadIds } }, data: { deleteRequestedAt: now } })
-      : Promise.resolve({ count: 0 }),
-    sessionKeys.length > 0
-      ? db.chatSession.updateMany({ where: { sessionKey: { in: sessionKeys } }, data: { deleteRequestedAt: now } })
-      : Promise.resolve({ count: 0 }),
-  ]);
-
-  const consentWithdrawal = await withdrawLeadConsentsForPrivacyRequest({
-    leadIds,
-    reason: "privacy.delete.request",
-    context: {
-      actor: subject.userId || "public-user",
+async function openContactVerification(
+  req: NextRequest,
+  input: { requestId: string; contact: string; locale: string },
+) {
+  const subjectHash = hashPii(input.contact);
+  if (!subjectHash) {
+    // hashPii returns null when PII_HASH_SECRET is absent. Without it there is
+    // no way to record which address a request is about that does not mean
+    // storing the address, so the request is audited and left unopened.
+    await recordRequestAudit(req, {
+      actor: "public-user",
       actorRole: "user",
-      ip: getClientIp(req),
-      userAgent: req.headers.get("user-agent"),
-    },
+      action: "privacy.delete.request.unproven",
+      targetType: "PrivacyDeletionRequest",
+      targetId: null,
+      metadata: { requestId: input.requestId, proof: null, reason: "contact_hashing_unavailable" },
+    });
+    return;
+  }
+
+  // One open request per subject, so a link cannot be kept alive indefinitely by
+  // requesting again, and an old mail cannot be redeemed after a newer one.
+  await db.privacyDeletionRequest.updateMany({
+    where: { subjectHash, status: "pending_verification" },
+    data: { status: "superseded", verificationTokenHash: null },
   });
 
-  return {
-    leadsMarked: leads.count,
-    partnerRequestsMarked: partnerRequests.count,
-    sessionsMarked: sessions.count,
-    consentsWithdrawn: consentWithdrawal.consents,
-  };
+  const { token, tokenHash } = issueDeletionToken();
+  const record = await db.privacyDeletionRequest.create({
+    data: {
+      subjectType: "contact",
+      subjectHash,
+      verificationChannel: "email",
+      verificationTokenHash: tokenHash,
+      status: "pending_verification",
+      expiresAt: new Date(Date.now() + DELETION_TOKEN_TTL_MS),
+    },
+    select: { id: true },
+  });
+
+  const copy = deletionVerificationCopy(input.locale);
+  const delivery = await sendNotificationEmail({
+    to: input.contact,
+    subject: copy.subject,
+    body: copy.body,
+    href: deletionVerifyPath(token),
+  });
+
+  await recordRequestAudit(req, {
+    actor: "public-user",
+    actorRole: "user",
+    action: "privacy.delete.request.verification_sent",
+    targetType: "PrivacyDeletionRequest",
+    // The request row, which holds no address. Safe to name, unlike the contact.
+    targetId: record.id,
+    metadata: {
+      requestId: input.requestId,
+      channel: "email",
+      // Whether the mail went out, never where it went.
+      delivery: delivery.status,
+      expiresInHours: Math.round(DELETION_TOKEN_TTL_MS / 3_600_000),
+    },
+  });
 }
