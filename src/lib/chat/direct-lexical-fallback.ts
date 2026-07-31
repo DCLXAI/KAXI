@@ -1,4 +1,5 @@
 import type { ChatCategory } from "@/lib/chat/category";
+import { auditCitations, remapCitations } from "@/lib/chat/citation-audit";
 import { createSupabaseChatClient } from "@/lib/chat/persistence";
 import type { GuardedChatResponse, GuardrailLocale } from "@/lib/chat/response-guardrail";
 import { RETRIEVAL_CONFIDENCE_POLICY_VERSION } from "@/lib/chat/retrieval-confidence";
@@ -856,14 +857,6 @@ function answerWithSources(
   return [answer.trim(), "", `${copy.evidence}:`, ...sourceLines].join("\n");
 }
 
-function remapCitations(answer: string, sourceIndexes: number[]) {
-  const citationMap = new Map(sourceIndexes.map((sourceIndex, index) => [sourceIndex, index + 1]));
-  return answer.replace(/\[(\d+)]/g, (citation, rawIndex: string) => {
-    const mapped = citationMap.get(Number(rawIndex));
-    return mapped ? `[${mapped}]` : citation;
-  });
-}
-
 function answerFromDocuments(
   documents: CandidateDocument[],
   input: DirectLexicalFallbackInput,
@@ -1296,7 +1289,33 @@ export async function runDirectRagFallback(
     };
   }
   const sources = sourcesFromDocuments(usedDocuments);
-  const answer = remapCitations(generation.answer, usedSourceIndexes);
+  const remapped = remapCitations(generation.answer, usedSourceIndexes);
+  const audit = auditCitations(remapped.answer, sources.length);
+
+  // P0-6. Either failure means the generation cited something it did not
+  // declare, or something that is not in the list the reader will see. The
+  // answer is discarded rather than shown with its numbering tidied up: a
+  // marker that survives renumbering points at whichever document happens to
+  // sit at that position, which is a confident citation of the wrong source.
+  if (remapped.unmapped.length > 0 || !audit.valid) {
+    return {
+      ...fallbackResponse,
+      searchMeta: {
+        ...currentSearchMeta,
+        answerGenerationStatus: "unavailable",
+        answerGenerationFailureReason: "invalid_generation",
+        answerPromptVersion: GROUNDED_RAG_PROMPT_VERSION,
+        citationAudit: {
+          citedIndexes: audit.citedIndexes,
+          sourceCount: audit.sourceCount,
+          invalidIndexes: audit.invalidIndexes,
+          undeclaredIndexes: remapped.unmapped,
+        },
+      },
+    };
+  }
+
+  const answer = remapped.answer;
   return {
     ...fallbackResponse,
     answer: answerWithSources(answer, sources, input.locale),
