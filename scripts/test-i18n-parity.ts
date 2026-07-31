@@ -129,6 +129,13 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
 // left the generated copy claiming "Cần luật sư hành chính".
 const scanned = [...sourceFiles("src"), ...LOCALES.map((locale) => `messages/${locale}.json`)];
 
+// Comment lines are prose, not user-facing strings. Code that FIXES this defect
+// has to be able to describe it — src/lib/knowledge/corpus-drift.ts explains that
+// the corpus called 행정사 a lawyer, and tripped this check for saying so. Only
+// lines whose first non-whitespace is a comment marker are skipped, so a claim in
+// a string literal is still caught even if the line ends in a comment.
+const COMMENT_LINE = /^\s*(\/\/|\/\*|\*)/;
+
 const lawyerClaims: string[] = [];
 for (const file of scanned) {
   if (LAWYER_ALLOWED_FILES.has(file)) continue;
@@ -136,6 +143,7 @@ for (const file of scanned) {
   lines.forEach((line, index) => {
     if (!LAWYER_CLAIM.test(line)) return;
     if (LAWYER_ALLOWED_LINE.test(line)) return;
+    if (COMMENT_LINE.test(line)) return;
     lawyerClaims.push(`${file}:${index + 1}  ${line.trim().slice(0, 140)}`);
   });
 }

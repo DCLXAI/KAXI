@@ -124,13 +124,18 @@ function sameLangText(value: string) {
   return { ko: value, vi: value, mn: value, en: value };
 }
 
-function staticDocContent(doc: KnowledgeDoc): string {
+// Exported so the corpus-drift check can recompute exactly what an ingestion
+// would produce, rather than keeping a second copy of the rules. src/lib/knowledge/
+// repository.ts has its own pair with maxChars 2800 for a different pipeline;
+// they are deliberately not merged here, since changing either one's chunk
+// boundaries would invalidate every embedding it has already produced.
+export function staticDocContent(doc: KnowledgeDoc): string {
   return (["ko", "en", "vi", "mn"] as Lang[])
     .map((lang) => `# ${pickLangText(doc.title, lang)}\n${pickLangText(doc.content, lang)}`)
     .join("\n\n");
 }
 
-function splitKnowledgeChunks(content: string, maxChars = 1200): string[] {
+export function splitKnowledgeChunks(content: string, maxChars = 1200): string[] {
   const paragraphs = content
     .split(/\n{2,}/)
     .map((part) => part.trim())

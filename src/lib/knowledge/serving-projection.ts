@@ -388,7 +388,11 @@ export async function ingestRagServingPayload(
   };
 }
 
-async function loadAllRows<T>(supabase: SupabaseClient, table: string, columns: string): Promise<T[]> {
+// Exported because PostgREST caps an unpaginated select at 1000 rows and returns
+// the truncation silently. KnowledgeChunk is well past that, so any consumer that
+// forgets to paginate sees a short list and concludes the data is wrong — the
+// corpus drift check reported 49 false positives before it used this.
+export async function loadAllRows<T>(supabase: SupabaseClient, table: string, columns: string): Promise<T[]> {
   const pageSize = 1_000;
   const rows: T[] = [];
   for (let offset = 0; ; offset += pageSize) {
