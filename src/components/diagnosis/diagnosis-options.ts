@@ -1,8 +1,10 @@
-import type { DiagnosisInput } from "@/lib/data/diagnosis";
+import { DIAGNOSIS_GOALS, type DiagnosisInput } from "@/lib/data/diagnosis";
 
 export const EDUCATION_VALUES = ["highschool", "college", "university", "master"] as const satisfies readonly DiagnosisInput["education"][];
 export const KOREAN_VALUES = ["none", "topik1", "topik2", "topik3"] as const satisfies readonly DiagnosisInput["korean"][];
-export const GOAL_VALUES = ["language", "degree", "transfer", "career", "unsure", "in_korea_job", "in_korea_employment"] as const satisfies readonly DiagnosisInput["goal"][];
+// The one runtime goal list lives with the type it defines; `satisfies` only
+// checks subset, so a restated copy could silently drop a member.
+export const GOAL_VALUES = DIAGNOSIS_GOALS;
 export const CURRENT_VISA_VALUES = ["D-2", "D-4"] as const satisfies readonly Exclude<DiagnosisInput["currentVisa"], "" | undefined>[];
 export const IN_KOREA_GOAL_VALUES = ["in_korea_job", "in_korea_employment"] as const satisfies readonly DiagnosisInput["goal"][];
 

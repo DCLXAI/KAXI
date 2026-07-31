@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { inferDiagnosisVisaType, recommendPath, type PathRecommendation } from "@/lib/data/diagnosis";
+import { DIAGNOSIS_GOALS, inferDiagnosisVisaType, recommendPath, type PathRecommendation } from "@/lib/data/diagnosis";
 import { evaluateVisaRulesWithDbFallback } from "@/lib/rules/visa-rule-engine";
 import { maybeCreateHighRiskEscalationCase } from "@/lib/cases/high-risk-hook";
 import { currentAuthenticatedStudentProfileId } from "@/lib/cases/current-student";
@@ -8,7 +8,6 @@ import { parseJsonBody } from "@/lib/api/validation";
 
 const EDUCATION_VALUES = ["highschool", "college", "university", "master"] as const;
 const KOREAN_VALUES = ["none", "topik1", "topik2", "topik3"] as const;
-const GOAL_VALUES = ["language", "degree", "transfer", "career", "unsure", "in_korea_job", "in_korea_employment"] as const;
 const REGION_VALUES = ["any", "seoul", "gyeonggi", "busan", "daegu", "gwangju", "other"] as const;
 
 // The following preprocessors reproduce the exact fallback/coercion behaviour
@@ -61,7 +60,7 @@ const diagnosisSchema = z.object({
   age: stringFieldSchema("20"),
   education: z.enum(EDUCATION_VALUES),
   korean: z.enum(KOREAN_VALUES),
-  goal: z.enum(GOAL_VALUES),
+  goal: z.enum(DIAGNOSIS_GOALS),
   budget: numberFieldSchema(0),
   region: regionFieldSchema(),
   usingBroker: booleanFieldSchema(),

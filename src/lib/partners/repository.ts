@@ -11,6 +11,7 @@ import {
 import { notifyUsers } from "@/lib/notifications/repository";
 import { sendOpsAlert } from "@/lib/ops/alerts";
 import { siteBaseUrl } from "@/lib/config/site-url";
+import { PARTNER_TYPES } from "@/lib/partners/types";
 
 export interface CreatePartnerRequestInput {
   leadId?: string | null;
@@ -41,8 +42,6 @@ export interface UnpersistedPartnerRequest {
 }
 
 export type PartnerRequestResult = PartnerRequest | UnpersistedPartnerRequest;
-
-const PARTNER_TYPES = new Set(["admin", "translation", "academy", "admission", "settlement"]);
 
 async function createAnonymousLead() {
   return db.diagnosisLead.create({

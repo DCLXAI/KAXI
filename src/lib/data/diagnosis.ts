@@ -5,12 +5,29 @@ import { calculateReadinessScore, type CalculateReadinessInput, type ReadinessSc
 
 export type DiagnosisVisaType = "D-2" | "D-4" | "D-10" | "E-7";
 
+// A runtime list, with the union derived from it rather than written twice.
+// The admin lead inbox has to turn each of these into a label, and when the two
+// in-Korea goals were added the label allowlist was not widened — so every E-7
+// lead was displayed as "not sure". A type-only union gave that code nothing to
+// check itself against; this gives it something.
+export const DIAGNOSIS_GOALS = [
+  "language",
+  "degree",
+  "transfer",
+  "career",
+  "unsure",
+  "in_korea_job",
+  "in_korea_employment",
+] as const;
+
+export type DiagnosisGoal = (typeof DIAGNOSIS_GOALS)[number];
+
 export interface DiagnosisInput {
   nationality: string;
   age: string;
   education: "highschool" | "college" | "university" | "master";
   korean: "none" | "topik1" | "topik2" | "topik3";
-  goal: "language" | "degree" | "transfer" | "career" | "unsure" | "in_korea_job" | "in_korea_employment";
+  goal: DiagnosisGoal;
   currentVisa?: "D-2" | "D-4" | "";
   budget: number;
   region: string;
@@ -20,7 +37,7 @@ export interface DiagnosisInput {
 }
 
 export interface PathRecommendation {
-  pathKey: string; // goal_language | goal_degree | goal_transfer | goal_career
+  pathKey: string; // one of DIAGNOSIS_PATH_KEYS
   visaType: DiagnosisVisaType;
   prepTime: { ko: string; vi: string; mn: string; en: string };
   estimatedCost: number; // KRW, 6 months
@@ -144,6 +161,24 @@ const PATH_PROFILES: Record<string, PathProfile> = {
     sourceRefs: ["internal:diagnosis-profile-in-korea-e7", "knowledge:hikorea-d2-d4-d10-e7-f2-f5-requirements", "knowledge:moj-e7-wage-requirement-2026"],
   },
 };
+
+// Pushed by recommendPath() rather than living on a profile, so it has to be
+// named separately for the derivations below to see it.
+const NATIONALITY_CONDITIONAL_DOC_KEYS = ["docs_doc_tuberculosis"];
+
+// Everything a PathRecommendation can carry, derived from the profiles instead
+// of restated. The admin lead inbox turns both into labels through its own
+// allowlists, and those allowlists were hand-written copies that stopped being
+// updated when the D-10 and E-7 paths landed: every such lead showed the
+// language-study path label and a row of document badges all reading "passport".
+export const DIAGNOSIS_PATH_KEYS: string[] = Object.values(PATH_PROFILES).map((profile) => profile.pathKey);
+
+export const DIAGNOSIS_DOC_KEYS: string[] = Array.from(
+  new Set([
+    ...Object.values(PATH_PROFILES).flatMap((profile) => profile.docs),
+    ...NATIONALITY_CONDITIONAL_DOC_KEYS,
+  ]),
+);
 
 function selectPathProfile(input: DiagnosisInput): PathProfile {
   if (input.goal === "in_korea_job") return PATH_PROFILES.goal_in_korea_d10;
@@ -481,7 +516,7 @@ export function recommendPath(
 
   const requiredDocs = [...profile.docs];
   if (input.nationality === "vn" || input.nationality === "mn") {
-    requiredDocs.push("docs_doc_tuberculosis");
+    requiredDocs.push(...NATIONALITY_CONDITIONAL_DOC_KEYS);
     sourceRefs.push("knowledge:tuberculosis-test");
   }
 
