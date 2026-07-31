@@ -63,7 +63,7 @@ when it ships; add the PR number when you pick one up.
 
 </details>
 
-## MEDIUM (8)
+## MEDIUM (9)
 
 ### In-Korea D-10/E-7 filing costs are rendered under the "Estimated cost (6 months)" label
 `src/components/diagnosis/DiagnosisResult.tsx:97` — honesty · effort: small
@@ -202,6 +202,44 @@ when it ships; add the PR number when you pick one up.
 - src/app/sources/[slug]/page.tsx:44 `<a href="/ko">`, :48 `상담 답변 출처`, :52/:56 `검토일`/`다음 검토일`, :60-62 Korean-only disclaimer.
 
 </details>
+
+### The same document is shown two different "review by" dates depending on which retrieval leg surfaced it
+
+`src/lib/chat/shared-openai-rag.ts:70` — honesty · effort: small
+
+**What breaks.** Two review horizons exist and disagree. Retrieval and the serving
+projection hardcode **180 days** — eight migration files plus
+`serving-projection.ts:435` (`180 * 24 * 60 * 60 * 1000`) — while governance uses
+**92 days**, configurable through `KNOWLEDGE_REVIEW_AFTER_DAYS`
+(`src/lib/knowledge/freshness.ts:1`). The citation metadata a user sees is computed
+from whichever path produced it: `reviewAfter()` adds +180d on the serving path,
+`reviewAfterDate()` applies the 92-day config on the repository path. So one
+document can be cited to two users with two different 재검토 예정일. A document
+92–180 days stale is simultaneously *servable* by the SQL gate and *stale* by the
+governance check.
+
+**Fix.** Give the horizon one definition. Export it from `freshness.ts`, pass it
+into the SQL functions the way the legacy path already does — `pgvector-rag.ts:517`
+passes `review_max_age_days` from `knowledgeReviewMaxAgeDays()`, so the pattern
+exists — and delete the hardcoded 180s. If the two horizons are deliberately
+different, they need different names and the user-facing date must state which one
+it is.
+
+<details><summary>Evidence</summary>
+
+- `src/lib/chat/shared-openai-rag.ts:70-74` — `date.setUTCDate(date.getUTCDate() + 180)`
+- `src/lib/knowledge/repository.ts:144-146` — `knowledgeReviewAfterDate()`, i.e. the 92-day config
+- `src/lib/knowledge/freshness.ts:1` — `DEFAULT_KNOWLEDGE_REVIEW_MAX_AGE_DAYS = 92`
+- `src/lib/knowledge/serving-projection.ts:435` — `180 * 24 * 60 * 60 * 1000`
+- 8 migration files contain `interval '180 days'` in the retrieval predicate
+- `src/lib/embeddings/pgvector-rag.ts:517` — the legacy path already parameterises the horizon, showing the newer path regressed on this
+
+</details>
+
+**Found by** the 2026-08-01 strengths assessment, as the caveat on an otherwise
+strong design: retrieval re-derives document eligibility from the canonical row on
+every query, but the predicate is restated in at least seven places with nothing
+pinning them equal.
 
 ## LOW (12)
 
