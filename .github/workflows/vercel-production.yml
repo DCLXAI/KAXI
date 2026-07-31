@@ -28,6 +28,17 @@ jobs:
       }}
     runs-on: ubuntu-latest
     env:
+      # Every step below used to run `bunx vercel`, which resolves whatever is
+      # latest on npm at that moment — so an upstream CLI release could change or
+      # break a production deploy with no commit on our side. It did: release
+      # 0dab19d deployed cleanly on 58.4.0, and the very next run, on 58.4.4,
+      # failed twice in a row at `deploy --prebuilt --archive=tgz` with
+      # `ENOENT ... /vercel/path0/node_modules/@opentelemetry/api/build/src/api/context.js`
+      # — a path outside the prebuilt output the workflow uploads. Same repo, same
+      # steps, different CLI.
+      #
+      # Bump this deliberately, and only after a green run.
+      VERCEL_CLI_VERSION: "58.4.0"
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -85,10 +96,10 @@ jobs:
         run: bun run rag:check:projection -- --base-url "${{ vars.PRODUCTION_BASE_URL || 'https://kaxi.vercel.app' }}"
       - name: Pull Vercel production environment
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
-        run: bunx vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+        run: bunx vercel@$VERCEL_CLI_VERSION pull --yes --environment=production --token="$VERCEL_TOKEN"
       - name: Build with Vercel
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
-        run: bunx vercel build --prod --token="$VERCEL_TOKEN"
+        run: bunx vercel@$VERCEL_CLI_VERSION build --prod --token="$VERCEL_TOKEN"
       - name: Apply PostgreSQL migrations
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
         run: bun run scripts/deploy-postgres-migrations.ts
@@ -102,7 +113,7 @@ jobs:
         id: deploy
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
         run: |
-          DEPLOYMENT_URL="$(bunx vercel deploy --prebuilt --archive=tgz --prod --skip-domain --meta "kaxiReleaseSha=$EXPECTED_SHA" --meta "kaxiSourceClean=1" --token="$VERCEL_TOKEN")"
+          DEPLOYMENT_URL="$(bunx vercel@$VERCEL_CLI_VERSION deploy --prebuilt --archive=tgz --prod --skip-domain --meta "kaxiReleaseSha=$EXPECTED_SHA" --meta "kaxiSourceClean=1" --token="$VERCEL_TOKEN")"
           echo "url=$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
       - name: Verify production canary end to end
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
@@ -110,7 +121,7 @@ jobs:
           CANARY_URL: ${{ steps.deploy.outputs.url }}
         run: |
           COOKIE_JAR="$RUNNER_TEMP/kaxi-vercel-bypass-cookie"
-          bunx vercel curl /api/readiness --deployment "$CANARY_URL" -- \
+          bunx vercel@$VERCEL_CLI_VERSION curl /api/readiness --deployment "$CANARY_URL" -- \
             --silent --show-error \
             --cookie-jar "$COOKIE_JAR" \
             --header "x-vercel-set-bypass-cookie: true" \
@@ -118,4 +129,4 @@ jobs:
           bun run release:check:backend -- --base-url "$CANARY_URL" --cookie-file "$COOKIE_JAR"
       - name: Promote verified canary to production domains
         if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
-        run: bunx vercel promote "${{ steps.deploy.outputs.url }}" --yes --token="$VERCEL_TOKEN"
+        run: bunx vercel@$VERCEL_CLI_VERSION promote "${{ steps.deploy.outputs.url }}" --yes --token="$VERCEL_TOKEN"
