@@ -9,6 +9,16 @@ import { getCurrentKaxiUser } from "@/lib/supabase/auth";
 import { sendOpsAlert } from "@/lib/ops/alerts";
 import { siteBaseUrl } from "@/lib/config/site-url";
 
+// Mirrors the LocalizedText shape every PathRecommendation warning/next action
+// carries. Kept strict: a missing locale would render as an empty cell in the
+// admin modal, which reads warning[locale] directly.
+const localizedTextSchema = z.object({
+  ko: z.string(),
+  vi: z.string(),
+  mn: z.string(),
+  en: z.string(),
+});
+
 // Prisma's DiagnosisLead.age/budget/brokerCost/estimatedCost are all Int
 // columns, so every numeric field here is coerced and validated as an
 // integer — a decimal like 25.5 must be rejected (400) rather than fail
@@ -34,8 +44,14 @@ const leadSchema = z.object({
   estimatedCost: z.coerce.number().int().min(0).optional().default(0),
   prepTime: z.string().optional().default(""),
   requiredDocs: z.array(z.string()).optional().default([]),
-  warnings: z.array(z.string()).optional().default([]),
-  nextActions: z.array(z.string()).optional().default([]),
+  // warningsJson/nextActionsJson hold "JSON array of {ko,vi,mn,en}" per
+  // prisma/postgres/schema.prisma, and PathRecommendation emits exactly that.
+  // These were declared as z.array(z.string()), so the body the diagnosis
+  // wizard actually sends was rejected with a 400 the moment a recommendation
+  // carried any warning or next action — which is nearly always. saveDiagnosis
+  // swallowed that into its local-only fallback, so the lead never persisted.
+  warnings: z.array(localizedTextSchema).optional().default([]),
+  nextActions: z.array(localizedTextSchema).optional().default([]),
   contact: z.string().max(160).optional(),
   contactType: z.string().optional(),
 });
