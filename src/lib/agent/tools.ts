@@ -2,6 +2,7 @@
 // 각 도구는 name, description, parameters, execute 함수로 구성
 
 import { getEffectiveSourceMetadata, getRagDocumentMetadata, pickLangText } from "../data/knowledge";
+import { DIAGNOSIS_GOALS } from "@/lib/data/diagnosis";
 import { inferDiagnosisVisaType, recommendPath, type DiagnosisInput } from "../data/diagnosis";
 import { searchSharedOpenAiRag } from "../chat/shared-openai-rag";
 import { withImmigrationLegalBasisDocs } from "../knowledge/legal-basis";
@@ -400,7 +401,7 @@ const diagnosePathTool: Tool = {
       age: { type: "number", description: "나이" },
       education: { type: "string", description: "최종 학력", enum: ["highschool", "college", "university", "master"] },
       korean_level: { type: "string", description: "한국어 수준", enum: ["none", "topik1", "topik2", "topik3"] },
-      goal: { type: "string", description: "유학 목표", enum: ["language", "degree", "transfer", "career", "unsure", "in_korea_job", "in_korea_employment"] },
+      goal: { type: "string", description: "유학 목표", enum: [...DIAGNOSIS_GOALS] },
       budget: { type: "number", description: "예산 (KRW, 6개월)" },
       using_broker: { type: "boolean", description: "브로커 이용 여부" },
       broker_cost: { type: "number", description: "브로커 요구 금액" },
@@ -412,7 +413,7 @@ const diagnosePathTool: Tool = {
     const nationality = stringArg(args, "nationality", "vn");
     const education = enumArg(args, "education", ["highschool", "college", "university", "master"] as const, "highschool");
     const koreanLevel = enumArg(args, "korean_level", ["none", "topik1", "topik2", "topik3"] as const, "none");
-    const goal = enumArg(args, "goal", ["language", "degree", "transfer", "career", "unsure", "in_korea_job", "in_korea_employment"] as const, "unsure");
+    const goal = enumArg(args, "goal", DIAGNOSIS_GOALS, "unsure");
     const budget = numberArg(args, "budget", 10_000_000);
     const usingBroker = booleanArg(args, "using_broker", false);
     const brokerCost = numberArg(args, "broker_cost", 0);
