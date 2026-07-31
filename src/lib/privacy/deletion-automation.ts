@@ -40,33 +40,6 @@ export function isPrivacyDeletionAutomationEnabled(env: NodeJS.ProcessEnv = proc
   return !isProductionPrivacyEnv(env);
 }
 
-// Same containment shape for the other P0-0 hole. createPartnerRequest() took the
-// leadId straight from the request body and then wrote nickname and contact onto
-// that lead, so an unverified id let a caller overwrite a stranger's details.
-// With reuse off, every caller-supplied id is replaced by a fresh anonymous lead.
-// P0-4 replaces this switch with resolveOwnedLead(), which proves ownership
-// instead of refusing it.
-export const PARTNER_LEAD_REUSE_FLAG = "PARTNER_LEAD_REUSE_ENABLED";
-
-export function isPartnerLeadReuseEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  const raw = env[PARTNER_LEAD_REUSE_FLAG];
-  if (isEnvTrue(raw)) return true;
-  if (isEnvFalse(raw)) return false;
-  return !isProductionPrivacyEnv(env);
-}
-
-export function partnerLeadReuseStatus(env: NodeJS.ProcessEnv = process.env) {
-  const enabled = isPartnerLeadReuseEnabled(env);
-  return {
-    enabled,
-    flag: PARTNER_LEAD_REUSE_FLAG,
-    containment: enabled ? null : ("p0_unverified_lead_reuse_containment" as const),
-    detail: enabled
-      ? "Partner requests may attach to a caller-supplied lead id. This is only correct once ownership is verified (P0-4)."
-      : "Partner requests always create a fresh anonymous lead, because the caller-supplied lead id cannot yet be proven to belong to them.",
-  };
-}
-
 export function privacyDeletionAutomationStatus(env: NodeJS.ProcessEnv = process.env) {
   const enabled = isPrivacyDeletionAutomationEnabled(env);
   return {

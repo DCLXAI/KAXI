@@ -5,6 +5,11 @@ import { z } from "zod";
 import { canWriteRuntimeDatabase, db } from "@/lib/db";
 import { getAdminContext, parsePositiveInt, rateLimit, requireAdmin } from "@/lib/api/security";
 import { leadSchema } from "@/lib/data/lead-payload";
+import {
+  LEAD_ACCESS_COOKIE,
+  issueLeadAccessToken,
+  leadAccessCookieOptions,
+} from "@/lib/leads/ownership";
 import { canPersistPiiValue, preparePiiField, retentionUntil } from "@/lib/privacy/pii";
 import { serializeLeadForResponse } from "@/lib/privacy/serializers";
 import { getCurrentKaxiUser } from "@/lib/supabase/auth";
@@ -180,10 +185,28 @@ export async function POST(req: NextRequest) {
       adminUrl: `${siteBaseUrl()}/admin/leads`,
     }).catch((err) => console.warn("[ops alert] lead", err instanceof Error ? err.message : err));
 
-    return NextResponse.json(
+    const created = NextResponse.json(
       { ok: true, persisted: true, lead: serializeLeadForResponse(lead), requestId },
       { status: 201 },
     );
+
+    // P0-4: hand the creator a signed, HttpOnly proof that this lead is theirs,
+    // so a later partner request can be linked to it without trusting the id in
+    // the request body. Only the anonymous case needs it — an authenticated
+    // creator is already provable through DiagnosisLead.userId.
+    //
+    // If LEAD_ACCESS_SIGNING_SECRET is not configured, issueLeadAccessToken
+    // returns null and no cookie is set. The anonymous caller then has no proof
+    // and their partner request gets a fresh lead, which is the contained
+    // behaviour rather than a fallback to trusting the body.
+    if (!linkedUserId) {
+      const accessToken = issueLeadAccessToken(lead.id);
+      if (accessToken) {
+        created.cookies.set(LEAD_ACCESS_COOKIE, accessToken, leadAccessCookieOptions());
+      }
+    }
+
+    return created;
   } catch (e) {
     console.error("[POST /api/leads]", e);
     // retryable: the request was well formed and something on our side failed,

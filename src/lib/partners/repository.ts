@@ -13,7 +13,6 @@ import { sendOpsAlert } from "@/lib/ops/alerts";
 import { siteBaseUrl } from "@/lib/config/site-url";
 import { ANONYMOUS_LEAD_PLACEHOLDER } from "@/lib/partners/anonymous-lead";
 import { PARTNER_TYPES } from "@/lib/partners/types";
-import { isPartnerLeadReuseEnabled } from "@/lib/privacy/deletion-automation";
 
 export interface CreatePartnerRequestInput {
   leadId?: string | null;
@@ -81,13 +80,15 @@ export async function createPartnerRequest(input: CreatePartnerRequestInput): Pr
   const contactType = input.contactType ? String(input.contactType).trim().slice(0, 32) : null;
   const protectedQuestion = preparePiiField(question, { kind: "text", maxPlainLength: 240 });
   const protectedContact = preparePiiField(contact, { kind: "contact", maxPlainLength: 160 });
-  let finalLeadId = input.leadId || "anonymous";
+  let finalLeadId = input.leadId || "";
 
   if (!canWriteRuntimeDatabase() || !canPersistPiiValue(question) || !canPersistPiiValue(contact)) {
     return {
       id: `unpersisted-${Date.now()}`,
       createdAt: new Date(),
-      leadId: finalLeadId,
+      // Nothing was written, so there is no lead. Echoing the requested id here
+      // would hand back an unverified identifier as if it were this request's.
+      leadId: "anonymous",
       partnerType,
       question: protectedQuestion.plaintext,
       questionCiphertext: protectedQuestion.ciphertext,
@@ -104,23 +105,20 @@ export async function createPartnerRequest(input: CreatePartnerRequestInput): Pr
     };
   }
 
-  // CONTAINMENT (P0-0). finalLeadId comes straight from the request body, and the
-  // update below writes nickname and contact onto whatever lead it names. Only
-  // "anonymous" and "local-*" used to be replaced, so any other id — including
-  // another person's — was taken at face value: a caller could overwrite a
-  // stranger's name and contact details and have a consent snapshot recorded
-  // against their lead.
+  // P0-4. The route now resolves ownership before calling this, and passes a
+  // leadId only when the caller proved the lead is theirs — session identity for
+  // an authenticated user, or the signed lead_access cookie issued when they
+  // created the diagnosis. An unproven id arrives here as null.
   //
-  // There is no ownership proof available here yet; P0-4 introduces
-  // resolveOwnedLead() (session identity, or a signed lead_access cookie for
-  // anonymous users). Until then EVERY caller-supplied id is treated as
-  // unverified and the request is attached to a fresh anonymous lead instead.
+  // This replaces the P0-0 containment, which refused to reuse ANY caller-supplied
+  // id. That was right while nothing could verify ownership, but it also broke the
+  // legitimate link between a user's diagnosis and their partner request; the
+  // operator saw a stub row for every request. Verification restores the link
+  // without restoring the hole.
   //
-  // The cost is real and accepted: a legitimate user's partner request no longer
-  // links back to their diagnosis lead, so the operator sees a stub row. That is
-  // strictly better than letting anyone rewrite anyone's contact details, and
-  // P0-4 restores the linkage properly.
-  if (!isPartnerLeadReuseEnabled() || finalLeadId === "anonymous" || finalLeadId.startsWith("local-")) {
+  // The placeholder branch stays: "anonymous" and "local-*" are the client's own
+  // words for "I have no server lead", not ids to look up.
+  if (!finalLeadId || finalLeadId === "anonymous" || finalLeadId.startsWith("local-")) {
     const lead = await createAnonymousLead();
     finalLeadId = lead.id;
   }
