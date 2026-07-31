@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { canPersistPiiValue, preparePiiField, readPiiField, redactSensitiveText } from "../src/lib/privacy/pii";
 import { serializeLeadForResponse, serializePartnerRequestForResponse } from "../src/lib/privacy/serializers";
+import { LEAD_ACCESS_COOKIE } from "../src/lib/leads/ownership";
 import { prepareTestDb } from "./prepare-test-db";
 
 function fail(message: string): never {
@@ -35,9 +36,15 @@ async function readJson(res: Response) {
   return { ok: res.ok, status: res.status, body };
 }
 
-function apiRequest(path: string, init: RequestInit = {}) {
+function apiRequest(path: string, init: RequestInit & { cookie?: string | null } = {}) {
   const headers = new Headers(init.headers || {});
   if (init.body && !headers.has("content-type")) headers.set("content-type", "application/json");
+  // P0-4: a partner request is only linked to the lead it names when the caller
+  // can prove the lead is theirs, and for an anonymous caller that proof is the
+  // signed cookie POST /api/leads set. Threading it here is what makes the
+  // consent assertions below exercise the real anonymous flow instead of an
+  // unprovable id.
+  if (init.cookie) headers.set("cookie", init.cookie);
   return new NextRequest(`http://localhost${path}`, {
     method: init.method,
     headers,
@@ -46,8 +53,7 @@ function apiRequest(path: string, init: RequestInit = {}) {
 }
 
 async function createPrivacyLead(leadsRoute: typeof import("../src/app/api/leads/route"), label: string) {
-  const res = await readJson(
-    await leadsRoute.POST(
+  const raw = await leadsRoute.POST(
       apiRequest("/api/leads", {
         method: "POST",
         body: JSON.stringify({
@@ -72,23 +78,29 @@ async function createPrivacyLead(leadsRoute: typeof import("../src/app/api/leads
           contactType: "email",
         }),
       })
-    )
   );
+  const res = await readJson(raw.clone());
   if (!res.ok) fail(`lead create failed: ${res.status} ${JSON.stringify(res.body)}`);
-  return res.body.lead.id as string;
+
+  const accessToken = raw.cookies.get(LEAD_ACCESS_COOKIE)?.value;
+  if (!accessToken) {
+    fail("POST /api/leads must set the lead_access cookie for an anonymous creator, or nothing can prove the lead later");
+  }
+  return { leadId: res.body.lead.id as string, cookie: `${LEAD_ACCESS_COOKIE}=${accessToken}` };
 }
 
 async function postPartnerRequest(
   partnersRoute: typeof import("../src/app/api/partner-requests/route"),
-  leadId: string,
+  lead: { leadId: string; cookie: string | null },
   consent?: Record<string, unknown>
 ) {
   return readJson(
     await partnersRoute.POST(
       apiRequest("/api/partner-requests", {
         method: "POST",
+        cookie: lead.cookie,
         body: JSON.stringify({
-          leadId,
+          leadId: lead.leadId,
           partnerType: "admin",
           name: "Privacy Test User",
           contact: "user@example.com",
@@ -116,6 +128,7 @@ async function testConsentThirdPartyFlow() {
       // (same pattern as test-document-flow.ts / test-chat-history.ts)
       NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
       SUPABASE_SERVICE_ROLE_KEY: "privacy-test-service-role-key",
+      LEAD_ACCESS_SIGNING_SECRET: "privacy-test-lead-access-signing-secret",
     });
     delete process.env.VERCEL;
     delete process.env.VERCEL_ENV;
@@ -127,8 +140,9 @@ async function testConsentThirdPartyFlow() {
     const { db } = await import("../src/lib/db");
     const { enforcePrivacyRetention } = await import("../src/lib/privacy/retention");
 
-    const leadId = await createPrivacyLead(leadsRoute, "consent-flow");
-    const blocked = await postPartnerRequest(partnersRoute, leadId);
+    const lead = await createPrivacyLead(leadsRoute, "consent-flow");
+    const leadId = lead.leadId;
+    const blocked = await postPartnerRequest(partnersRoute, lead);
     if (blocked.status !== 428 || blocked.body.code !== "CONSENT_REQUIRED") {
       fail(`partner request without consent should be blocked, got ${blocked.status}: ${JSON.stringify(blocked.body)}`);
     }
@@ -143,7 +157,7 @@ async function testConsentThirdPartyFlow() {
       locale: "ko",
       source: "privacy-test",
     };
-    const allowed = await postPartnerRequest(partnersRoute, leadId, consent);
+    const allowed = await postPartnerRequest(partnersRoute, lead, consent);
     if (allowed.status !== 201) fail(`partner request with consent should persist, got ${allowed.status}: ${JSON.stringify(allowed.body)}`);
 
     const consentUser = await db.user.findUnique({ where: { zaloUid: `lead:${leadId}` } });
@@ -170,10 +184,42 @@ async function testConsentThirdPartyFlow() {
     });
     if (!adminAudit) fail("partner routing should mirror to AdminAuditLog");
 
-    const existingConsentAllowed = await postPartnerRequest(partnersRoute, leadId);
+    const existingConsentAllowed = await postPartnerRequest(partnersRoute, lead);
     if (existingConsentAllowed.status !== 201) {
       fail(`active stored consent should allow follow-up partner request, got ${existingConsentAllowed.status}`);
     }
+
+    // P0-4, through the real route and the real database. Someone else naming
+    // this lead used to have their name and contact written onto it, and a
+    // consent snapshot recorded against it. The attacker here holds a perfectly
+    // valid cookie — for their own lead — which is the case a naive "is the
+    // cookie signed?" check would wave through.
+    const ownedBefore = await db.partnerRequest.count({ where: { leadId } });
+    const attacker = await createPrivacyLead(leadsRoute, "idor-attacker");
+    const stolen = await postPartnerRequest(partnersRoute, { leadId, cookie: attacker.cookie }, consent);
+
+    // The request itself succeeds; it just lands somewhere else. Failing it
+    // would tell the caller that this lead exists.
+    if (stolen.status !== 201) fail(`an unproven lead id should still be served, got ${stolen.status}`);
+    if (isRecord(stolen.body) && String(JSON.stringify(stolen.body)).includes(leadId)) {
+      fail("the response must not echo a lead id the caller did not prove they own");
+    }
+    const ownedAfter = await db.partnerRequest.count({ where: { leadId } });
+    if (ownedAfter !== ownedBefore) {
+      fail(`a partner request attached to someone else's lead: ${ownedBefore} -> ${ownedAfter}`);
+    }
+
+    const victim = await db.diagnosisLead.findUnique({ where: { id: leadId } });
+    if (!victim || victim.nickname !== "consent-flow") {
+      fail(`the victim lead's nickname was overwritten: ${victim?.nickname}`);
+    }
+
+    const rejection = await db.auditEvent.findFirst({
+      where: { action: "partner.lead.ownership_rejected" },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!rejection) fail("a rejected ownership claim must be audited");
+    if (rejection.targetId) fail("the audit row must not record the unverified lead id it was handed");
 
     const deleteRes = await readJson(
       await deleteRoute.POST(
@@ -189,8 +235,9 @@ async function testConsentThirdPartyFlow() {
     });
     if (withdrawn < 3) fail(`privacy delete request should withdraw consents, got ${withdrawn}`);
 
-    const retentionLeadId = await createPrivacyLead(leadsRoute, "retention-flow");
-    const retentionAllowed = await postPartnerRequest(partnersRoute, retentionLeadId, consent);
+    const retentionLead = await createPrivacyLead(leadsRoute, "retention-flow");
+    const retentionLeadId = retentionLead.leadId;
+    const retentionAllowed = await postPartnerRequest(partnersRoute, retentionLead, consent);
     if (retentionAllowed.status !== 201) fail("retention consent setup should persist partner request");
     const retentionUser = await db.user.findUnique({ where: { zaloUid: `lead:${retentionLeadId}` } });
     if (!retentionUser) fail("retention lead consent user missing");
