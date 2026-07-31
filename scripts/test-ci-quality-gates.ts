@@ -111,6 +111,26 @@ assert(
   );
 }
 
+// Everything above only matters if the gated workflow is the ONLY way code reaches
+// production. It was not: Vercel's Git integration deploys every push to main on
+// its own, and on 2026-07-30 it put 42fe6cb live while this workflow's canary step
+// was failing — migrations, drift check, canary readiness and the Agent/Consult
+// smoke tests all skipped, with a red run to look at. vercel.json now turns that
+// trigger off for main only, so unspecified branches keep their PR previews.
+{
+  const vercelConfig = JSON.parse(readFileSync("vercel.json", "utf8")) as {
+    git?: { deploymentEnabled?: boolean | Record<string, boolean> };
+  };
+  const deploymentEnabled = vercelConfig.git?.deploymentEnabled;
+  const mainDisabled =
+    deploymentEnabled === false ||
+    (typeof deploymentEnabled === "object" && deploymentEnabled !== null && deploymentEnabled.main === false);
+  assert(
+    mainDisabled,
+    "vercel.json must set git.deploymentEnabled.main = false — otherwise a push to main deploys to production without the migration, drift and canary gates in this workflow",
+  );
+}
+
 // The health alert commented on every run, so 17 days of identical "degraded"
 // lines buried a real n8n/Typebot outage. It must stay quiet while the failing
 // set is unchanged, or the alert is decoration.
