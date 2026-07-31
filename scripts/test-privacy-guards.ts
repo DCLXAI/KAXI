@@ -236,12 +236,16 @@ async function testConsentThirdPartyFlow() {
       fail(`the request should still have been persisted somewhere: ${totalBefore} -> ${totalAfter}`);
     }
 
-    const rejection = await db.auditEvent.findFirst({
+    // recordRequestAudit writes to AdminAuditLog, not AuditEvent.
+    const rejection = await db.adminAuditLog.findFirst({
       where: { action: "partner.lead.ownership_rejected" },
       orderBy: { createdAt: "desc" },
     });
     if (!rejection) fail("a rejected ownership claim must be audited");
     if (rejection.targetId) fail("the audit row must not record the unverified lead id it was handed");
+    if (String(rejection.metadata || "").includes(leadId)) {
+      fail("the audit metadata must not carry the unverified lead id either");
+    }
 
     const deleteRes = await readJson(
       await deleteRoute.POST(
