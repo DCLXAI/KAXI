@@ -84,9 +84,32 @@ assert(
   "production deploy must exercise backend readiness before promotion",
 );
 assert(
-  deploymentWorkflow.includes("vercel promote"),
+  /vercel(@[^\s]+)? promote/.test(deploymentWorkflow),
   "production deploy must promote only after the canary passes",
 );
+
+// The workflow ran `bunx vercel`, which resolves whatever is latest on npm at
+// that moment, so the release path was exposed to any upstream publish. CLI
+// 58.4.0 deployed 0dab19d cleanly; 58.4.4 then failed the very next run — twice,
+// identically — inside `deploy --prebuilt --archive=tgz`, on a node_modules path
+// outside the prebuilt output. No commit of ours was involved.
+{
+  // Comment lines are prose, not invocations — the comment above this very
+  // assertion quotes `bunx vercel` and would otherwise trip it.
+  const executableLines = deploymentWorkflow
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("#"));
+
+  const unpinned = executableLines.filter((line) => /bunx vercel(?!@)/.test(line));
+  assert(
+    unpinned.length === 0,
+    `production deploy must pin the Vercel CLI — found ${unpinned.length} unpinned "bunx vercel" invocation(s), which resolve to whatever npm publishes next:\n${unpinned.map((line) => `    ${line.trim()}`).join("\n")}`,
+  );
+  assert(
+    /VERCEL_CLI_VERSION:\s*"\d+\.\d+\.\d+"/.test(deploymentWorkflow),
+    "the pinned Vercel CLI version must be an exact version, not a range",
+  );
+}
 
 // The health alert commented on every run, so 17 days of identical "degraded"
 // lines buried a real n8n/Typebot outage. It must stay quiet while the failing
