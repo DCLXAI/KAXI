@@ -195,8 +195,19 @@ async function testConsentThirdPartyFlow() {
     // valid cookie — for their own lead — which is the case a naive "is the
     // cookie signed?" check would wave through.
     const ownedBefore = await db.partnerRequest.count({ where: { leadId } });
+    const totalBefore = await db.partnerRequest.count();
+    // Snapshot rather than assume: the owner's own partner requests above have
+    // legitimately written their name onto this lead already, so the value to
+    // hold constant is whatever it is now, not what it was at creation.
+    const victimBefore = await db.diagnosisLead.findUnique({ where: { id: leadId } });
+    if (!victimBefore) fail("the victim lead should exist before the ownership check");
+
     const attacker = await createPrivacyLead(leadsRoute, "idor-attacker");
-    const stolen = await postPartnerRequest(partnersRoute, { leadId, cookie: attacker.cookie }, consent);
+    const stolen = await postPartnerRequest(
+      partnersRoute,
+      { leadId, cookie: attacker.cookie },
+      consent,
+    );
 
     // The request itself succeeds; it just lands somewhere else. Failing it
     // would tell the caller that this lead exists.
@@ -209,9 +220,20 @@ async function testConsentThirdPartyFlow() {
       fail(`a partner request attached to someone else's lead: ${ownedBefore} -> ${ownedAfter}`);
     }
 
-    const victim = await db.diagnosisLead.findUnique({ where: { id: leadId } });
-    if (!victim || victim.nickname !== "consent-flow") {
-      fail(`the victim lead's nickname was overwritten: ${victim?.nickname}`);
+    const victimAfter = await db.diagnosisLead.findUnique({ where: { id: leadId } });
+    if (!victimAfter) fail("the victim lead disappeared");
+    for (const field of ["nickname", "contact", "contactHash", "contactCiphertext"] as const) {
+      if (victimAfter[field] !== victimBefore[field]) {
+        fail(`an unproven caller changed the victim lead's ${field}`);
+      }
+    }
+
+    // The request was served — on a lead of its own. Without this the
+    // assertions above would also pass if it had been silently dropped, and
+    // "we quietly discard partner requests" is not the property under test.
+    const totalAfter = await db.partnerRequest.count();
+    if (totalAfter !== totalBefore + 1) {
+      fail(`the request should still have been persisted somewhere: ${totalBefore} -> ${totalAfter}`);
     }
 
     const rejection = await db.auditEvent.findFirst({
