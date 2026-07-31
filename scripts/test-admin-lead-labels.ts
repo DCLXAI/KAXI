@@ -83,14 +83,14 @@ const DOMAINS: Domain[] = [
     values: DIAGNOSIS_DOC_KEYS,
     keyFor: (key) => key,
     label: (key) => documentLabel(echo, key),
-    fallback: "docs_doc_passport",
+    fallback: "docs_doc_unrecognized",
   },
   {
     name: "partnerType",
     values: [...PARTNER_TYPES] as string[],
     keyFor: (type) => `partner_${type}`,
     label: (type) => partnerLabel(echo, type),
-    fallback: "partner_admin",
+    fallback: "partner_unrecognized",
   },
 ];
 
@@ -143,7 +143,18 @@ console.log(
 }
 
 // Unknown values keep falling back rather than rendering a raw key at an
-// operator, and every fallback resolves to a real translation.
+// operator, every fallback resolves to a real translation — and, the property
+// that actually protects the operator, NO FALLBACK IS A MEMBER OF ITS OWN
+// DOMAIN. All four used to be:
+//
+//   goal      -> goal_unsure         "잘 모름", an answer the wizard offers
+//   pathKey   -> goal_language       D-4 한국어 연수, a path the engine recommends
+//   doc       -> docs_doc_passport   여권, on every unrecognized badge
+//   partner   -> partner_admin       행정사
+//
+// so a value with no legitimate label was handed somebody else's and rendered as
+// indistinguishable from the real thing. Checked against the domain constants
+// themselves, so re-pointing any fallback at a real value fails here.
 for (const domain of DOMAINS) {
   const rendered = domain.label("kaxi_not_a_real_value");
   assertOk(
@@ -154,9 +165,13 @@ for (const domain of DOMAINS) {
     domain.fallback in translations,
     `${domain.name} falls back to "${domain.fallback}", which does not exist in translations.ts`,
   );
+  assertOk(
+    !domain.values.map(domain.keyFor).includes(domain.fallback),
+    `${domain.name} falls back to "${domain.fallback}", which is a real ${domain.name} — an unlabelled value would be shown to the operator as that answer instead of as an unknown one`,
+  );
 }
 
-console.log("PASS admin lead labels: path keys stay their own namespace and unknown values still fall back");
+console.log("PASS admin lead labels: path keys stay their own namespace, and no fallback is a real answer");
 
 // Falling back is not enough on its own: the goal and path fallbacks USED to be
 // goal_unsure ("잘 모름") and goal_language (D-4 한국어 연수), which are answers
@@ -170,23 +185,11 @@ console.log("PASS admin lead labels: path keys stay their own namespace and unkn
 // and ANONYMOUS_LEAD_PLACEHOLDER (written into goal and pathKey on the stub rows
 // createAnonymousLead() creates for partner requests with no saved diagnosis).
 {
-  const GOAL_LABEL_KEYS = new Set(DIAGNOSIS_GOALS.map((goal) => `goal_${goal}`));
   const goals: readonly string[] = DIAGNOSIS_GOALS;
 
   assertOk(
     !goals.includes(ANONYMOUS_LEAD_PLACEHOLDER) && !DIAGNOSIS_PATH_KEYS.includes(ANONYMOUS_LEAD_PLACEHOLDER),
     `"${ANONYMOUS_LEAD_PLACEHOLDER}" must not be a wizard goal or a real path — if it becomes one, the stub rows need a different sentinel`,
-  );
-
-  // No fallback may be a real answer. Asserted against the domains themselves,
-  // so re-pointing a fallback at a wizard value fails here.
-  assertOk(
-    !GOAL_LABEL_KEYS.has("goal_unrecognized"),
-    "the goal fallback must not be one of the wizard's own answers",
-  );
-  assertOk(
-    !DIAGNOSIS_PATH_KEYS.includes("path_unrecognized"),
-    "the path fallback must not be one of the engine's own recommended paths",
   );
 
   // Absent data reads as absent, in both columns.
@@ -223,7 +226,7 @@ console.log("PASS admin lead labels: path keys stay their own namespace and unkn
     );
   }
 
-  for (const key of ["goal_not_recorded", "goal_unrecognized", "path_not_recorded", "path_unrecognized", "admin_no_diagnosis"]) {
+  for (const key of ["goal_not_recorded", "path_not_recorded", "admin_no_diagnosis"]) {
     assertOk(key in translations, `"${key}" does not exist in translations.ts — it would render the raw key at an operator`);
   }
 }

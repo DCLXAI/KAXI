@@ -60,10 +60,17 @@ export function pathLabel(t: Translator, pathKey: string): string {
   return translateKnown(t, pathKey, "path_unrecognized", PATH_KEYS);
 }
 
+// No "not recorded" case for these two: requiredDocs records absence as an empty
+// array (which renders no badges at all, not a badge saying nothing), and
+// createPartnerRequest throws on a partnerType outside PARTNER_TYPES, so absence
+// never reaches the label. The fallbacks still had to move off a real value —
+// docs_doc_passport put 여권 on every unrecognized badge, inventing a document
+// list, and partner_admin displayed unknown partner types as 행정사, which is the
+// one label in this codebase that must never be applied to the wrong thing.
 export function documentLabel(t: Translator, key: string): string {
-  return translateKnown(t, key, "docs_doc_passport", DOC_KEYS);
+  return translateKnown(t, key, "docs_doc_unrecognized", DOC_KEYS);
 }
 
 export function partnerLabel(t: Translator, type: string): string {
-  return translateKnown(t, `partner_${type}`, "partner_admin", PARTNER_KEYS);
+  return translateKnown(t, `partner_${type}`, "partner_unrecognized", PARTNER_KEYS);
 }

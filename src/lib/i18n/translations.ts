@@ -311,6 +311,9 @@ export const t = {
   docs_doc_enrollment: { ko: "재학증명서", vi: "Giấy xác nhận đang học", mn: "Суралцаж буй тодорхойлолт", en: "Certificate of enrollment" },
   docs_doc_residence_proof: { ko: "체류지 입증서류", vi: "Chứng minh nơi cư trú", mn: "Оршин суух газрын нотолгоо", en: "Proof of residence" },
   docs_doc_residence_card: { ko: "외국인등록증·체류카드", vi: "Thẻ cư trú", mn: "Оршин суух карт", en: "Residence card" },
+  // Admin-only. Never a required document itself — it labels a stored key that is
+  // not one, instead of putting 여권 on the badge and inventing a document list.
+  docs_doc_unrecognized: { ko: "알 수 없는 서류", vi: "Giấy tờ không xác định", mn: "Тодорхойгүй бичиг баримт", en: "Unrecognized document" },
   docs_hint_form: { ko: "작성 후 서명한 최종본을 보관하세요.", vi: "Lưu bản cuối đã điền và ký.", mn: "Бөглөж гарын үсэг зурсан эцсийн хувийг хадгална уу.", en: "Keep the completed and signed final version." },
   docs_hint_passport: { ko: "인적사항면을 선명하게 첨부하고 유효기간을 확인하세요.", vi: "Tải trang thông tin rõ nét và kiểm tra hạn hộ chiếu.", mn: "Мэдээллийн хуудсыг тод оруулж хүчинтэй хугацааг шалгана уу.", en: "Upload a clear bio page and check passport validity." },
   docs_hint_authentication: { ko: "학교·공관에 번역, 공증, 아포스티유 또는 영사확인 필요 여부를 확인하세요.", vi: "Kiểm tra yêu cầu dịch, công chứng, Apostille hoặc hợp pháp hóa lãnh sự.", mn: "Орчуулга, нотариат, Apostille эсвэл консулын баталгаа шаардлагатай эсэхийг шалгана уу.", en: "Confirm translation, notarization, apostille, or consular legalization requirements." },
@@ -373,6 +376,9 @@ export const t = {
   partner_academy: { ko: "한국어 학원", vi: "Trung tâm tiếng Hàn", mn: "Солонгос хэлний төв", en: "Korean academy" },
   partner_admission: { ko: "학교 입학처", vi: "Phòng tuyển sinh", mn: "Элсэлтийн алба", en: "School admission office" },
   partner_settlement: { ko: "정착 파트너 (픽업·숙소·통신·보험)", vi: "Hỗ trợ ban đầu", mn: "Байршуулалт", en: "Settlement partner" },
+  // Admin-only. Never a partner type itself — an unrecognized type used to render
+  // as partner_admin, i.e. 행정사, the one label here that must never be misapplied.
+  partner_unrecognized: { ko: "알 수 없는 유형", vi: "Loại không xác định", mn: "Тодорхойгүй төрөл", en: "Unrecognized type" },
   partner_request: { ko: "상담 요청", vi: "Yêu cầu tư vấn", mn: "Зөвлөгөө хүсэх", en: "Request consultation" },
   partner_excluded: { ko: "취업 매칭은 법적 위험으로 제외됩니다", vi: "Không ghép việc làm", mn: "Ажлын байр холбохгүй", en: "No job matching (legal risk)" },
 
