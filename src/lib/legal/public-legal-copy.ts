@@ -19,8 +19,6 @@ type LegalPageCopy = {
   rightsDescription: string;
   requestContactLabel: string;
   requestContactPlaceholder: string;
-  requestQuestionLabel: string;
-  requestQuestionPlaceholder: string;
   requestSubmit: string;
   requestSending: string;
   requestSuccess: string;
@@ -40,10 +38,8 @@ const shared = {
     versionLabel: "게시 버전: 2026-07-13.v2 · 최종 검토: 2026-07-13",
     rightsTitle: "내 정보 권리 요청",
     rightsDescription: "열람, 정정, 삭제, 처리정지 또는 동의 철회를 요청할 수 있습니다. 다른 사람의 기록 존재 여부가 드러나지 않도록 접수 결과는 동일하게 표시됩니다.",
-    requestContactLabel: "상담 때 남긴 연락처",
+    requestContactLabel: "본인 확인을 받을 연락처",
     requestContactPlaceholder: "이메일, 전화번호 또는 메신저 ID",
-    requestQuestionLabel: "대화에서 입력한 질문",
-    requestQuestionPlaceholder: "기록을 찾을 수 있도록 질문을 정확히 입력하세요.",
     requestSubmit: "권리 요청 접수",
     requestSending: "접수 중...",
     requestSuccess: "요청을 접수했습니다. 일치하는 기록은 안전하게 확인한 뒤 처리합니다.",
@@ -80,10 +76,8 @@ const shared = {
     versionLabel: "Published version: 2026-07-13.v2 · Last reviewed: 2026-07-13",
     rightsTitle: "Exercise your data rights",
     rightsDescription: "You may request access, correction, deletion, restriction, or withdrawal of consent. We return the same receipt whether or not a matching record exists.",
-    requestContactLabel: "Contact used for consultation",
+    requestContactLabel: "Contact to verify your request",
     requestContactPlaceholder: "Email, phone number, or messenger ID",
-    requestQuestionLabel: "Exact question entered in chat",
-    requestQuestionPlaceholder: "Enter the question exactly so we can locate the record.",
     requestSubmit: "Submit rights request",
     requestSending: "Submitting...",
     requestSuccess: "Your request was received. Matching records will be verified and handled securely.",
@@ -124,10 +118,8 @@ const localized: Record<"vi" | "mn", Pick<LegalPageCopy, keyof LegalPageCopy>> =
     versionLabel: "Phiên bản công bố: 2026-07-13.v2 · Rà soát: 2026-07-13",
     rightsTitle: "Yêu cầu quyền dữ liệu",
     rightsDescription: "Bạn có thể yêu cầu truy cập, sửa, xóa, hạn chế xử lý hoặc rút lại sự đồng ý.",
-    requestContactLabel: "Thông tin liên hệ đã dùng",
+    requestContactLabel: "Liên hệ để xác minh yêu cầu",
     requestContactPlaceholder: "Email, số điện thoại hoặc ID nhắn tin",
-    requestQuestionLabel: "Câu hỏi chính xác trong cuộc trò chuyện",
-    requestQuestionPlaceholder: "Nhập chính xác câu hỏi để tìm bản ghi.",
     requestSubmit: "Gửi yêu cầu",
     requestSending: "Đang gửi...",
     requestSuccess: "Đã tiếp nhận yêu cầu. Bản ghi phù hợp sẽ được xác minh và xử lý an toàn.",
@@ -165,10 +157,8 @@ const localized: Record<"vi" | "mn", Pick<LegalPageCopy, keyof LegalPageCopy>> =
     versionLabel: "Нийтэлсэн хувилбар: 2026-07-13.v2 · Хянасан: 2026-07-13",
     rightsTitle: "Мэдээллийн эрхийн хүсэлт",
     rightsDescription: "Та мэдээлэл авах, засах, устгах, боловсруулалтыг хязгаарлах эсвэл зөвшөөрлөө буцаах хүсэлт гаргаж болно.",
-    requestContactLabel: "Зөвлөгөөнд ашигласан холбоо барих мэдээлэл",
+    requestContactLabel: "Хүсэлтээ баталгаажуулах холбоо барих мэдээлэл",
     requestContactPlaceholder: "Имэйл, утас эсвэл мессенжер ID",
-    requestQuestionLabel: "Чатад оруулсан яг асуулт",
-    requestQuestionPlaceholder: "Бичлэгийг олохын тулд асуултаа яг оруулна уу.",
     requestSubmit: "Хүсэлт илгээх",
     requestSending: "Илгээж байна...",
     requestSuccess: "Хүсэлтийг хүлээн авлаа. Тохирох бичлэгийг аюулгүй шалгаж боловсруулна.",

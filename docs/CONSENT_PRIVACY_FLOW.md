@@ -62,7 +62,16 @@ This makes blocked transfers, consent capture, actual partner routing, user dele
 
 ## Deletion And Retention
 
-`POST /api/privacy/delete-request` still accepts `leadId`, `contact`, or exact `question`. When a matching lead is found, active consent rows for that lead are marked `WITHDRAWN`.
+`POST /api/privacy/delete-request` acts only on records whose ownership the caller proved. Two proofs are accepted today:
+
+| proof | who has it |
+| --- | --- |
+| `session` | a signed-in user — their leads, their partner requests, their chat sessions |
+| `lead_access` | an anonymous person still holding the signed `kaxi_lead_access` cookie issued when they saved a diagnosis — that one lead and the sessions reachable from it |
+
+Nothing in the request body selects records. The old `question` selector matched `hashPii(question)` across every row, and a question like "비자 연장 서류" is typed by many people, so one anonymous request scheduled strangers' records for deletion; it is refused with `400` rather than verified, because a shared string cannot identify one person's data. A request carrying no proof is recorded and audited but mutates nothing — the contact-verification channel that will honour those is not built yet.
+
+Every outcome returns the same `202` with the same body, so the endpoint cannot be used to probe whether a record exists. Active consent rows for the proven leads are marked `WITHDRAWN`.
 
 `/api/privacy/retention` and `bun run privacy:enforce-retention` expire active lead consents when the linked lead reaches deletion or retention expiry. This is independent of whether contact text was already redacted during encrypted storage.
 

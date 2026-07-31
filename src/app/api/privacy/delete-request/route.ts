@@ -4,178 +4,127 @@ import { canWriteRuntimeDatabase, db } from "@/lib/db";
 import { JsonBodyError, readJsonBody } from "@/lib/api/json-body";
 import { recordRequestAudit } from "@/lib/audit";
 import { withdrawLeadConsentsForPrivacyRequest } from "@/lib/privacy/consent";
-import { hashPii } from "@/lib/privacy/pii";
-import { isPrivacyDeletionAutomationEnabled } from "@/lib/privacy/deletion-automation";
+import { LEAD_ACCESS_COOKIE } from "@/lib/leads/ownership";
+import { resolveDeletionSubject, type DeletionSubject } from "@/lib/privacy/deletion-scope";
+import { getCurrentKaxiUser } from "@/lib/supabase/auth";
 import { getClientIp, jsonError, rateLimit } from "@/lib/api/security";
 
+/**
+ * The one response this endpoint gives.
+ *
+ * It cannot depend on whether anything was found, or on whether the caller
+ * proved anything, because a caller who could tell those apart could use this
+ * endpoint to ask "does a record for this person exist?" — which is the
+ * disclosure the whole design is built to avoid.
+ */
+function accepted(requestId: string) {
+  return NextResponse.json(
+    {
+      ok: true,
+      accepted: true,
+      requestId,
+      status: "received",
+      message: "요청을 접수했습니다. 본인 확인이 끝나면 처리 결과를 안내합니다.",
+    },
+    { status: 202 },
+  );
+}
+
 export async function POST(req: NextRequest) {
+  const requestId = randomUUID();
+
   try {
     const limited = await rateLimit(req, { key: "privacy:delete-request", limit: 5, windowMs: 60 * 60 * 1000 });
     if (limited) return limited;
 
     const body = await readJsonBody<Record<string, unknown>>(req, 16 * 1024);
-    const leadId = typeof body.leadId === "string" ? body.leadId.trim() : "";
-    const contact = typeof body.contact === "string" ? body.contact.trim() : "";
-    const question = typeof body.question === "string" ? body.question.trim() : "";
-    if (!leadId && !contact && !question) return jsonError("leadId, contact, or question is required", 400);
 
-    // CONTAINMENT (P0-0). This endpoint has no way to prove the caller owns the
-    // data it is asked to delete: it took an unauthenticated leadId, contact or
-    // question and set deleteRequestedAt on every matching row. The question path
-    // is the dangerous one — it matched hashPii(question), and a question like
-    // "비자 연장 서류" is typed by many different people, so a single anonymous
-    // request could schedule unrelated users' records for deletion and withdraw
-    // their consents.
-    //
-    // Until P0-1 adds ownership verification, the request is accepted and audited
-    // but performs NO mutation. The response shape does not depend on whether
-    // anything matched, so it cannot be used to probe for the existence of a
-    // record — which is also the contract P0-1 has to keep.
-    if (!isPrivacyDeletionAutomationEnabled()) {
-      const requestId = randomUUID();
-      await recordRequestAudit(req, {
-        actor: "public-user",
-        actorRole: "user",
-        action: "privacy.delete.request.received",
-        targetType: "UserData",
-        // No identifier is echoed. leadId is caller-supplied and unverified, so
-        // recording it would let the audit log accumulate other people's ids.
-        targetId: null,
-        metadata: {
-          requestId,
-          automationEnabled: false,
-          containment: "p0_unverified_deletion_containment",
-          // Which FIELDS were supplied, never their values or hashes.
-          leadIdProvided: Boolean(leadId),
-          contactProvided: Boolean(contact),
-          questionProvided: Boolean(question),
-        },
-      });
-
-      return NextResponse.json(
-        {
-          ok: true,
-          accepted: true,
-          persisted: false,
-          requestId,
-          status: "received",
-          message: "요청을 접수했습니다. 본인 확인 절차를 거친 뒤 처리 결과를 안내합니다.",
-        },
-        { status: 202 },
+    // The question path is gone, not gated. It matched hashPii(question) across
+    // every row, and many people type the same question, so it could never
+    // identify one person's data no matter what verification sat in front of it.
+    // Rejected loudly rather than ignored, so a client still sending it finds
+    // out instead of believing its data was covered.
+    if (typeof body.question === "string" && body.question.trim()) {
+      return jsonError(
+        "A question string cannot identify whose data to delete and is no longer accepted.",
+        400,
       );
     }
 
-    if (!canWriteRuntimeDatabase()) {
-      return NextResponse.json({
-        ok: true,
-        persisted: false,
-        reason: "Writable production database is not configured",
-      }, { status: 202 });
-    }
+    // leadId and contact in the body are deliberately NOT read. The subject is
+    // derived from the caller's proof below; anything they type here would be an
+    // unverified claim about someone's data, and the previous version of this
+    // endpoint acted on exactly that.
 
-    const now = new Date();
-    let matched = 0;
-    const consentLeadIds = new Set<string>();
-    const canonicalSessionKeys = new Set<string>();
-    if (leadId) {
-      const result = await db.diagnosisLead.updateMany({
-        where: { id: leadId },
-        data: { deleteRequestedAt: now },
-      });
-      matched += result.count;
-      if (result.count > 0) consentLeadIds.add(leadId);
-      const handoffLead = await db.handoffLead.findUnique({
-        where: { id: leadId },
-        select: { sessionKey: true },
-      });
-      if (handoffLead) canonicalSessionKeys.add(handoffLead.sessionKey);
-    }
+    const subject = await resolveDeletionSubject(
+      {
+        findLeadIdsForUser: async (userId) =>
+          (await db.diagnosisLead.findMany({ where: { userId }, select: { id: true } })).map((row) => row.id),
+        findSessionKeysForUser: async (userId) =>
+          (await db.chatSession.findMany({ where: { userId }, select: { sessionKey: true } })).map(
+            (row) => row.sessionKey,
+          ),
+        findSessionKeysForLeads: async (leadIds) => {
+          const [handoffLeads, handoffContacts] = await Promise.all([
+            db.handoffLead.findMany({ where: { id: { in: leadIds } }, select: { sessionKey: true } }),
+            db.handoffLeadContact.findMany({ where: { leadId: { in: leadIds } }, select: { sessionKey: true } }),
+          ]);
+          return [...handoffLeads, ...handoffContacts].map((row) => row.sessionKey);
+        },
+      },
+      {
+        sessionUserId: (await getCurrentKaxiUser().catch(() => null))?.id ?? null,
+        leadAccessToken: req.cookies.get(LEAD_ACCESS_COOKIE)?.value ?? null,
+      },
+    );
 
-    if (contact) {
-      const contactHash = hashPii(contact);
-      if (contactHash) {
-        const leads = await db.diagnosisLead.findMany({
-          where: { contactHash },
-          select: { id: true },
-        });
-        leads.forEach((lead) => consentLeadIds.add(lead.id));
-        const result = await db.diagnosisLead.updateMany({
-          where: { contactHash },
-          data: { deleteRequestedAt: now },
-        });
-        matched += result.count;
-        const handoffContacts = await db.handoffLeadContact.findMany({
-          where: { contactHash },
-          select: { sessionKey: true },
-        });
-        handoffContacts.forEach((item) => canonicalSessionKeys.add(item.sessionKey));
-      }
-    }
-
-    if (question) {
-      const questionHash = hashPii(question);
-      if (questionHash) {
-        const partnerLeadIds = await db.partnerRequest.findMany({
-          where: { questionHash },
-          select: { leadId: true },
-        });
-        partnerLeadIds.forEach((request) => consentLeadIds.add(request.leadId));
-        const [chatLogs, partnerRequests] = await Promise.all([
-          db.chatLog.updateMany({
-            where: { questionHash },
-            data: { deleteRequestedAt: now },
-          }),
-          db.partnerRequest.updateMany({
-            where: { questionHash },
-            data: { deleteRequestedAt: now },
-          }),
-        ]);
-        matched += chatLogs.count + partnerRequests.count;
-        const [canonicalMessages, handoffLeads] = await Promise.all([
-          db.chatMessage.findMany({ where: { questionHash }, select: { sessionKey: true } }),
-          db.handoffLead.findMany({ where: { questionHash }, select: { sessionKey: true } }),
-        ]);
-        canonicalMessages.forEach((item) => canonicalSessionKeys.add(item.sessionKey));
-        handoffLeads.forEach((item) => canonicalSessionKeys.add(item.sessionKey));
-      }
-    }
-
-    if (canonicalSessionKeys.size > 0) {
-      const result = await db.chatSession.updateMany({
-        where: { sessionKey: { in: [...canonicalSessionKeys] } },
-        data: { deleteRequestedAt: now },
-      });
-      matched += result.count;
-    }
-
-    const consentWithdrawal = await withdrawLeadConsentsForPrivacyRequest({
-      leadIds: [...consentLeadIds],
-      reason: "privacy.delete.request",
-      context: {
+    if (!subject) {
+      // Nothing was proven, so nothing is touched. The request is still recorded:
+      // a person who cannot prove ownership today still asked, and P0-1b's
+      // verification channel is what will let that request be honoured.
+      await recordRequestAudit(req, {
         actor: "public-user",
         actorRole: "user",
-        ip: getClientIp(req),
-        userAgent: req.headers.get("user-agent"),
-      },
-    });
+        action: "privacy.delete.request.unproven",
+        targetType: "UserData",
+        targetId: null,
+        metadata: { requestId, proof: null },
+      });
+      return accepted(requestId);
+    }
+
+    if (!canWriteRuntimeDatabase()) {
+      await recordRequestAudit(req, {
+        actor: "public-user",
+        actorRole: "user",
+        action: "privacy.delete.request.deferred",
+        targetType: "UserData",
+        targetId: subject.userId,
+        metadata: { requestId, proof: subject.proof, reason: "database_not_writable" },
+      });
+      return accepted(requestId);
+    }
+
+    const result = await markSubjectForDeletion(subject, req);
 
     await recordRequestAudit(req, {
-      actor: "public-user",
+      actor: subject.userId || "public-user",
       actorRole: "user",
       action: "privacy.delete.request",
       targetType: "UserData",
-      targetId: leadId || null,
+      targetId: subject.userId,
       metadata: {
-        matched: matched > 0,
-        contactProvided: Boolean(contact),
-        questionProvided: Boolean(question),
-        consentLeadIds: consentLeadIds.size,
-        canonicalSessions: canonicalSessionKeys.size,
-        consentsWithdrawn: consentWithdrawal.consents,
+        requestId,
+        proof: subject.proof,
+        // Counts, never identifiers. An audit row is not a place to accumulate
+        // the ids of the records a person asked to have erased.
+        leads: subject.leadIds.length,
+        sessions: subject.sessionKeys.length,
+        ...result,
       },
     });
 
-    return NextResponse.json({ ok: true });
+    return accepted(requestId);
   } catch (err) {
     if (err instanceof JsonBodyError) {
       return NextResponse.json({ error: err.message }, { status: err.status });
@@ -183,4 +132,47 @@ export async function POST(req: NextRequest) {
     console.error("[POST /api/privacy/delete-request]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
+}
+
+/**
+ * Marks everything in the proven subject, and nothing else.
+ *
+ * Each `where` clause is keyed on an id that came out of resolveDeletionSubject.
+ * Re-running it is harmless: setting deleteRequestedAt to a fresh timestamp on
+ * rows that already carry one changes nothing about what the retention sweep
+ * will do.
+ */
+async function markSubjectForDeletion(subject: DeletionSubject, req: NextRequest) {
+  const now = new Date();
+  const { leadIds, sessionKeys } = subject;
+
+  const [leads, partnerRequests, sessions] = await Promise.all([
+    leadIds.length > 0
+      ? db.diagnosisLead.updateMany({ where: { id: { in: leadIds } }, data: { deleteRequestedAt: now } })
+      : Promise.resolve({ count: 0 }),
+    leadIds.length > 0
+      ? db.partnerRequest.updateMany({ where: { leadId: { in: leadIds } }, data: { deleteRequestedAt: now } })
+      : Promise.resolve({ count: 0 }),
+    sessionKeys.length > 0
+      ? db.chatSession.updateMany({ where: { sessionKey: { in: sessionKeys } }, data: { deleteRequestedAt: now } })
+      : Promise.resolve({ count: 0 }),
+  ]);
+
+  const consentWithdrawal = await withdrawLeadConsentsForPrivacyRequest({
+    leadIds,
+    reason: "privacy.delete.request",
+    context: {
+      actor: subject.userId || "public-user",
+      actorRole: "user",
+      ip: getClientIp(req),
+      userAgent: req.headers.get("user-agent"),
+    },
+  });
+
+  return {
+    leadsMarked: leads.count,
+    partnerRequestsMarked: partnerRequests.count,
+    sessionsMarked: sessions.count,
+    consentsWithdrawn: consentWithdrawal.consents,
+  };
 }

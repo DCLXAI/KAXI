@@ -251,7 +251,9 @@ async function testConsentThirdPartyFlow() {
       await deleteRoute.POST(
         apiRequest("/api/privacy/delete-request", {
           method: "POST",
-          body: JSON.stringify({ leadId }),
+          // The proof, not the id. The body no longer selects anything.
+          cookie: lead.cookie,
+          body: JSON.stringify({}),
         })
       )
     );
@@ -311,17 +313,44 @@ async function testConsentThirdPartyFlow() {
     ) {
       fail("n8n audit trigger must retain metadata and scrub duplicated conversation content");
     }
+    // Tie the canonical session to a lead of its own, the way a real handoff
+    // does. Without a link like this a session has no owner and no proof can
+    // reach it — the honest consequence of dropping question matching.
+    //
+    // Deliberately NOT the retention lead: deleting through a proof also
+    // withdraws that lead's consents immediately, which would leave the
+    // retention sweep below with nothing active to expire and turn its
+    // assertion vacuous.
+    const canonicalLead = await createPrivacyLead(leadsRoute, "canonical-flow");
+    await db.handoffLead.create({
+      data: { id: canonicalLead.leadId, sessionKey: canonicalSessionKey, locale: "ko", source: "privacy-test" },
+    });
+
     const canonicalDelete = await readJson(
       await deleteRoute.POST(
         apiRequest("/api/privacy/delete-request", {
           method: "POST",
-          body: JSON.stringify({ question: canonicalQuestion }),
+          cookie: canonicalLead.cookie,
+          body: JSON.stringify({}),
         }),
       ),
     );
     if (!canonicalDelete.ok) fail(`canonical chat delete request failed: ${canonicalDelete.status}`);
     const markedCanonicalSession = await db.chatSession.findUnique({ where: { sessionKey: canonicalSessionKey } });
     if (!markedCanonicalSession?.deleteRequestedAt) fail("canonical chat session was not marked for privacy deletion");
+
+    const questionSelector = await readJson(
+      await deleteRoute.POST(
+        apiRequest("/api/privacy/delete-request", {
+          method: "POST",
+          cookie: canonicalLead.cookie,
+          body: JSON.stringify({ question: canonicalQuestion }),
+        }),
+      ),
+    );
+    if (questionSelector.status !== 400) {
+      fail(`a question string must be refused as a deletion selector, got ${questionSelector.status}`);
+    }
 
     const retention = await enforcePrivacyRetention();
     if (retention.consentsExpired < 3) fail(`retention should expire active consents, got ${retention.consentsExpired}`);
