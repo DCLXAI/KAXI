@@ -13,6 +13,7 @@ import { sendOpsAlert } from "@/lib/ops/alerts";
 import { siteBaseUrl } from "@/lib/config/site-url";
 import { ANONYMOUS_LEAD_PLACEHOLDER } from "@/lib/partners/anonymous-lead";
 import { PARTNER_TYPES } from "@/lib/partners/types";
+import { isPartnerLeadReuseEnabled } from "@/lib/privacy/deletion-automation";
 
 export interface CreatePartnerRequestInput {
   leadId?: string | null;
@@ -103,7 +104,23 @@ export async function createPartnerRequest(input: CreatePartnerRequestInput): Pr
     };
   }
 
-  if (finalLeadId === "anonymous" || finalLeadId.startsWith("local-")) {
+  // CONTAINMENT (P0-0). finalLeadId comes straight from the request body, and the
+  // update below writes nickname and contact onto whatever lead it names. Only
+  // "anonymous" and "local-*" used to be replaced, so any other id — including
+  // another person's — was taken at face value: a caller could overwrite a
+  // stranger's name and contact details and have a consent snapshot recorded
+  // against their lead.
+  //
+  // There is no ownership proof available here yet; P0-4 introduces
+  // resolveOwnedLead() (session identity, or a signed lead_access cookie for
+  // anonymous users). Until then EVERY caller-supplied id is treated as
+  // unverified and the request is attached to a fresh anonymous lead instead.
+  //
+  // The cost is real and accepted: a legitimate user's partner request no longer
+  // links back to their diagnosis lead, so the operator sees a stub row. That is
+  // strictly better than letting anyone rewrite anyone's contact details, and
+  // P0-4 restores the linkage properly.
+  if (!isPartnerLeadReuseEnabled() || finalLeadId === "anonymous" || finalLeadId.startsWith("local-")) {
     const lead = await createAnonymousLead();
     finalLeadId = lead.id;
   }
