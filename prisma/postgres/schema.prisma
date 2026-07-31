@@ -427,10 +427,10 @@ model PartnerRequest {
   acceptedAt         DateTime?
   closedAt           DateTime?
 
-  slaTier             String?
-  slaDueAt            DateTime?
-  slaFirstResponseAt  DateTime?
-  slaBreachAlertedAt  DateTime?
+  slaTier            String?
+  slaDueAt           DateTime?
+  slaFirstResponseAt DateTime?
+  slaBreachAlertedAt DateTime?
 
   @@index([leadId])
   @@index([organizationId])
@@ -1154,10 +1154,10 @@ model EscalationCase {
   updatedAt           DateTime         @updatedAt
   closedAt            DateTime?
 
-  slaTier             String?
-  slaDueAt            DateTime?
-  slaFirstResponseAt  DateTime?
-  slaBreachAlertedAt  DateTime?
+  slaTier            String?
+  slaDueAt           DateTime?
+  slaFirstResponseAt DateTime?
+  slaBreachAlertedAt DateTime?
 
   organization   Organization?       @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   studentProfile StudentProfile      @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
@@ -1260,5 +1260,48 @@ model AuditEvent {
   @@index([targetType])
   @@index([targetId])
   @@index([caseId])
+  @@index([createdAt])
+}
+
+/// A person's request to have their data deleted, and the proof that it is theirs.
+///
+/// P0-1b. Before this table existed, a request from someone who could not prove
+/// ownership was audited and dropped — the request itself was not recorded, so
+/// there was nothing to verify later and nothing to answer. That is fine as a
+/// containment posture and unacceptable as a permanent one: a person who is not
+/// signed in and no longer holds their lead cookie still has the right to have
+/// their data erased.
+///
+/// Nothing here is reversible from the row. subjectHash is an HMAC of the
+/// contact, and verificationTokenHash is a digest of a token that exists only in
+/// the email that was sent. Neither the address nor the token is stored.
+model PrivacyDeletionRequest {
+  id String @id @default(uuid())
+
+  /// "contact" for an unverified address. Set to the proof once verified.
+  subjectType String
+  /// HMAC of the contact this request is about. Never the address itself.
+  subjectHash String
+
+  /// email | authenticated_session | lead_access
+  verificationChannel   String
+  /// SHA-256 of the one-time token. The token itself is only ever in the email.
+  verificationTokenHash String? @unique
+
+  /// pending_verification | verified | expired | superseded | rejected
+  status String
+
+  expiresAt  DateTime?
+  verifiedAt DateTime?
+
+  /// Counts of what was marked, never which records. An audit trail is not a
+  /// place to accumulate the ids of records a person asked to have erased.
+  scopeSummary Json @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([subjectHash, status])
+  @@index([status, expiresAt])
   @@index([createdAt])
 }

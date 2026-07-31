@@ -49,27 +49,41 @@ function code(path: string): string {
     .join("\n");
 }
 
-// 1. The delete-request route must derive its target set from the resolver, and
-//    must not be able to reach a mutation before it.
+// 1. Every mutation lives in one module, and that module only ever receives a
+//    subject the resolver produced. Both routes reach it — POST when the caller
+//    already had a proof, and verify once they redeemed the mailed link — and a
+//    second copy of these queries is how one of them ends up keyed on something
+//    the caller typed.
 {
-  const route = code("src/app/api/privacy/delete-request/route.ts");
+  const apply = code("src/lib/privacy/deletion-apply.ts");
 
-  const resolveAt = route.indexOf("resolveDeletionSubject(");
-  assertOk(resolveAt !== -1, "the delete-request route must resolve a proven subject");
-
-  for (const mutation of ["deleteRequestedAt: now", "withdrawLeadConsentsForPrivacyRequest("]) {
-    const at = route.indexOf(mutation);
-    assertOk(at !== -1, `expected the route to still contain ${mutation}`);
-    assertOk(at > resolveAt, `"${mutation}" appears before the subject is resolved`);
-  }
-
-  // The unproven branch must return before any of that, not fall through.
-  const unprovenReturn = route.indexOf("if (!subject)");
-  assertOk(unprovenReturn !== -1, "the route must have an explicit branch for a caller who proved nothing");
   assertOk(
-    unprovenReturn > resolveAt && unprovenReturn < route.indexOf("deleteRequestedAt: now"),
-    "the unproven branch must return before the first mutation",
+    /export async function applyDeletionSubject\(\s*subject: DeletionSubject/.test(apply),
+    "the mutation must take a resolved subject, not loose identifiers",
   );
+
+  for (const routePath of [
+    "src/app/api/privacy/delete-request/route.ts",
+    "src/app/api/privacy/delete-request/verify/route.ts",
+  ]) {
+    const route = code(routePath);
+    const resolveAt = route.indexOf("resolveDeletionSubject(");
+    const applyAt = route.indexOf("applyDeletionSubject(");
+    assertOk(resolveAt !== -1, `${routePath} must resolve a proven subject`);
+    assertOk(applyAt !== -1, `${routePath} must apply through the shared module`);
+    assertOk(applyAt > resolveAt, `${routePath} applies before it resolves`);
+
+    // No route may write deletion markers itself, or the single choke point is
+    // not a choke point.
+    assertOk(
+      !route.includes("deleteRequestedAt:"),
+      `${routePath} must not set deleteRequestedAt directly — it goes through applyDeletionSubject`,
+    );
+    assertOk(
+      !route.includes("withdrawLeadConsentsForPrivacyRequest("),
+      `${routePath} must not withdraw consents directly`,
+    );
+  }
 }
 
 // 2. Every mutation must be keyed on an id that came out of the resolver. This is
@@ -77,23 +91,34 @@ function code(path: string): string {
 //    `where` clauses read leadId, contactHash and questionHash straight from the
 //    request, and no ordering check can save a query that trusts the body.
 {
-  const route = code("src/app/api/privacy/delete-request/route.ts");
+  const apply = code("src/lib/privacy/deletion-apply.ts");
 
   for (const clause of [
     "db.diagnosisLead.updateMany({ where: { id: { in: leadIds } }",
     "db.partnerRequest.updateMany({ where: { leadId: { in: leadIds } }",
     "db.chatSession.updateMany({ where: { sessionKey: { in: sessionKeys } }",
   ]) {
-    assertOk(route.includes(clause), `a mutation must be keyed on the resolved subject: ${clause}`);
+    assertOk(apply.includes(clause), `a mutation must be keyed on the resolved subject: ${clause}`);
   }
 
-  // The identifiers a caller can type must not appear in a query at all.
-  for (const fromTheBody of ["body.leadId", "body.contact", "hashPii("]) {
-    assertOk(
-      !route.includes(fromTheBody),
-      `${fromTheBody} must not be read here — an id the caller typed is a claim, not a proof`,
-    );
-  }
+  const post = code("src/app/api/privacy/delete-request/route.ts");
+
+  // body.leadId is never read: it would be an unverified claim about someone
+  // else's records, which is exactly what the original endpoint acted on.
+  assertOk(!post.includes("body.leadId"), "a lead id the caller typed is a claim, not a proof");
+
+  // body.contact IS read now — but only as a destination to mail a link to. It
+  // must never reach a query, so the hash of it may only be used to key the
+  // request row, and the verify route is the only place a contact hash resolves
+  // to records.
+  assertOk(
+    !/where:\s*{[^}]*contactHash/.test(post),
+    "the POST route must not look up records by a contact the caller merely typed",
+  );
+  assertOk(
+    post.includes("sendNotificationEmail(") && post.includes("issueDeletionToken("),
+    "an unproven contact must produce a verification link, not a deletion",
+  );
 }
 
 // 3. The question path must be gone rather than gated. A shared string cannot
@@ -115,13 +140,39 @@ function code(path: string): string {
   const route = code("src/app/api/privacy/delete-request/route.ts");
   const returns = route.match(/return\s+(accepted\(requestId\)|NextResponse\.json)/g) || [];
   const shaped = returns.filter((line) => line.includes("accepted(requestId)")).length;
-  assertOk(shaped >= 3, `every success path must return the single shared response shape, found ${shaped}`);
+  assertOk(shaped >= 4, `every success path must return the single shared response shape, found ${shaped}`);
 
   // Counts in the audit trail are fine; identifiers are not.
   assertOk(
     !/metadata:\s*{[^}]*leadIds:\s*subject\.leadIds\b/.test(route),
     "the audit metadata must record how many records were marked, never which ones",
   );
+
+  // The verify route is the sharper case: a distinguishable reply for an expired
+  // or already-used link turns a token found in a forwarded mail or a proxy log
+  // into a test for whether someone's deletion request exists.
+  const verify = code("src/app/api/privacy/delete-request/verify/route.ts");
+  const verifyReturns = verify.match(/return\s+(done\(\)|NextResponse\.json)/g) || [];
+  const verifyShaped = verifyReturns.filter((line) => line.includes("done()")).length;
+  assertOk(verifyShaped >= 4, `every verify outcome must return one shape, found ${verifyShaped}`);
+  assertOk(
+    !/reason:\s*check\.reason[^}]*}\s*,\s*{\s*status:/.test(verify),
+    "the rejection reason is for the audit trail, never for the response",
+  );
+
+  // The token must be redeemed by a conditional write, not by re-reading state.
+  assertOk(
+    /updateMany\(\{[\s\S]*?status: "pending_verification", verifiedAt: null/.test(verify),
+    "redemption must be a single conditional write, or two simultaneous clicks both pass",
+  );
+  assertOk(
+    verify.indexOf("redeemed.count !== 1") < verify.indexOf("applyDeletionSubject("),
+    "the token must be spent before any record is touched",
+  );
+
+  // The raw token must never be stored or logged — only its digest is.
+  assertOk(!/token(?!Hash)\b\s*[,:}]/.test(verify.replace(/searchParams.get\("token"\)/g, "")),
+    "the raw token must not be passed anywhere except the hash function");
 }
 
 console.log("PASS privacy deletion: every mutation is keyed on a proven subject, and the question path is gone");

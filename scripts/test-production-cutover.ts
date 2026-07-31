@@ -18,7 +18,19 @@ import {
 } from "../src/lib/typebot/runtime-health";
 
 const expectedMigration = latestMigrationName();
-assert.equal(expectedMigration, "20260722210000_diagnosis_current_visa");
+
+// Not a literal copy of the current migration name. That has to be hand-edited
+// for every migration, and the assertion below already enforces the thing that
+// matters — that what schema-parity.ts declares is what is actually newest on
+// disk. What the literal did catch, by accident, is a broken reader: if the
+// directory scan started returning "", declared and latest would both be empty
+// and compare equal. So check the shape instead, which needs no edit per
+// migration and still fails when the reader stops reading.
+assert.match(
+  expectedMigration,
+  /^\d{14}_[a-z0-9_]+$/,
+  `latestMigrationName() returned ${JSON.stringify(expectedMigration)}; the migrations directory is not being read`,
+);
 assert.equal(declaredRequiredMigration(), expectedMigration);
 
 const readyPayload = {

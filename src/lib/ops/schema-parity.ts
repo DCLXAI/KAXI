@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 
-export const REQUIRED_PRODUCTION_MIGRATION = "20260722210000_diagnosis_current_visa";
+export const REQUIRED_PRODUCTION_MIGRATION = "20260801120000_privacy_deletion_request";
 
 const REQUIRED_SCHEMA_OBJECTS = [
   "migration_ledger",
