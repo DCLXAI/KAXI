@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { canWriteRuntimeDatabase, db } from "@/lib/db";
 import { JsonBodyError, readJsonBody } from "@/lib/api/json-body";
 import { recordRequestAudit } from "@/lib/audit";
 import { withdrawLeadConsentsForPrivacyRequest } from "@/lib/privacy/consent";
 import { hashPii } from "@/lib/privacy/pii";
+import { isPrivacyDeletionAutomationEnabled } from "@/lib/privacy/deletion-automation";
 import { getClientIp, jsonError, rateLimit } from "@/lib/api/security";
 
 export async function POST(req: NextRequest) {
@@ -16,6 +18,52 @@ export async function POST(req: NextRequest) {
     const contact = typeof body.contact === "string" ? body.contact.trim() : "";
     const question = typeof body.question === "string" ? body.question.trim() : "";
     if (!leadId && !contact && !question) return jsonError("leadId, contact, or question is required", 400);
+
+    // CONTAINMENT (P0-0). This endpoint has no way to prove the caller owns the
+    // data it is asked to delete: it took an unauthenticated leadId, contact or
+    // question and set deleteRequestedAt on every matching row. The question path
+    // is the dangerous one — it matched hashPii(question), and a question like
+    // "비자 연장 서류" is typed by many different people, so a single anonymous
+    // request could schedule unrelated users' records for deletion and withdraw
+    // their consents.
+    //
+    // Until P0-1 adds ownership verification, the request is accepted and audited
+    // but performs NO mutation. The response shape does not depend on whether
+    // anything matched, so it cannot be used to probe for the existence of a
+    // record — which is also the contract P0-1 has to keep.
+    if (!isPrivacyDeletionAutomationEnabled()) {
+      const requestId = randomUUID();
+      await recordRequestAudit(req, {
+        actor: "public-user",
+        actorRole: "user",
+        action: "privacy.delete.request.received",
+        targetType: "UserData",
+        // No identifier is echoed. leadId is caller-supplied and unverified, so
+        // recording it would let the audit log accumulate other people's ids.
+        targetId: null,
+        metadata: {
+          requestId,
+          automationEnabled: false,
+          containment: "p0_unverified_deletion_containment",
+          // Which FIELDS were supplied, never their values or hashes.
+          leadIdProvided: Boolean(leadId),
+          contactProvided: Boolean(contact),
+          questionProvided: Boolean(question),
+        },
+      });
+
+      return NextResponse.json(
+        {
+          ok: true,
+          accepted: true,
+          persisted: false,
+          requestId,
+          status: "received",
+          message: "요청을 접수했습니다. 본인 확인 절차를 거친 뒤 처리 결과를 안내합니다.",
+        },
+        { status: 202 },
+      );
+    }
 
     if (!canWriteRuntimeDatabase()) {
       return NextResponse.json({
