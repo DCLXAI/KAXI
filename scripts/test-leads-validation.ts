@@ -20,6 +20,39 @@ function req(body: unknown) {
   });
 }
 
+// The 400 contract changed with P0-3: `issues` became `fieldErrors`, keyed by
+// field path, alongside `code` and `retryable`. The client needs `retryable` to
+// tell a refusal from an outage — without it, saveDiagnosis treated a rejected
+// payload exactly like a dropped connection and fabricated a local lead.
+//
+// These assertions are deliberately stronger than the ones they replace, which
+// only checked that *some* array existed and never that the right field was
+// named.
+async function assertContractRejection(res: Response, field: string, label: string) {
+  assert.equal(res.status, 400, `expected 400 for ${label}, got ${res.status}`);
+  const json = await res.json() as {
+    ok?: boolean;
+    persisted?: boolean;
+    code?: string;
+    retryable?: boolean;
+    fieldErrors?: Record<string, string[]>;
+    requestId?: string;
+  };
+  assert.equal(json.ok, false, `${label}: a rejection must report ok:false`);
+  assert.equal(json.persisted, false, `${label}: a rejection must report persisted:false`);
+  assert.equal(json.code, "LEAD_PAYLOAD_INVALID", `${label}: expected LEAD_PAYLOAD_INVALID, got ${json.code}`);
+  assert.equal(
+    json.retryable,
+    false,
+    `${label}: a schema rejection is not retryable — retrying the same body cannot help, and marking it retryable is what let the client keep a local-only lead`,
+  );
+  assert.ok(json.requestId, `${label}: a rejection must carry a requestId so it can be traced`);
+  assert.ok(
+    json.fieldErrors && Array.isArray(json.fieldErrors[field]) && json.fieldErrors[field].length > 0,
+    `${label}: fieldErrors must name "${field}", got ${JSON.stringify(json.fieldErrors)}`,
+  );
+}
+
 const validBody = {
   nickname: "테스트유저",
   nationality: "vn",
@@ -40,9 +73,7 @@ console.log("PASS valid lead body -> 201, omitted age defaults to 0");
 // `Number(age) || 0`. zod must reject it with 400 instead of persisting junk.
 {
   const res = await POST(req({ ...validBody, age: "abc" }));
-  assert.equal(res.status, 400, `expected 400 for age:"abc", got ${res.status}`);
-  const json = await res.json();
-  assert.ok(Array.isArray(json.issues), "expected a structured issues array in the 400 response");
+  await assertContractRejection(res, "age", 'age:"abc"');
 }
 console.log('PASS age:"abc" is rejected with 400 (no more silent 0-coercion)');
 
@@ -95,9 +126,7 @@ console.log('PASS currentVisa:"D-2" persists and echoes');
 // not silently coerced or persisted.
 {
   const res = await POST(req({ ...validBody, currentVisa: "C-3" }));
-  assert.equal(res.status, 400, `expected 400 for currentVisa:"C-3", got ${res.status}`);
-  const json = await res.json();
-  assert.ok(Array.isArray(json.issues), "expected a structured issues array in the 400 response");
+  await assertContractRejection(res, "currentVisa", 'currentVisa:"C-3"');
 }
 console.log('PASS currentVisa:"C-3" is rejected with 400');
 
