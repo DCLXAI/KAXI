@@ -1,44 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
+import { JsonBodyError, readJsonBody } from "@/lib/api/json-body";
 import { z } from "zod";
 import { canWriteRuntimeDatabase, db } from "@/lib/db";
 import { getAdminContext, parsePositiveInt, rateLimit, requireAdmin } from "@/lib/api/security";
-import { parseJsonBody } from "@/lib/api/validation";
+import { leadSchema } from "@/lib/data/lead-payload";
 import { canPersistPiiValue, preparePiiField, retentionUntil } from "@/lib/privacy/pii";
 import { serializeLeadForResponse } from "@/lib/privacy/serializers";
 import { getCurrentKaxiUser } from "@/lib/supabase/auth";
 import { sendOpsAlert } from "@/lib/ops/alerts";
 import { siteBaseUrl } from "@/lib/config/site-url";
 
-// Prisma's DiagnosisLead.age/budget/brokerCost/estimatedCost are all Int
-// columns, so every numeric field here is coerced and validated as an
-// integer — a decimal like 25.5 must be rejected (400) rather than fail
-// later as a 500 at db.create.
-const leadSchema = z.object({
-  nickname: z.string().min(1).max(80),
-  nationality: z.string().min(1),
-  pathKey: z.string().min(1),
-  age: z.coerce.number().int().min(0).max(150).optional().default(0),
-  education: z.string().optional().default(""),
-  koreanLevel: z.string().optional().default(""),
-  goal: z.string().optional().default(""),
-  currentVisa: z.enum(["D-2", "D-4", ""]).optional().default(""),
-  budget: z.coerce.number().int().min(0).optional().default(0),
-  region: z.string().optional().default(""),
-  // NOTE: z.coerce.boolean() is JS-truthiness (Boolean(x)) — the STRING "false"
-  // coerces to true. That matches this route's prior Boolean(x) behavior, but do
-  // not copy it for fields that receive "true"/"false" strings; parse those
-  // explicitly instead.
-  usingBroker: z.coerce.boolean().optional().default(false),
-  brokerCost: z.coerce.number().int().min(0).optional().default(0),
-  hasHistory: z.coerce.boolean().optional().default(false),
-  estimatedCost: z.coerce.number().int().min(0).optional().default(0),
-  prepTime: z.string().optional().default(""),
-  requiredDocs: z.array(z.string()).optional().default([]),
-  warnings: z.array(z.string()).optional().default([]),
-  nextActions: z.array(z.string()).optional().default([]),
-  contact: z.string().max(160).optional(),
-  contactType: z.string().optional(),
-});
 
 // GET /api/leads - 리드 목록 조회
 export async function GET(req: NextRequest) {
@@ -82,19 +54,75 @@ export async function POST(req: NextRequest) {
     const limited = await rateLimit(req, { key: "lead:create", limit: 20, windowMs: 60 * 60 * 1000 });
     if (limited) return limited;
 
-    const parsed = await parseJsonBody(req, leadSchema);
-    if (!parsed.ok) return parsed.response;
-    const data = parsed.data;
+    // The client has to be able to tell a contract violation from a transient
+    // failure. It could not: every error looked the same, so saveDiagnosis
+    // treated a 400 exactly like a dropped connection and fabricated a local
+    // lead. `retryable: false` is the field that makes "do not pretend this
+    // saved" decidable on the client.
+    const requestId = randomUUID();
+    const parsedBody = await readJsonBody<unknown>(req, 16_384).catch((err) => err);
+    if (parsedBody instanceof Error) {
+      const status = parsedBody instanceof JsonBodyError ? parsedBody.status : 400;
+      return NextResponse.json(
+        {
+          ok: false,
+          persisted: false,
+          code: "LEAD_BODY_UNREADABLE",
+          retryable: false,
+          error: parsedBody.message,
+          requestId,
+        },
+        { status },
+      );
+    }
+
+    const validated = leadSchema.safeParse(parsedBody);
+    if (!validated.success) {
+      // Field paths and messages only — never the offending value, which for
+      // this route can be a contact detail.
+      const fieldErrors: Record<string, string[]> = {};
+      for (const issue of validated.error.issues) {
+        const key = issue.path.join(".") || "_";
+        (fieldErrors[key] ||= []).push(issue.message);
+      }
+      return NextResponse.json(
+        {
+          ok: false,
+          persisted: false,
+          code: "LEAD_PAYLOAD_INVALID",
+          retryable: false,
+          fieldErrors,
+          requestId,
+        },
+        { status: 400 },
+      );
+    }
+    const data = validated.data;
 
     if (!canWriteRuntimeDatabase()) {
       return NextResponse.json(
-        { error: "Writable production database is not configured", persisted: false },
+        {
+          ok: false,
+          persisted: false,
+          code: "LEAD_DATABASE_UNAVAILABLE",
+          retryable: true,
+          error: "Writable production database is not configured",
+          requestId,
+        },
         { status: 503 }
       );
     }
     if (!canPersistPiiValue(data.contact ?? null)) {
       return NextResponse.json(
-        { error: "PII encryption is required before storing contact in production", persisted: false },
+        {
+          ok: false,
+          persisted: false,
+          code: "LEAD_PII_ENCRYPTION_REQUIRED",
+          // Configuration, not transport: retrying the same body cannot fix it.
+          retryable: false,
+          error: "PII encryption is required before storing contact in production",
+          requestId,
+        },
         { status: 503 }
       );
     }
@@ -152,9 +180,17 @@ export async function POST(req: NextRequest) {
       adminUrl: `${siteBaseUrl()}/admin/leads`,
     }).catch((err) => console.warn("[ops alert] lead", err instanceof Error ? err.message : err));
 
-    return NextResponse.json({ lead: serializeLeadForResponse(lead) }, { status: 201 });
+    return NextResponse.json(
+      { ok: true, persisted: true, lead: serializeLeadForResponse(lead), requestId },
+      { status: 201 },
+    );
   } catch (e) {
     console.error("[POST /api/leads]", e);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    // retryable: the request was well formed and something on our side failed,
+    // so the client keeping it for a retry is correct.
+    return NextResponse.json(
+      { ok: false, persisted: false, code: "LEAD_INTERNAL_ERROR", retryable: true, error: "Internal error" },
+      { status: 500 },
+    );
   }
 }
