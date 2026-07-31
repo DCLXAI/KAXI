@@ -114,6 +114,14 @@ export const t = {
   goal_in_korea_e7: { ko: "취업 확정 후 E-7 전환", vi: "Chuyển sang E-7 sau khi có việc làm", mn: "Ажилд орсны дараа E-7 руу шилжих", en: "Switch to E-7 after a job offer" },
   goal_in_korea_job: { ko: "졸업 후 한국에서 구직할 거예요", vi: "Tôi sẽ tìm việc tại Hàn Quốc sau tốt nghiệp", mn: "Төгсөөд Солонгост ажил хайна", en: "I'll look for a job in Korea after graduating" },
   goal_in_korea_employment: { ko: "채용이 확정됐어요 (E-7 전환)", vi: "Tôi đã có việc làm (chuyển E-7)", mn: "Ажилд орох нь батлагдсан (E-7)", en: "I have a job offer (E-7 switch)" },
+  // Admin-only labels for values that are NOT wizard answers. goal_unsure above
+  // is one — "잘 모름" is a choice a user deliberately picks — so it must never
+  // stand in for a lead that recorded no goal at all. Same for goal_language and
+  // the path column. vi/mn are drafts pending native review.
+  goal_not_recorded: { ko: "미입력", vi: "Chưa nhập", mn: "Оруулаагүй", en: "Not recorded" },
+  goal_unrecognized: { ko: "알 수 없는 값", vi: "Giá trị không xác định", mn: "Тодорхойгүй утга", en: "Unrecognized value" },
+  path_not_recorded: { ko: "미기록", vi: "Chưa có lộ trình", mn: "Бүртгэгдээгүй", en: "Not recorded" },
+  path_unrecognized: { ko: "알 수 없는 경로", vi: "Lộ trình không xác định", mn: "Тодорхойгүй маршрут", en: "Unrecognized path" },
 
   region_seoul: { ko: "서울", vi: "Seoul", mn: "Сеул", en: "Seoul" },
   region_gyeonggi: { ko: "경기", vi: "Gyeonggi", mn: "Кёнги", en: "Gyeonggi" },
@@ -380,6 +388,9 @@ export const t = {
   admin_col_created: { ko: "생성일", vi: "Ngày", mn: "Огноо", en: "Created" },
   admin_col_action: { ko: "액션", vi: "Hành động", mn: "Үйлдэл", en: "Action" },
   admin_empty: { ko: "아직 리드가 없습니다. 진단을 완료해보세요.", vi: "Chưa có lead.", mn: "Лид байхгүй.", en: "No leads yet." },
+  // Marks a stub lead row: created by a partner request from a visitor with no
+  // saved diagnosis, so every wizard column on it is absent rather than answered.
+  admin_no_diagnosis: { ko: "진단 없음", vi: "Chưa đánh giá", mn: "Үнэлгээгүй", en: "No diagnosis" },
 
   // Supabase Auth / workspace
   auth_student_title: { ko: "학생 로그인", vi: "Đăng nhập học sinh", mn: "Оюутны нэвтрэлт", en: "Student login" },
