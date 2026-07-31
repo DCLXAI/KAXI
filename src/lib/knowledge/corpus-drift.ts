@@ -157,8 +157,16 @@ export function describeCorpusDrift(report: CorpusDriftReport): string {
     return `All ${report.totalDocuments} corpus documents match the ingested chunks.`;
   }
   const names = report.driftedDocuments.map((drift) => `${drift.docId} (${drift.reason})`).join(", ");
+  // Deliberately says "disagree" rather than "have not been ingested". The usual
+  // cause is an un-ingested corpus edit, but approveKnowledgeDocument() looks
+  // documents up by docId and re-chunks with repository.ts's own splitter at a
+  // different width, so an admin edit targeting a corpus docId lands here too —
+  // and for that case `knowledge:pgvector` would overwrite the admin's text with
+  // the code's. Naming both keeps the instruction from being confidently wrong.
   return (
-    `${report.driftedDocuments.length} of ${report.totalDocuments} corpus documents have not been ingested since they were last edited: ${names}. ` +
-    "Users are being served the previous text. Run `bun run knowledge:pgvector` then `bun run rag:serving:sync`."
+    `${report.driftedDocuments.length} of ${report.totalDocuments} corpus documents disagree with what is stored: ${names}. ` +
+    "Retrieval serves the stored text, so users are not seeing the committed version. " +
+    "If the corpus was edited and never ingested, run `bun run knowledge:pgvector` then `bun run rag:serving:sync`; " +
+    "if the stored version was edited through the admin knowledge API instead, that command would overwrite it — reconcile the two first."
   );
 }
