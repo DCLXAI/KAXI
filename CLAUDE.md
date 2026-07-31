@@ -72,13 +72,17 @@ gh run list --workflow "Vercel Production Deploy" --limit 3
 
 The workflow runs CI, checks a clean attached `main`, builds a Vercel canary, applies migrations, verifies `/api/readiness` plus Agent/Consult smoke tests, and promotes the canary only after those checks pass.
 
+**Merging to `main` no longer deploys anything.** Until 2026-07-31 it did: Vercel's Git integration deployed every push to `main` on its own, in parallel with this workflow and skipping all of its gates. That is how `42fe6cb` reached production while the workflow's canary step was failing — a red deploy run that looked like nothing had shipped, when it already had. `vercel.json` now sets `git.deploymentEnabled.main = false`, so a merge builds nothing and the workflow above is the only path to production. PR previews on other branches are unaffected, and `test:ci-gates` fails if the setting is removed or flipped back.
+
+The workflow pins the Vercel CLI through `VERCEL_CLI_VERSION` in `.github/workflows/vercel-production.yml`. Every step used to run `bunx vercel`, resolving whatever npm had published most recently; CLI 58.4.4 broke `deploy --prebuilt --archive=tgz` with an `ENOENT` on a transitive `@sentry/node` path and blocked releases until it was pinned back to 58.4.0. Bump that value deliberately, and only after a green run.
+
 Emergency direct deployment is possible because the local Vercel CLI is authenticated and the project is linked:
 
 ```bash
 vercel deploy --prod --yes --force
 ```
 
-Use that only from a clean `main` worktree. It bypasses the GitHub migration/canary gate, so first confirm that the operational DB already has the required migration and then verify readiness after deployment.
+Use that only from a clean `main` worktree. It bypasses the GitHub migration/canary gate, so first confirm that the operational DB already has the required migration and then verify readiness after deployment. It is a CLI deployment, so it still works with the Git integration disabled — that is the escape hatch if the workflow itself is broken.
 
 ## Required post-deploy checks
 
