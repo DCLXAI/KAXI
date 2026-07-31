@@ -24,6 +24,39 @@ export const useLangStore = create<LangState>()(
 );
 
 // --- 리드 (서버 동기화) ---
+/**
+ * Why a diagnosis failed to reach the server.
+ *
+ * `retryable: false` means the server understood the request and refused it, so
+ * keeping a local copy and calling it saved would be a lie. That is exactly what
+ * used to happen: POST /api/leads rejected every completed diagnosis with 400
+ * because its schema demanded string[] where the engine emits {ko,vi,mn,en}, and
+ * this store turned each rejection into a `local-<timestamp>` lead the wizard
+ * reported as a success.
+ */
+export interface LeadSaveFailure {
+  code: string;
+  retryable: boolean;
+  fieldErrors?: Record<string, string[]>;
+  requestId?: string;
+}
+
+class LeadSaveError extends Error {
+  readonly code: string;
+  readonly retryable: boolean;
+  readonly fieldErrors?: Record<string, string[]>;
+  readonly requestId?: string;
+
+  constructor(code: string, retryable: boolean, fieldErrors?: Record<string, string[]>, requestId?: string) {
+    super(`lead save failed: ${code}`);
+    this.name = "LeadSaveError";
+    this.code = code;
+    this.retryable = retryable;
+    this.fieldErrors = fieldErrors;
+    this.requestId = requestId;
+  }
+}
+
 export interface Lead {
   id: string;
   createdAt: string;
@@ -53,6 +86,9 @@ interface LeadState {
   leads: Lead[];
   loading: boolean;
   savingDiagnosis: boolean;
+  // Non-null only when the server refused the payload. A retryable failure keeps
+  // the offline fallback path and leaves this null.
+  saveFailure: LeadSaveFailure | null;
   selectedSchoolsForReadiness: School[];
   saveDiagnosis: (nickname: string, input: DiagnosisInput, recommendation: PathRecommendation) => Promise<string | null>;
   fetchLeads: () => Promise<void>;
@@ -88,10 +124,11 @@ export const useLeadStore = create<LeadState>()(
       leads: [],
       loading: false,
       savingDiagnosis: false,
+      saveFailure: null,
       selectedSchoolsForReadiness: [],
 
       saveDiagnosis: async (nickname, input, recommendation) => {
-        set({ savingDiagnosis: true });
+        set({ savingDiagnosis: true, saveFailure: null });
         try {
           const res = await fetch("/api/leads", {
             method: "POST",
@@ -116,17 +153,47 @@ export const useLeadStore = create<LeadState>()(
               nextActions: recommendation.nextActions,
             }),
           });
-          if (!res.ok) throw new Error("Failed to save lead");
+          if (!res.ok) {
+            // A 4xx means the server understood us and refused. Retrying the same
+            // body cannot help, and pretending it saved is what hid this bug for
+            // weeks — the wizard reported success while the admin inbox stayed
+            // empty. Surface it instead.
+            const problem = await res.json().catch(() => null) as
+              | { code?: string; retryable?: boolean; fieldErrors?: Record<string, string[]>; requestId?: string }
+              | null;
+            const retryable = problem?.retryable ?? res.status >= 500;
+            throw new LeadSaveError(
+              problem?.code || `HTTP_${res.status}`,
+              retryable,
+              problem?.fieldErrors,
+              problem?.requestId,
+            );
+          }
           const { lead } = await res.json();
           set({
             currentDiagnosis: { input, recommendation },
             currentLeadId: lead.id,
+            saveFailure: null,
             leads: [lead, ...get().leads].slice(0, 100),
           });
           return lead.id;
         } catch (e) {
           console.error("[saveDiagnosis]", e);
-          // fallback: 로컬 상태에만 저장
+
+          // A rejected contract is not an offline user. Keep the diagnosis on
+          // screen so nothing the user typed is lost, record why, and return null
+          // so the caller cannot mistake this for a saved lead.
+          if (e instanceof LeadSaveError && !e.retryable) {
+            set({
+              currentDiagnosis: { input, recommendation },
+              currentLeadId: null,
+              saveFailure: { code: e.code, retryable: false, fieldErrors: e.fieldErrors, requestId: e.requestId },
+            });
+            return null;
+          }
+
+          // Everything else — a dropped connection, a 5xx — may succeed later, so
+          // the local copy is a legitimate offline fallback rather than a lie.
           const localLead: Lead = {
             id: `local-${Date.now()}`,
             createdAt: new Date().toISOString(),
