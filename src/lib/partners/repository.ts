@@ -11,6 +11,7 @@ import {
 import { notifyUsers } from "@/lib/notifications/repository";
 import { sendOpsAlert } from "@/lib/ops/alerts";
 import { siteBaseUrl } from "@/lib/config/site-url";
+import { ANONYMOUS_LEAD_PLACEHOLDER } from "@/lib/partners/anonymous-lead";
 import { PARTNER_TYPES } from "@/lib/partners/types";
 
 export interface CreatePartnerRequestInput {
@@ -47,14 +48,14 @@ async function createAnonymousLead() {
   return db.diagnosisLead.create({
     data: {
       nickname: "익명",
-      nationality: "unknown",
+      nationality: ANONYMOUS_LEAD_PLACEHOLDER,
       age: 0,
-      education: "unknown",
-      koreanLevel: "unknown",
-      goal: "unknown",
+      education: ANONYMOUS_LEAD_PLACEHOLDER,
+      koreanLevel: ANONYMOUS_LEAD_PLACEHOLDER,
+      goal: ANONYMOUS_LEAD_PLACEHOLDER,
       budget: 0,
-      region: "unknown",
-      pathKey: "unknown",
+      region: ANONYMOUS_LEAD_PLACEHOLDER,
+      pathKey: ANONYMOUS_LEAD_PLACEHOLDER,
       estimatedCost: 0,
       prepTime: "",
       requiredDocs: "[]",

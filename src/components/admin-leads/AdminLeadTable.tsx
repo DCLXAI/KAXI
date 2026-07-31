@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { Locale } from "@/i18n/routing";
 import { goalLabel, pathLabel } from "./i18n";
+import { hasNoDiagnosis } from "./lead-record";
 import type { AdminLead } from "./types";
 
 interface AdminLeadTableProps {
@@ -67,7 +68,16 @@ export function AdminLeadTable({
               <tbody>
                 {leads.map((lead) => (
                   <tr key={lead.id} className="border-b last:border-0 hover:bg-muted/30">
-                    <td className="py-2 pr-2 font-medium">{lead.nickname}</td>
+                    <td className="py-2 pr-2 font-medium">
+                      <div className="flex items-center gap-1.5">
+                        <span>{lead.nickname}</span>
+                        {hasNoDiagnosis(lead) && (
+                          <Badge variant="secondary" className="text-[10px] font-normal">
+                            {t("admin_no_diagnosis")}
+                          </Badge>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-2 pr-2"><Badge variant="outline">{lead.nationality.toUpperCase()}</Badge></td>
                     <td className="py-2 pr-2 text-xs">{goalLabel(t, lead.goal)}</td>
                     <td className="py-2 pr-2 text-xs">{pathLabel(t, lead.pathKey)}</td>

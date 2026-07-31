@@ -114,6 +114,14 @@ export const t = {
   goal_in_korea_e7: { ko: "취업 확정 후 E-7 전환", vi: "Chuyển sang E-7 sau khi có việc làm", mn: "Ажилд орсны дараа E-7 руу шилжих", en: "Switch to E-7 after a job offer" },
   goal_in_korea_job: { ko: "졸업 후 한국에서 구직할 거예요", vi: "Tôi sẽ tìm việc tại Hàn Quốc sau tốt nghiệp", mn: "Төгсөөд Солонгост ажил хайна", en: "I'll look for a job in Korea after graduating" },
   goal_in_korea_employment: { ko: "채용이 확정됐어요 (E-7 전환)", vi: "Tôi đã có việc làm (chuyển E-7)", mn: "Ажилд орох нь батлагдсан (E-7)", en: "I have a job offer (E-7 switch)" },
+  // Admin-only labels for values that are NOT wizard answers. goal_unsure above
+  // is one — "잘 모름" is a choice a user deliberately picks — so it must never
+  // stand in for a lead that recorded no goal at all. Same for goal_language and
+  // the path column. vi/mn are drafts pending native review.
+  goal_not_recorded: { ko: "미입력", vi: "Chưa nhập", mn: "Оруулаагүй", en: "Not recorded" },
+  goal_unrecognized: { ko: "알 수 없는 값", vi: "Giá trị không xác định", mn: "Тодорхойгүй утга", en: "Unrecognized value" },
+  path_not_recorded: { ko: "미기록", vi: "Chưa có lộ trình", mn: "Бүртгэгдээгүй", en: "Not recorded" },
+  path_unrecognized: { ko: "알 수 없는 경로", vi: "Lộ trình không xác định", mn: "Тодорхойгүй маршрут", en: "Unrecognized path" },
 
   region_seoul: { ko: "서울", vi: "Seoul", mn: "Сеул", en: "Seoul" },
   region_gyeonggi: { ko: "경기", vi: "Gyeonggi", mn: "Кёнги", en: "Gyeonggi" },
@@ -303,6 +311,9 @@ export const t = {
   docs_doc_enrollment: { ko: "재학증명서", vi: "Giấy xác nhận đang học", mn: "Суралцаж буй тодорхойлолт", en: "Certificate of enrollment" },
   docs_doc_residence_proof: { ko: "체류지 입증서류", vi: "Chứng minh nơi cư trú", mn: "Оршин суух газрын нотолгоо", en: "Proof of residence" },
   docs_doc_residence_card: { ko: "외국인등록증·체류카드", vi: "Thẻ cư trú", mn: "Оршин суух карт", en: "Residence card" },
+  // Admin-only. Never a required document itself — it labels a stored key that is
+  // not one, instead of putting 여권 on the badge and inventing a document list.
+  docs_doc_unrecognized: { ko: "알 수 없는 서류", vi: "Giấy tờ không xác định", mn: "Тодорхойгүй бичиг баримт", en: "Unrecognized document" },
   docs_hint_form: { ko: "작성 후 서명한 최종본을 보관하세요.", vi: "Lưu bản cuối đã điền và ký.", mn: "Бөглөж гарын үсэг зурсан эцсийн хувийг хадгална уу.", en: "Keep the completed and signed final version." },
   docs_hint_passport: { ko: "인적사항면을 선명하게 첨부하고 유효기간을 확인하세요.", vi: "Tải trang thông tin rõ nét và kiểm tra hạn hộ chiếu.", mn: "Мэдээллийн хуудсыг тод оруулж хүчинтэй хугацааг шалгана уу.", en: "Upload a clear bio page and check passport validity." },
   docs_hint_authentication: { ko: "학교·공관에 번역, 공증, 아포스티유 또는 영사확인 필요 여부를 확인하세요.", vi: "Kiểm tra yêu cầu dịch, công chứng, Apostille hoặc hợp pháp hóa lãnh sự.", mn: "Орчуулга, нотариат, Apostille эсвэл консулын баталгаа шаардлагатай эсэхийг шалгана уу.", en: "Confirm translation, notarization, apostille, or consular legalization requirements." },
@@ -365,6 +376,9 @@ export const t = {
   partner_academy: { ko: "한국어 학원", vi: "Trung tâm tiếng Hàn", mn: "Солонгос хэлний төв", en: "Korean academy" },
   partner_admission: { ko: "학교 입학처", vi: "Phòng tuyển sinh", mn: "Элсэлтийн алба", en: "School admission office" },
   partner_settlement: { ko: "정착 파트너 (픽업·숙소·통신·보험)", vi: "Hỗ trợ ban đầu", mn: "Байршуулалт", en: "Settlement partner" },
+  // Admin-only. Never a partner type itself — an unrecognized type used to render
+  // as partner_admin, i.e. 행정사, the one label here that must never be misapplied.
+  partner_unrecognized: { ko: "알 수 없는 유형", vi: "Loại không xác định", mn: "Тодорхойгүй төрөл", en: "Unrecognized type" },
   partner_request: { ko: "상담 요청", vi: "Yêu cầu tư vấn", mn: "Зөвлөгөө хүсэх", en: "Request consultation" },
   partner_excluded: { ko: "취업 매칭은 법적 위험으로 제외됩니다", vi: "Không ghép việc làm", mn: "Ажлын байр холбохгүй", en: "No job matching (legal risk)" },
 
@@ -380,6 +394,9 @@ export const t = {
   admin_col_created: { ko: "생성일", vi: "Ngày", mn: "Огноо", en: "Created" },
   admin_col_action: { ko: "액션", vi: "Hành động", mn: "Үйлдэл", en: "Action" },
   admin_empty: { ko: "아직 리드가 없습니다. 진단을 완료해보세요.", vi: "Chưa có lead.", mn: "Лид байхгүй.", en: "No leads yet." },
+  // Marks a stub lead row: created by a partner request from a visitor with no
+  // saved diagnosis, so every wizard column on it is absent rather than answered.
+  admin_no_diagnosis: { ko: "진단 없음", vi: "Chưa đánh giá", mn: "Үнэлгээгүй", en: "No diagnosis" },
 
   // Supabase Auth / workspace
   auth_student_title: { ko: "학생 로그인", vi: "Đăng nhập học sinh", mn: "Оюутны нэвтрэлт", en: "Student login" },
