@@ -313,18 +313,24 @@ async function testConsentThirdPartyFlow() {
     ) {
       fail("n8n audit trigger must retain metadata and scrub duplicated conversation content");
     }
-    // Tie the canonical session to the retention lead, the way a real handoff
-    // does. Without a link like this a session has no owner, and no proof can
-    // reach it — which is the honest consequence of dropping question matching.
+    // Tie the canonical session to a lead of its own, the way a real handoff
+    // does. Without a link like this a session has no owner and no proof can
+    // reach it — the honest consequence of dropping question matching.
+    //
+    // Deliberately NOT the retention lead: deleting through a proof also
+    // withdraws that lead's consents immediately, which would leave the
+    // retention sweep below with nothing active to expire and turn its
+    // assertion vacuous.
+    const canonicalLead = await createPrivacyLead(leadsRoute, "canonical-flow");
     await db.handoffLead.create({
-      data: { id: retentionLeadId, sessionKey: canonicalSessionKey, locale: "ko", source: "privacy-test" },
+      data: { id: canonicalLead.leadId, sessionKey: canonicalSessionKey, locale: "ko", source: "privacy-test" },
     });
 
     const canonicalDelete = await readJson(
       await deleteRoute.POST(
         apiRequest("/api/privacy/delete-request", {
           method: "POST",
-          cookie: retentionLead.cookie,
+          cookie: canonicalLead.cookie,
           body: JSON.stringify({}),
         }),
       ),
@@ -337,7 +343,7 @@ async function testConsentThirdPartyFlow() {
       await deleteRoute.POST(
         apiRequest("/api/privacy/delete-request", {
           method: "POST",
-          cookie: retentionLead.cookie,
+          cookie: canonicalLead.cookie,
           body: JSON.stringify({ question: canonicalQuestion }),
         }),
       ),
