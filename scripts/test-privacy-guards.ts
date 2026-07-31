@@ -251,7 +251,9 @@ async function testConsentThirdPartyFlow() {
       await deleteRoute.POST(
         apiRequest("/api/privacy/delete-request", {
           method: "POST",
-          body: JSON.stringify({ leadId }),
+          // The proof, not the id. The body no longer selects anything.
+          cookie: lead.cookie,
+          body: JSON.stringify({}),
         })
       )
     );
@@ -311,17 +313,38 @@ async function testConsentThirdPartyFlow() {
     ) {
       fail("n8n audit trigger must retain metadata and scrub duplicated conversation content");
     }
+    // Tie the canonical session to the retention lead, the way a real handoff
+    // does. Without a link like this a session has no owner, and no proof can
+    // reach it — which is the honest consequence of dropping question matching.
+    await db.handoffLead.create({
+      data: { id: retentionLeadId, sessionKey: canonicalSessionKey, locale: "ko", source: "privacy-test" },
+    });
+
     const canonicalDelete = await readJson(
       await deleteRoute.POST(
         apiRequest("/api/privacy/delete-request", {
           method: "POST",
-          body: JSON.stringify({ question: canonicalQuestion }),
+          cookie: retentionLead.cookie,
+          body: JSON.stringify({}),
         }),
       ),
     );
     if (!canonicalDelete.ok) fail(`canonical chat delete request failed: ${canonicalDelete.status}`);
     const markedCanonicalSession = await db.chatSession.findUnique({ where: { sessionKey: canonicalSessionKey } });
     if (!markedCanonicalSession?.deleteRequestedAt) fail("canonical chat session was not marked for privacy deletion");
+
+    const questionSelector = await readJson(
+      await deleteRoute.POST(
+        apiRequest("/api/privacy/delete-request", {
+          method: "POST",
+          cookie: retentionLead.cookie,
+          body: JSON.stringify({ question: canonicalQuestion }),
+        }),
+      ),
+    );
+    if (questionSelector.status !== 400) {
+      fail(`a question string must be refused as a deletion selector, got ${questionSelector.status}`);
+    }
 
     const retention = await enforcePrivacyRetention();
     if (retention.consentsExpired < 3) fail(`retention should expire active consents, got ${retention.consentsExpired}`);

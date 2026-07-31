@@ -6,7 +6,7 @@ import { getDocumentStorageInfo } from "@/lib/documents/storage";
 import { sharedOpenAiRagRuntimeInfo } from "@/lib/chat/shared-openai-rag";
 import { getRagServingProjectionStatus } from "@/lib/knowledge/serving-projection";
 import { getPrivacyRuntimeReadiness } from "@/lib/privacy/config";
-import { privacyDeletionAutomationStatus } from "@/lib/privacy/deletion-automation";
+import { SUPPORTED_DELETION_PROOFS } from "@/lib/privacy/deletion-scope";
 import { getSchoolSourceAudit } from "@/lib/schools/repository";
 import { isTypebotGatewayAuthConfigured } from "@/lib/typebot/gateway-auth";
 import { checkProductionSchemaParity } from "@/lib/ops/schema-parity";
@@ -113,7 +113,7 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
   const sourceAudit = getKnowledgeSourceAudit();
   const schoolAudit = await getSchoolSourceAudit();
   const privacyReadiness = getPrivacyRuntimeReadiness(env);
-  const deletionAutomation = privacyDeletionAutomationStatus(env);
+  const deletionProofs = [...SUPPORTED_DELETION_PROOFS];
   const sharedRagRuntime = sharedOpenAiRagRuntimeInfo(env);
   const servingProjection = await getRagServingProjectionStatus().catch((error) => ({
     error: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
@@ -365,22 +365,25 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
       credentialRotation,
       production ? "required" : "warning",
     ),
-    // P0-1 has not shipped, so /api/privacy/delete-request still cannot prove the
-    // requester owns the data it is asked to delete, and its mutations stay
-    // contained. Reported as OK while contained, because containment is the
-    // correct posture — what must be visible is the opposite: switching it back
-    // on in production before verification exists.
+    // P0-1a. /api/privacy/delete-request now derives what it touches from a proof
+    // the caller presented, so this reports which proofs exist rather than the
+    // state of a switch — there is no switch left to flip, and a flag that can
+    // never legitimately be true is worse than no flag.
     //
-    // The partner-lead half of this check is gone: P0-4 replaced that containment
-    // with an actual ownership proof, so there is no longer a switch to report.
+    // Reported as OK because the covered paths work and the uncovered one is
+    // contained, not silently dropped. What this makes visible is the gap: a
+    // person who is neither signed in nor still holding their lead cookie has no
+    // way to prove a contact address is theirs, so their request is recorded and
+    // audited but performs nothing until P0-1b's verification channel lands.
     check(
-      "privacy.unverified_deletion_containment",
-      "Unverified deletion containment",
-      !production || !deletionAutomation.enabled,
-      !production || !deletionAutomation.enabled
-        ? "Deletion requests are accepted and audited but perform no mutation, pending ownership verification."
-        : `${deletionAutomation.flag} allows unverified deletion requests to mutate user data in production.`,
-      { deletionAutomation },
+      "privacy.deletion_ownership_proofs",
+      "Deletion request ownership proofs",
+      deletionProofs.length > 0,
+      deletionProofs.length > 0
+        ? `Deletion requests act only on records proven by: ${deletionProofs.join(", ")}. `
+          + "Requests carrying no proof are recorded and audited but mutate nothing."
+        : "No ownership proof is implemented, so no deletion request can be honoured.",
+      { supportedProofs: deletionProofs },
       production ? "required" : "warning",
     ),
     check(
