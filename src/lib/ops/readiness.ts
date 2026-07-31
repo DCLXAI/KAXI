@@ -6,7 +6,7 @@ import { getDocumentStorageInfo } from "@/lib/documents/storage";
 import { sharedOpenAiRagRuntimeInfo } from "@/lib/chat/shared-openai-rag";
 import { getRagServingProjectionStatus } from "@/lib/knowledge/serving-projection";
 import { getPrivacyRuntimeReadiness } from "@/lib/privacy/config";
-import { partnerLeadReuseStatus, privacyDeletionAutomationStatus } from "@/lib/privacy/deletion-automation";
+import { privacyDeletionAutomationStatus } from "@/lib/privacy/deletion-automation";
 import { getSchoolSourceAudit } from "@/lib/schools/repository";
 import { isTypebotGatewayAuthConfigured } from "@/lib/typebot/gateway-auth";
 import { checkProductionSchemaParity } from "@/lib/ops/schema-parity";
@@ -114,7 +114,6 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
   const schoolAudit = await getSchoolSourceAudit();
   const privacyReadiness = getPrivacyRuntimeReadiness(env);
   const deletionAutomation = privacyDeletionAutomationStatus(env);
-  const partnerLeadReuse = partnerLeadReuseStatus(env);
   const sharedRagRuntime = sharedOpenAiRagRuntimeInfo(env);
   const servingProjection = await getRagServingProjectionStatus().catch((error) => ({
     error: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
@@ -366,24 +365,22 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
       credentialRotation,
       production ? "required" : "warning",
     ),
-    // P0-0 containment state. Reported as OK when contained, because containment
-    // is the correct posture right now — the two endpoints cannot prove the caller
-    // owns the data they mutate. What must be visible is the opposite case: if
-    // either switch is turned back on before P0-1/P0-4 land ownership
-    // verification, readiness says so instead of staying quietly green.
+    // P0-1 has not shipped, so /api/privacy/delete-request still cannot prove the
+    // requester owns the data it is asked to delete, and its mutations stay
+    // contained. Reported as OK while contained, because containment is the
+    // correct posture — what must be visible is the opposite: switching it back
+    // on in production before verification exists.
+    //
+    // The partner-lead half of this check is gone: P0-4 replaced that containment
+    // with an actual ownership proof, so there is no longer a switch to report.
     check(
-      "privacy.unverified_mutation_containment",
-      "Unverified deletion and lead-reuse containment",
-      !production || (!deletionAutomation.enabled && !partnerLeadReuse.enabled),
-      !production || (!deletionAutomation.enabled && !partnerLeadReuse.enabled)
-        ? "Deletion requests and partner lead reuse are contained until ownership verification ships."
-        : "An endpoint that cannot verify ownership is enabled in production: "
-          + [
-            deletionAutomation.enabled ? `${deletionAutomation.flag} allows unverified deletion requests to mutate user data` : null,
-            partnerLeadReuse.enabled ? `${partnerLeadReuse.flag} allows a caller-supplied lead id to be written to` : null,
-          ].filter(Boolean).join("; ")
-          + ".",
-      { deletionAutomation, partnerLeadReuse },
+      "privacy.unverified_deletion_containment",
+      "Unverified deletion containment",
+      !production || !deletionAutomation.enabled,
+      !production || !deletionAutomation.enabled
+        ? "Deletion requests are accepted and audited but perform no mutation, pending ownership verification."
+        : `${deletionAutomation.flag} allows unverified deletion requests to mutate user data in production.`,
+      { deletionAutomation },
       production ? "required" : "warning",
     ),
     check(

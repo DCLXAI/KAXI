@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { recordRequestAudit } from "@/lib/audit";
+import { getCurrentKaxiUser } from "@/lib/supabase/auth";
+import { LEAD_ACCESS_COOKIE, resolveOwnedLead } from "@/lib/leads/ownership";
 import { getClientIp, jsonError, rateLimit, requireAdmin } from "@/lib/api/security";
 import { createPartnerRequest, isUnpersistedPartnerRequest } from "@/lib/partners/repository";
 import { ConsentRequiredError } from "@/lib/privacy/consent";
@@ -20,8 +23,40 @@ export async function POST(req: NextRequest) {
     if (name && String(name).length > 80) return jsonError("Name is too long", 413);
     if (contact && String(contact).length > 160) return jsonError("Contact is too long", 413);
 
+    // P0-4. The body's leadId is a hint, never an authority. resolveOwnedLead
+    // returns an id only when the caller proved they own it — through the session
+    // user for an authenticated caller, or the signed lead_access cookie issued
+    // when they created the diagnosis. Anything else resolves to null and the
+    // repository creates a fresh anonymous lead, which is what P0-0 did for
+    // every caller.
+    //
+    // The failure reason is audited but never returned: telling the client that
+    // a lead exists but is not theirs is itself a disclosure.
+    const ownership = await resolveOwnedLead(
+      { findLeadOwner: (id) => db.diagnosisLead.findUnique({ where: { id }, select: { userId: true } }) },
+      {
+        requestedLeadId: typeof leadId === "string" ? leadId : null,
+        leadAccessToken: req.cookies.get(LEAD_ACCESS_COOKIE)?.value ?? null,
+        sessionUserId: (await getCurrentKaxiUser().catch(() => null))?.id ?? null,
+      },
+    );
+
+    if (leadId && !ownership.leadId) {
+      await recordRequestAudit(req, {
+        actor: "public-user",
+        actorRole: "user",
+        action: "partner.lead.ownership_rejected",
+        targetType: "DiagnosisLead",
+        // The requested id is not recorded: it is unverified and may be someone
+        // else's, and an audit log is not a place to accumulate other people's
+        // identifiers.
+        targetId: null,
+        metadata: { reason: ownership.reason },
+      });
+    }
+
     const request = await createPartnerRequest({
-      leadId,
+      leadId: ownership.leadId,
       partnerType: String(partnerType),
       question: question || null,
       name: name || null,

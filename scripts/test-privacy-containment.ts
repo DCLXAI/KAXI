@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import {
-  PARTNER_LEAD_REUSE_FLAG,
   PRIVACY_DELETION_AUTOMATION_FLAG,
-  isPartnerLeadReuseEnabled,
   isPrivacyDeletionAutomationEnabled,
-  partnerLeadReuseStatus,
   privacyDeletionAutomationStatus,
 } from "../src/lib/privacy/deletion-automation";
 
@@ -55,10 +52,6 @@ for (const env of PRODUCTION_ENVS) {
     !isPrivacyDeletionAutomationEnabled(env),
     `deletion automation must be OFF by default in production ${label}`,
   );
-  assertOk(
-    !isPartnerLeadReuseEnabled(env),
-    `partner lead reuse must be OFF by default in production ${label}`,
-  );
 }
 
 // 2. Still ON outside production, so local and CI keep exercising the real code
@@ -69,10 +62,6 @@ for (const env of NON_PRODUCTION_ENVS) {
     isPrivacyDeletionAutomationEnabled(env),
     `deletion automation must stay ON outside production ${label} — otherwise the mutation path is never tested`,
   );
-  assertOk(
-    isPartnerLeadReuseEnabled(env),
-    `partner lead reuse must stay ON outside production ${label}`,
-  );
 }
 
 // 3. The override works in both directions and is explicit. Re-enabling in
@@ -82,19 +71,11 @@ for (const truthy of ["1", "true", "TRUE", "yes", "on"]) {
     isPrivacyDeletionAutomationEnabled({ NODE_ENV: "production", [PRIVACY_DELETION_AUTOMATION_FLAG]: truthy }),
     `"${truthy}" must re-enable deletion automation`,
   );
-  assertOk(
-    isPartnerLeadReuseEnabled({ NODE_ENV: "production", [PARTNER_LEAD_REUSE_FLAG]: truthy }),
-    `"${truthy}" must re-enable partner lead reuse`,
-  );
 }
 for (const falsy of ["0", "false", "FALSE", "no", "off"]) {
   assertOk(
     !isPrivacyDeletionAutomationEnabled({ [PRIVACY_DELETION_AUTOMATION_FLAG]: falsy }),
     `"${falsy}" must disable deletion automation even outside production`,
-  );
-  assertOk(
-    !isPartnerLeadReuseEnabled({ [PARTNER_LEAD_REUSE_FLAG]: falsy }),
-    `"${falsy}" must disable partner lead reuse even outside production`,
   );
 }
 
@@ -104,13 +85,11 @@ for (const junk of ["", "  ", "maybe", "enabled", "2", "null", "undefined"]) {
     !isPrivacyDeletionAutomationEnabled({ NODE_ENV: "production", [PRIVACY_DELETION_AUTOMATION_FLAG]: junk }),
     `production must stay contained when the flag is the unparseable value ${JSON.stringify(junk)}`,
   );
-  assertOk(
-    !isPartnerLeadReuseEnabled({ NODE_ENV: "production", [PARTNER_LEAD_REUSE_FLAG]: junk }),
-    `partner lead reuse must stay contained for ${JSON.stringify(junk)}`,
-  );
 }
 
-console.log("PASS privacy containment: both switches default to contained in production and require an explicit opt-in");
+// The partner-lead half of this pair is gone: P0-4 replaced its blanket refusal
+// with proven ownership, so only the deletion switch remains.
+console.log("PASS privacy containment: deletion automation defaults to contained in production and requires an explicit opt-in");
 
 // 5. The status objects an operator reads must say WHY, and must name a reason
 //    only while contained — a permanent reason string would read as a permanent
@@ -131,11 +110,6 @@ console.log("PASS privacy containment: both switches default to contained in pro
   const enabled = privacyDeletionAutomationStatus({ NODE_ENV: "development" });
   assertOk(enabled.enabled === true && enabled.containment === null, "an enabled status must carry no containment reason");
 
-  const partnerContained = partnerLeadReuseStatus({ NODE_ENV: "production" });
-  assertOk(
-    partnerContained.enabled === false && partnerContained.containment === "p0_unverified_lead_reuse_containment",
-    "partner lead reuse status must report its own containment reason",
-  );
 }
 
 console.log("PASS privacy containment: status objects name the flag and the reason");
@@ -181,23 +155,51 @@ console.log("PASS privacy containment: status objects name the flag and the reas
 
 console.log("PASS privacy containment: every delete-request mutation sits behind the guard, and the contained branch records no caller identifiers");
 
-// 7. Partner request: the containment must be checked before the lead is reused.
+// 7. Partner requests. The P0-0 switch is gone — P0-4 replaced it with an actual
+//    ownership proof — so what must hold now is that the route resolves ownership
+//    BEFORE the repository can write to a lead, and that the repository no longer
+//    has any path that trusts a caller-supplied id.
 {
   const { readFileSync } = await import("node:fs");
+  const route = readFileSync("src/app/api/partner-requests/route.ts", "utf8");
   const repo = readFileSync("src/lib/partners/repository.ts", "utf8");
 
-  const guardAt = repo.indexOf("isPartnerLeadReuseEnabled()");
-  assertOk(guardAt !== -1, "createPartnerRequest must consult the lead-reuse switch");
+  const resolveAt = route.indexOf("resolveOwnedLead(");
+  assertOk(resolveAt !== -1, "the partner route must resolve lead ownership");
 
-  const updateAt = repo.indexOf("db.diagnosisLead.update(");
-  assertOk(updateAt !== -1, "expected the lead update to still exist");
-  assertOk(updateAt > guardAt, "the lead update must sit after the containment guard");
-
-  const consentAt = repo.indexOf("ensurePartnerRoutingConsentForLead(");
+  const createAt = route.indexOf("createPartnerRequest(");
+  assertOk(createAt > resolveAt, "ownership must be resolved before the request is created");
   assertOk(
-    consentAt > guardAt,
-    "the consent snapshot must be recorded after the lead id has been replaced, never against an unverified lead",
+    /leadId:\s*ownership\.leadId/.test(route),
+    "createPartnerRequest must receive the RESOLVED lead id, never the raw body value",
+  );
+
+  // The repository must not be able to reach a lead the route did not verify.
+  assertOk(
+    !/isPartnerLeadReuseEnabled/.test(repo),
+    "the superseded reuse switch must be gone, not left as a dead control",
+  );
+  const updateAt = repo.indexOf("db.diagnosisLead.update(");
+  const guardAt = repo.indexOf('if (!finalLeadId || finalLeadId === "anonymous"');
+  assertOk(guardAt !== -1, "the repository must still replace a placeholder id with a fresh lead");
+  assertOk(updateAt > guardAt, "the lead update must sit after the placeholder replacement");
+  assertOk(
+    repo.indexOf("ensurePartnerRoutingConsentForLead(") > guardAt,
+    "a consent snapshot must never be recorded against an unresolved lead",
+  );
+
+  // The rejection must not tell the caller whether the lead exists.
+  const auditAt = route.indexOf("partner.lead.ownership_rejected");
+  assertOk(auditAt !== -1, "a rejected ownership claim must be audited");
+  const auditBlock = route.slice(auditAt, auditAt + 600);
+  assertOk(
+    /targetId: null/.test(auditBlock),
+    "the audit entry must not record the unverified id — it may be someone else's",
+  );
+  assertOk(
+    !/return .*(404|403)/.test(route.slice(resolveAt, createAt)),
+    "a failed proof must fall through to a fresh lead, not answer with a status that reveals the lead exists",
   );
 }
 
-console.log("PASS privacy containment: partner requests replace an unverified lead id before any write to it");
+console.log("PASS privacy containment: partner requests act only on a lead whose ownership was proven");
