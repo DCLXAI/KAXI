@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
 import { getRagServingProjectionStatus } from "@/lib/knowledge/serving-projection";
+import { describeCorpusDrift, detectStaticCorpusDrift } from "@/lib/knowledge/corpus-drift";
 import { sendOpsAlert } from "@/lib/ops/alerts";
 import { siteBaseUrl } from "@/lib/config/site-url";
 import { extractRagProvenance, resolveRagProvenance } from "@/lib/n8n/provenance";
@@ -363,6 +364,28 @@ export async function runRagSystemHealth(triggerSource = "manual") {
           ? `${status.lexicalOnlyReadyChunks} serving chunk(s) are citation-ready but still require OpenAI vector embeddings.`
           : "The governed OpenAI serving projection is incomplete.";
       return { ok, detail, metadata: status as unknown as Record<string, unknown> };
+    }),
+    // Deliberately a warning, not required. The corpus is EXPECTED to be ahead of
+    // the database between the PR that edits it and the operator action that
+    // ingests it, so this must never flip production to degraded or block a
+    // release. It only has to stop the gap from being invisible: the daily cron
+    // surfaces failing keys regardless of severity, so a stale corpus now shows up
+    // in the ops alert instead of sitting unnoticed for weeks, which is exactly
+    // what happened to the 행정사 corrections in PR #65.
+    //
+    // Note this runs in runRagSystemHealth, not in the readiness payload, so the
+    // deploy canary cannot be blocked by it.
+    timed("rag.corpus_freshness", false, async () => {
+      const report = await detectStaticCorpusDrift(serviceClient());
+      return {
+        ok: report.inSync,
+        detail: describeCorpusDrift(report),
+        metadata: {
+          totalDocuments: report.totalDocuments,
+          matchedDocuments: report.matchedDocuments,
+          driftedDocuments: report.driftedDocuments,
+        },
+      };
     }),
     timed("rag.openai_query_embedding", openAiEmbeddingRequired, async () => {
       const embedding = await createRagQueryEmbedding(
