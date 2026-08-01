@@ -568,11 +568,17 @@ export const SOURCE_METADATA: Record<string, SourceMetadata> = {
   "국가법령정보센터 · 출입국관리법 최근공포·시행일자": {
     label: "국가법령정보센터 · 최근공포법령",
     url: "https://www.law.go.kr/LSW/nwRvsLsPop.do?chrIdx=10&cptOfi=&lsKndCd=&lsNm=%EC%B6%9C%EC%9E%85%EA%B5%AD%EA%B4%80%EB%A6%AC%EB%B2%95&p_epubdt=&p_epubno=&p_spubdt=&p_spubno=&searchType=lsNm&sortIdx=0",
-    // 2026-07-17 재검증: 최근공포 목록 최신 항목이 시행규칙 법무부령 제1106호
-    // (공포·시행 2026-01-23) — 문서 기준선(법 2025-07-22 공포/2026-01-23 시행,
-    // 시행규칙 2026-01-23, 시행령 2025-05-27)과 일치, 신규 공포 없음.
-    verifiedAt: "2026-07-17",
-    reviewAfter: "2026-07-31",
+    // 2026-08-01 재검증: 최근공포 목록을 직접 조회. 최신 항목은 여전히 시행규칙
+    // 법무부령 제1106호(공포·시행 2026-01-23)이고, 그 아래로 법률 제20992호
+    // (공포 2025-07-22 / 시행 2026-01-23), 시행령 제35540호(공포 2025-05-27 /
+    // 시행 2025-06-01)까지 문서 기준선과 일치 — 신규 공포 없음.
+    //
+    // 다만 문서 본문은 시행령을 "2025-05-27 시행본"이라고 쓰는데, 2025-05-27은
+    // 공포일이고 시행일은 2025-06-01이다. 감시 주장(신규 공포 없음)은 유효하지만
+    // 이 한 줄은 사실과 다르며, 코퍼스 본문 수정은 4개 로케일 + 재인제스트 +
+    // serving projection 동기화가 따라붙으므로 별도 작업으로 분리했다.
+    verifiedAt: "2026-08-01",
+    reviewAfter: "2026-08-15",
     owner: "official",
     sourceType: "official_law",
     jurisdiction: "KR",
@@ -689,11 +695,14 @@ export const SOURCE_METADATA: Record<string, SourceMetadata> = {
   "HiKorea · 첫 화면 긴급 공지": {
     label: "하이코리아 첫 화면 긴급 공지",
     url: "https://www.hikorea.go.kr/index.html",
-    // 2026-07-17 재검증: 첫 화면에 문서가 기술하는 공지 유형이 그대로 노출 중
-    // (전자입국신고서 사칭사이트 주의, 전자팩스 신고대상 변경 2026-06-01,
-    // 전자민원·방문예약 안내) — 내용 유효.
-    verifiedAt: "2026-07-17",
-    reviewAfter: "2026-07-31",
+    // 2026-08-01 재검증: 첫 화면을 JS 실행 브라우저로 직접 확인(정적 페치로는
+    // 껍데기만 내려온다). 문서가 기술하는 공지 유형이 그대로 노출 중 —
+    // 전자입국신고서 사칭사이트 주의(공식 www.e-arrivalcard.go.kr, 수수료 무료),
+    // 전자팩스 신고대상 변경(2026-06-01부터 고용변동·D-10 연수 신고만 팩스 가능),
+    // 한·미 자동출입국심사 재오픈. 문서는 특정 공지가 아니라 감시 대상 유형을
+    // 기술하므로 내용 유효.
+    verifiedAt: "2026-08-01",
+    reviewAfter: "2026-08-15",
     owner: "official",
     sourceType: "official_government",
     jurisdiction: "KR",
