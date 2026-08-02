@@ -167,6 +167,63 @@ async function testImageOcrReadiness() {
   }
 }
 
+async function testDeletionMailGapDoesNotBlockRelease() {
+  // The first version of privacy.deletion_ownership_proofs made a missing
+  // SMTP_HOST a REQUIRED failure. That turned an unset optional notification
+  // channel into a hard block on every production release — deploy run
+  // 30741109720 failed its canary on exactly this, with nothing actually wrong.
+  //
+  // The trade is wrong in both directions, so both are pinned here: an
+  // undeliverable verification link must stay VISIBLE (the check still fails)
+  // but must not gate the release (severity warning, status still ready),
+  // while "no ownership proof at all" must remain a required failure, because
+  // then no deletion request can ever be honoured.
+  const snapshot = { ...process.env };
+  try {
+    Object.assign(process.env, {
+      NODE_ENV: "production",
+      VERCEL_ENV: "production",
+      VERCEL: "1",
+    });
+    delete process.env.SMTP_HOST;
+    delete process.env.SMTP_FROM;
+
+    const payload = await getReadinessPayload();
+    const check = payload.checks.find((item) => item.key === "privacy.deletion_ownership_proofs");
+    if (!check) fail("readiness must report which deletion ownership proofs exist");
+    if (check.ok) {
+      fail(`an undeliverable verification link must stay visible, not silently pass: ${JSON.stringify(check)}`);
+    }
+    if (check.severity !== "warning") {
+      fail(`a missing mail channel must not gate the release: severity=${check.severity}`);
+    }
+    if (payload.checks.some((item) => item.severity === "required" && !item.ok && item.key === check.key)) {
+      fail("the deletion proof check must not appear as a required failure without mail configured");
+    }
+    if (check.metadata?.verificationMailConfigured !== false) {
+      fail(`the metadata must say the mail channel is unconfigured: ${JSON.stringify(check.metadata)}`);
+    }
+    // The proofs that do not need mail must still be advertised, or the detail
+    // would imply deletion is unavailable when two channels still work.
+    const proofs = check.metadata?.supportedProofs as string[] | undefined;
+    for (const proof of ["session", "lead_access"]) {
+      if (!proofs?.includes(proof)) fail(`${proof} must still be advertised when mail is unconfigured`);
+    }
+
+    process.env.SMTP_HOST = "smtp.example.test";
+    process.env.SMTP_FROM = "no-reply@example.test";
+    const configuredPayload = await getReadinessPayload();
+    const configuredCheck = configuredPayload.checks.find(
+      (item) => item.key === "privacy.deletion_ownership_proofs",
+    );
+    if (!configuredCheck?.ok) {
+      fail(`configured mail should clear the check: ${JSON.stringify(configuredCheck)}`);
+    }
+  } finally {
+    restoreEnv(snapshot);
+  }
+}
+
 async function testProductionReadinessRejectsWeakPrivacyConfig() {
   const snapshot = { ...process.env };
   try {
@@ -527,6 +584,7 @@ function testRagQualityGate() {
 
 await testProductionReadinessFlagsMissingOpsConfig();
 await testImageOcrReadiness();
+await testDeletionMailGapDoesNotBlockRelease();
 await testProductionReadinessRejectsWeakPrivacyConfig();
 testDatabaseRuntimeInfo();
 await testProductionRateLimitFailsClosedWithoutSharedBackend();
