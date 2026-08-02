@@ -75,8 +75,8 @@ if (sourceAudit.expiredDocs.length > 0) {
 // expected check date; the evidence for each re-verification lives beside the
 // entry in src/lib/data/source-metadata.ts.
 const REVERIFIED_CHECK_DATES: Record<string, string> = {
-  "hikorea-homepage-urgent-notices": "2026-07-17",
-  "immigration-law-recent-promulgations": "2026-07-17",
+  "hikorea-homepage-urgent-notices": "2026-08-01",
+  "immigration-law-recent-promulgations": "2026-08-01",
 };
 
 const requiredHiKoreaDocs = [
