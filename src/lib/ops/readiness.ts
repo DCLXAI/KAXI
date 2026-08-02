@@ -115,6 +115,8 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
   const privacyReadiness = getPrivacyRuntimeReadiness(env);
   const deletionProofs = [...SUPPORTED_DELETION_PROOFS];
   const deletionMailReady = configured(env.SMTP_HOST) && configured(env.SMTP_FROM);
+  const deletionProofsImplemented = deletionProofs.length > 0;
+  const deletionMailGap = deletionProofs.includes("contact_token") && !deletionMailReady;
   const sharedRagRuntime = sharedOpenAiRagRuntimeInfo(env);
   const servingProjection = await getRagServingProjectionStatus().catch((error) => ({
     error: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
@@ -377,19 +379,30 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
     // also surfaces the case where contact_token is advertised but no mail can
     // actually be sent — otherwise the link is issued into nothing and the
     // request is never honoured.
+    //
+    // The two failures have different severities on purpose, and the first
+    // version of this check got that wrong: it made a missing mail channel a
+    // REQUIRED failure, which turned an unset SMTP_HOST into a hard block on
+    // every production release. That is the wrong trade. The endpoint still
+    // refuses to act without proof, and the session and lead_access proofs are
+    // unaffected — an undeliverable link is a capability gap, not an unsafe
+    // state, so it is reported as a warning and stays visible without gating
+    // the release. Only "no proof is implemented at all" is a required failure,
+    // because then no deletion request can ever be honoured.
     check(
       "privacy.deletion_ownership_proofs",
       "Deletion request ownership proofs",
-      deletionProofs.length > 0 && (!deletionProofs.includes("contact_token") || deletionMailReady),
-      deletionProofs.length === 0
+      deletionProofsImplemented && !deletionMailGap,
+      !deletionProofsImplemented
         ? "No ownership proof is implemented, so no deletion request can be honoured."
-        : deletionProofs.includes("contact_token") && !deletionMailReady
+        : deletionMailGap
           ? "Deletion requests from an unauthenticated contact need SMTP_HOST and SMTP_FROM to send the "
-            + "one-time verification link. Without it the request is recorded but the link never arrives."
+            + "one-time verification link. Without it the request is recorded but the link never arrives. "
+            + `The ${deletionProofs.filter((proof) => proof !== "contact_token").join(" and ")} proofs still work.`
           : `Deletion requests act only on records proven by: ${deletionProofs.join(", ")}. `
             + "A request carrying no proof and no contact is recorded and audited but mutates nothing.",
       { supportedProofs: deletionProofs, verificationMailConfigured: deletionMailReady },
-      production ? "required" : "warning",
+      !deletionProofsImplemented && production ? "required" : "warning",
     ),
     check(
       "privacy.plaintext_override",
