@@ -78,6 +78,8 @@ A request carrying no proof and no contact is recorded and audited but mutates n
 
 Every outcome returns the same `202` with the same body, so the endpoint cannot be used to probe whether a record exists. Active consent rows for the proven leads are marked `WITHDRAWN`.
 
+The sweep's selector is `retentionProcessedAt IS NULL`. It used to be `questionRedacted = false` / `contactRedacted = false`, but `preparePiiField()` sets those at write time whenever encryption succeeds — so in production every row was already flagged, nothing was ever selected, and ciphertext outlived its window while the job looked healthy. `redacted` is the state of the display plaintext; whether the policy has processed a row is a separate fact with its own column.
+
 `/api/privacy/retention` and `bun run privacy:enforce-retention` expire active lead consents when the linked lead reaches deletion or retention expiry. This is independent of whether contact text was already redacted during encrypted storage.
 
 ## Verification

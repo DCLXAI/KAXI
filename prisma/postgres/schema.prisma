@@ -390,6 +390,17 @@ model DiagnosisLead {
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  /// When the retention policy processed this row. NULL means "not yet".
+  ///
+  /// P0-2. This used to be inferred from `contactRedacted`, which is the state of the
+  /// DISPLAY plaintext and is already true at write time whenever encryption is
+  /// configured — so the retention query matched nothing in production and the
+  /// ciphertext outlived its window. The two facts now have separate columns.
+  retentionProcessedAt DateTime?
+  /// The policy version that processed it, so a later policy change is auditable.
+  retentionVersion     String?
+
+  @@index([retentionProcessedAt])
   @@index([createdAt])
   @@index([nationality])
   @@index([pathKey])
@@ -432,6 +443,17 @@ model PartnerRequest {
   slaFirstResponseAt DateTime?
   slaBreachAlertedAt DateTime?
 
+  /// When the retention policy processed this row. NULL means "not yet".
+  ///
+  /// P0-2. This used to be inferred from `questionRedacted`, which is the state of the
+  /// DISPLAY plaintext and is already true at write time whenever encryption is
+  /// configured — so the retention query matched nothing in production and the
+  /// ciphertext outlived its window. The two facts now have separate columns.
+  retentionProcessedAt DateTime?
+  /// The policy version that processed it, so a later policy change is auditable.
+  retentionVersion     String?
+
+  @@index([retentionProcessedAt])
   @@index([leadId])
   @@index([organizationId])
   @@index([assignedUserId])
@@ -580,6 +602,17 @@ model ChatLog {
   source             String // rule, rag, hybrid
   retrievedDocs      String? // JSON
 
+  /// When the retention policy processed this row. NULL means "not yet".
+  ///
+  /// P0-2. This used to be inferred from `questionRedacted`, which is the state of the
+  /// DISPLAY plaintext and is already true at write time whenever encryption is
+  /// configured — so the retention query matched nothing in production and the
+  /// ciphertext outlived its window. The two facts now have separate columns.
+  retentionProcessedAt DateTime?
+  /// The policy version that processed it, so a later policy change is auditable.
+  retentionVersion     String?
+
+  @@index([retentionProcessedAt])
   @@index([createdAt])
   @@index([lang])
   @@index([questionHash])

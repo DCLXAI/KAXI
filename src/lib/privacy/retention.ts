@@ -21,6 +21,15 @@ export interface RetentionResult {
   typebotResults: TypebotResultRetentionResult;
 }
 
+/**
+ * The retention policy version stamped onto rows the sweep has processed.
+ *
+ * Bump this when the policy changes what it removes, so a row processed under
+ * an older, weaker policy can be found and re-processed rather than looking
+ * finished forever.
+ */
+export const RETENTION_POLICY_VERSION = "2026-08-02.ciphertext-v1";
+
 function daysAgo(days: number): Date {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 }
@@ -140,7 +149,11 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
       { retentionUntil: { lte: now } },
       { createdAt: { lt: daysAgo(config.chatLogDays) } },
     ],
-    questionRedacted: false,
+    // NOT questionRedacted:false. That flag is the state of the display
+    // plaintext and is already true at write time whenever encryption is
+    // configured, so this clause matched nothing in production and the
+    // ciphertext outlived its window while the job reported zero rows due.
+    retentionProcessedAt: null,
   };
   const partnerWhere = {
     OR: [
@@ -148,14 +161,14 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
       { retentionUntil: { lte: now } },
       { createdAt: { lt: daysAgo(config.partnerRequestDays) } },
     ],
-    questionRedacted: false,
+    retentionProcessedAt: null,
   };
   const leadRedactWhere = {
     OR: [
       { retentionUntil: { lte: now } },
       { createdAt: { lt: daysAgo(config.leadDays) } },
     ],
-    contactRedacted: false,
+    retentionProcessedAt: null,
   };
   const leadConsentExpiryWhere = {
     OR: [
@@ -234,6 +247,8 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
         questionHash: null,
         questionRedacted: true,
         deletedAt: now,
+        retentionProcessedAt: now,
+        retentionVersion: RETENTION_POLICY_VERSION,
       },
     }),
     db.partnerRequest.updateMany({
@@ -244,6 +259,8 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
         questionHash: null,
         questionRedacted: true,
         deletedAt: now,
+        retentionProcessedAt: now,
+        retentionVersion: RETENTION_POLICY_VERSION,
       },
     }),
     db.diagnosisLead.updateMany({
@@ -254,6 +271,8 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
         contactHash: null,
         contactRedacted: true,
         deletedAt: now,
+        retentionProcessedAt: now,
+        retentionVersion: RETENTION_POLICY_VERSION,
       },
     }),
     db.diagnosisLead.deleteMany({ where: leadDeleteWhere }),
