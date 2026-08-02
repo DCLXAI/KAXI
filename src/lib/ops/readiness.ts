@@ -420,7 +420,12 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
       "privacy.retention",
       "Retention enforcement",
       configured(env.CRON_SECRET),
-      "CRON_SECRET must be configured so scheduled retention enforcement can authenticate.",
+      // One static string here said "CRON_SECRET must be configured" whether or
+      // not it was, so a passing check told the operator to go do something. A
+      // check that reads as a to-do while reporting ok is worse than no detail.
+      configured(env.CRON_SECRET)
+        ? "CRON_SECRET is configured, so the scheduled retention sweep can authenticate."
+        : "CRON_SECRET must be configured so scheduled retention enforcement can authenticate.",
       { cronSecretConfigured: configured(env.CRON_SECRET) }
     ),
     check(
