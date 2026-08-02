@@ -682,14 +682,26 @@ bun run test:readiness
 
 ### P0 통과 조건
 
-- [ ] P0 보안 테스트 100% 통과
-- [ ] production 진단 저장 24개 조합 성공
-- [ ] 삭제 요청 cross-user 영향 0건
-- [ ] 만료 ciphertext 잔존 0건
-- [ ] citation precision 100%
+`bun run test:p0-release-gate`가 이 목록을 이 문서에서 직접 읽어, 각 조건에 증거가
+배정되어 있는지와 증거로 지목된 테스트가 실제로 `bun run ci`에서 도는지 검사한다.
+조건을 여기서 지우거나 이름을 바꾸면 게이트가 실패한다.
+
+기계가 판정할 수 없는 조건은 그렇다고 선언되어 있으며, 테스트로 "자동화"하려는 시도도
+게이트가 막는다. 사람이 봐야 하는 항목이 조용히 체크되는 것을 막기 위해서다.
+
+- [x] P0 보안 테스트 100% 통과
+- [x] production 진단 저장 24개 조합 성공
+- [x] 삭제 요청 cross-user 영향 0건
+- [x] 만료 ciphertext 잔존 0건
+- [x] citation precision 100%
 - [ ] E2E 20회 연속 성공
 - [ ] P0 기간 신규 critical ops event 0건
 - [ ] 독립 reviewer 1인 이상 승인
+
+체크된 항목은 CI가 매 실행마다 검증한다. 남은 세 항목은 시간이 지나야 관찰되거나
+사람이 판단해야 하므로 코드로 닫을 수 없다. 여기에 더해, 만료 ciphertext의 **production
+잔존 수**는 다음 retention 크론 실행 뒤 dry run으로 확인해야 한다 — 스윕이 백로그를
+처리할 수 있게 된 것과 백로그가 실제로 비었다는 것은 다른 사실이다.
 
 # P1. 답변 품질과 RAG 고도화
 
