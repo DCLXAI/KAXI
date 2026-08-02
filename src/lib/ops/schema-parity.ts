@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 
-export const REQUIRED_PRODUCTION_MIGRATION = "20260801120000_privacy_deletion_request";
+export const REQUIRED_PRODUCTION_MIGRATION = "20260802140000_retention_processed_at";
 
 const REQUIRED_SCHEMA_OBJECTS = [
   "migration_ledger",
@@ -28,6 +28,11 @@ const REQUIRED_SCHEMA_OBJECTS = [
   "product_analytics_events",
   "rag_confidence_policy",
   "rag_provider_independent_hybrid",
+  // P0-2. The retention sweep selects on retentionProcessedAt. Without the
+  // column it throws at runtime, but the whole lesson of P0-2 is that a sweep
+  // which quietly does nothing looks identical to one with nothing to do — so
+  // readiness reports the column's absence before the cron discovers it.
+  "retention_processed_columns",
 ] as const;
 
 type RequiredSchemaObject = (typeof REQUIRED_SCHEMA_OBJECTS)[number];
@@ -89,6 +94,20 @@ export async function checkProductionSchemaParity(): Promise<SchemaParityResult>
           SELECT 1 FROM information_schema.columns
           WHERE table_schema = 'public' AND table_name = 'PartnerRequest' AND column_name = 'organizationId'
         ) AS partner_request_assignment,
+        (
+          EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'ChatLog' AND column_name = 'retentionProcessedAt'
+          )
+          AND EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'PartnerRequest' AND column_name = 'retentionProcessedAt'
+          )
+          AND EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'diagnosis_leads' AND column_name = 'retentionProcessedAt'
+          )
+        ) AS retention_processed_columns,
         to_regclass('public."UserNotification"') IS NOT NULL AS user_notifications,
         to_regprocedure('public.kaxi_rag_category_allowed(text,text)') IS NOT NULL
           AND to_regprocedure('public.kaxi_extract_rag_locale_sections(text,text)') IS NOT NULL
