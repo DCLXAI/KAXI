@@ -10,6 +10,7 @@ import {
   QUESTION_MEDIATOR_PROMPT_VERSION,
   QUESTION_MEDIATOR_WORKFLOW_VERSION,
 } from "../src/lib/chat/question-mediator";
+import { RAG_QUERY_EMBEDDING_DIMENSIONS, RAG_QUERY_EMBEDDING_MODEL } from "../src/lib/chat/query-embedding";
 import { createRagQueryEmbedding } from "../src/lib/chat/query-embedding";
 import {
   extractRagProvenance,
@@ -957,6 +958,17 @@ const completed = await supabase.from("rag_evaluation_runs").update({
     configuredProvenance: expectedProvenance,
     observedProvenance: provenanceSummary.observed,
     mixedProvenance: provenanceSummary.mixed,
+    // P0-7. The health gate judges retrieval against the constants the
+    // retriever itself uses, so it needs the identity the run actually
+    // exercised — not the collapsed single-blob provenance above, which loses
+    // the fact that a run touches several runtime paths with different
+    // identities. runtimePathDistribution carries the paths; this carries what
+    // the retrieval layer reported while walking them.
+    retrieval: {
+      provider: "karxy-supabase",
+      embeddingModel: RAG_QUERY_EMBEDDING_MODEL,
+      embeddingDimensions: RAG_QUERY_EMBEDDING_DIMENSIONS,
+    },
   },
   completed_at: new Date().toISOString(),
 }).eq("id", runId);
