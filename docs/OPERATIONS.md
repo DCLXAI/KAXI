@@ -321,6 +321,21 @@ Agent `ChatLog` and `AgentRequestLedger` persistence should use a writable produ
 
 The ledger records IP/user id, backend, duration, estimated tokens, grounded/tool count, success/failure, and compact error type/message. It is for cost/debug accounting, not a permanent user profile.
 
+### RAG provenance (P0-7)
+
+A RAG answer is produced by three systems whose versions move independently, so the health gate judges them separately:
+
+| component | expectation source | drift verdict |
+| --- | --- | --- |
+| retrieval | derived from `RAG_QUERY_EMBEDDING_MODEL` / `RAG_QUERY_EMBEDDING_DIMENSIONS`, the same constants the retriever imports | **failure** — the answers under test were retrieved differently from what the gate assumes |
+| orchestration | `N8N_RAG_WORKFLOW_ID` / `N8N_RAG_WORKFLOW_VERSION_ID`, only when declared | failure when declared and moved; **unverifiable** when nobody declared one |
+| generation | recorded, not asserted | — |
+
+The gate used to compare all four provenance fields against the n8n workflow identity. A correct direct-hybrid answer records the *retriever's* identity, so it was reported as drift — and the expected values were hardcoded and stale on three of four fields, so it could never match on any path. It fired every run and was muted.
+
+The rule now: **assert what you can derive, report what you cannot.** `evaluateRagQualityRun` takes no default expectation; passing nothing means "take whatever the environment declares, or say it is unverifiable". A run that exercises several runtime paths is recorded as mixed rather than collapsed into one identity.
+
+
 ## Managed LLM Backend
 
 Agent, Consult, general chat, OCR, and structured admin suggestions use `src/lib/ai/llm-gateway.ts`.

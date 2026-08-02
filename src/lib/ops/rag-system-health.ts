@@ -5,6 +5,7 @@ import { describeCorpusDrift, detectStaticCorpusDrift } from "@/lib/knowledge/co
 import { sendOpsAlert } from "@/lib/ops/alerts";
 import { siteBaseUrl } from "@/lib/config/site-url";
 import { extractRagProvenance, resolveRagProvenance } from "@/lib/n8n/provenance";
+import { classifyRunProvenance, describeRunProvenance } from "@/lib/ops/provenance-verdict";
 import { signN8nPayload } from "@/lib/n8n/signature";
 import {
   TypebotRuntimeTurn,
@@ -69,9 +70,56 @@ function metric(value: unknown, key: string) {
   return Number.isFinite(result) ? result : null;
 }
 
+function metricRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+/** Runtime paths the run recorded, so a mixed run is visible instead of collapsed. */
+function runtimePathsFromMetrics(value: unknown): string[] {
+  const metrics = metricRecord(value);
+  const raw = metrics.runtimePathDistribution ?? metrics.runtimePaths;
+  if (Array.isArray(raw)) return raw.filter((item): item is string => typeof item === "string");
+  return Object.keys(metricRecord(raw));
+}
+
+function retrievalIdentityFromMetrics(value: unknown) {
+  const retrieval = metricRecord(metricRecord(value).retrieval);
+  const model = typeof retrieval.embeddingModel === "string" ? retrieval.embeddingModel : undefined;
+  const dimensions = Number(retrieval.embeddingDimensions);
+  const provider = typeof retrieval.provider === "string" ? retrieval.provider : undefined;
+  if (!model && !provider && !Number.isFinite(dimensions)) return null;
+  return {
+    provider,
+    embeddingModel: model,
+    embeddingDimensions: Number.isFinite(dimensions) ? dimensions : undefined,
+  };
+}
+
+/**
+ * The orchestration identity an operator explicitly declared, or null.
+ *
+ * Deliberately does NOT fall back to the built-in default. That literal is what
+ * went stale on three of four fields and turned this check into permanent noise;
+ * "nobody declared one" is reported as unverifiable instead of asserted wrongly.
+ */
+function configuredOrchestrationExpectation(env: NodeJS.ProcessEnv = process.env) {
+  const workflowId = env.N8N_RAG_WORKFLOW_ID?.trim() || "";
+  const workflowVersionId = env.N8N_RAG_WORKFLOW_VERSION_ID?.trim() || "";
+  return workflowId || workflowVersionId ? { workflowId, workflowVersionId } : null;
+}
+
 export function evaluateRagQualityRun(
   row: EvaluationHealthRow | null,
-  expected = resolveRagProvenance(),
+  /**
+   * The orchestration identity to assert, or undefined to take whatever the
+   * environment declares.
+   *
+   * Deliberately has NO default. The old default was resolveRagProvenance(),
+   * which always returns the built-in literal, so "the caller declared an
+   * expectation" and "nobody declared one" were indistinguishable — and the
+   * literal had gone stale, so every run failed. Undefined now means undefined.
+   */
+  expectedOrchestration?: { workflowId?: string; workflowVersionId?: string } | null,
   now = Date.now(),
 ) {
   if (!row) {
@@ -97,11 +145,20 @@ export function evaluateRagQualityRun(
   const failures = Object.entries(thresholds)
     .filter(([key, threshold]) => (metric(row.metrics, key) ?? -1) < threshold)
     .map(([key]) => key);
-  const provenanceMatches = row.workflow_id === expected.workflowId
-    && row.workflow_version_id === expected.workflowVersionId
-    && row.model_version === expected.modelVersion
-    && row.prompt_version === expected.promptVersion;
-  if (!provenanceMatches) failures.push("provenance");
+  // P0-7. Judge each component against the expectation that applies to it.
+  // This used to compare all four fields against the n8n workflow identity,
+  // which a correct direct-hybrid run can never match — it records the
+  // RETRIEVER's identity, not the orchestrator's. The comparison fired on every
+  // run and was muted; now only real drift fires.
+  const provenanceVerdict = classifyRunProvenance({
+    observedPaths: runtimePathsFromMetrics(row.metrics),
+    retrieval: retrievalIdentityFromMetrics(row.metrics),
+    orchestration: { workflowId: row.workflow_id, workflowVersionId: row.workflow_version_id },
+    expectedOrchestration: expectedOrchestration === undefined
+      ? configuredOrchestrationExpectation()
+      : expectedOrchestration,
+  });
+  if (provenanceVerdict.drifted) failures.push("provenance");
   if (row.status !== "passed") failures.push("status");
   if ((row.case_count || 0) < 64) failures.push("caseCount");
   if (ageHours === null || ageHours > 24 * 7) failures.push("freshness");
@@ -122,13 +179,32 @@ export function evaluateRagQualityRun(
       ? `Latest ${row.case_count}-case RAG evaluation meets the production quality gate.`
       : unverified
         ? `No trustworthy recent RAG evaluation: ${failures.join(", ")}. The last run's measured quality passed; re-run \`bun run rag:evaluation:full\` against the production provenance to restore the signal.`
-        : `Latest full-suite RAG evaluation failed: ${failures.join(", ")}.`,
+        : `Latest full-suite RAG evaluation failed: ${failures.join(", ")}. ${describeRunProvenance(provenanceVerdict)}`,
     metadata: {
       runId: row.id || null,
       caseCount: row.case_count || 0,
       passedCount: row.passed_count || 0,
       ageHours,
       failures,
+      // Per-component, so a reader can tell "the retriever changed" from
+      // "an external workflow moved" from "nobody told us what to expect" —
+      // three facts the single boolean could not distinguish.
+      provenance: {
+        summary: describeRunProvenance(provenanceVerdict),
+        orchestration: provenanceVerdict.orchestration,
+        retrieval: provenanceVerdict.retrieval,
+        observedPaths: provenanceVerdict.observedPaths,
+        mixedPaths: provenanceVerdict.mixedPaths,
+        unverifiable: provenanceVerdict.unverifiable,
+        // What the run itself recorded, so a failed gate is reproducible
+        // without going back to the database.
+        recorded: {
+          workflowId: row.workflow_id || null,
+          workflowVersionId: row.workflow_version_id || null,
+          modelVersion: row.model_version || null,
+          promptVersion: row.prompt_version || null,
+        },
+      },
       metrics: row.metrics || {},
     },
   };
@@ -424,7 +500,11 @@ export async function runRagSystemHealth(triggerSource = "manual") {
         .limit(1)
         .maybeSingle();
       if (result.error) throw result.error;
-      return evaluateRagQualityRun(result.data as EvaluationHealthRow | null, provenance);
+      // Not `provenance` (= resolveRagProvenance()). That resolves to the
+      // built-in literal when nothing is configured, which is what made this
+      // gate assert a stale version on every run. Passing undefined lets the
+      // evaluator take the environment's declaration, or report the gap.
+      return evaluateRagQualityRun(result.data as EvaluationHealthRow | null);
     }),
     timed("ops.open_events", false, async () => {
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
