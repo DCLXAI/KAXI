@@ -156,3 +156,37 @@ console.log("PASS guide pages: no two pages cite the same evidence, and monitori
 }
 
 console.log("PASS guide pages: every topic is pre-rendered, listed in the sitemap, and titled in its own locale");
+
+// 7. No topic may be an orphan. The pages shipped reachable only from the
+//    sitemap and from four "related" links on sibling pages; a search engine
+//    weights an orphan far below a page inside a linked cluster, and a reader
+//    who lands on one has no way to reach the rest. Building the pages and
+//    leaving them unfindable is the same failure the effort was meant to fix.
+{
+  const { readFileSync } = await import("node:fs");
+  const hub = readFileSync("src/app/[locale]/guide/page.tsx", "utf8");
+  assertOk(hub.includes("guideTopics()"), "the hub must list topics derived from the corpus, not a fixed list");
+  assertOk(
+    /href=\{`\/\$\{locale\}\/guide\/\$\{topic\.slug\}`\}/.test(hub),
+    "the hub must link every topic it lists",
+  );
+
+  // Grouping must cover every topic — a group filter that silently drops one
+  // leaves that page an orphan again.
+  const grouped = GUIDE_VISA_CODES.flatMap((code) => topics.filter((topic) => topic.visaCodes[0] === code));
+  assertOk(
+    grouped.length === topics.length,
+    `the hub groups ${grouped.length} of ${topics.length} topics; the rest would be unreachable from it`,
+  );
+
+  const page = readFileSync("src/app/[locale]/guide/[topic]/page.tsx", "utf8");
+  assertOk(
+    /href=\{`\/\$\{locale\}\/guide`\}/.test(page),
+    "each guide page must link back to the hub, so the cluster is linked in both directions",
+  );
+
+  const sitemap = readFileSync("src/app/sitemap.ts", "utf8");
+  assertOk(sitemap.includes("/guide`"), "the hub itself must be in the sitemap");
+}
+
+console.log("PASS guide pages: the hub lists every topic and every page links back to it");
