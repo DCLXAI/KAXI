@@ -1,4 +1,5 @@
-import { KaxiCat } from "@/components/brand/KaxiCat";
+import Image from "next/image";
+
 import { cn } from "@/lib/utils";
 
 export function KaxiRunningCat({
@@ -9,8 +10,17 @@ export function KaxiRunningCat({
   className?: string;
 }) {
   return (
-    <span data-kaxi-running-cat="stationary" className={cn("inline-flex items-end", className)}>
-      <KaxiCat state="running" size={size} fps={10} className="shrink-0" />
+    <span data-karxy-mascot="trio" className={cn("inline-flex items-end", className)}>
+      <Image
+        src="/mascot/karxy-mascot-trio.png"
+        alt=""
+        aria-hidden
+        width={1774}
+        height={887}
+        sizes={`${size * 2}px`}
+        className="h-auto shrink-0 object-contain"
+        style={{ width: size * 2, height: size }}
+      />
     </span>
   );
 }

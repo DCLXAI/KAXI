@@ -80,7 +80,16 @@ assert.doesNotMatch(landing, /tr\("cta_start"/, "home must not gate participatio
 assert.doesNotMatch(landing, /kaxi-home-chat-launcher/, "home must not keep a second floating AI launcher");
 assert.doesNotMatch(landing, /ai_banner_title/, "home must not keep a separate promotional AI banner");
 assert.doesNotMatch(header, /publicHref\("consult"\)/, "header must expose one AI entry point");
-assert.match(header, /<KaxiRunningCat size=\{32\} \/>/, "the header brand must use a stationary RunCat");
+// 크기와 "정지 상태"만 고정한다. 원래는 호출부를 통째로 리터럴 비교했는데,
+// 좁은 화면에서 마스코트를 숨기는 반응형 클래스를 붙이자 의도와 무관하게
+// 깨졌다. 지켜야 하는 것은 헤더 브랜드가 32px이고 움직이지 않는다는 것이지,
+// 다른 prop이 하나도 없다는 것이 아니다.
+assert.match(header, /<KaxiRunningCat\s+size=\{32\}[^>]*\/>/, "the header brand must use a RunCat at 32px");
+assert.doesNotMatch(
+  header,
+  /<KaxiRunningCat[^>]*(animate|motion|running|autoPlay)/i,
+  "the header brand must stay stationary",
+);
 assert.doesNotMatch(header, />\s*K\s*<\/div>/, "the legacy K badge must be removed from the header");
 assert.match(agentHook, /\/api\/ai\/unified/, "the single AI screen must use the server-side router");
 assert.match(unifiedApi, /runExpertConsult/, "regulated guidance must retain the expert backend boundary");
@@ -187,8 +196,16 @@ assert.match(widget, /<Bubble/, "home must use the published Typebot bubble runt
 assert.match(widget, /typebot="kaxi-rag-typebot"/, "the Typebot launcher must target the published KAXI bot");
 assert.doesNotMatch(widget, /KaxiFlowerMark/, "the legacy flower mark must be removed from Typebot");
 assert.doesNotMatch(landing, /KaxiRunningCat/, "home must not show a decorative running cat");
-assert.match(runningCat, /state="running"/, "both surfaces must use the running animation");
-assert.match(runningCat, /data-kaxi-running-cat="stationary"/, "Typebot cat must stay in place");
+// 브랜드 마크가 달리는 고양이 스프라이트에서 정지 마스코트 일러스트로 바뀌었다.
+// 그래서 state="running" / data-kaxi-running-cat 을 찍던 두 단언은 이제 존재하지
+// 않는 구현을 검사한다. 지키려던 것 자체 — 마크는 제자리에 있고, 헤더와 Typebot이
+// 같은 하나를 쓴다 — 는 그대로 두고 현재 구현에 맞춰 다시 쓴다.
+assert.match(runningCat, /data-karxy-mascot="trio"/, "the shared brand mark must be identifiable on every surface");
+assert.doesNotMatch(
+  runningCat,
+  /state="running"|animate|fps=|@keyframes/,
+  "the brand mark must stay in place; it is an illustration, not an animation",
+);
 assert.doesNotMatch(runningCat, /travel|white/, "the removed homepage travel variant must not remain");
 assert.match(pawMark, /data-kaxi-mark="paw"/, "the public AI brand must expose the KAXI paw mark");
 assert.match(globalTheme, /--primary: #c7d2fe;/, "the main KAXI action color must match the approved lavender pastel token");

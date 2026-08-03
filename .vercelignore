@@ -17,3 +17,7 @@ tsconfig.e2e.json
 data/model-cache
 runtime-artifacts/model-cache
 db/*.db
+-H
+127.0.0.1
+Capsomnia
+output

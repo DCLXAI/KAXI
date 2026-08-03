@@ -233,7 +233,7 @@ function MobileNav({
   return (
     <Sheet>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="lg:hidden" aria-label={label}>
+        <Button variant="ghost" size="icon" className="xl:hidden" aria-label={label}>
           <Menu className="h-5 w-5" />
         </Button>
       </SheetTrigger>
@@ -241,7 +241,7 @@ function MobileNav({
         <SheetHeader className="border-b border-border/70 bg-muted/50">
           <SheetTitle className="flex items-center gap-2.5">
             <KaxiRunningCat size={26} />
-            <KarxyWordmark className="h-3 w-auto" aria-label="KARXY" />
+            <KarxyWordmark className="h-6 w-auto" aria-label="KARXY" />
           </SheetTitle>
           <SheetDescription className="sr-only">{label}</SheetDescription>
         </SheetHeader>
@@ -399,10 +399,22 @@ export function Header({
           aria-label="KARXY"
           className="group flex items-center gap-2 font-bold"
         >
-          <KaxiRunningCat size={32} />
-          <KarxyWordmark className="hidden h-[15px] w-auto min-[400px]:block lg:max-xl:hidden transition-colors duration-200 group-hover:text-primary-strong" />
+          {/* 자리가 모자라면 장식이 먼저 빠지고 워드마크는 남는다.
+              전에는 반대였다 — 워드마크가 400px 미만과 1024~1279px에서 숨겨져,
+              375px짜리 화면(가장 흔한 폭이다)에는 64x32로 뭉개진 마스코트만
+              남았다. 그 마스코트는 aria-hidden 장식이라 스크린리더에도 읽히지
+              않으므로, 그 폭의 헤더에는 브랜드가 아예 존재하지 않았다.
+              1024~1279px 쪽은 아래 내비 분기점을 xl로 올려 원인을 없앴다. */}
+          <KaxiRunningCat size={32} className="hidden min-[360px]:inline-flex" />
+          <KarxyWordmark className="h-7 w-auto transition-transform duration-200 group-hover:-translate-y-0.5" priority />
         </Link>
-        <nav className="ml-4 hidden items-center gap-1 lg:flex" aria-label={tr("nav_menu", activeLang)}>
+        {/* lg(1024px)이 아니라 xl(1280px)에서 펼친다.
+            lg에서 펼치면 1024~1279px 구간에서 몽골어 라벨 다섯 개가 폭을 다 써
+            헤더가 가로로 넘치고 오른쪽 끝의 로그인 링크가 잘려 나갔다. 프로덕션에서
+            이미 그렇게 나가고 있었고, 브랜드 자리를 만들려고 워드마크를 그 구간에서
+            숨긴 것도 같은 원인의 증상이었다. 분기점을 올리면 그 구간은 햄버거로
+            내려가고, 브랜드와 내비가 둘 다 온전히 들어간다. */}
+        <nav className="ml-4 hidden items-center gap-1 xl:flex" aria-label={tr("nav_menu", activeLang)}>
           {navGroups.map((group) => (
             <DesktopNavGroup key={group.key} currentView={currentView} group={group} />
           ))}

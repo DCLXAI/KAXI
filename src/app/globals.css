@@ -15,8 +15,11 @@
   --color-foreground: var(--foreground);
   --ease-snappy: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-fluid: cubic-bezier(0.77, 0, 0.175, 1);
-  --font-sans: var(--font-pretendard), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-serif-brand), var(--font-serif-ko), ui-serif, Georgia, serif;
+  --font-sans: var(--font-pretendard-latin), var(--font-pretendard-korean), ui-sans-serif, system-ui, sans-serif;
+  /* 디스플레이 서체. --font-rounded-intl은 Fredoka가 글리프를 갖지 못한
+     로케일(vi·mn)에서만 정의되고, 그때는 Fredoka가 체인에서 아예 빠진다.
+     한 단어 안에서 서체가 섞이지 않게 하려는 것이다. src/app/fonts.ts 참고. */
+  --font-serif: var(--font-rounded-intl, var(--font-rounded-latin)), var(--font-rounded-ko), var(--font-pretendard-latin), var(--font-pretendard-korean), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);

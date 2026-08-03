@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { KarxyWordmark } from "@/components/brand/KarxyWordmark";
 import { KNOWLEDGE_DOCS, getSourceMetadata } from "@/lib/data/knowledge";
 
 const SOURCE_BY_SLUG = {
@@ -42,7 +43,7 @@ export default async function SourcePage({ params }: SourcePageProps) {
     <main className="min-h-dvh bg-white px-5 py-12 text-neutral-900 sm:px-8 sm:py-16">
       <div className="mx-auto max-w-3xl">
         <a href="/ko" className="text-sm font-semibold text-neutral-500 hover:text-neutral-900">
-          KARXY
+          <KarxyWordmark className="h-8 w-auto" aria-label="KARXY" priority />
         </a>
         <header className="mt-8 border-b border-neutral-200 pb-8">
           <p className="text-sm font-semibold text-neutral-500">상담 답변 출처</p>
