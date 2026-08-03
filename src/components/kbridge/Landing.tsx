@@ -1,21 +1,27 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { useLangStore } from "@/store/kbridge";
-import { tr } from "@/lib/i18n/translations";
+import { tr, type Lang } from "@/lib/i18n/translations";
 import type { School } from "@/lib/data/schools";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { KaxiCat } from "@/components/brand/KaxiCat";
 import { AgentExperience } from "@/components/agent/AgentExperience";
 import { smoothScrollIntoView } from "@/lib/ui/scroll";
 import { HomeQuickDiagnosis } from "@/components/diagnosis/HomeQuickDiagnosis";
 import { HeroFluidInk } from "@/components/kbridge/HeroFluidInk";
 import { ArrowRight, Calculator, FileCheck, School as SchoolIcon, Users, Globe2, AlertTriangle } from "lucide-react";
 
-export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
-  const { lang } = useLangStore();
+export function Landing({ onNavigate, locale }: { onNavigate: (v: string) => void; locale?: Lang }) {
+  // 라우트의 locale이 먼저다. 스토어만 읽으면 서버 렌더에서 값이 항상 기본값
+  // ko라, /vi 와 /mn 의 초기 HTML이 통째로 한국어로 나갔다 — h1까지 포함해서.
+  // 하이드레이션 후에야 번역으로 바뀌므로 사람 눈에는 한국어가 한 번 번쩍이고,
+  // 크롤러와 폰트 unicode-range에는 그 한국어가 이 페이지의 내용으로 남는다.
+  // KaxiPage와 Header는 이미 이 방식이었고 Landing만 빠져 있었다.
+  const { lang: storeLang } = useLangStore();
+  const lang = locale ?? storeLang;
   const shouldReduceMotion = useReducedMotion();
   const [schoolStats, setSchoolStats] = useState<{ total: number | null; accredited: number | null }>({
     total: null,
@@ -215,6 +221,23 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
               {tr("hero_cta_agent", lang)}
             </Button>
           </div>
+          <motion.div
+            initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, transform: "translateY(12px)" }}
+            animate={{ opacity: 1, transform: "translateY(0px)" }}
+            transition={{ duration: 0.45, ease: [0.23, 1, 0.32, 1], delay: 0.12 }}
+            className="relative mx-auto mt-8 w-full max-w-2xl"
+          >
+            <div aria-hidden className="absolute inset-x-[12%] bottom-[8%] h-10 rounded-[50%] bg-primary/20 blur-2xl" />
+            <Image
+              src="/mascot/karxy-mascot-trio.png"
+              alt="여권 준비, 공식 근거 확인, 다음 행동 안내를 함께하는 KARXY 세 마스코트"
+              width={1774}
+              height={887}
+              sizes="(max-width: 768px) 92vw, 672px"
+              className="relative h-auto w-full object-contain"
+              priority
+            />
+          </motion.div>
           <div className="mx-auto mt-10 h-px max-w-3xl bg-gradient-to-r from-transparent via-border to-transparent md:mt-12" aria-hidden="true" />
         </div>
       </section>
@@ -340,7 +363,15 @@ export function Landing({ onNavigate }: { onNavigate: (v: string) => void }) {
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-primary to-[#b7c4fd] p-8 md:p-12 text-primary-foreground text-center shadow-[0_24px_48px_-24px_rgba(79,93,179,0.55)] ring-1 ring-inset ring-primary-foreground/10">
           <div className="relative">
             <div className="mb-4 flex justify-center">
-              <KaxiCat state="happy" size={44} />
+              <Image
+                src="/mascot/karxy-mascot-trio.png"
+                alt=""
+                aria-hidden
+                width={1774}
+                height={887}
+                sizes="13rem"
+                className="h-auto w-52 object-contain"
+              />
             </div>
             <h2 className="font-serif text-2xl md:text-3xl font-bold mb-3">{tr("hero_title", lang)}</h2>
             <p className="text-primary-foreground/80 mb-6 max-w-2xl mx-auto">{tr("hero_subtitle", lang)}</p>

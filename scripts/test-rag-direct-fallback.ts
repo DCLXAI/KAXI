@@ -18,7 +18,7 @@ import {
   ragRuntimePrimary,
   requestN8nRuntime,
   shouldRetryN8nNoContext,
-} from "../src/app/api/typebot-rag/route";
+} from "../src/lib/n8n/typebot-runtime";
 import {
   CANONICAL_QUERY_EMBEDDING_DIMENSIONS,
   CANONICAL_QUERY_EMBEDDING_MODEL,

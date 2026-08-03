@@ -38,6 +38,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { KarxyWordmark } from "@/components/brand/KarxyWordmark";
 import { useKaxiSession } from "@/hooks/useKaxiSession";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
@@ -139,7 +140,10 @@ function AdminMobileNav({ pathname }: { pathname: string }) {
       </SheetTrigger>
       <SheetContent side="right" className="w-[min(88vw,22rem)]">
         <SheetHeader className="border-b">
-          <SheetTitle>KARXY Admin</SheetTitle>
+          <SheetTitle className="flex items-center gap-2">
+            <KarxyWordmark className="h-6 w-auto" aria-label="KARXY" />
+            <span>Admin</span>
+          </SheetTitle>
           <SheetDescription className="sr-only">관리 메뉴</SheetDescription>
         </SheetHeader>
         <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-4 pb-6" aria-label="관리 메뉴">
@@ -252,10 +256,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
         <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
           <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4">
             <Link href="/" className="flex items-center gap-2 font-semibold" aria-label="KARXY 홈으로 이동">
-              <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-black text-primary-foreground">
-                K
-              </span>
-              <span>KARXY Admin</span>
+              <KarxyWordmark className="h-7 w-auto" aria-label="KARXY" priority />
+              <span className="hidden sm:inline">Admin</span>
             </Link>
             <nav className="hidden items-center gap-1 md:flex">
               {navGroups.map((group) => (

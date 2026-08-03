@@ -3,9 +3,20 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { TypebotBubble } from "@/components/typebot/TypebotBubble";
 import { ProductAnalyticsTracker } from "@/components/analytics/ProductAnalyticsTracker";
-import { pretendard, notoSerifKr, nanumMyeongjo } from "./fonts";
+import {
+  fredoka,
+  jua,
+  pretendardKorean,
+  pretendardLatin,
+} from "./fonts";
+
+const metadataBaseUrl = process.env.NEXT_PUBLIC_SITE_URL
+  ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : "http://localhost:3000");
 
 export const metadata: Metadata = {
+  metadataBase: new URL(metadataBaseUrl),
   title: "KARXY · 브로커 없이 준비하는 한국 유학",
   description:
     "베트남·몽골 한국 유학 준비생을 위한 원스톱 플랫폼. AI 에이전트, 학교 비교, 비용 계산, 서류 준비, 비자 가이드, 검증 파트너 연결.",
@@ -56,7 +67,7 @@ export default function RootLayout({
     <html
       lang="ko"
       suppressHydrationWarning
-      className={`${pretendard.variable} ${notoSerifKr.variable} ${nanumMyeongjo.variable}`}
+      className={`${pretendardLatin.variable} ${pretendardKorean.variable} ${fredoka.variable} ${jua.variable}`}
     >
       <body className="antialiased bg-background text-foreground">
         {children}

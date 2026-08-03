@@ -48,7 +48,7 @@ export function KaxiPage({ view, locale }: { view: ViewKey; locale?: Lang }) {
       <Header currentView={view} locale={locale} />
 
       <main className={view === "agent" ? "flex-1 chat-surface dark bg-background text-foreground" : "flex-1"}>
-        {view === "home" && <Landing onNavigate={navigate} />}
+        {view === "home" && <Landing onNavigate={navigate} locale={locale} />}
         {view === "agent" && <Agent />}
         {view === "diagnose" && <Diagnosis onNavigate={navigate} />}
         {view === "schools" && <Schools />}
@@ -81,7 +81,7 @@ export function KaxiPage({ view, locale }: { view: ViewKey; locale?: Lang }) {
                   className="inline-flex items-center gap-2.5 text-foreground/80 transition-colors hover:text-foreground"
                 >
                   <KaxiRunningCat size={28} />
-                  <KarxyWordmark className="h-[13px] w-auto" />
+                  <KarxyWordmark className="h-6 w-auto" />
                 </Link>
                 <p className="text-xs text-muted-foreground">
                   © 2026 KARXY · Broker-free Korea Study Preparation
