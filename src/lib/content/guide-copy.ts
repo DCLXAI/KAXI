@@ -37,6 +37,10 @@ const COPY: Record<Lang, {
   ctaBody: string;
   ctaButton: string;
   relatedTitle: string;
+  hubTitle: string;
+  hubIntro: string;
+  hubBack: string;
+  topicCount: (topics: number, sources: number) => string;
 }> = {
   ko: {
     sourceLabel: "출처",
@@ -47,6 +51,10 @@ const COPY: Record<Lang, {
     ctaBody: "국적·학력·현재 체류자격을 입력하면 해당하는 경로와 준비 서류를 정리해 드립니다.",
     ctaButton: "무료 진단 시작",
     relatedTitle: "함께 보면 좋은 안내",
+    hubTitle: "체류자격별 안내",
+    hubIntro: "공식 출처만 인용하고, 각 문단마다 출처와 확인일을 함께 표시합니다. 근거가 없는 내용은 싣지 않습니다.",
+    hubBack: "체류자격별 안내",
+    topicCount: (topics, sources) => `${topics}개 주제 · 공식 출처 인용 ${sources}건`,
   },
   vi: {
     sourceLabel: "Nguồn",
@@ -57,6 +65,10 @@ const COPY: Record<Lang, {
     ctaBody: "Nhập quốc tịch, trình độ học vấn và tư cách lưu trú hiện tại để nhận lộ trình và danh sách hồ sơ phù hợp.",
     ctaButton: "Bắt đầu chẩn đoán miễn phí",
     relatedTitle: "Hướng dẫn liên quan",
+    hubTitle: "Hướng dẫn theo tư cách lưu trú",
+    hubIntro: "Chỉ trích dẫn nguồn chính thức, kèm nguồn và ngày kiểm tra cho từng đoạn. Nội dung không có căn cứ sẽ không được đăng.",
+    hubBack: "Hướng dẫn theo tư cách lưu trú",
+    topicCount: (topics, sources) => `${topics} chủ đề · ${sources} trích dẫn nguồn chính thức`,
   },
   mn: {
     sourceLabel: "Эх сурвалж",
@@ -67,6 +79,10 @@ const COPY: Record<Lang, {
     ctaBody: "Иргэншил, боловсрол, одоогийн оршин суух ангиллаа оруулбал тохирох зам болон бэлтгэх бичиг баримтыг эмхэтгэж өгнө.",
     ctaButton: "Үнэгүй оношилгоо эхлүүлэх",
     relatedTitle: "Холбоотой заавар",
+    hubTitle: "Оршин суух ангиллаар заавар",
+    hubIntro: "Зөвхөн албан ёсны эх сурвалж иш татдаг бөгөөд догол мөр бүрд эх сурвалж, шалгасан огноог хамт харуулна. Нотолгоогүй агуулга нийтлэгдэхгүй.",
+    hubBack: "Оршин суух ангиллаар заавар",
+    topicCount: (topics, sources) => `${topics} сэдэв · ${sources} албан ёсны эх сурвалжийн иш татлага`,
   },
   en: {
     sourceLabel: "Source",
@@ -77,6 +93,10 @@ const COPY: Record<Lang, {
     ctaBody: "Enter your nationality, education and current status to get the track that fits and the documents it needs.",
     ctaButton: "Start the free check",
     relatedTitle: "Related guides",
+    hubTitle: "Guides by stay status",
+    hubIntro: "Only official sources are quoted, and every paragraph shows its source and the date it was checked. Nothing without evidence is published.",
+    hubBack: "Guides by stay status",
+    topicCount: (topics, sources) => `${topics} topics · ${sources} official source citations`,
   },
 };
 

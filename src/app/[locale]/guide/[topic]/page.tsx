@@ -67,6 +67,11 @@ export default async function GuidePage({ params }: PageProps) {
   return (
     <main className="mx-auto w-full max-w-3xl px-5 py-10 sm:py-14">
       <article>
+        <nav className="mb-4 text-sm" aria-label="breadcrumb">
+          <Link href={`/${locale}/guide`} className="text-primary underline underline-offset-2">
+            {copy.hubBack}
+          </Link>
+        </nav>
         <header className="mb-8">
           <h1 className="font-serif text-3xl font-bold leading-tight text-foreground sm:text-4xl">
             {guideTitle(topic, locale)}

@@ -25,6 +25,14 @@ export default function sitemap(): MetadataRoute.Sitemap {
   //
   // Derived from guideTopics() rather than listed, so a topic cannot exist
   // without being submitted, or stay submitted after it stops existing.
+  // The hub, so the cluster has an entry point that is not just a sitemap line.
+  const guideHub = LOCALES.map((locale) => ({
+    url: `${BASE}/${locale}/guide`,
+    lastModified: now,
+    changeFrequency: "weekly" as const,
+    priority: 0.9,
+  }));
+
   const guides = guideTopics().flatMap((topic) =>
     LOCALES.map((locale) => ({
       url: `${BASE}/${locale}/guide/${topic.slug}`,
@@ -34,5 +42,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
     }))
   );
 
-  return [...views, ...guides];
+  return [...views, ...guideHub, ...guides];
 }
