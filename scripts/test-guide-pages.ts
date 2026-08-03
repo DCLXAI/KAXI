@@ -36,7 +36,33 @@ const topics = guideTopics();
 
 // 1. There must be pages, and each must carry enough evidence to answer.
 {
-  assertOk(topics.length >= 10, `expected a meaningful set of guide topics, got ${topics.length}`);
+  // 20 is what the corpus currently supports, measured — not a target.
+  //
+  // The plan estimated "7 tracks x ~6 intents = ~42 topics". That estimate was
+  // made before anyone counted the corpus. Measuring (visa code x intent) pairs
+  // shows why the real number is lower and why that is correct:
+  //
+  //   cost                      0-2 documents per status (the corpus has 3 in total)
+  //   refusal_or_reapplication  0-1 per status
+  //   status_change (F-2/F-5)   0
+  //
+  // Those pages would rank for a question they cannot answer. Reaching 42 would
+  // mean writing content without evidence, which is the one thing this product
+  // refuses to do — so the shortfall is a corpus fact to fix upstream, not a
+  // threshold to lower here.
+  //
+  // Widening intent matching to all four locales was measured too, and rejected:
+  // it takes work_permission from 17 documents to 49 by matching English
+  // "hours?" and Vietnamese "giấy phép" incidentally, which drags re-entry
+  // permits and departure inspection onto a page about working hours. Korean is
+  // the language the corpus is authored in and the precise one.
+  //
+  // A floor rather than an equality: growing the corpus should add pages freely,
+  // but losing them should be noticed.
+  assertOk(
+    topics.length >= 20,
+    `guide coverage fell to ${topics.length} topics from the 20 the corpus supports; a document or source likely expired`,
+  );
   for (const topic of topics) {
     assertOk(
       topic.documents.length >= MIN_DOCUMENTS_PER_TOPIC,
