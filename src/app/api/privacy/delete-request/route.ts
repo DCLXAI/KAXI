@@ -13,7 +13,7 @@ import {
   issueDeletionToken,
 } from "@/lib/privacy/deletion-verification";
 import { hashPii } from "@/lib/privacy/pii";
-import { sendNotificationEmail } from "@/lib/notifications/email";
+import { sendNotificationEmail, smtpConfigured } from "@/lib/notifications/email";
 import { getCurrentKaxiUser } from "@/lib/supabase/auth";
 import { getClientIp, jsonError, rateLimit } from "@/lib/api/security";
 
@@ -158,6 +158,30 @@ async function openContactVerification(
       targetType: "PrivacyDeletionRequest",
       targetId: null,
       metadata: { requestId: input.requestId, proof: null, reason: "contact_hashing_unavailable" },
+    });
+    return;
+  }
+
+  // Deliverability is checked BEFORE any state changes, not after.
+  //
+  // Opening a request first meant that when the channel could not deliver, two
+  // things went wrong at once: a token and a pending row were created that could
+  // never be redeemed, and — worse — an EXISTING valid request for the same
+  // address was superseded first. Someone holding a working link from when mail
+  // was configured would lose it to a replacement that never arrives, and the
+  // response still promised that verification would follow.
+  //
+  // That is the unkeepable promise this codebase has already been burned by. If
+  // the link cannot be sent, nothing is opened, nothing existing is destroyed,
+  // and the gap stays visible in readiness instead of in someone's empty inbox.
+  if (!smtpConfigured()) {
+    await recordRequestAudit(req, {
+      actor: "public-user",
+      actorRole: "user",
+      action: "privacy.delete.request.unproven",
+      targetType: "PrivacyDeletionRequest",
+      targetId: null,
+      metadata: { requestId: input.requestId, proof: null, reason: "verification_channel_unavailable" },
     });
     return;
   }

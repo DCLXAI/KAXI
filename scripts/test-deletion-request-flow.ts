@@ -56,8 +56,13 @@ __setTransportForTest({
   },
 });
 
+let ipCounter = 0;
 function post(path: string, body: unknown, cookie?: string) {
   const headers = new Headers({ "content-type": "application/json" });
+  // The delete-request endpoint allows 5 per IP per hour, and this file makes
+  // more than that. A distinct client IP per call keeps the rate limiter out of
+  // the way without weakening the limit the route actually enforces.
+  headers.set("x-forwarded-for", `203.0.113.${(ipCounter += 1) % 250}`);
   if (cookie) headers.set("cookie", cookie);
   return new NextRequest(`http://localhost${path}`, { method: "POST", headers, body: JSON.stringify(body) });
 }
@@ -244,6 +249,47 @@ try {
     assertOk(!(await marked(carol.id)), "the cookie authorises its own lead and no other");
     if (sent.length !== 0) fail("a caller who already proved ownership must not be sent a verification mail");
   }
+
+  // 7. When the verification channel cannot deliver, opening a request would
+  //    promise a link that never arrives — and, worse, would supersede a link
+  //    that still works. Neither may happen.
+  {
+    sent.length = 0;
+    const holder = await createLead("link-holder", "holder@example.com");
+    await requestRoute.POST(post("/api/privacy/delete-request", { contact: holder.contact, locale: "ko" }));
+    const liveToken = tokenFromLastMail();
+    const openBefore = await db.privacyDeletionRequest.count({
+      where: { subjectHash: hashPii(holder.contact)!, status: "pending_verification" },
+    });
+    if (openBefore !== 1) fail(`setup: expected one live request, got ${openBefore}`);
+
+    // Now the channel goes away — exactly today's production state.
+    const savedHost = process.env.SMTP_HOST;
+    process.env.SMTP_HOST = "";
+    sent.length = 0;
+    const res = await requestRoute.POST(
+      post("/api/privacy/delete-request", { contact: holder.contact, locale: "ko" }),
+    );
+    process.env.SMTP_HOST = savedHost;
+
+    // The response must not change — a caller still cannot tell what happened.
+    if (res.status !== 202) fail(`an undeliverable request must answer like any other, got ${res.status}`);
+    if (sent.length !== 0) fail("nothing may be sent when the channel is unconfigured");
+
+    const openAfter = await db.privacyDeletionRequest.count({
+      where: { subjectHash: hashPii(holder.contact)!, status: "pending_verification" },
+    });
+    if (openAfter !== 1) {
+      fail(`an undeliverable request must not open or destroy anything: ${openBefore} -> ${openAfter} live requests`);
+    }
+
+    // And the link the holder already has must still work.
+    const redeemed = await verify(liveToken);
+    if (redeemed.status !== 200) fail(`the pre-existing link must still redeem, got ${redeemed.status}`);
+    assertOk(await marked(holder.id), "the still-valid link must act when redeemed");
+  }
+
+  console.log("PASS deletion request flow: an undeliverable request opens nothing and destroys no live link");
 
   console.log("PASS deletion request flow: nothing is marked until the mailed link comes back, and only for that address");
 } finally {
