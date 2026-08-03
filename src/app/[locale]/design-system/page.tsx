@@ -298,6 +298,11 @@ export default async function DesignSystemPage({ params }: PageProps) {
             ))}
           </div>
           <p className={styles.inlineRule}><strong>주의</strong> disabled 텍스트도 최소 4.5:1을 유지하고, 비활성 여부는 커서·아이콘·문구로 함께 전달합니다.</p>
+          <p className={styles.inlineRule}>
+            <strong>측정됨</strong> 두 테마에서 화면에 겹치는 16개 조합을 <CodePill>test:color-contrast</CodePill>가
+            매 CI마다 잽니다. 이 규칙을 적어두기만 했던 동안 다크 모드의 오류 문구는 카드 위 3.84:1이었고,
+            그 색은 <CodePill>text-destructive</CodePill> 53곳과 AI 화면 전체에 걸려 있었습니다.
+          </p>
         </SpecSection>
 
         <SpecSection number={10} title="focus" intro="키보드 사용자가 현재 위치를 놓치지 않도록 모든 조작 요소에 동일한 이중 링을 제공합니다.">
@@ -381,12 +386,30 @@ export default async function DesignSystemPage({ params }: PageProps) {
           <div className={styles.gapsTable} role="table" aria-label="디자인 시스템 미해결 과제">
             <div role="row" className={styles.gapsHead}><span role="columnheader">영역</span><span role="columnheader">현재 한계</span><span role="columnheader">다음 조치</span><span role="columnheader">상태</span></div>
             {[
-              ["다국어", "베트남어·몽골어 장문에서 제목 줄바꿈 검증 부족", "4개 언어 시각 회귀 기준선 구축", "P0"],
-              ["다크 모드", "마케팅용 Echo 그림자와 Clay 대비 미확정", "토큰별 WCAG 대비·스크린샷 감사", "P0"],
-              ["마스코트", "일부 상태가 픽셀 PNG이며 고해상도 자산 부족", "상태별 마스터·사용 범위 문서화", "P1"],
-              ["모션", "저사양 Android에서 복합 애니메이션 성능 데이터 부족", "기기 매트릭스와 motion budget 적용", "P1"],
-              ["차트", "색각 다양성을 고려한 패턴·라벨 규칙 미완성", "패턴 세트와 데이터 라벨 계약 추가", "P1"],
-              ["완료·검증 색", "Mint와 Echo 그림자는 이 문서에만 있고 제품 토큰이 없다", "semantic success 토큰을 globals.css에 정의", "P1"],
+              [
+                "죽은 토큰",
+                "--clay 4종과 --chart 5종이 globals.css에 있고 여기 실려 있지만 제품 컴포넌트 사용처가 0이다. Mint와 Echo는 이 문서에만 있다",
+                "쓸 것인지 지울 것인지 정하고, 남길 것에는 실제 사용처를 만든다",
+                "P1",
+              ],
+              [
+                "다국어",
+                "vi·mn 제목 줄바꿈을 사람이 눈으로만 확인했다. 회귀를 잡을 기준선이 없다",
+                "4개 언어 × 주요 폭 스크린샷 기준선",
+                "P1",
+              ],
+              [
+                "마스코트",
+                "해상도는 충분하다(415~1774px). 어떤 상태를 어디에 쓰는지가 어디에도 적혀 있지 않다",
+                "상태별 사용 범위 문서화",
+                "P2",
+              ],
+              [
+                "모션",
+                "저사양 Android 실측 데이터가 없다. prefers-reduced-motion은 전역으로 처리되어 있다",
+                "기기 매트릭스에서 측정",
+                "P2",
+              ],
             ].map(([area, gap, action, status]) => (
               <div role="row" key={area}><b role="cell">{area}</b><span role="cell">{gap}</span><span role="cell">{action}</span><em role="cell" data-priority={status}>{status}</em></div>
             ))}

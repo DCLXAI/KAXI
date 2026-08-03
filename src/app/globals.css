@@ -136,8 +136,13 @@
   --muted-foreground: #a8a49a;
   --accent: #3a3831;
   --accent-foreground: #f0eee6;
-  --destructive: #e2574a;
-  --destructive-foreground: #fdf5f3;
+  /* 밝힌 이유: #e2574a는 카드 위 3.84:1, 페이지 위 4.16:1로 AA(4.5)에 미달했다.
+     text-destructive가 53곳, bg-destructive가 35곳이고 .chat-surface도 이 팔레트를
+     쓰므로 AI 화면의 오류 문구가 전부 그 대비였다. 지금은 5.06 / 5.49.
+     전경을 흰색에서 잉크로 바꾼 것은 배경을 밝히면 흰 글자가 2.91:1로 떨어지기
+     때문이고, 다크의 clay가 이미 쓰던 방식과 같다. */
+  --destructive: #fa6f62;
+  --destructive-foreground: #2a1a12;
   --border: #3a3831;
   --input: #3a3831;
   --ring: #a5b4fc;
