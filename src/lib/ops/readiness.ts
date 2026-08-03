@@ -14,6 +14,7 @@ import { getChatAttachmentSecurityDiagnostics } from "@/lib/chat/attachment-secu
 import { getOpsAlertDiagnostics } from "@/lib/ops/alerts";
 import { getCredentialRotationDiagnostics } from "@/lib/security/rotating-secret";
 import { parseLimit } from "@/lib/api/security";
+import { smtpConfigured } from "@/lib/notifications/email";
 
 export type ReadinessStatus = "ready" | "degraded";
 
@@ -114,7 +115,11 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
   const schoolAudit = await getSchoolSourceAudit();
   const privacyReadiness = getPrivacyRuntimeReadiness(env);
   const deletionProofs = [...SUPPORTED_DELETION_PROOFS];
-  const deletionMailReady = configured(env.SMTP_HOST) && configured(env.SMTP_FROM);
+  // Derived from the sender itself, not re-stated. A second copy of "is mail
+  // configured?" is how readiness comes to disagree with what sendNotificationEmail
+  // will actually do — and this one had already drifted: it checked host and
+  // from-address while the provider also needs a credential.
+  const deletionMailReady = smtpConfigured(env);
   const deletionProofsImplemented = deletionProofs.length > 0;
   const deletionMailGap = deletionProofs.includes("contact_token") && !deletionMailReady;
   const sharedRagRuntime = sharedOpenAiRagRuntimeInfo(env);
