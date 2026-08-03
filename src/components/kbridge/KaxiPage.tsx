@@ -52,9 +52,9 @@ export function KaxiPage({ view, locale }: { view: ViewKey; locale?: Lang }) {
         {view === "agent" && <Agent />}
         {view === "diagnose" && <Diagnosis onNavigate={navigate} />}
         {view === "schools" && <Schools />}
-        {view === "cost" && <CostCalculator />}
-        {view === "docs" && <Documents onNavigate={navigate} />}
-        {view === "partners" && <Partners />}
+        {view === "cost" && <CostCalculator locale={locale} />}
+        {view === "docs" && <Documents onNavigate={navigate} locale={locale} />}
+        {view === "partners" && <Partners locale={locale} />}
         {view === "admin" && <Admin />}
         {view === "synonyms" && <Synonyms />}
       </main>

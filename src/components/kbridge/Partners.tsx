@@ -120,9 +120,15 @@ const PARTNERS: PartnerType[] = [
   },
 ];
 
-export function Partners() {
+export function Partners({ locale }: { locale?: Lang }) {
   const searchParams = useSearchParams();
-  const { lang } = useLangStore();
+  // 라우트 locale이 먼저다. 스토어만 읽으면 서버 렌더에서 항상 기본값 ko가 되어
+
+  // 이 화면 전체가 한국어로 나간다. 자세한 근거는 Landing.tsx 참고.
+
+  const { lang: storeLang } = useLangStore();
+
+  const lang = locale ?? storeLang;
   const { currentLeadId } = useLeadStore();
   const { submitting, submitPartnerRequest } = usePartnerStore();
   const requestedType = searchParams.get("type");

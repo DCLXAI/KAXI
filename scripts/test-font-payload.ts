@@ -72,21 +72,29 @@ const fonts = readFileSync("src/app/fonts.ts", "utf8");
 }
 
 // 4. 그리고 애초에 비한국어 페이지에 한국어가 렌더되지 않아야 한다.
-//    Landing이 라우트 locale을 무시하고 클라이언트 스토어만 읽던 동안, /vi 와
-//    /mn 의 초기 HTML은 h1까지 통째로 한국어였다. 그러면 unicode-range가
-//    아무리 정확해도 브라우저는 한글 서체를 받는다.
+//    이 뷰들이 라우트 locale을 무시하고 클라이언트 스토어만 읽던 동안 — 스토어는
+//    서버에서 항상 ko다 — /vi/docs 의 초기 HTML은 h1 "서류 워크스페이스"부터
+//    트랙 라벨까지 통째로 한국어였다. 하이드레이션 뒤에야 번역으로 바뀌므로
+//    사람 눈에는 한국어가 번쩍이고, 크롤러에는 그 한국어가 페이지 내용으로 남고,
+//    unicode-range가 아무리 정확해도 브라우저는 한글 서체 1.7 MB를 받는다.
+//
+//    측정해서 고른 목록이다. agent·diagnose·schools는 같은 검사에서 한국어가
+//    나오지 않았고, admin은 운영자 전용이라 제외한다.
 {
-  const landing = readFileSync("src/components/kbridge/Landing.tsx", "utf8");
-  assertOk(
-    /locale\s*\?\?\s*storeLang/.test(landing),
-    "Landing이 라우트 locale보다 클라이언트 스토어를 우선한다; 서버 렌더가 다시 한국어로 나간다",
-  );
-
+  const LOCALE_AWARE_VIEWS = ["Landing", "CostCalculator", "Documents", "Partners"] as const;
   const page = readFileSync("src/components/kbridge/KaxiPage.tsx", "utf8");
-  assertOk(
-    /<Landing[^/]*locale=\{locale\}/.test(page),
-    "KaxiPage가 Landing에 locale을 넘기지 않는다",
-  );
+
+  for (const view of LOCALE_AWARE_VIEWS) {
+    const source = readFileSync(`src/components/kbridge/${view}.tsx`, "utf8");
+    assertOk(
+      /locale\s*\?\?\s*storeLang/.test(source),
+      `${view}가 라우트 locale보다 클라이언트 스토어를 우선한다; 서버 렌더가 다시 한국어로 나간다`,
+    );
+    assertOk(
+      new RegExp(`<${view}[^>]*locale=\\{locale\\}`).test(page),
+      `KaxiPage가 ${view}에 locale을 넘기지 않는다; prop을 받아도 항상 undefined다`,
+    );
+  }
 }
 
 console.log("PASS 서체 페이로드: 한글은 한국어를 그릴 때만 내려가고, 비한국어 페이지는 한국어를 렌더하지 않는다");

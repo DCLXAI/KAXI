@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 // 디자인 시스템 문서가 실제 제품을 설명하는지 확인한다.
@@ -79,4 +80,70 @@ const page = readFileSync(PAGE, "utf8");
   );
 }
 
+// 3. z-index는 문서가 코드를 따라야 한다. 반대가 아니다.
+//
+//    전에는 문서가 0/10/20/40/60/80을 "계약"이라 적었는데 60과 80은 코드
+//    어디에서도 쓰인 적이 없었고, 실제로 쓰이는 50과 100은 표에 없었다. 그
+//    50과 100의 대부분은 components/ui에 벤더링된 shadcn의 오버레이 계층이라
+//    우리가 옮길 수 있는 값도 아니다. 문서를 계획이 아니라 제품으로 되돌린다.
+{
+  const layers = (scope: string) =>
+    new Set(
+      execSync(`grep -rhoE '\\bz-(\\[[0-9]+\\]|[0-9]+)' ${scope} --include='*.tsx' || true`, {
+        encoding: "utf8",
+      })
+        .split("\n")
+        .map((token) => token.trim().replace(/^z-\[?|\]$/g, ""))
+        .filter(Boolean),
+    );
+
+  // 벤더링된 shadcn은 자기 내부 값을 갖는다 — navigation-menu의 z-[1] 같은 것은
+  // 앱이 추론하는 층이 아니라 한 컴포넌트의 구현 세부다. 그래서 "문서에 있어야
+  // 한다"는 앱 코드에만 요구하고, "문서에 있으면 실제로 쓰여야 한다"는 전체에
+  // 요구한다. 후자가 60·80 같은 허구를 잡는 쪽이다.
+  const everywhere = layers("src");
+  const appOwned = new Set(
+    [...layers("src")].filter((value) => {
+      const hits = execSync(
+        `grep -rlE '\\bz-(\\[)?${value}(\\])?\\b' src --include='*.tsx' | grep -v '^src/components/ui/' || true`,
+        { encoding: "utf8" },
+      ).trim();
+      return hits.length > 0;
+    }),
+  );
+
+  const documented = new Set(
+    [...page.matchAll(/\["(?:Toast|Overlay|Sticky|Anchored|Raised|Base)", "(\d+)"/g)].map((m) => m[1]!),
+  );
+  assertOk(documented.size >= 5, "z-index 표를 찾지 못했다");
+
+  for (const value of appOwned) {
+    assertOk(
+      documented.has(value),
+      `앱 코드가 z-${value}를 쓰는데 디자인 시스템 8장에 그 층이 없다; 임의의 숫자이거나 표가 낡았다`,
+    );
+  }
+  for (const value of documented) {
+    assertOk(
+      value === "0" || everywhere.has(value),
+      `문서가 z-${value} 층을 싣지만 코드 어디에서도 쓰이지 않는다; 제품이 아니라 계획을 설명하고 있다`,
+    );
+  }
+}
+
+// 4. 반경 눈금은 --radius에서 파생된다. 문서가 다른 숫자를 적으면 잡는다.
+{
+  const base = tokens.get("--radius");
+  assertOk(base === "0.75rem", `--radius가 ${base}로 바뀌었다; 아래 눈금을 다시 계산해야 한다`);
+
+  const EXPECTED = new Map([["sm", "8px"], ["md", "10px"], ["lg", "12px"], ["xl", "16px"]]);
+  for (const [, name, value] of page.matchAll(/\["(sm|md|lg|xl)", "(\d+px)"/g)) {
+    assertOk(
+      EXPECTED.get(name!) === value!,
+      `문서는 radius ${name} = ${value}라고 하는데 --radius(0.75rem)에서 나오는 값은 ${EXPECTED.get(name!)}이다`,
+    );
+  }
+}
+
 console.log("PASS 디자인 토큰: 스펙 페이지가 제품 토큰을 가리키고, 문서에 적힌 값이 제품과 일치한다");
+console.log("PASS 디자인 토큰: z-index 층과 반경 눈금이 코드에서 실제로 쓰이는 것과 같다");
