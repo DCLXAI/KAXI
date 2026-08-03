@@ -67,16 +67,24 @@ const spacing = [
   ["6", "24px"], ["8", "32px"], ["12", "48px"], ["16", "64px"], ["24", "96px"],
 ] as const;
 
+// globals.css의 --radius(0.75rem)에서 파생되는 실제 단계.
+// 전에는 xs 4 · sm 8 · md 12 · lg 16 · xl 24로 적혀 있었는데, 그 값들은
+// 제품 어디에도 없었다. Tailwind가 --radius로부터 계산하는 네 단계가 전부다.
 const radii = [
-  ["none", "0"], ["xs", "4px"], ["sm", "8px"], ["md", "12px"],
-  ["lg", "16px"], ["xl", "24px"], ["full", "999px"],
+  ["sm", "8px", "--radius - 4px"],
+  ["md", "10px", "--radius - 2px"],
+  ["lg", "12px", "--radius"],
+  ["xl", "16px", "--radius + 4px"],
+  ["full", "999px", "배지·아바타"],
 ] as const;
 
+// 제품이 실제로 내보내는 그림자 토큰. 전에는 shadow-1/2/3/brand라는,
+// 제품에 존재하지 않는 이름을 쓰고 있었다.
 const shadows = [
-  { name: "Hairline", token: "shadow-1", usage: "입력·행 안쪽 구분", className: styles.shadowHairline },
-  { name: "Card", token: "shadow-2", usage: "일반 콘텐츠 카드", className: styles.shadowCard },
-  { name: "Lift", token: "shadow-3", usage: "hover·선택 상태", className: styles.shadowLift },
-  { name: "Echo", token: "shadow-brand", usage: "브랜드·합성 섹션 한정", className: styles.shadowEcho },
+  { name: "Hairline", token: "shadow-2xs", usage: "입력·행 안쪽 구분", className: styles.shadowHairline },
+  { name: "Card", token: "shadow-card", usage: "일반 콘텐츠 카드", className: styles.shadowCard },
+  { name: "Lift", token: "shadow-md", usage: "hover·선택 상태", className: styles.shadowLift },
+  { name: "Echo", token: "(제품 토큰 없음)", usage: "이 문서의 브랜드 순간 한정", className: styles.shadowEcho },
 ] as const;
 
 function SpecSection({ number, title, intro, children }: {
@@ -261,14 +269,26 @@ export default async function DesignSystemPage({ params }: PageProps) {
           <p className={styles.inlineRule}><strong>접근성</strong> <CodePill>prefers-reduced-motion</CodePill>에서는 이동·반복을 제거하고 120ms 이하의 opacity 변화만 허용합니다.</p>
         </SpecSection>
 
-        <SpecSection number={8} title="z-index" intro="임의의 큰 숫자를 금지하고, 여섯 단계의 레이어 계약만 사용합니다.">
+        <SpecSection number={8} title="z-index" intro="여섯 단계만 사용합니다. 이 값들은 코드에서 실제로 쓰이는 것을 세어 적은 것입니다.">
           <div className={styles.layerStack}>
             {[
-              ["Toast", "80", "전역 피드백"], ["Modal", "60", "사용자 결정"], ["Popover", "40", "메뉴·도움말"],
-              ["Sticky", "20", "헤더·필터"], ["Raised", "10", "hover 카드"], ["Base", "0", "일반 콘텐츠"],
+              ["Toast", "100", "전역 피드백 · shadcn toast"],
+              ["Overlay", "50", "다이얼로그·팝오버·드롭다운·시트"],
+              ["Sticky", "40", "헤더·플로팅 런처"],
+              ["Anchored", "20", "사이드바 레일"],
+              ["Raised", "10", "hover 카드"],
+              ["Base", "0", "일반 콘텐츠"],
             ].map(([name, z, role]) => <div key={name}><b>{name}</b><CodePill>z-{z}</CodePill><span>{role}</span></div>)}
           </div>
-          <p className={styles.inlineRule}><strong>규칙</strong> 새 레이어가 필요하면 숫자를 추가하기 전에 stacking context 생성 원인을 먼저 제거합니다.</p>
+          <p className={styles.inlineRule}>
+            <strong>소유</strong> Overlay와 Toast는 <CodePill>components/ui</CodePill>에 벤더링된 shadcn이 정합니다.
+            앱 코드가 그 위에 새 숫자를 얹지 않는 것이 규칙이고, 필요하다고 느껴지면 숫자를 올리기 전에
+            stacking context를 만든 원인을 먼저 없앱니다.
+          </p>
+          <p className={styles.inlineRule}>
+            <strong>정정</strong> 이 표는 원래 60(Modal)과 80(Toast)을 적고 있었습니다. 두 값은 코드 어디에서도
+            쓰인 적이 없습니다 — 문서가 제품이 아니라 계획을 설명하고 있었습니다.
+          </p>
         </SpecSection>
 
         <SpecSection number={9} title="opacity" intro="투명도는 보조 정보와 오버레이에만 사용하며, 본문 가독성을 낮추는 용도로 쓰지 않습니다.">
@@ -366,9 +386,7 @@ export default async function DesignSystemPage({ params }: PageProps) {
               ["마스코트", "일부 상태가 픽셀 PNG이며 고해상도 자산 부족", "상태별 마스터·사용 범위 문서화", "P1"],
               ["모션", "저사양 Android에서 복합 애니메이션 성능 데이터 부족", "기기 매트릭스와 motion budget 적용", "P1"],
               ["차트", "색각 다양성을 고려한 패턴·라벨 규칙 미완성", "패턴 세트와 데이터 라벨 계약 추가", "P1"],
-              ["완료·검증 색", "Mint를 쓰지만 제품에 대응 토큰이 없다", "semantic success 토큰을 globals.css에 정의", "P1"],
-              ["z-index", "계약은 0/10/20/40/60/80인데 코드는 z-50을 22곳, z-[100]을 1곳 쓴다", "실제 레이어로 계약을 다시 쓰고 lint로 고정", "P1"],
-              ["반경·그림자", "문서는 lg=16px·shadow-1~3인데 제품은 lg=12px·2xs~2xl", "명명을 한쪽으로 통일", "P2"],
+              ["완료·검증 색", "Mint와 Echo 그림자는 이 문서에만 있고 제품 토큰이 없다", "semantic success 토큰을 globals.css에 정의", "P1"],
             ].map(([area, gap, action, status]) => (
               <div role="row" key={area}><b role="cell">{area}</b><span role="cell">{gap}</span><span role="cell">{action}</span><em role="cell" data-priority={status}>{status}</em></div>
             ))}

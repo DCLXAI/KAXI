@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useCostStore, useLangStore } from "@/store/kbridge";
-import { tr, translationKey } from "@/lib/i18n/translations";
+import { tr, translationKey, type Lang } from "@/lib/i18n/translations";
 import type { School } from "@/lib/data/schools";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -48,8 +48,14 @@ function schoolCostPatch(school: School): Record<"cost_item_tuition" | "cost_ite
   };
 }
 
-export function CostCalculator() {
-  const { lang } = useLangStore();
+export function CostCalculator({ locale }: { locale?: Lang }) {
+  // 라우트 locale이 먼저다. 스토어만 읽으면 서버 렌더에서 항상 기본값 ko가 되어
+
+  // 이 화면 전체가 한국어로 나간다. 자세한 근거는 Landing.tsx 참고.
+
+  const { lang: storeLang } = useLangStore();
+
+  const lang = locale ?? storeLang;
   const { savedCosts, saveCost, removeCost } = useCostStore();
   const [schools, setSchools] = useState<School[]>([]);
   const [schoolsLoading, setSchoolsLoading] = useState(true);
