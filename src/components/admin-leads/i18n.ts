@@ -1,6 +1,6 @@
 import { DIAGNOSIS_DOC_KEYS, DIAGNOSIS_GOALS, DIAGNOSIS_PATH_KEYS } from "@/lib/data/diagnosis";
 import { ANONYMOUS_LEAD_PLACEHOLDER } from "@/lib/partners/anonymous-lead";
-import { PARTNER_TYPES } from "@/lib/partners/types";
+import { LABELLED_PARTNER_TYPES } from "@/lib/partners/types";
 
 // These allowlists used to be hand-written copies of the value domains, and
 // translateKnown() renders the FALLBACK label for anything outside them —
@@ -18,7 +18,10 @@ import { PARTNER_TYPES } from "@/lib/partners/types";
 const GOAL_KEYS = new Set(DIAGNOSIS_GOALS.map((goal) => `goal_${goal}`));
 const PATH_KEYS = new Set(DIAGNOSIS_PATH_KEYS);
 const DOC_KEYS = new Set(DIAGNOSIS_DOC_KEYS);
-const PARTNER_KEYS = new Set([...PARTNER_TYPES].map((type) => `partner_${type}`));
+// 접수를 닫은 유형까지 포함해야 과거 요청이 제 이름으로 보인다. 쓰기 허용
+// 집합(PARTNER_TYPES)에서 파생하면, 접수를 닫는 순간 그 유형의 과거 요청이
+// 전부 "알 수 없는 유형"으로 바뀐다.
+const PARTNER_KEYS = new Set([...LABELLED_PARTNER_TYPES].map((type) => `partner_${type}`));
 
 // Two values reach these functions that are not wizard answers at all:
 //

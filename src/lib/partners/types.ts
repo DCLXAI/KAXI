@@ -1,9 +1,29 @@
-// The partner types a request may be stored with. This is the write-side
-// validation set (createPartnerRequest rejects anything else) and it lives in
-// its own leaf module so client surfaces can derive from it without pulling in
-// repository.ts, which imports Prisma.
+// 파트너 유형. 쓰기 허용 집합과 라벨 집합이 서로 다르다.
 //
-// The admin inbox previously kept a second hand-written copy for labelling, and
-// a partner type missing from that copy renders as a DIFFERENT partner type
-// rather than as an unknown one — so the copies must not be allowed to drift.
-export const PARTNER_TYPES = new Set(["admin", "translation", "academy", "admission", "settlement"]);
+// 원래는 하나였다. 그런데 실제 제휴 파트너는 권영근 행정사 한 명뿐인데
+// 페이지는 다섯 종류를 내걸고 다섯 개 모두에서 이름·연락처와 제3자 제공 동의를
+// 받고 있었다. 연결해 줄 사람이 없는 요청을 받는 것이라 네 종류의 접수를 닫는다.
+//
+// 그렇다고 목록에서 지워버리면 안 된다. 이미 저장된 요청들이 그 유형을 달고
+// 있고, 라벨 집합은 PARTNER_TYPES에서 파생되므로 지우는 순간 과거 요청이
+// 관리자·파트너 인박스에서 "알 수 없음"으로 보인다. 접수를 닫는 것과 기록을
+// 읽는 것은 다른 문제다.
+
+/** 지금 새 요청을 받을 수 있는 유형. createPartnerRequest가 이것으로 검증한다. */
+export const PARTNER_TYPES = new Set(["admin"]);
+
+/**
+ * 지금까지 저장된 적이 있는 모든 유형. 라벨링 전용이다.
+ *
+ * 접수를 닫은 유형이 여기 남아 있어야 과거 요청이 제 이름으로 보인다.
+ * 이 집합에서 무언가를 빼면 그 유형의 과거 요청은 "알 수 없는 유형"이 된다 —
+ * 라벨이 다른 유형으로 잘못 붙는 것보다는 낫지만, 기록을 잃는 것은 맞다.
+ */
+export const LABELLED_PARTNER_TYPES = new Set([
+  ...PARTNER_TYPES,
+  // 2026-08-04에 접수를 닫음. 제휴 파트너가 없는 채로 개인정보를 받고 있었다.
+  "translation",
+  "academy",
+  "admission",
+  "settlement",
+]);

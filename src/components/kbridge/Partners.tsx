@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Scale, Languages, BookOpen, School, Home, CheckCircle2, Ban, Loader2, ShieldCheck } from "lucide-react";
+import { Scale, CheckCircle2, Ban, Loader2, ShieldCheck } from "lucide-react";
 
 interface PartnerType {
   key: string;
@@ -32,6 +32,16 @@ interface PartnerType {
   };
 }
 
+// 실제로 연결해 줄 수 있는 파트너만 싣는다.
+//
+// 전에는 다섯이었다 — 행정사, 번역·공증, 한국어 학원, 학교 입학처, 정착 파트너.
+// 그런데 제휴가 되어 있는 것은 행정사 한 곳뿐이었고, 나머지 넷도 똑같이
+// "상담 요청" 버튼을 달고 이름·연락처와 제3자 제공·처리위탁·국외이전 동의를
+// 받고 있었다. 받은 요청을 넘길 상대가 없으므로, 그 동의는 일어나지 않을 일에
+// 대한 동의였다.
+//
+// 이 제품은 채팅에서 근거 없는 답을 거부한다. 같은 기준을 여기에도 적용한다 —
+// 연결이 실제로 되는 것만 싣고, 파트너가 생기면 그때 늘린다.
 const PARTNERS: PartnerType[] = [
   {
     key: "admin",
@@ -48,74 +58,6 @@ const PARTNERS: PartnerType[] = [
       vi: "Từng từ chối visa, chuyển D-4→D-2, gia hạn",
       mn: "Виз татгалзсан, D-4→D-2 шилжих, сунгах",
       en: "Visa refusal, D-4→D-2 transfer, extension",
-    },
-  },
-  {
-    key: "translation",
-    icon: Languages,
-    titleKey: "partner_translation",
-    desc: {
-      ko: "졸업증명서·성적증명서·호적 등 공식 번역·공증. 베트남어·몽골어·영어 가능.",
-      vi: "Dịch+công chứng bằng cấp, học bạ, hộ tịch. Tiếng Việt/Mông Cổ/Anh.",
-      mn: "Орчуулга, гэрчилгээ. Монгол/Вьетнам/Англи хэл.",
-      en: "Translation & notarization of diplomas, transcripts, family records.",
-    },
-    example: {
-      ko: "VO/ GZO 등 번역공증, 문서당 약 15,000~50,000원",
-      vi: "Dịch+công chứng, 15,000~50,000₩/tài liệu",
-      mn: "15,000~50,000₩/баримт",
-      en: "15,000~50,000₩/document",
-    },
-  },
-  {
-    key: "academy",
-    icon: BookOpen,
-    titleKey: "partner_academy",
-    desc: {
-      ko: "현지 한국어 학원. TOPIK 대비, 기초 한국어 과정.",
-      vi: "Trung tâm tiếng Hàn tại địa phương. TOPIK, cơ bản.",
-      mn: "Орон нутагийн Солонгос хэлний төв. TOPIK.",
-      en: "Local Korean academies. TOPIK prep, basic Korean.",
-    },
-    example: {
-      ko: "TOPIK 3급 도달 시 학위과정 지원 가능",
-      vi: "Đạt TOPIK 3 → nộp ĐH",
-      mn: "TOPIK 3 → их сургууль",
-      en: "TOPIK 3 → degree eligible",
-    },
-  },
-  {
-    key: "admission",
-    icon: School,
-    titleKey: "partner_admission",
-    desc: {
-      ko: "학교 입학처·유학 담당자 직접 연결. 모집요강, 표준입학허가서 발급 문의.",
-      vi: "Phòng tuyển sinh trường. Hỏi về tuyển sinh, giấy nhập học.",
-      mn: "Сургуулийн элсэлтийн алба. Элсэлт, зөвшөөрөл.",
-      en: "School admission offices. Recruitment, admission letters.",
-    },
-    example: {
-      ko: "모집요강, 제출서류, 표준입학허가서 발급 일정",
-      vi: "Yêu cầu tuyển sinh, lịch cấp giấy",
-      mn: "Элсэлтийн нөхцөл, хуанли",
-      en: "Requirements, issuance schedule",
-    },
-  },
-  {
-    key: "settlement",
-    icon: Home,
-    titleKey: "partner_settlement",
-    desc: {
-      ko: "공항 픽업, 숙소, 유심, 건강보험, 은행 계좌, 외국인등록 안내.",
-      vi: "Đón sân bay, nhà ở, SIM, bảo hiểm, ngân hàng, đăng ký người nước ngoài.",
-      mn: "Нисэх буудал, байр, SIM, даатгал, банк, бүртгэл.",
-      en: "Airport pickup, housing, SIM, insurance, bank, ARC registration.",
-    },
-    example: {
-      ko: "입국 후 90일 이내 외국인등록 필수",
-      vi: "Đăng ký người nước ngoài trong 90 ngày",
-      mn: "90 хоногийн дотор бүртгүүлэх",
-      en: "ARC within 90 days of arrival",
     },
   },
 ];
