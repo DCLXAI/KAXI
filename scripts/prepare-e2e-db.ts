@@ -1,4 +1,5 @@
 import { spawnSync } from "child_process";
+import { prepareTestDb } from "./prepare-test-db";
 
 function isPostgresUrl(value: string | undefined): value is string {
   return /^postgres(?:ql)?:\/\//i.test((value || "").trim());
@@ -16,8 +17,9 @@ if (!["localhost", "127.0.0.1", "::1"].includes(target.hostname) || !target.path
 }
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 
+prepareTestDb("E2E");
+
 for (const command of [
-  ["bun", "run", "scripts/prepare-test-db.ts"],
   ["bun", "run", "db:seed:schools"],
   ["bun", "run", "db:seed:synonyms"],
   ["bun", "run", "db:seed:rules"],

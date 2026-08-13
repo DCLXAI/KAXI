@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
 
+const isVercelBuild = process.env.VERCEL === "1";
+
 const codexCliTrace = [
   "./node_modules/@openai/codex/bin/codex.js",
 ];
@@ -15,7 +17,7 @@ const deploymentCacheTraceExcludes = [
 ];
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  ...(isVercelBuild ? {} : { output: "standalone" as const }),
   outputFileTracingExcludes: {
     "*": deploymentCacheTraceExcludes,
   },
