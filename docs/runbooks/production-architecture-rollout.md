@@ -46,6 +46,29 @@ Replace every placeholder with the approved evidence. The command must pass from
 the exact clean release checkout. A failure is a stop-the-line result, not a reason
 to skip an input or weaken the check.
 
+Production deployment is never triggered by a push or completed CI run. Use the
+`Vercel Production Release` workflow manually. Its `verify` operation is read-only
+and confirms database connectivity plus migration/schema parity from the exact
+approved `main` commit. Its `deploy` operation requires the protected `production`
+environment, `deployment_authorized=true`, the approved ticket/rollback owner,
+Railway authorization, latency budgets, acknowledged alert recipients and the
+exact UTC canary start. It reruns CI and the fail-closed rollout preflight before
+build, migration, canary creation or domain promotion.
+
+Run read-only verification first:
+
+```sh
+gh workflow run vercel-production.yml --ref main \
+  -f operation=verify \
+  -f source_commit=0000000000000000000000000000000000000000 \
+  -f deployment_authorized=false \
+  -f alert_recipients_acknowledged=false
+```
+
+Do not dispatch `operation=deploy` until the local preflight above passes and the
+same approved values are ready for the workflow inputs. A verify run never builds,
+migrates, creates a deployment or changes production domains.
+
 ## 2. Pre-deploy gates
 
 From the exact release commit, require CI, type, lint, schema policy, architecture,

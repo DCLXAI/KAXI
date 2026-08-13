@@ -1,43 +1,78 @@
-name: Vercel Production Deploy
+name: Vercel Production Release
+
+run-name: >-
+  Production ${{ inputs.operation }} · ${{ inputs.source_commit }} · ${{ inputs.ticket || 'read-only verification' }}
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      operation:
+        description: Read-only schema verification or an approved production deployment
+        required: true
+        type: choice
+        options:
+          - verify
+          - deploy
+        default: verify
+      source_commit:
+        description: Exact 40-character main commit to verify or deploy
+        required: true
+        type: string
+      deployment_authorized:
+        description: Web and Railway production rollout is approved; ignored by verify
+        required: true
+        type: boolean
+        default: false
+      ticket:
+        description: Approved change ticket (required for deploy)
+        required: false
+        type: string
+      rollback_owner:
+        description: Named rollback decision owner (required for deploy)
+        required: false
+        type: string
+      base_url:
+        description: Approved production/canary base URL
+        required: false
+        type: string
+        default: https://kaxi.vercel.app
+      baseline_complete_p95_ms:
+        description: Approved pre-release completed-response p95 in milliseconds
+        required: false
+        type: string
+      cold_first_progress_budget_ms:
+        description: Approved cold first-progress budget in milliseconds
+        required: false
+        type: string
+      alert_recipients_acknowledged:
+        description: Alert recipients expect the production rehearsal
+        required: true
+        type: boolean
+        default: false
+      canary_start_utc:
+        description: Exact UTC canary start (YYYY-MM-DDTHH:MM:SSZ)
+        required: false
+        type: string
+
+permissions:
+  contents: read
 
 concurrency:
   group: kaxi-production
   cancel-in-progress: false
 
 jobs:
-  verify-manual-deploy:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+  verify-release-ci:
     uses: ./.github/workflows/ci.yml
 
-  deploy:
-    needs: [verify-manual-deploy]
-    if: >-
-      ${{
-        always() &&
-        (
-          (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
-          (github.event_name == 'workflow_dispatch' && needs.verify-manual-deploy.result == 'success')
-        )
-      }}
+  release:
+    needs: [verify-release-ci]
+    if: ${{ needs.verify-release-ci.result == 'success' }}
     runs-on: ubuntu-latest
+    environment: production
     env:
-      # Every step below used to run `bunx vercel`, which resolves whatever is
-      # latest on npm at that moment — so an upstream CLI release could change or
-      # break a production deploy with no commit on our side. It did: release
-      # 0dab19d deployed cleanly on 58.4.0, and the very next run, on 58.4.4,
-      # failed twice in a row at `deploy --prebuilt --archive=tgz` with
-      # `ENOENT ... /vercel/path0/node_modules/@opentelemetry/api/build/src/api/context.js`
-      # — a path outside the prebuilt output the workflow uploads. Same repo, same
-      # steps, different CLI.
-      #
-      # Bump this deliberately, and only after a green run.
+      # Pin the Vercel CLI. An upstream patch release previously broke the
+      # prebuilt deployment path without a repository change.
       VERCEL_CLI_VERSION: "58.4.0"
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -45,78 +80,108 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
       PRISMA_DATABASE_URL: ${{ secrets.PRISMA_DATABASE_URL }}
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
       KAXI_PRISMA_PROVIDER: postgresql
-      EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      EXPECTED_SHA: ${{ inputs.source_commit }}
+      PRODUCTION_ENV_FILE: .vercel/.env.production.local
     steps:
+      - name: Require explicit production deployment authorization
+        if: ${{ inputs.operation == 'deploy' && !inputs.deployment_authorized }}
+        run: |
+          echo "deployment_authorized must be true for a production deployment."
+          exit 1
       - name: Require Vercel deployment secrets
         if: ${{ env.VERCEL_TOKEN == '' || env.VERCEL_ORG_ID == '' || env.VERCEL_PROJECT_ID == '' }}
         run: |
-          echo "VERCEL_TOKEN, VERCEL_ORG_ID, and VERCEL_PROJECT_ID are required for production deployment."
+          echo "VERCEL_TOKEN, VERCEL_ORG_ID, and VERCEL_PROJECT_ID are required."
           exit 1
       - name: Require production database secrets
-        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' && env.DATABASE_URL == '' && env.POSTGRES_URL == '' }}
+        if: ${{ env.DATABASE_URL == '' && env.POSTGRES_URL == '' && env.PRISMA_DATABASE_URL == '' }}
         run: |
-          echo "DATABASE_URL or POSTGRES_URL GitHub secret is required for production migrations."
+          echo "DATABASE_URL, POSTGRES_URL, or PRISMA_DATABASE_URL is required for production verification."
           exit 1
-      - name: Mask production database secrets
-        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
+      - name: Mask production access secrets
         run: |
           [ -z "$DATABASE_URL" ] || echo "::add-mask::$DATABASE_URL"
           [ -z "$POSTGRES_URL" ] || echo "::add-mask::$POSTGRES_URL"
           [ -z "$PRISMA_DATABASE_URL" ] || echo "::add-mask::$PRISMA_DATABASE_URL"
+          [ -z "$RAILWAY_TOKEN" ] || echo "::add-mask::$RAILWAY_TOKEN"
       - uses: actions/checkout@v7
-        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
         with:
-          # release:check:source requires an attached main branch; the next step
-          # still pins the exact CI-verified SHA, so reproducibility holds and a
-          # racing push simply aborts this run in favor of its own pipeline.
           ref: main
-      - name: Verify deployment commit
-        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
-        env:
-          EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
-        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Verify exact approved main commit
+        run: |
+          test "$EXPECTED_SHA" = "$(git rev-parse HEAD)"
+          test "${#EXPECTED_SHA}" = "40"
       - uses: oven-sh/setup-bun@v2
-        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
         with:
           bun-version: 1.3.5
       - name: Install dependencies
-        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
         run: bun install --frozen-lockfile
       - name: Verify reproducible release source
-        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
         run: bun run release:check:source -- --expected-sha "$EXPECTED_SHA"
-      # Serving-projection drift makes production readiness report 503, which the canary
-      # gate below rejects — but only after a build, a migration and a canary deployment
-      # have been paid for. The projection is shared Supabase state that can already be
-      # drifted before this release starts, so read it from the live production readiness
-      # endpoint first. Needs no credentials, so it runs ahead of every costly step.
-      - name: Check RAG serving projection drift
-        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
-        run: bun run rag:check:projection -- --base-url "${{ vars.PRODUCTION_BASE_URL || 'https://kaxi.vercel.app' }}"
       - name: Pull Vercel production environment
-        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
         run: bunx vercel@$VERCEL_CLI_VERSION pull --yes --environment=production --token="$VERCEL_TOKEN"
+      - name: Verify production database connectivity
+        run: bun --env-file="$PRODUCTION_ENV_FILE" run db:check-production
+      - name: Verify applied production schema
+        if: ${{ inputs.operation == 'verify' }}
+        run: bun --env-file="$PRODUCTION_ENV_FILE" run ops:check:schema-parity
+      - name: Stop after read-only verification
+        if: ${{ inputs.operation == 'verify' }}
+        run: echo "PASS read-only production database and schema verification"
+      - name: Run fail-closed production rollout preflight
+        if: ${{ inputs.operation == 'deploy' }}
+        env:
+          CHANGE_TICKET: ${{ inputs.ticket }}
+          ROLLBACK_OWNER: ${{ inputs.rollback_owner }}
+          APPROVED_BASE_URL: ${{ inputs.base_url }}
+          BASELINE_COMPLETE_P95_MS: ${{ inputs.baseline_complete_p95_ms }}
+          COLD_FIRST_PROGRESS_BUDGET_MS: ${{ inputs.cold_first_progress_budget_ms }}
+          CANARY_START_UTC: ${{ inputs.canary_start_utc }}
+          ALERT_RECIPIENTS_ACKNOWLEDGED: ${{ inputs.alert_recipients_acknowledged }}
+        run: |
+          args=(
+            --phase all
+            --ticket "$CHANGE_TICKET"
+            --rollback-owner "$ROLLBACK_OWNER"
+            --source-commit "$EXPECTED_SHA"
+            --railway-deploy-authorized
+            --base-url "$APPROVED_BASE_URL"
+            --baseline-complete-p95-ms "$BASELINE_COMPLETE_P95_MS"
+            --cold-first-progress-budget-ms "$COLD_FIRST_PROGRESS_BUDGET_MS"
+            --canary-start-utc "$CANARY_START_UTC"
+          )
+          if [ "$ALERT_RECIPIENTS_ACKNOWLEDGED" = "true" ]; then
+            args+=(--alert-recipients-acknowledged)
+          fi
+          bun --env-file="$PRODUCTION_ENV_FILE" run ops:check:rollout-readiness -- "${args[@]}"
+      - name: Check RAG serving projection drift
+        if: ${{ inputs.operation == 'deploy' }}
+        run: bun run rag:check:projection -- --base-url "${{ inputs.base_url }}"
       - name: Build with Vercel
-        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
+        if: ${{ inputs.operation == 'deploy' }}
         run: bunx vercel@$VERCEL_CLI_VERSION build --prod --token="$VERCEL_TOKEN"
       - name: Apply PostgreSQL migrations
-        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
+        if: ${{ inputs.operation == 'deploy' }}
         run: bun run scripts/deploy-postgres-migrations.ts
+      - name: Verify post-migration schema parity
+        if: ${{ inputs.operation == 'deploy' }}
+        run: bun --env-file="$PRODUCTION_ENV_FILE" run ops:check:schema-parity
       - name: Prune deployment model cache
-        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
+        if: ${{ inputs.operation == 'deploy' }}
         run: bun run scripts/prune-vercel-output.ts
       - name: Inject runtime environment into prebuilt functions
-        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
+        if: ${{ inputs.operation == 'deploy' }}
         run: bun run scripts/inject-vercel-runtime-env.ts
       - name: Deploy production canary without assigning domains
         id: deploy
-        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
+        if: ${{ inputs.operation == 'deploy' }}
         run: |
           DEPLOYMENT_URL="$(bunx vercel@$VERCEL_CLI_VERSION deploy --prebuilt --archive=tgz --prod --skip-domain --meta "kaxiReleaseSha=$EXPECTED_SHA" --meta "kaxiSourceClean=1" --token="$VERCEL_TOKEN")"
           echo "url=$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
       - name: Verify production canary end to end
-        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
+        if: ${{ inputs.operation == 'deploy' }}
         env:
           CANARY_URL: ${{ steps.deploy.outputs.url }}
         run: |
@@ -128,5 +193,5 @@ jobs:
             --output /dev/null
           bun run release:check:backend -- --base-url "$CANARY_URL" --cookie-file "$COOKIE_JAR"
       - name: Promote verified canary to production domains
-        if: ${{ env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != '' }}
+        if: ${{ inputs.operation == 'deploy' }}
         run: bunx vercel@$VERCEL_CLI_VERSION promote "${{ steps.deploy.outputs.url }}" --yes --token="$VERCEL_TOKEN"
