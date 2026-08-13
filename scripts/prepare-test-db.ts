@@ -90,6 +90,7 @@ export function prepareTestDb(label: string): void {
 
   // All Prisma clients imported after this call resolve the isolated test DB.
   process.env.DATABASE_URL = databaseUrl;
+  process.env.TENANT_CONTEXT_SIGNING_SECRET ||= "kaxi-test-tenant-context-signing-secret-2026-only";
 
   const result = spawnSync(
     "bunx",

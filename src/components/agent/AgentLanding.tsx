@@ -1,7 +1,6 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, ArrowUp, Brain, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -39,16 +38,9 @@ export function AgentLanding({
   onSend,
 }: AgentLandingProps) {
   const t = useTranslations();
-  const shouldReduceMotion = useReducedMotion();
-
   return (
     <div className={embedded ? "w-full" : "min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center px-4 py-12"}>
-      <motion.div
-        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, transform: "translateY(10px)" }}
-        animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, transform: "translateY(0px)" }}
-        transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
-        className="w-full max-w-3xl"
-      >
+      <div className="w-full max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-200 motion-reduce:animate-none">
         <div className={embedded ? "text-center mb-5" : "text-center mb-10"}>
           <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full bg-primary-strong/10 text-primary-strong text-xs font-medium">
             <KaxiPawMark className="h-3.5 w-3.5" />
@@ -133,7 +125,7 @@ export function AgentLanding({
             ))}
           </div>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { isEnvTrue } from "@/lib/env";
 import {
   getConfiguredLlmBackend,
@@ -52,16 +53,19 @@ export interface AiBackendDiagnostics {
     fallbackConfigured: boolean;
     configuredProviderCount: number;
   };
-  kimi: {
+  openai: {
     apiKeyConfigured: boolean;
     model: string;
     baseUrl: string;
     protocol: "openai-chat-completions";
+    genuineProvider: boolean;
     managedApi: true;
   };
-  claude: {
+  anthropic: {
     apiKeyConfigured: boolean;
     model: string;
+    baseUrl: string;
+    genuineProvider: boolean;
     managedApi: true;
   };
   fallbackPolicy: {
@@ -73,7 +77,7 @@ export interface AiBackendDiagnostics {
   warnings: string[];
 }
 
-export function isHostedRuntime(env: NodeJS.ProcessEnv = process.env): boolean {
+export function isHostedRuntime(env: NodeJS.ProcessEnv = runtimeEnvironment()): boolean {
   return env.VERCEL === "1" || Boolean(env.VERCEL_ENV);
 }
 
@@ -102,12 +106,13 @@ function requireLlm(env: NodeJS.ProcessEnv): boolean {
 }
 
 function legacyWarnings(env: NodeJS.ProcessEnv): string[] {
+  const legacyCodexBackendKey = /^CODEX_(?:API|BACKEND|MODEL|REMOTE|ENABLED|BASE_URL|URL|TOKEN|KEY)(?:_|$)/;
   const configured = Object.keys(env).filter((key) => {
     if (!env[key]?.trim()) return false;
     return (
       key === "AGENT_BACKEND" ||
       key === "AI_CONSULT_BACKEND" ||
-      key.startsWith("CODEX_") ||
+      legacyCodexBackendKey.test(key) ||
       key.startsWith("ZAI_") ||
       key.startsWith("NEXT_PUBLIC_CODEX_")
     );
@@ -136,9 +141,9 @@ function decision(feature: AiBackendFeature, env: NodeJS.ProcessEnv): AiBackendD
   table.push(
     selected(
       `${feature}.backend.${backend}`,
-      backend === "kimi"
-        ? "Using Kimi through its OpenAI-compatible managed API."
-        : "Using Anthropic Claude through the managed LLM gateway."
+      backend === "openai"
+        ? "Using OpenAI through the official managed API."
+        : "Using Anthropic through the official managed API."
     )
   );
 
@@ -159,34 +164,34 @@ function decision(feature: AiBackendFeature, env: NodeJS.ProcessEnv): AiBackendD
   };
 }
 
-export function getAgentBackend(env: NodeJS.ProcessEnv = process.env): AgentBackend {
+export function getAgentBackend(env: NodeJS.ProcessEnv = runtimeEnvironment()): AgentBackend {
   return getConfiguredLlmBackend(env);
 }
 
-export function getConsultBackend(env: NodeJS.ProcessEnv = process.env): ConsultBackend {
+export function getConsultBackend(env: NodeJS.ProcessEnv = runtimeEnvironment()): ConsultBackend {
   return getConfiguredLlmBackend(env);
 }
 
-export function explainAgentBackendDecision(env: NodeJS.ProcessEnv = process.env): AiBackendDecision<AgentBackend> {
+export function explainAgentBackendDecision(env: NodeJS.ProcessEnv = runtimeEnvironment()): AiBackendDecision<AgentBackend> {
   return decision("agent", env);
 }
 
-export function explainConsultBackendDecision(env: NodeJS.ProcessEnv = process.env): AiBackendDecision<ConsultBackend> {
+export function explainConsultBackendDecision(env: NodeJS.ProcessEnv = runtimeEnvironment()): AiBackendDecision<ConsultBackend> {
   return decision("consult", env);
 }
 
-export function shouldRequireAgentLlm(_backend?: AgentBackend, env: NodeJS.ProcessEnv = process.env): boolean {
+export function shouldRequireAgentLlm(_backend?: AgentBackend, env: NodeJS.ProcessEnv = runtimeEnvironment()): boolean {
   return requireLlm(env);
 }
 
-export function shouldRequireConsultLlm(_backend?: ConsultBackend, env: NodeJS.ProcessEnv = process.env): boolean {
+export function shouldRequireConsultLlm(_backend?: ConsultBackend, env: NodeJS.ProcessEnv = runtimeEnvironment()): boolean {
   return requireLlm(env);
 }
 
-export function getAiBackendDiagnostics(env: NodeJS.ProcessEnv = process.env): AiBackendDiagnostics {
+export function getAiBackendDiagnostics(env: NodeJS.ProcessEnv = runtimeEnvironment()): AiBackendDiagnostics {
   const hosted = isHostedRuntime(env);
   const gateway = getLlmGatewayDiagnostics(env);
-  const { claude, kimi } = gateway;
+  const { anthropic, openai } = gateway;
   const agentDecision = explainAgentBackendDecision(env);
   const consultDecision = explainConsultBackendDecision(env);
   const issues: string[] = [];
@@ -195,7 +200,7 @@ export function getAiBackendDiagnostics(env: NodeJS.ProcessEnv = process.env): A
   const managedLlmConfigured = gateway.apiKeyConfigured
     || (gateway.fallbackEnabled && gateway.fallbackConfigured);
   if (!managedLlmConfigured) {
-    const keyName = gateway.backend === "kimi" ? "OPENAI_API_KEY/KIMI_API_KEY" : "ANTHROPIC_API_KEY";
+    const keyName = gateway.backend === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY";
     const message = requireLlm(env)
       ? `${keyName} is not configured for ${gateway.backend} while AI_REQUIRE_LLM=true.`
       : `${keyName} is not configured for ${gateway.backend}; LLM calls will use deterministic fallback.`;
@@ -203,15 +208,25 @@ export function getAiBackendDiagnostics(env: NodeJS.ProcessEnv = process.env): A
   } else if (!gateway.apiKeyConfigured && gateway.fallbackConfigured) {
     warnings.push(`${gateway.backend} is not configured; managed LLM calls will start on ${gateway.fallbackBackend}.`);
   }
-  if (env.AI_REQUIRE_PROVIDER_FAILOVER === "true" && !gateway.fallbackConfigured) {
-    issues.push(`AI_REQUIRE_PROVIDER_FAILOVER=true but ${gateway.fallbackBackend} credentials are not configured.`);
+  const requireProviderFailover = hosted || env.AI_REQUIRE_PROVIDER_FAILOVER === "true";
+  if (requireProviderFailover && (!gateway.fallbackEnabled || !gateway.fallbackConfigured)) {
+    issues.push(`Production requires genuine OpenAI and Anthropic failover; ${gateway.fallbackBackend} is unavailable or provider failover is disabled.`);
   } else if (gateway.apiKeyConfigured && !gateway.fallbackConfigured) {
     warnings.push(`${gateway.fallbackBackend} is not configured; a ${gateway.backend} runtime failure has no managed-provider failover.`);
   }
 
   const requested = env.AI_PROVIDER?.trim().toLowerCase();
-  if (requested && !["auto", "kimi", "moonshot", "openai", "openai-compatible", "claude", "anthropic"].includes(requested)) {
+  if (requested && ["kimi", "moonshot", "openai-compatible"].includes(requested)) {
+    issues.push(`AI_PROVIDER=${requested} is a retired compatibility provider. Set AI_PROVIDER=openai or anthropic.`);
+  } else if (requested && !["auto", "openai", "claude", "anthropic"].includes(requested)) {
     warnings.push(`Unsupported AI_PROVIDER=${requested}; automatic provider selection was applied.`);
+  }
+
+  if ((env.KIMI_API_KEY?.trim() || env.MOONSHOT_API_KEY?.trim() || /kimi|moonshot/i.test(env.OPENAI_BASE_URL || ""))) {
+    issues.push("Kimi/Moonshot credentials or endpoints are present in the managed LLM path; remove them before production readiness can pass.");
+  }
+  if (!openai.genuineProvider || !anthropic.genuineProvider) {
+    issues.push("Managed provider endpoints/models must identify the official OpenAI and Anthropic services.");
   }
 
   const ready = managedLlmConfigured || fallbackAllowed(env);
@@ -248,22 +263,25 @@ export function getAiBackendDiagnostics(env: NodeJS.ProcessEnv = process.env): A
       fallbackConfigured: gateway.fallbackConfigured,
       configuredProviderCount: gateway.configuredProviderCount,
     },
-    kimi: {
-      apiKeyConfigured: kimi.apiKeyConfigured,
-      model: kimi.model,
-      baseUrl: kimi.baseUrl,
-      protocol: kimi.protocol,
+    openai: {
+      apiKeyConfigured: openai.apiKeyConfigured,
+      model: openai.model,
+      baseUrl: openai.baseUrl,
+      protocol: openai.protocol,
+      genuineProvider: openai.genuineProvider,
       managedApi: true,
     },
-    claude: {
-      apiKeyConfigured: claude.apiKeyConfigured,
-      model: claude.model,
+    anthropic: {
+      apiKeyConfigured: anthropic.apiKeyConfigured,
+      model: anthropic.model,
+      baseUrl: anthropic.baseUrl,
+      genuineProvider: anthropic.genuineProvider,
       managedApi: true,
     },
     fallbackPolicy: {
       globalFallbackAllowed: fallbackAllowed(env),
       providerFailoverEnabled: gateway.fallbackEnabled,
-      providerFailoverReady: gateway.fallbackConfigured,
+      providerFailoverReady: gateway.fallbackEnabled && gateway.fallbackConfigured,
     },
     issues,
     warnings,

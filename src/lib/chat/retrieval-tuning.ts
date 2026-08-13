@@ -13,28 +13,28 @@ export const QUERY_HINTS: Record<GuardrailLocale, Record<ChatCategory, string>> 
     visa: "비자 체류자격 연장 변경 출입국",
     documents: "서류 증명서 재정증빙 여권",
     school: "학교 대학 입학 어학당",
-    cost: "비용 학비 등록금 수수료 생활비",
+    cost: "한국 유학 비용 예산 학비 등록금 생활비 주거비 식비 교통비 수수료",
     general: "한국 유학 비자",
   },
   en: {
     visa: "visa status stay extension immigration",
     documents: "documents certificate proof funds passport",
     school: "school university admission language program",
-    cost: "cost tuition fee living expenses",
+    cost: "Korea study cost budget tuition living expenses housing food transport fee",
     general: "study Korea visa",
   },
   vi: {
     visa: "thị thực lưu trú gia hạn xuất nhập cảnh",
     documents: "hồ sơ giấy tờ chứng minh tài chính hộ chiếu",
     school: "trường đại học nhập học viện ngôn ngữ",
-    cost: "chi phí học phí lệ phí sinh hoạt",
+    cost: "chi phí du học Hàn Quốc ngân sách học phí sinh hoạt nhà ở ăn uống đi lại lệ phí",
     general: "du học Hàn Quốc thị thực",
   },
   mn: {
     visa: "виз оршин суух сунгалт цагаачлал",
     documents: "бичиг баримт тодорхойлолт санхүү паспорт",
     school: "сургууль их сургууль элсэлт хэлний бэлтгэл",
-    cost: "зардал сургалтын төлбөр хураамж амьжиргаа",
+    cost: "Солонгост сурах зардал төсөв сургалтын төлбөр амьжиргаа байр хоол тээвэр хураамж",
     general: "Солонгост сурах виз",
   },
 };
@@ -59,6 +59,14 @@ export const LANGUAGE_STUDY_PATTERN = /한국어.{0,12}(?:연수|공부|배우)|
 
 export const OPERATIONAL_QUERY_RULES: Array<{ pattern: RegExp; hint: string }> = [
   {
+    pattern: /(?:한국\s*유학|유학\s*(?:준비|예산)).{0,32}(?:총\s*)?(?:비용|예산|얼마)|(?:cost\s+items?|budget|total\s+cost).{0,40}(?:stud(?:y|ying)|Korea)|(?:stud(?:y|ying)|Korea).{0,40}(?:cost\s+items?|budget|total\s+cost)|chi\s*phí\s*du\s*học\s*Hàn\s*Quốc|du\s*học\s*Hàn\s*Quốc.{0,32}chi\s*phí|Солонгост\s*сурах.{0,32}зард|сурах.{0,24}(?:нийт\s*)?зард/iu,
+    hint: "cost-breakdown living-cost-breakdown tuition registration housing food transport 한국 유학 등록금 생활비 주거비 식비 교통비 học phí sinh hoạt nhà ở сургалтын төлбөр амьжиргаа",
+  },
+  {
+    pattern: /(?:비자|체류|연장|자격\s*변경|민원).{0,24}수수료|수수료.{0,24}(?:비자|체류|연장|자격\s*변경|민원)|(?:visa|stay|extension|status\s*change|petition).{0,24}fees?|fees?.{0,24}(?:visa|stay|extension|status\s*change|petition)|lệ\s*phí.{0,24}(?:visa|lưu\s*trú|gia\s*hạn)|(?:виз|оршин\s*суух|сунгалт).{0,24}хураамж/iu,
+    hint: "immigration-rule-fees hikorea-fees-processing-authentication visa stay petition fee 체류 민원 수수료 lệ phí lưu trú визний хураамж",
+  },
+  {
     pattern: LANGUAGE_STUDY_PATTERN,
     hint: "d4-overview D-4 Korean language training visa 어학연수 học tiếng Hàn солонгос хэлний бэлтгэл",
   },
@@ -67,7 +75,7 @@ export const OPERATIONAL_QUERY_RULES: Array<{ pattern: RegExp; hint: string }> =
     hint: "hikorea-stay-extension immigration-act-stay-extension stay extension 체류기간 연장 gia hạn хугацаа сунгах",
   },
   {
-    pattern: /이미\s*(?:지났|만료)|불법\s*체류|오버스테이|already\s+expired|overstay|đã\s+hết\s+hạn|quá\s+hạn|аль\s+хэдийн.{0,16}дуус|хугацаа\s*хэтэр/iu,
+    pattern: /이미\s*(?:지났|만료)|불법\s*체류|오버스테이|already\s+expired|overstay|đã\s+hết\s+hạn|thời\s*hạn\s*lưu\s*trú.{0,32}đã\s*hết|quá\s+hạn|аль\s+хэдийн.{0,16}дуус|хугацаа\s*хэтэр/iu,
     hint: "immigration-act-deportation-grounds immigration-act-stay-extension hikorea-stay-extension overstay deportation",
   },
   {

@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { createHmac } from "crypto";
 import type { OfficialKnowledgeMonitorSummary } from "./source-monitor";
 import { sendOpsAlert, type OpsAlertChannelResult } from "@/lib/ops/alerts";
@@ -7,7 +8,7 @@ type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 export interface KnowledgeMonitorAlertContext {
   actor: string;
-  trigger: "cron" | "admin-preview" | "admin-persist" | "test";
+  trigger: "cron" | "admin-preview" | "admin-persist" | "worker" | "test";
   fetchImpl?: FetchLike;
   now?: Date;
 }
@@ -183,7 +184,7 @@ export async function sendKnowledgeMonitorAlert(
   summary: OfficialKnowledgeMonitorSummary,
   context: KnowledgeMonitorAlertContext
 ): Promise<KnowledgeMonitorAlertResult> {
-  const webhookUrl = process.env.KNOWLEDGE_MONITOR_ALERT_WEBHOOK_URL?.trim() || "";
+  const webhookUrl = runtimeEnvironment().KNOWLEDGE_MONITOR_ALERT_WEBHOOK_URL?.trim() || "";
   if (!shouldAlert(summary)) {
     return { attempted: false, sent: false, skippedReason: "no_change" };
   }
@@ -214,7 +215,7 @@ export async function sendKnowledgeMonitorAlert(
     };
   }
 
-  const format = process.env.KNOWLEDGE_MONITOR_ALERT_FORMAT?.trim().toLowerCase();
+  const format = runtimeEnvironment().KNOWLEDGE_MONITOR_ALERT_FORMAT?.trim().toLowerCase();
   const body = JSON.stringify(
     format === "slack" || webhookUrl.includes("hooks.slack.com")
       ? toSlackPayload(payload)
@@ -224,7 +225,7 @@ export async function sendKnowledgeMonitorAlert(
     "content-type": "application/json",
     "user-agent": "KAXI-Knowledge-Monitor/1.0 (+https://kaxi.vercel.app)",
   };
-  const signingSecret = process.env.KNOWLEDGE_MONITOR_ALERT_SIGNING_SECRET?.trim() || "";
+  const signingSecret = runtimeEnvironment().KNOWLEDGE_MONITOR_ALERT_SIGNING_SECRET?.trim() || "";
   if (configured(signingSecret)) {
     headers["x-kaxi-signature"] = signBody(body, signingSecret);
   }

@@ -9,8 +9,9 @@ async function fetchSession(url: string): Promise<KaxiSessionPayload> {
   return response.json() as Promise<KaxiSessionPayload>;
 }
 
-export function useKaxiSession() {
+export function useKaxiSession(fallbackData?: KaxiSessionPayload) {
   const session = useSWR("/api/auth/session", fetchSession, {
+    fallbackData,
     revalidateOnFocus: true,
     shouldRetryOnError: false,
   });

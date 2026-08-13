@@ -1,7 +1,9 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import {
   generateLlmText,
   isLlmConfigured,
   isLlmNotConfiguredError,
+  isLlmQuotaExhaustedError,
   type LlmBackend,
 } from "@/lib/ai/llm-gateway";
 import type { ChatCategory } from "@/lib/chat/category";
@@ -42,6 +44,8 @@ type GenerationMetadata = {
   durationMs: number;
   attempts: 1 | 2;
   retryReason: "invalid_generation" | "generation_failed" | null;
+  providerAttempts?: number;
+  providerFallbackReason?: string | null;
 };
 
 export type GroundedAnswerResult =
@@ -57,7 +61,7 @@ export type GroundedAnswerResult =
   })
   | {
     status: "unavailable";
-    reason: "not_configured" | "generation_failed" | "invalid_generation";
+    reason: "not_configured" | "provider_quota_exhausted" | "generation_failed" | "invalid_generation";
     attempts?: 1 | 2;
     retryReason?: "invalid_generation" | "generation_failed" | null;
   };
@@ -66,7 +70,7 @@ export type GroundedAnswerGenerator = (
   request: GroundedAnswerRequest,
 ) => Promise<GroundedAnswerResult>;
 
-export function groundedRagAnswerTimeoutMs(env: NodeJS.ProcessEnv = process.env) {
+export function groundedRagAnswerTimeoutMs(env: NodeJS.ProcessEnv = runtimeEnvironment()) {
   const configured = Number.parseInt(env.RAG_GROUNDED_ANSWER_TIMEOUT_MS || "", 10);
   return Number.isFinite(configured) ? Math.min(Math.max(configured, 3_000), 12_000) : 7_500;
 }
@@ -237,6 +241,9 @@ ${context}`;
     if (isLlmNotConfiguredError(error)) {
       return { status: "unavailable", reason: "not_configured", attempts: 1, retryReason: null };
     }
+    if (isLlmQuotaExhaustedError(error)) {
+      return { status: "unavailable", reason: "provider_quota_exhausted", attempts: 1, retryReason: null };
+    }
     console.error("[grounded RAG answer generation failed]", error);
     retryReason = "generation_failed";
   }
@@ -250,6 +257,9 @@ ${context}`;
     } catch (error) {
       if (isLlmNotConfiguredError(error)) {
         return { status: "unavailable", reason: "not_configured", attempts, retryReason };
+      }
+      if (isLlmQuotaExhaustedError(error)) {
+        return { status: "unavailable", reason: "provider_quota_exhausted", attempts, retryReason };
       }
       console.error("[grounded RAG answer retry failed]", error);
       return { status: "unavailable", reason: "generation_failed", attempts, retryReason };
@@ -270,6 +280,8 @@ ${context}`;
     durationMs: completion.durationMs,
     attempts,
     retryReason,
+    providerAttempts: completion.attempts ?? 1,
+    providerFallbackReason: completion.fallbackReason ?? null,
   };
   if (!output.supported || !output.answer || usedSourceIndexes.length === 0) {
     return {

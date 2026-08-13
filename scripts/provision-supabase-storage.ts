@@ -1,6 +1,6 @@
 import { ALLOWED_DOCUMENT_MIME_TYPES, maxDocumentUploadBytes } from "../src/lib/documents/config";
 import { supabaseDocumentBucket } from "../src/lib/documents/storage";
-import { createSupabaseServiceRoleClient } from "../src/lib/supabase/server";
+import { createSupabaseServiceRoleClient } from "../src/infrastructure/supabase/service-role-client";
 
 async function main() {
   const bucket = supabaseDocumentBucket();

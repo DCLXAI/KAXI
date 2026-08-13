@@ -5,7 +5,6 @@ import {
   isCacheableAgentQuestion,
 } from "../src/lib/ai/agent-response-cache";
 import {
-  chunkUnifiedAiAnswer,
   createUnifiedAiEventStream,
   encodeUnifiedAiStreamEvent,
   parseUnifiedAiStreamEvent,
@@ -24,13 +23,6 @@ function testTimeoutConfiguration() {
   assert.equal(unifiedAiStreamTimeoutMs({ UNIFIED_AI_STREAM_TIMEOUT_MS: "12000" }), 12_000);
 }
 
-function testChunkIntegrity() {
-  const answer = "D-4 신청에는 입학허가서와 재정 증빙이 필요합니다.\n공식 기준을 함께 확인하세요.";
-  const chunks = chunkUnifiedAiAnswer(answer, 24);
-  assert.ok(chunks.length > 1);
-  assert.equal(chunks.join(""), answer);
-}
-
 function testEventRoundTrip() {
   const event: UnifiedAiStreamEvent = {
     type: "progress",
@@ -47,8 +39,6 @@ async function testImmediateFirstEvent() {
   const stream = createUnifiedAiEventStream({
     capability: "expert",
     timeoutMs: 1_000,
-    progressDelayMs: 20,
-    chunkDelayMs: 0,
     run: async () => {
       await sleep(100);
       return { ok: true, status: 200, data: { answer: "완료" } };
@@ -69,28 +59,54 @@ async function testCompleteStream() {
   const stream = createUnifiedAiEventStream({
     capability: "expert",
     timeoutMs: 1_000,
-    progressDelayMs: 5,
-    chunkDelayMs: 0,
-    run: async () => {
+    run: async (progress) => {
+      progress("searching");
       await sleep(15);
+      progress("generating");
+      progress("finalizing");
       return { ok: true, status: 200, data: { answer, grounded: true } };
     },
   });
   const events: UnifiedAiStreamEvent[] = [];
   const result = await readUnifiedAiEventStream(new Response(stream), (event) => events.push(event));
   assert.equal(result.answer, answer);
-  assert.equal(events.filter((event) => event.type === "delta").map((event) => event.type === "delta" ? event.delta : "").join(""), answer);
+  assert.equal(events.filter((event) => event.type === "delta").length, 0, "guarded answers must not be replayed as fake deltas");
   assert.ok(events.some((event) => event.type === "progress" && event.stage === "searching"));
   assert.ok(events.some((event) => event.type === "progress" && event.stage === "generating"));
   assert.equal(events.at(-1)?.type, "complete");
+}
+
+async function testVerifiedDeltaBeforeCompletion() {
+  let useCaseCompleted = false;
+  const stream = createUnifiedAiEventStream({
+    capability: "expert",
+    mode: "verified-delta",
+    timeoutMs: 1_000,
+    run: async (progress, verifiedDelta) => {
+      progress("searching");
+      verifiedDelta("승인된 공식 근거 2건을 확인했습니다.\n");
+      await sleep(10);
+      progress("generating");
+      useCaseCompleted = true;
+      return { ok: true, status: 200, data: { answer: "최종 검증 답변" } };
+    },
+  });
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let sawDeltaBeforeCompletion = false;
+  while (true) {
+    const item = await reader.read();
+    if (item.done) break;
+    const event = parseUnifiedAiStreamEvent(decoder.decode(item.value));
+    if (event?.type === "delta" && !useCaseCompleted) sawDeltaBeforeCompletion = true;
+  }
+  assert.equal(sawDeltaBeforeCompletion, true, "verified delta should arrive before use-case completion");
 }
 
 async function testRecoverableTimeout() {
   const stream = createUnifiedAiEventStream({
     capability: "action",
     timeoutMs: 25,
-    progressDelayMs: 5,
-    chunkDelayMs: 0,
     run: () => new Promise(() => undefined),
   });
   await assert.rejects(
@@ -124,10 +140,10 @@ function testSessionCachePolicy() {
 }
 
 testTimeoutConfiguration();
-testChunkIntegrity();
 testEventRoundTrip();
 await testImmediateFirstEvent();
 await testCompleteStream();
+await testVerifiedDeltaBeforeCompletion();
 await testRecoverableTimeout();
 testSessionCachePolicy();
 

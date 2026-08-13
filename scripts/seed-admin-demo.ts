@@ -3,6 +3,7 @@ import { DocumentStatus, Prisma, ReviewStatus } from "@prisma/client";
 import { db } from "../src/lib/db";
 import { seedComplianceRules } from "./seed-compliance-rules";
 import { evaluateVisaRulesFromDb } from "../src/lib/rules/visa-rule-engine";
+import { PLATFORM_TENANT_ID } from "../src/application/tenancy/tenant-context";
 
 const ORG_ID = "org_kaxi_demo_agent_office";
 const STUDENTS = [
@@ -149,7 +150,12 @@ export async function seedAdminDemo() {
   await db.organization.upsert({
     where: { id: ORG_ID },
     update: { name: "KAXI Demo 행정사 사무소", type: "PARTNER_AGENT_OFFICE" },
-    create: { id: ORG_ID, name: "KAXI Demo 행정사 사무소", type: "PARTNER_AGENT_OFFICE" },
+    create: {
+      id: ORG_ID,
+      tenantId: PLATFORM_TENANT_ID,
+      name: "KAXI Demo 행정사 사무소",
+      type: "PARTNER_AGENT_OFFICE",
+    },
   });
 
   await db.agentReview.deleteMany({ where: { escalationCaseId: { in: STUDENTS.map((student) => student.caseId) } } });

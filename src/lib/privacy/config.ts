@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { isEnvTrue } from "@/lib/env";
 
 const MIN_SECRET_BYTES = 32;
@@ -71,11 +72,11 @@ export function validatePrivacySecret(value: string | undefined | null): Privacy
   return { configured: true, strong: true, materialBytes, reason: "ok" };
 }
 
-export function isProductionPrivacyEnv(env: NodeJS.ProcessEnv = process.env): boolean {
+export function isProductionPrivacyEnv(env: NodeJS.ProcessEnv = runtimeEnvironment()): boolean {
   return env.VERCEL_ENV === "production" || env.NODE_ENV === "production";
 }
 
-export function getPrivacyRuntimeReadiness(env: NodeJS.ProcessEnv = process.env): PrivacyRuntimeReadiness {
+export function getPrivacyRuntimeReadiness(env: NodeJS.ProcessEnv = runtimeEnvironment()): PrivacyRuntimeReadiness {
   const production = isProductionPrivacyEnv(env);
   const dataEncryptionKey = validatePrivacySecret(env.DATA_ENCRYPTION_KEY);
   const piiHashSecret = validatePrivacySecret(env.PII_HASH_SECRET);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, BarChart3, CheckCircle2, RefreshCw, XCircle } from "lucide-react";
 import { useAdminApi } from "@/components/admin/AdminShell";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 
 type FeedbackLabel = "ACCURATE" | "FALSE_POSITIVE" | "FALSE_NEGATIVE" | "NEEDS_REVIEW";
 
-interface DocumentVerificationMetrics {
+export interface DocumentVerificationMetrics {
   window: {
     since: string;
     until: string;
@@ -116,12 +116,13 @@ function MetricTile({
   );
 }
 
-export function AdminDocumentVerificationMetrics() {
+export function AdminDocumentVerificationMetrics({ initialData = null }: { initialData?: DocumentVerificationMetrics | null }) {
   const { adminFetch } = useAdminApi();
   const [since, setSince] = useState(defaultSince);
   const [until, setUntil] = useState(() => dateInputValue(new Date()));
-  const [metrics, setMetrics] = useState<DocumentVerificationMetrics | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [metrics, setMetrics] = useState<DocumentVerificationMetrics | null>(initialData);
+  const [loading, setLoading] = useState(!initialData);
+  const initialPending = useRef(Boolean(initialData));
   const [error, setError] = useState<string | null>(null);
 
   const loadMetrics = useCallback(async () => {
@@ -145,7 +146,11 @@ export function AdminDocumentVerificationMetrics() {
   }, [adminFetch, since, until]);
 
   useEffect(() => {
-    loadMetrics();
+    if (initialPending.current) {
+      initialPending.current = false;
+      return;
+    }
+    void loadMetrics();
   }, [loadMetrics]);
 
   return (

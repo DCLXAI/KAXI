@@ -1,5 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
+import { createSupabaseServiceRoleClient } from "@/infrastructure/supabase/service-role-client";
 import { randomUUID } from "crypto";
+import { PLATFORM_TENANT_ID } from "@/application/tenancy/tenant-context";
 import { getRagServingProjectionStatus } from "@/lib/knowledge/serving-projection";
 import { describeCorpusDrift, detectStaticCorpusDrift } from "@/lib/knowledge/corpus-drift";
 import { sendOpsAlert } from "@/lib/ops/alerts";
@@ -23,6 +25,8 @@ import {
   getRagEmbeddingStrategy,
   isOpenAiQueryEmbedding,
 } from "@/lib/chat/query-embedding";
+import { probeManagedLlmProviders } from "@/lib/ai/llm-gateway";
+import { evaluateProductionEvaluationTarget } from "@/lib/ops/evaluation-target";
 
 export type SystemHealthCheck = {
   key: string;
@@ -102,7 +106,7 @@ function retrievalIdentityFromMetrics(value: unknown) {
  * went stale on three of four fields and turned this check into permanent noise;
  * "nobody declared one" is reported as unverifiable instead of asserted wrongly.
  */
-function configuredOrchestrationExpectation(env: NodeJS.ProcessEnv = process.env) {
+function configuredOrchestrationExpectation(env: NodeJS.ProcessEnv = runtimeEnvironment()) {
   const workflowId = env.N8N_RAG_WORKFLOW_ID?.trim() || "";
   const workflowVersionId = env.N8N_RAG_WORKFLOW_VERSION_ID?.trim() || "";
   return workflowId || workflowVersionId ? { workflowId, workflowVersionId } : null;
@@ -145,6 +149,8 @@ export function evaluateRagQualityRun(
   const failures = Object.entries(thresholds)
     .filter(([key, threshold]) => (metric(row.metrics, key) ?? -1) < threshold)
     .map(([key]) => key);
+  const productionTarget = evaluateProductionEvaluationTarget(metricRecord(row.metrics).baseUrl);
+  if (!productionTarget.ok) failures.push("productionTarget");
   // P0-7. Judge each component against the expectation that applies to it.
   // This used to compare all four fields against the n8n workflow identity,
   // which a correct direct-hybrid run can never match — it records the
@@ -206,6 +212,7 @@ export function evaluateRagQualityRun(
         },
       },
       metrics: row.metrics || {},
+      productionTarget,
     },
   };
 }
@@ -239,10 +246,11 @@ async function timed(
 }
 
 function serviceClient() {
-  const url = configured(process.env.NEXT_PUBLIC_SUPABASE_URL);
-  const key = configured(process.env.SUPABASE_SERVICE_ROLE_KEY);
-  if (!url || !key) throw new Error("Supabase service configuration is missing");
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  try {
+    return createSupabaseServiceRoleClient();
+  } catch {
+    throw new Error("Supabase service configuration is missing");
+  }
 }
 
 async function endpointHealth(urlValue: string, path: string) {
@@ -252,8 +260,8 @@ async function endpointHealth(urlValue: string, path: string) {
 }
 
 export async function checkPublishedTypebotRuntime() {
-  const publicUrl = configured(process.env.TYPEBOT_PUBLIC_URL);
-  const publicId = configured(process.env.TYPEBOT_PUBLIC_ID);
+  const publicUrl = configured(runtimeEnvironment().TYPEBOT_PUBLIC_URL);
+  const publicId = configured(runtimeEnvironment().TYPEBOT_PUBLIC_ID);
   if (!publicUrl || !publicId) throw new Error("TYPEBOT_PUBLIC_URL and TYPEBOT_PUBLIC_ID are required");
 
   const endpoint = new URL(`/api/v1/typebots/${encodeURIComponent(publicId)}/startChat`, new URL(publicUrl).origin);
@@ -320,7 +328,7 @@ export async function checkN8nRagWorkflow(supabase = serviceClient()) {
   const signed = signN8nPayload("typebot-runtime", {
     question: "한국 유학 준비에 필요한 주요 비용 항목을 한 문장으로 알려주세요.",
     sessionId,
-    tenant_id: "default",
+    tenant_id: PLATFORM_TENANT_ID,
     category: "cost",
     source: "kaxi-site",
     locale: "ko",
@@ -372,9 +380,9 @@ export async function runRagSystemHealth(triggerSource = "manual") {
   const started = Date.now();
   const supabase = serviceClient();
   const provenance = resolveRagProvenance();
-  const bucket = configured(process.env.SUPABASE_CHAT_ATTACHMENTS_BUCKET) || configured(process.env.SUPABASE_STORAGE_BUCKET) || "kaxi-documents";
-  const n8nWebhook = configured(process.env.N8N_TYPEBOT_RAG_WEBHOOK_URL);
-  const typebotUrl = configured(process.env.TYPEBOT_PUBLIC_URL);
+  const bucket = configured(runtimeEnvironment().SUPABASE_CHAT_ATTACHMENTS_BUCKET) || configured(runtimeEnvironment().SUPABASE_STORAGE_BUCKET) || "kaxi-documents";
+  const n8nWebhook = configured(runtimeEnvironment().N8N_TYPEBOT_RAG_WEBHOOK_URL);
+  const typebotUrl = configured(runtimeEnvironment().TYPEBOT_PUBLIC_URL);
   const attachmentSecurity = getChatAttachmentSecurityDiagnostics();
   const embeddingStrategy = getRagEmbeddingStrategy();
   const openAiEmbeddingRequired = true;
@@ -488,6 +496,17 @@ export async function runRagSystemHealth(triggerSource = "manual") {
           failureReason: embedding.failureReason,
           latencyMs: embedding.latencyMs,
         },
+      };
+    }),
+    timed("ai.managed_provider_generation", true, async () => {
+      const providers = await probeManagedLlmProviders();
+      const failed = providers.filter((provider) => !provider.ok);
+      return {
+        ok: failed.length === 0,
+        detail: failed.length === 0
+          ? "OpenAI and Anthropic both completed an independent generation probe."
+          : `Managed LLM generation failed for ${failed.map((provider) => `${provider.backend}:${provider.failureCode}`).join(", ")}.`,
+        metadata: { providers },
       };
     }),
     timed("rag.quality_evaluation", (result) => !result.unverified, async () => {
@@ -612,8 +631,4 @@ export async function runRagSystemHealth(triggerSource = "manual") {
   return { id: inserted.data.id, status, checkedAt: new Date().toISOString(), durationMs, checks, alert, ...provenance };
 }
 
-export async function getLatestRagSystemHealth() {
-  const result = await serviceClient().from("system_health_runs").select("*").order("created_at", { ascending: false }).limit(1).maybeSingle();
-  if (result.error) throw result.error;
-  return result.data;
-}
+export { getLatestRagSystemHealth } from "@/lib/ops/rag-system-health-status";

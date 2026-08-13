@@ -1,6 +1,7 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import type { ChatCategory } from "@/lib/chat/category";
 import { auditCitations, remapCitations } from "@/lib/chat/citation-audit";
-import { createSupabaseChatClient } from "@/lib/chat/persistence";
+import { createSupabaseServiceRoleClient as createSupabaseChatClient } from "@/infrastructure/supabase/service-role-client";
 import type { GuardedChatResponse, GuardrailLocale } from "@/lib/chat/response-guardrail";
 import { RETRIEVAL_CONFIDENCE_POLICY_VERSION } from "@/lib/chat/retrieval-confidence";
 import {
@@ -20,6 +21,9 @@ import {
 } from "@/lib/chat/question-mediator";
 import type { RagProvenance } from "@/lib/n8n/provenance";
 import type { SessionProfile } from "@/lib/chat/session-profile";
+import {
+  withRetrievalPlanMetadata,
+} from "@/application/rag/retrieval-plan";
 import {
   LANGUAGE_STUDY_PATTERN,
   LANGUAGE_STUDY_QUERY_HINTS,
@@ -75,6 +79,10 @@ export type DirectHybridRpc = (input: {
 export type DirectRagSearchDependencies = {
   rpc?: DirectHybridRpc;
   createEmbedding?: (question: string) => Promise<QueryEmbeddingResult>;
+  observeDirectStage?: <T>(
+    stage: "vector_embedding" | "lexical_vector" | "rerank" | "answer_provider_attempt",
+    run: () => Promise<T>,
+  ) => Promise<T>;
 };
 
 export type DirectRagDependencies = DirectRagSearchDependencies & {
@@ -216,6 +224,8 @@ const COPY = {
     checked: "확인",
     noContext: "관련된 KARXY 승인 문서를 충분히 찾지 못했어요. 추측해서 답하지 않고 상담원 검토로 넘길게요.",
     noContextNext: "과정, 비자 종류, 현재 체류자격 또는 서류명을 포함해 다시 질문해 주세요.",
+    generationUnavailable: "현재 답변 생성 서비스에 문제가 있어 완성된 상담 답변을 만들지 못했어요. 아래 내용은 검색된 공식 문서의 자동 발췌이며, 상담원 검토가 필요합니다.",
+    generationUnavailableNext: "잠시 후 다시 질문하거나 상담원 검토 결과를 기다려 주세요.",
     next: {
       visa: "현재 체류자격, 만료일과 신청 예정 시점을 확인해 주세요.",
       documents: "학교 안내와 관할 기관 체크리스트로 최종 서류를 대조해 주세요.",
@@ -232,6 +242,8 @@ const COPY = {
     checked: "checked",
     noContext: "I could not find enough approved KARXY evidence to answer reliably. I will avoid guessing and route this for human review.",
     noContextNext: "Ask again with your program, visa type, current stay status, or document name.",
+    generationUnavailable: "The answer-generation service is currently unavailable. The text below is an automated extract from retrieved official sources, not a completed consultation answer, and needs human review.",
+    generationUnavailableNext: "Try again shortly or wait for a human-reviewed response.",
     next: {
       visa: "Confirm your current status, expiry date, and intended application date.",
       documents: "Cross-check the final documents against your school and responsible authority checklists.",
@@ -248,6 +260,8 @@ const COPY = {
     checked: "kiểm tra",
     noContext: "Tôi chưa tìm thấy đủ nguồn KARXY đã duyệt để trả lời đáng tin cậy. Tôi sẽ không phỏng đoán và chuyển nhân viên kiểm tra.",
     noContextNext: "Hãy hỏi lại kèm chương trình, loại visa, tình trạng lưu trú hiện tại hoặc tên giấy tờ.",
+    generationUnavailable: "Dịch vụ tạo câu trả lời hiện đang gặp sự cố. Nội dung dưới đây chỉ là phần trích xuất tự động từ nguồn chính thức đã tìm thấy, chưa phải câu trả lời tư vấn hoàn chỉnh và cần nhân viên kiểm tra.",
+    generationUnavailableNext: "Hãy thử lại sau ít phút hoặc chờ kết quả kiểm tra của nhân viên.",
     next: {
       visa: "Hãy xác nhận tư cách lưu trú hiện tại, ngày hết hạn và thời điểm dự định nộp hồ sơ.",
       documents: "Đối chiếu hồ sơ cuối cùng với danh sách của trường và cơ quan phụ trách.",
@@ -264,6 +278,8 @@ const COPY = {
     checked: "шалгасан",
     noContext: "Найдвартай хариулах хангалттай баталгаажсан KARXY эх сурвалж олдсонгүй. Таамаглахгүйгээр ажилтны хяналтад шилжүүлнэ.",
     noContextNext: "Хөтөлбөр, визний төрөл, одоогийн статус эсвэл баримтын нэрийг нэмээд дахин асууна уу.",
+    generationUnavailable: "Хариулт үүсгэх үйлчилгээ одоогоор доголдсон байна. Доорх нь олдсон албан эх сурвалжаас автоматаар авсан хэсэг бөгөөд бүрэн зөвлөгөө биш тул ажилтан шалгах шаардлагатай.",
+    generationUnavailableNext: "Хэсэг хугацааны дараа дахин асуух эсвэл ажилтны шалгасан хариуг хүлээнэ үү.",
     next: {
       visa: "Одоогийн статус, дуусах огноо болон өргөдөл гаргах өдрөө шалгана уу.",
       documents: "Эцсийн баримтаа сургууль болон хариуцсан байгууллагын жагсаалттай тулгана уу.",
@@ -280,6 +296,8 @@ const COPY = {
   checked: string;
   noContext: string;
   noContextNext: string;
+  generationUnavailable: string;
+  generationUnavailableNext: string;
   next: Record<ChatCategory, string>;
 }>;
 
@@ -461,6 +479,21 @@ function candidateSearchText(document: CandidateDocument) {
   return `${document.docId || ""}\n${document.title}\n${document.content}`;
 }
 
+const PRECISE_TIMING_EVIDENCE_PATTERN = /(?:\d+[\s~-]*(?:일|주|개월|년|days?|weeks?|months?|years?|ngày|tuần|tháng|năm|хоног|долоо\s*хоног|сар|жил))|(?:만료|신청|접수|허가).{0,40}(?:전|후|이내|부터|까지)|(?:만료|끝나기).{0,20}전|(?:before|after|within|from).{0,48}(?:expir|fil|apply|permission|\d)|(?:trước|sau|trong\s+vòng).{0,48}(?:hết\s+hạn|nộp|xin|\d)|(?:өмнө|дараа|дотор).{0,48}(?:дуус|өргөдөл|зөвшөөр|\d)/iu;
+const MONETARY_EVIDENCE_PATTERN = /(?:\d[\d,.]*(?:[\s~-]*\d[\d,.]*)?\s*(?:원|만원|백만원|천원|krw|won|usd|₩|₫|төгрөг|вон))|(?:학비|등록금|기숙사비|생활비|수수료|tuition|dorm|living\s+expenses?|fees?|học\s*phí|ký\s*túc\s*xá|sinh\s*hoạt|lệ\s*phí|сургалтын\s*төлбөр|дотуур\s*байр|амьжиргаа|хураамж).{0,40}(?:금액|비용|cost|amount|chi\s*phí|зардал|дүн|\d)/iu;
+const COST_COMPONENT_PATTERN = /학비|등록금|기숙사(?:비)?|생활비|수수료|항공(?:권)?|번역|공증|tuition|dorm|living\s+expenses?|fees?|flight|translation|notari|học\s*phí|ký\s*túc\s*xá|sinh\s*hoạt|lệ\s*phí|vé\s* máy\s*bay|сургалтын\s*төлбөр|дотуур\s*байр|амьжиргаа|хураамж/giu;
+
+function supportsRequestedIntent(intentId: string, document: CandidateDocument) {
+  const candidateText = candidateSearchText(document);
+  if (intentId === "deadline_or_timing") return PRECISE_TIMING_EVIDENCE_PATTERN.test(candidateText);
+  if (intentId === "cost") {
+    const components = new Set((candidateText.match(COST_COMPONENT_PATTERN) || []).map((item) => item.toLowerCase()));
+    return MONETARY_EVIDENCE_PATTERN.test(candidateText) || components.size >= 2;
+  }
+  const intent = QUESTION_INTENTS.find((candidate) => candidate.id === intentId);
+  return Boolean(intent?.evidencePattern.test(candidateText));
+}
+
 function hasExactOperationalIdentity(
   input: DirectLexicalFallbackInput,
   document: Pick<CandidateDocument, "docId" | "title">,
@@ -496,7 +529,7 @@ function selectAnswerableDocuments(
         : requestedVisaCodes.some((code) => candidateCodes.includes(code));
       const genericSupportingEvidence = identityCodes.length === 0
         && candidateCodes.length === 0
-        && intents.some((intent) => intent.evidencePattern.test(candidateText));
+        && intents.some((intent) => supportsRequestedIntent(intent.id, document));
       return codeMatch || genericSupportingEvidence;
     });
     if (scoped.length === 0) {
@@ -513,11 +546,11 @@ function selectAnswerableDocuments(
 
   if (intents.length > 0) {
     const matching = scoped.filter((document) => intents.some(
-      (intent) => intent.evidencePattern.test(candidateSearchText(document)),
+      (intent) => supportsRequestedIntent(intent.id, document),
     ));
     const coveredIntentIds = intents
       .filter((intent) => matching.some(
-        (document) => intent.evidencePattern.test(candidateSearchText(document)),
+        (document) => supportsRequestedIntent(intent.id, document),
       ))
       .map((intent) => intent.id);
     const coveredIntentSet = new Set(coveredIntentIds);
@@ -627,14 +660,14 @@ export function buildDirectLexicalQuery(input: DirectLexicalFallbackInput) {
 }
 
 function fallbackTimeoutMs() {
-  const configured = Number(process.env.KAXI_DIRECT_RAG_TIMEOUT_MS);
+  const configured = Number(runtimeEnvironment().KAXI_DIRECT_RAG_TIMEOUT_MS);
   if (!Number.isFinite(configured)) return 8_000;
   return Math.min(Math.max(Math.trunc(configured), 1_000), 20_000);
 }
 
 async function defaultRpc(input: { matchCount: number; filter: Record<string, unknown> }) {
   const result = await createSupabaseChatClient()
-    .rpc("match_rag_documents_lexical", {
+    .rpc("match_rag_documents_lexical_v3", {
       match_count: input.matchCount,
       filter: input.filter,
     })
@@ -648,7 +681,7 @@ async function defaultHybridRpc(input: {
   filter: Record<string, unknown>;
 }) {
   const result = await createSupabaseChatClient()
-    .rpc("match_rag_documents_hybrid_v3", {
+    .rpc("match_rag_documents_hybrid_v4", {
       query_embedding: input.queryEmbedding,
       match_count: input.matchCount,
       filter: input.filter,
@@ -947,7 +980,7 @@ export function buildDirectLexicalResponseFromRows(
     || (hybrid ? "hybrid-rrf-v3" : "lexical-v2");
   const scoreVersion = firstText(firstMetadata.score_version)
     || (hybrid ? "rrf-k60-provider-v3" : "absolute-weighted-v2");
-  const searchMeta = {
+  const unversionedSearchMeta = {
     type: retrievalType,
     retrievalMode,
     scoreVersion,
@@ -1005,6 +1038,13 @@ export function buildDirectLexicalResponseFromRows(
     attachmentCount: input.attachmentCount || 0,
     ...(input.mediation ? questionMediationMetadata(input.mediation) : {}),
   };
+  const searchMeta = withRetrievalPlanMetadata(unversionedSearchMeta, selection.documents.map((document) => ({
+    docId: document.docId,
+    sourceUrl: document.sourceUrl,
+    checkedAt: document.checkedAt,
+    category: document.category,
+    language: document.language,
+  })));
   const executionId = `direct-${input.requestId}`;
 
   if (!extractive) {
@@ -1063,21 +1103,23 @@ async function retrieveDirectRagCandidates(
   input: DirectLexicalFallbackInput,
   dependencies: DirectRagSearchDependencies = {},
 ) {
-  let embedding: QueryEmbeddingResult;
+  const observe = dependencies.observeDirectStage || (async <T>(_stage: string, run: () => Promise<T>) => run());
   const embeddingQuestion = input.retrievalQuery || input.question;
-  try {
-    embedding = await (dependencies.createEmbedding || createRagQueryEmbedding)(embeddingQuestion);
-  } catch {
-    embedding = {
-      vector: null,
-      status: "failed",
-      provider: "none",
-      model: "text-embedding-3-small",
-      dimensions: null,
-      failureReason: "embedding_provider_unavailable",
-      latencyMs: 0,
-    };
-  }
+  const embedding = await observe("vector_embedding", async (): Promise<QueryEmbeddingResult> => {
+    try {
+      return await (dependencies.createEmbedding || createRagQueryEmbedding)(embeddingQuestion);
+    } catch {
+      return {
+        vector: null,
+        status: "failed",
+        provider: "none",
+        model: "text-embedding-3-small",
+        dimensions: null,
+        failureReason: "embedding_provider_unavailable",
+        latencyMs: 0,
+      };
+    }
+  });
   const openAiEmbedding = isOpenAiQueryEmbedding(embedding);
   // Safe-by-default: fail closed unless a caller EXPLICITLY opts out with
   // requireOpenAiEmbedding: false. Correctness must not rest on every future
@@ -1098,22 +1140,25 @@ async function retrieveDirectRagCandidates(
     && embedding.status === "not_configured"
     && input.allowStoredVectorExpansion === true
     && !exactVisaScope
-    && process.env.KAXI_STORED_VECTOR_EXPANSION_ENABLED !== "false";
+    && runtimeEnvironment().KAXI_STORED_VECTOR_EXPANSION_ENABLED !== "false";
   const queryText = buildDirectLexicalQuery(input);
-  const result = await runIntentScopedRpc(input, (category) => (dependencies.rpc || defaultHybridRpc)({
-    queryEmbedding,
-    matchCount: 12,
-    filter: {
-      tenant_id: input.tenantId,
-      category,
-      category_mode: "strict",
-      locale: input.locale,
-      query_text: queryText,
-      embedding_failure_reason: embedding.failureReason || undefined,
-      allow_seeded_vector: allowSeededVector,
-      vector_seed_count: 3,
-    },
-  }));
+  const result = await observe("lexical_vector", () => runIntentScopedRpc(
+    input,
+    (category) => (dependencies.rpc || defaultHybridRpc)({
+      queryEmbedding,
+      matchCount: 12,
+      filter: {
+        tenant_id: input.tenantId,
+        category,
+        category_mode: "strict",
+        locale: input.locale,
+        query_text: queryText,
+        embedding_failure_reason: embedding.failureReason || undefined,
+        allow_seeded_vector: allowSeededVector,
+        vector_seed_count: 3,
+      },
+    }),
+  ));
   if (result.error) {
     throw new Error(`DIRECT_RAG_RPC_FAILED: ${rpcErrorMessage(result.error)}`);
   }
@@ -1131,8 +1176,10 @@ async function retrieveDirectRagCandidates(
     runtimePath,
     embedding,
   };
-  const parsed = parseCandidates(result.data, resolvedInput);
-  const selection = selectAnswerableDocuments(parsed.documents, resolvedInput);
+  const selection = await observe("rerank", async () => {
+    const parsed = parseCandidates(result.data, resolvedInput);
+    return selectAnswerableDocuments(parsed.documents, resolvedInput);
+  });
   return {
     data: result.data,
     resolvedInput,
@@ -1179,8 +1226,34 @@ export async function runDirectRagFallback(
   const fallbackResponse = buildDirectLexicalResponseFromRows(retrieval.data, resolvedInput);
   if (selection.documents.length === 0) return fallbackResponse;
   const currentSearchMeta = metadataRecord(fallbackResponse.searchMeta);
+  const buildDegradedGenerationResponse = (
+    reason: string,
+    metadata: Record<string, unknown> = {},
+  ) => {
+    const copy = COPY[input.locale];
+    return {
+      ...fallbackResponse,
+      answer: `${copy.generationUnavailable}\n\n${fallbackResponse.answer}`,
+      nextStep: copy.generationUnavailableNext,
+      needsHuman: true,
+      riskLevel: "medium" as const,
+      leadStage: "review" as const,
+      searchMeta: {
+        ...currentSearchMeta,
+        ...metadata,
+        answerMode: "degraded-extractive-fallback",
+        serviceDegraded: true,
+        answerQuality: "fallback",
+        noContext: false,
+        answerGenerationStatus: "unavailable",
+        answerGenerationFailureReason: reason,
+        answerPromptVersion: GROUNDED_RAG_PROMPT_VERSION,
+      },
+    };
+  };
 
-  const generation = await (dependencies.generateAnswer || generateGroundedRagAnswer)({
+  const observe = dependencies.observeDirectStage || (async <T>(_stage: string, run: () => Promise<T>) => run());
+  const generation = await observe("answer_provider_attempt", () => (dependencies.generateAnswer || generateGroundedRagAnswer)({
     question: input.question,
     category: input.category,
     locale: input.locale,
@@ -1198,19 +1271,12 @@ export async function runDirectRagFallback(
       checkedAt: document.checkedAt,
       checkedBy: document.checkedBy,
     })),
-  });
+  }));
   if (generation.status === "unavailable") {
-    return {
-      ...fallbackResponse,
-      searchMeta: {
-        ...currentSearchMeta,
-        answerGenerationStatus: "unavailable",
-        answerGenerationFailureReason: generation.reason,
+    return buildDegradedGenerationResponse(generation.reason, {
         answerAttempts: generation.attempts ?? 1,
         answerRetryReason: generation.retryReason ?? null,
-        answerPromptVersion: GROUNDED_RAG_PROMPT_VERSION,
-      },
-    };
+    });
   }
 
   const generatedMetadata = {
@@ -1221,6 +1287,8 @@ export async function runDirectRagFallback(
     answerPromptVersion: GROUNDED_RAG_PROMPT_VERSION,
     answerAttempts: generation.attempts,
     answerRetryReason: generation.retryReason,
+    answerProviderAttempts: generation.providerAttempts,
+    answerProviderFallbackReason: generation.providerFallbackReason,
   };
   if (generation.status === "no_context") {
     const exactOperationalEvidence = selection.documents.some((document) =>
@@ -1278,15 +1346,7 @@ export async function runDirectRagFallback(
     return document ? [document] : [];
   });
   if (usedDocuments.length === 0) {
-    return {
-      ...fallbackResponse,
-      searchMeta: {
-        ...currentSearchMeta,
-        answerGenerationStatus: "unavailable",
-        answerGenerationFailureReason: "invalid_generation",
-        answerPromptVersion: GROUNDED_RAG_PROMPT_VERSION,
-      },
-    };
+    return buildDegradedGenerationResponse("invalid_generation");
   }
   const sources = sourcesFromDocuments(usedDocuments);
   const remapped = remapCitations(generation.answer, usedSourceIndexes);
@@ -1298,21 +1358,15 @@ export async function runDirectRagFallback(
   // marker that survives renumbering points at whichever document happens to
   // sit at that position, which is a confident citation of the wrong source.
   if (remapped.unmapped.length > 0 || !audit.valid) {
-    return {
-      ...fallbackResponse,
-      searchMeta: {
-        ...currentSearchMeta,
-        answerGenerationStatus: "unavailable",
+    return buildDegradedGenerationResponse("invalid_generation", {
         answerGenerationFailureReason: "invalid_generation",
-        answerPromptVersion: GROUNDED_RAG_PROMPT_VERSION,
         citationAudit: {
           citedIndexes: audit.citedIndexes,
           sourceCount: audit.sourceCount,
           invalidIndexes: audit.invalidIndexes,
           undeclaredIndexes: remapped.unmapped,
         },
-      },
-    };
+    });
   }
 
   const answer = remapped.answer;

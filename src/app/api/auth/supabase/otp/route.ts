@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabasePublicConfig } from "@/lib/supabase/config";
 import { isSupabaseAuthUnavailable } from "@/lib/supabase/server";
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
     // on the operator's Supabase quota and sending-domain reputation.
     const limited = await rateLimit(req, {
       key: "auth:otp",
-      limit: parseLimit(process.env.AUTH_OTP_RATE_LIMIT, 5),
+      limit: parseLimit(runtimeEnvironment().AUTH_OTP_RATE_LIMIT, 5),
       windowMs: 60 * 60 * 1000,
     });
     if (limited) return limited;

@@ -1,15 +1,10 @@
-import { createClient } from "@supabase/supabase-js";
-import { processChatAttachment } from "@/lib/chat/attachment-processing";
-import { isTerminalChatAttachmentError } from "@/lib/chat/attachment-security";
-import { recordOpsEvent } from "@/lib/ops/events";
-
-type JobRow = {
-  id: string;
-  attachment_id: string;
-  attempts: number;
-  max_attempts: number;
-  lock_token: string;
-};
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
+import { createSupabaseServiceRoleClient } from "@/infrastructure/supabase/service-role-client";
+import {
+  assertTenantContext,
+  signTenantClaim,
+  type TenantContext,
+} from "@/application/tenancy/tenant-context";
 
 type SupabaseErrorLike = { code?: string; message?: string };
 
@@ -19,10 +14,11 @@ function configured(value: string | undefined) {
 }
 
 function client() {
-  const url = configured(process.env.NEXT_PUBLIC_SUPABASE_URL);
-  const key = configured(process.env.SUPABASE_SERVICE_ROLE_KEY);
-  if (!url || !key) throw new Error("SUPABASE_CHAT_JOBS_NOT_CONFIGURED");
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  try {
+    return createSupabaseServiceRoleClient();
+  } catch {
+    throw new Error("SUPABASE_CHAT_JOBS_NOT_CONFIGURED");
+  }
 }
 
 function isQueueUnavailable(error: unknown) {
@@ -37,13 +33,31 @@ function isQueueUnavailable(error: unknown) {
   );
 }
 
-function safeError(error: unknown) {
-  return (error instanceof Error ? error.message : String(error)).slice(0, 500);
+export interface AttachmentJobCorrelation {
+  requestId: string;
+  traceId: string;
+  traceparent: string;
 }
 
-export async function enqueueChatAttachmentJob(attachmentId: string) {
+function assertCorrelation(correlation: AttachmentJobCorrelation) {
+  if (!correlation.requestId.trim() || correlation.requestId.length > 128) throw new Error("ATTACHMENT_REQUEST_ID_INVALID");
+  if (!/^[0-9a-f]{32}$/.test(correlation.traceId)) throw new Error("ATTACHMENT_TRACE_ID_INVALID");
+}
+
+export async function enqueueChatAttachmentJob(
+  tenantContext: TenantContext,
+  attachmentId: string,
+  correlation: AttachmentJobCorrelation,
+) {
+  assertTenantContext(tenantContext);
+  assertCorrelation(correlation);
   const result = await client().from("chat_attachment_jobs").upsert(
     {
+      tenant_id: tenantContext.tenantId,
+      tenant_claim: signTenantClaim(tenantContext, { audience: "worker", subject: `attachment:${attachmentId}` }, runtimeEnvironment()),
+      request_id: correlation.requestId.trim(),
+      trace_id: correlation.traceId,
+      traceparent: correlation.traceparent,
       attachment_id: attachmentId,
       status: "queued",
       available_at: new Date().toISOString(),
@@ -55,15 +69,27 @@ export async function enqueueChatAttachmentJob(attachmentId: string) {
   return true;
 }
 
-export async function retryChatAttachmentJob(attachmentId: string) {
+export async function retryChatAttachmentJob(
+  tenantContext: TenantContext,
+  attachmentId: string,
+  correlation: AttachmentJobCorrelation,
+) {
+  assertTenantContext(tenantContext);
+  assertCorrelation(correlation);
   const supabase = client();
   const now = new Date().toISOString();
   const attachment = await supabase
     .from("chat_attachments")
     .update({ status: "quarantined", processing_status: "queued", processed_at: null, deleted_at: null })
+    .eq("tenant_id", tenantContext.tenantId)
     .eq("id", attachmentId);
   if (attachment.error) throw attachment.error;
   const result = await supabase.from("chat_attachment_jobs").upsert({
+    tenant_id: tenantContext.tenantId,
+    tenant_claim: signTenantClaim(tenantContext, { audience: "worker", subject: `attachment:${attachmentId}` }, runtimeEnvironment()),
+    request_id: correlation.requestId.trim(),
+    trace_id: correlation.traceId,
+    traceparent: correlation.traceparent,
     attachment_id: attachmentId,
     status: "queued",
     attempts: 0,
@@ -76,81 +102,21 @@ export async function retryChatAttachmentJob(attachmentId: string) {
   if (result.error) throw result.error;
 }
 
-export async function drainChatAttachmentJobs(options: { limit?: number; leaseSeconds?: number } = {}) {
-  const supabase = client();
-  const limit = Math.min(Math.max(options.limit || 3, 1), 20);
-  const leaseSeconds = Math.min(Math.max(options.leaseSeconds || 120, 30), 900);
-  const claimed = await supabase.rpc("kaxi_claim_chat_attachment_jobs", {
-    p_limit: limit,
-    p_lease_seconds: leaseSeconds,
-  });
-  if (claimed.error && isQueueUnavailable(claimed.error)) {
-    return { available: false, claimed: 0, completed: 0, retried: 0, failed: 0 };
+export async function getChatAttachmentQueueStatus() {
+  const result = await client()
+    .from("chat_attachment_jobs")
+    .select("status,attempts,created_at");
+  if (result.error && isQueueUnavailable(result.error)) {
+    return { available: false, depth: 0, retryCount: 0, failed: 0, oldestCreatedAt: null };
   }
-  if (claimed.error) throw claimed.error;
-
-  const jobs = (claimed.data || []) as JobRow[];
-  let completed = 0;
-  let retried = 0;
-  let failed = 0;
-
-  for (const job of jobs) {
-    try {
-      await processChatAttachment(job.attachment_id);
-      const updated = await supabase
-        .from("chat_attachment_jobs")
-        .update({
-          status: "completed",
-          completed_at: new Date().toISOString(),
-          locked_at: null,
-          lock_token: null,
-          last_error: null,
-        })
-        .eq("id", job.id)
-        .eq("lock_token", job.lock_token);
-      if (updated.error) throw updated.error;
-      completed += 1;
-    } catch (error) {
-      const terminal = isTerminalChatAttachmentError(error) || job.attempts >= job.max_attempts;
-      const delaySeconds = Math.min(30 * 2 ** Math.max(0, job.attempts - 1), 3_600);
-      const updated = await supabase
-        .from("chat_attachment_jobs")
-        .update({
-          status: terminal ? "failed" : "queued",
-          available_at: new Date(Date.now() + delaySeconds * 1000).toISOString(),
-          locked_at: null,
-          lock_token: null,
-          last_error: safeError(error),
-          completed_at: terminal ? new Date().toISOString() : null,
-        })
-        .eq("id", job.id)
-        .eq("lock_token", job.lock_token);
-      if (updated.error) throw updated.error;
-      if (terminal) {
-        const attachment = await supabase
-          .from("chat_attachments")
-          .update({ processing_status: "failed", processed_at: new Date().toISOString() })
-          .eq("id", job.attachment_id);
-        if (attachment.error) throw attachment.error;
-      }
-      if (terminal) failed += 1;
-      else retried += 1;
-    }
-  }
-
-  if (failed > 0) {
-    const minuteBucket = Math.floor(Date.now() / 60_000);
-    await recordOpsEvent({
-      source: "kaxi-attachment-worker",
-      severity: "error",
-      eventType: "attachment_processing_failed",
-      message: `${failed} attachment processing job(s) reached a terminal failure.`,
-      executionId: `attachment-drain:${minuteBucket}`,
-      payload: { claimed: jobs.length, completed, retried, failed },
-    }).catch((alertError) => {
-      console.error("[chat attachment worker] operations alert failed", alertError);
-    });
-  }
-
-  return { available: true, claimed: jobs.length, completed, retried, failed };
+  if (result.error) throw result.error;
+  const rows = result.data || [];
+  const active = rows.filter((row) => row.status === "queued" || row.status === "processing");
+  return {
+    available: true,
+    depth: active.length,
+    retryCount: rows.filter((row) => row.status === "queued" && Number(row.attempts) > 0).length,
+    failed: rows.filter((row) => row.status === "failed").length,
+    oldestCreatedAt: active.map((row) => row.created_at).filter(Boolean).sort()[0] || null,
+  };
 }

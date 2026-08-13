@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { createSupabaseServiceRoleClient } from "@/infrastructure/supabase/service-role-client";
 import {
   CANONICAL_QUERY_EMBEDDING_DIMENSIONS,
   createRagQueryEmbedding,
@@ -8,6 +9,7 @@ import {
   RAG_QUERY_EMBEDDING_MODEL,
 } from "@/lib/chat/query-embedding";
 import { signN8nPayload } from "@/lib/n8n/signature";
+import { assertTenantContext, type TenantContext } from "@/application/tenancy/tenant-context";
 import { resolveProvidedChunkEmbedding } from "@/lib/n8n/provided-query-embedding";
 
 type CanonicalDocument = {
@@ -87,10 +89,7 @@ function configured(value: string | undefined) {
 }
 
 function serviceClient() {
-  const url = configured(process.env.NEXT_PUBLIC_SUPABASE_URL);
-  const key = configured(process.env.SUPABASE_SERVICE_ROLE_KEY);
-  if (!url || !key) throw new Error("SUPABASE_SERVICE_ROLE_NOT_CONFIGURED");
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  return createSupabaseServiceRoleClient();
 }
 
 function delay(milliseconds: number) {
@@ -298,13 +297,14 @@ function payloadText(value: unknown, maxLength: number) {
 
 export async function ingestRagServingPayload(
   payload: Record<string, unknown>,
-  options: { providedEmbedding?: unknown } = {},
+  options: { tenantContext: TenantContext; providedEmbedding?: unknown },
 ) {
+  assertTenantContext(options.tenantContext);
   const canonicalChunkId = payloadText(payload.canonical_chunk_id, 160);
   const canonicalDocumentId = payloadText(payload.canonical_document_id, 160);
   const externalDocumentId = payloadText(payload.doc_id, 240);
   const contentHash = payloadText(payload.content_hash, 128);
-  const tenantId = payloadText(payload.tenant_id, 120) || "default";
+  const tenantId = options.tenantContext.tenantId;
   const reviewStatus = payloadText(payload.review_status, 40).toLowerCase();
   const embeddingModel = payloadText(payload.embedding_model, 120);
   if (
@@ -312,7 +312,7 @@ export async function ingestRagServingPayload(
     || !canonicalDocumentId
     || !externalDocumentId
     || !contentHash
-    || tenantId !== "default"
+    || (payloadText(payload.tenant_id, 120) && payloadText(payload.tenant_id, 120) !== tenantId)
     || reviewStatus !== "approved"
     || embeddingModel !== RAG_QUERY_EMBEDDING_MODEL
   ) {
@@ -350,7 +350,7 @@ export async function ingestRagServingPayload(
     source_url: document.sourceUrl,
     category: document.topic,
     language: document.language,
-    tenant_id: "default",
+    tenant_id: tenantId,
     last_checked_at: document.lastCheckedAt,
     checked_by: document.checkedBy,
     keywords: chunk.keywords,
@@ -577,7 +577,12 @@ export async function getRagServingProjectionStatus(): Promise<RagServingProject
   };
 }
 
-export async function syncRagServingProjection(options: { limit?: number; force?: boolean } = {}) {
+export async function syncRagServingProjection(options: {
+  tenantContext: TenantContext;
+  limit?: number;
+  force?: boolean;
+}) {
+  assertTenantContext(options.tenantContext);
   const data = await loadProjectionData();
   const limit = Math.min(Math.max(options.limit || 10, 1), 50);
   const documentById = new Map(data.eligibleDocuments.map((document) => [document.id, document]));
@@ -618,7 +623,7 @@ export async function syncRagServingProjection(options: { limit?: number; force?
         source_url: document.sourceUrl,
         category: document.topic,
         language: document.language,
-        tenant_id: "default",
+        tenant_id: options.tenantContext.tenantId,
         last_checked_at: document.lastCheckedAt,
         checked_by: document.checkedBy,
         keywords: chunk.keywords,

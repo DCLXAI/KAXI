@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import { KaxiPage } from "@/components/kbridge/KaxiPage";
+import { PublicShell } from "@/components/kbridge/PublicShell";
+import { Documents } from "@/components/kbridge/Documents";
 import { isLocale } from "@/i18n/routing";
 import { publicViewMetadata } from "@/lib/kbridge/public-routes";
 
@@ -22,7 +23,7 @@ export default async function DocsPage({ params }: PageProps) {
   // same as the partners and diagnose routes.
   return (
     <Suspense fallback={<div className="min-h-screen bg-background" />}>
-      <KaxiPage view="docs" locale={locale} />
+      <PublicShell view="docs" locale={locale}><Documents locale={locale} /></PublicShell>
     </Suspense>
   );
 }

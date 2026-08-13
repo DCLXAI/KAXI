@@ -1,8 +1,9 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { mkdir, writeFile } from "fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "path";
 import { getRuntimeDatabaseInfo, db } from "@/lib/db";
-import { getSupabaseServerConfig } from "@/lib/supabase/config";
-import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+import { getSupabaseServerConfig } from "@/infrastructure/config/supabase-server-config";
+import { createSupabaseServiceRoleClient } from "@/infrastructure/supabase/service-role-client";
 import type { SupabaseClientLike } from "@/lib/supabase/dynamic";
 
 export type DocumentStorageKind = "local" | "blob" | "database" | "supabase" | "disabled" | "unsupported";
@@ -30,7 +31,7 @@ function requestedBackend(env: NodeJS.ProcessEnv): string {
   return (env.DOCUMENT_UPLOAD_STORAGE_BACKEND || "").trim().toLowerCase();
 }
 
-export function getDocumentStorageInfo(env: NodeJS.ProcessEnv = process.env): DocumentStorageInfo {
+export function getDocumentStorageInfo(env: NodeJS.ProcessEnv = runtimeEnvironment()): DocumentStorageInfo {
   const hostedRuntime = isHostedRuntime(env);
   const blobTokenConfigured = configured(env.BLOB_READ_WRITE_TOKEN);
   const supabaseConfigured = Boolean(
@@ -122,7 +123,7 @@ export function getDocumentStorageInfo(env: NodeJS.ProcessEnv = process.env): Do
   };
 }
 
-export function supabaseDocumentBucket(env: NodeJS.ProcessEnv = process.env): string {
+export function supabaseDocumentBucket(env: NodeJS.ProcessEnv = runtimeEnvironment()): string {
   return env.SUPABASE_STORAGE_BUCKET?.trim() || "kaxi-documents";
 }
 
@@ -177,7 +178,7 @@ export function localUploadPath(storageKey: string): string {
     throw new Error("Invalid local document storage key.");
   }
 
-  const configuredRoot = process.env.DOCUMENT_UPLOAD_DIR?.trim();
+  const configuredRoot = runtimeEnvironment().DOCUMENT_UPLOAD_DIR?.trim();
   const root = resolve(
     /*turbopackIgnore: true*/ configuredRoot ||
       join(/*turbopackIgnore: true*/ process.cwd(), "data", "uploads"),

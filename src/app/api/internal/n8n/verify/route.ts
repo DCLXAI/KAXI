@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { NextRequest, NextResponse } from "next/server";
 import { parseLimit, rateLimit } from "@/lib/api/security";
 import { JsonBodyError, readJsonBody } from "@/lib/api/json-body";
@@ -19,7 +20,7 @@ function text(value: unknown, maxLength: number) {
 export async function POST(req: NextRequest) {
   const limited = await rateLimit(req, {
     key: "n8n-signature-verify",
-    limit: parseLimit(process.env.N8N_VERIFY_RATE_LIMIT, 240),
+    limit: parseLimit(runtimeEnvironment().N8N_VERIFY_RATE_LIMIT, 240),
     windowMs: 60 * 1000,
   });
   if (limited) return limited;

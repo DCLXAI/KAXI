@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { KaxiPage } from "@/components/kbridge/KaxiPage";
+import { PublicShell } from "@/components/kbridge/PublicShell";
+import { Agent } from "@/components/kbridge/Agent";
 import { isLocale } from "@/i18n/routing";
 import { publicViewMetadata } from "@/lib/kbridge/public-routes";
 
@@ -17,5 +18,5 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function AgentPage({ params }: PageProps) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
-  return <KaxiPage view="agent" locale={locale} />;
+  return <PublicShell view="agent" locale={locale}><Agent /></PublicShell>;
 }

@@ -1,0 +1,16 @@
+.git
+.next
+.vercel
+.worktrees
+.claude
+.local
+.tmp
+node_modules
+test-results
+output
+logs
+dev.log
+*.log
+.env
+.env.*
+!.env.example

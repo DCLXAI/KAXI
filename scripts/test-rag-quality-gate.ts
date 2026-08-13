@@ -1,6 +1,7 @@
 import { strict as assert } from "assert";
 import { readFileSync } from "fs";
 import { evaluateRagQualityRun } from "../src/lib/ops/rag-system-health";
+import { evaluateProductionEvaluationTarget } from "../src/lib/ops/evaluation-target";
 
 // The rag.quality_evaluation check held /api/ops/health at `degraded` every day
 // for weeks. Not because answer quality regressed — the last full suite passed
@@ -30,6 +31,7 @@ const PASSING_METRICS = {
   localeSourceAccuracy: 1,
   highRiskRecall: 1,
   noContextAccuracy: 1,
+  baseUrl: "https://kaxi.example.com",
 };
 
 const NOW = Date.parse("2026-07-29T18:00:00Z");
@@ -105,6 +107,13 @@ assert.equal(tooFewCases.ok, false, "a partial suite must not satisfy the full-s
 assert.equal(tooFewCases.unverified, false, "an undersized suite is a measurement defect, not staleness");
 
 console.log("PASS rag quality gate: measured regressions page, unmeasured quality warns");
+
+assert.equal(evaluateProductionEvaluationTarget("http://localhost:3002").ok, false);
+assert.equal(evaluateProductionEvaluationTarget("https://kaxi.example.com").ok, true);
+assert.equal(
+  evaluateProductionEvaluationTarget("https://preview.example.com", { NEXT_PUBLIC_SITE_URL: "https://kaxi.example.com" } as NodeJS.ProcessEnv).reason,
+  "production_origin_mismatch",
+);
 
 // The readiness probe used to select the 1536-dimension vectors for every
 // knowledge chunk and serving row purely to ask Boolean(embedding), shipping

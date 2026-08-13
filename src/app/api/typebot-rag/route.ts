@@ -1,9 +1,11 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { after, NextRequest, NextResponse } from "next/server";
 import { parseLimit, rateLimit } from "@/lib/api/security";
 import { JsonBodyError, readJsonBody } from "@/lib/api/json-body";
-import { persistCanonicalHandoffTask, persistChatExchange } from "@/lib/chat/persistence";
+import { persistChatExchange } from "@/lib/chat/persistence";
+import { persistAtomicChatTurn } from "@/infrastructure/chat/prisma-chat-unit-of-work";
 import { CHAT_SESSION_COOKIE, verifyChatSessionToken } from "@/lib/chat/session-token";
-import { getReadyChatAttachmentsForRuntime } from "@/lib/chat/attachment-processing";
+import { getReadyChatAttachmentsForRuntime } from "@/lib/chat/attachment-status";
 import { inferChatCategory } from "@/lib/chat/category";
 import { loadChatSessionSnapshot } from "@/lib/chat/history";
 import {
@@ -39,8 +41,8 @@ import {
   DIRECT_LEXICAL_PROVENANCE,
   DIRECT_LEXICAL_RUNTIME_PATH,
   DIRECT_HYBRID_RUNTIME_PATH,
-  runDirectRagFallback,
 } from "@/lib/chat/direct-lexical-fallback";
+import { runRagAnswerUseCase } from "@/application/ai/rag-answer";
 import { createChatRequestIdentity } from "@/lib/chat/request-identity";
 import {
   applyChatResponseGuardrail,
@@ -62,6 +64,12 @@ import {
 import { recordOpsEvent } from "@/lib/ops/events";
 import { verifyTypebotGatewayHeaders } from "@/lib/typebot/gateway-auth";
 import { recordServerProductEvent } from "@/lib/analytics/server";
+import { requestTraceContext } from "@/infrastructure/observability/trace-context";
+import { withSpan } from "@/infrastructure/observability/tracing";
+import {
+  PLATFORM_TENANT_ID,
+  platformAnonymousTenantContext,
+} from "@/application/tenancy/tenant-context";
 
 export const maxDuration = 60;
 
@@ -126,7 +134,10 @@ function ragJson(
   return addProvenanceHeaders(NextResponse.json({ ...body, ...provenance }, init), provenance);
 }
 
-async function ragRateLimitJson(response: NextResponse) {
+async function ragRateLimitJson(
+  response: NextResponse,
+  correlation?: { requestId: string; traceId: string; traceparent: string },
+) {
   const payload = await response.json().catch(() => ({ error: "Rate limit unavailable" }));
   const body = payload && typeof payload === "object" && !Array.isArray(payload)
     ? payload as Record<string, unknown>
@@ -134,7 +145,14 @@ async function ragRateLimitJson(response: NextResponse) {
   const headers = new Headers();
   const retryAfter = response.headers.get("retry-after");
   if (retryAfter) headers.set("retry-after", retryAfter);
-  return ragJson(body, { status: response.status, headers });
+  if (correlation) {
+    headers.set("x-request-id", correlation.requestId);
+    headers.set("traceparent", correlation.traceparent);
+  }
+  return ragJson({
+    ...body,
+    ...(correlation ? { requestId: correlation.requestId, traceId: correlation.traceId } : {}),
+  }, { status: response.status, headers });
 }
 
 function normalizeBoolean(value: unknown) {
@@ -160,12 +178,11 @@ function withQuestionMediation(
 }
 
 export async function POST(req: NextRequest) {
-  const limited = await rateLimit(req, {
-    key: "typebot-rag",
-    limit: parseLimit(process.env.TYPEBOT_RAG_RATE_LIMIT, 20),
-    windowMs: 60 * 1000,
-  });
-  if (limited) return ragRateLimitJson(limited);
+  let trackChatProductEvent: ((
+    eventName: "chatbot_question_sent" | "chatbot_answer_succeeded" | "chatbot_answer_failed" | "chatbot_no_context" | "chatbot_retry" | "chatbot_fallback",
+    properties?: Record<string, string | number | boolean | null>,
+  ) => void) | null = null;
+  const trace = requestTraceContext(req.headers);
 
   try {
     const body = await readJsonBody<Record<string, unknown>>(req, 64 * 1024);
@@ -177,49 +194,78 @@ export async function POST(req: NextRequest) {
     const deterministicCategory = inferChatCategory(question, body?.category);
     const attachments = normalizeAttachments(body?.attachments);
 
-    if (!question || !sessionId) {
-      return ragJson({ error: "question and sessionId are required" }, { status: 400 });
-    }
-    if (source === "typebot" && (!typebotResultId || sessionId !== `typebot-${typebotResultId}`)) {
-      return ragJson({ error: "Invalid Typebot session" }, { status: 400 });
-    }
-    if (source === "typebot" && !verifyTypebotGatewayHeaders(req.headers)) {
-      return ragJson({ error: "Unauthorized Typebot gateway" }, { status: 401 });
-    }
-    if (source === "typebot" && attachments.length > 0) {
-      return ragJson({ error: "Typebot attachments are not supported by this gateway" }, { status: 400 });
-    }
-    if (source === "kaxi-site" && !verifyChatSessionToken(req.cookies.get(CHAT_SESSION_COOKIE)?.value, sessionId)) {
-      return ragJson({ error: "Invalid or expired chat session" }, { status: 401 });
-    }
-    let verifiedAttachments = attachments;
-    if (source === "kaxi-site" && attachments.length > 0) {
-      try {
-        verifiedAttachments = await getReadyChatAttachmentsForRuntime(sessionId, attachments);
-      } catch (error) {
-        console.warn("[POST /api/typebot-rag] attachment validation failed", error);
-        return ragJson({ error: "Attachment is not ready or does not belong to this session" }, { status: 409 });
-      }
-    }
-
     const startedAt = Date.now();
     const identity = createChatRequestIdentity({ requestId: body?.requestId, source, sessionId, question });
-    const trackTypebotProductEvent = (
-      eventName: "chatbot_question_sent" | "chatbot_answer_succeeded" | "chatbot_no_context",
+    const correlation = {
+      requestId: identity.requestId,
+      traceId: trace.traceId,
+      traceparent: trace.traceparent,
+    };
+    const limited = await withSpan({
+      name: "rag.rate_limit",
+      parent: trace,
+      attributes: { requestId: identity.requestId, channel: source, tenantId: PLATFORM_TENANT_ID },
+      run: () => rateLimit(req, {
+        key: "typebot-rag",
+        limit: parseLimit(runtimeEnvironment().TYPEBOT_RAG_RATE_LIMIT, 20),
+        windowMs: 60 * 1000,
+      }),
+    });
+    if (limited) return ragRateLimitJson(limited, correlation);
+    if (!question || !sessionId) {
+      return ragJson({
+        error: "question and sessionId are required",
+        requestId: identity.requestId,
+        traceId: trace.traceId,
+      }, { status: 400, headers: { "x-request-id": identity.requestId, traceparent: trace.traceparent } });
+    }
+    const authorization = await withSpan({
+      name: "rag.auth",
+      parent: trace,
+      attributes: { requestId: identity.requestId, channel: source, tenantId: PLATFORM_TENANT_ID },
+      run: async () => {
+        const tenantContext = platformAnonymousTenantContext(sessionId);
+        if (source === "typebot" && (!typebotResultId || sessionId !== `typebot-${typebotResultId}`)) {
+          return { error: ragJson({ error: "Invalid Typebot session", requestId: identity.requestId, traceId: trace.traceId }, { status: 400, headers: { "x-request-id": identity.requestId, traceparent: trace.traceparent } }) };
+        }
+        if (source === "typebot" && !verifyTypebotGatewayHeaders(req.headers)) {
+          return { error: ragJson({ error: "Unauthorized Typebot gateway", requestId: identity.requestId, traceId: trace.traceId }, { status: 401, headers: { "x-request-id": identity.requestId, traceparent: trace.traceparent } }) };
+        }
+        if (source === "typebot" && attachments.length > 0) {
+          return { error: ragJson({ error: "Typebot attachments are not supported by this gateway", requestId: identity.requestId, traceId: trace.traceId }, { status: 400, headers: { "x-request-id": identity.requestId, traceparent: trace.traceparent } }) };
+        }
+        if (source === "kaxi-site" && !verifyChatSessionToken(req.cookies.get(CHAT_SESSION_COOKIE)?.value, sessionId)) {
+          return { error: ragJson({ error: "Invalid or expired chat session", requestId: identity.requestId, traceId: trace.traceId }, { status: 401, headers: { "x-request-id": identity.requestId, traceparent: trace.traceparent } }) };
+        }
+        let verifiedAttachments = attachments;
+        if (source === "kaxi-site" && attachments.length > 0) {
+          try {
+            verifiedAttachments = await getReadyChatAttachmentsForRuntime(tenantContext, sessionId, attachments);
+          } catch (error) {
+            console.warn("[POST /api/typebot-rag] attachment validation failed", error);
+            return { error: ragJson({ error: "Attachment is not ready or does not belong to this session", requestId: identity.requestId, traceId: trace.traceId }, { status: 409, headers: { "x-request-id": identity.requestId, traceparent: trace.traceparent } }) };
+          }
+        }
+        return { tenantContext, verifiedAttachments };
+      },
+    });
+    if ("error" in authorization) return authorization.error;
+    const { tenantContext, verifiedAttachments } = authorization;
+    trackChatProductEvent = (
+      eventName: "chatbot_question_sent" | "chatbot_answer_succeeded" | "chatbot_answer_failed" | "chatbot_no_context" | "chatbot_retry" | "chatbot_fallback",
       properties: Record<string, string | number | boolean | null> = {},
     ) => {
-      if (source !== "typebot") return;
       after(() => recordServerProductEvent({
         eventName,
         sessionId,
         locale,
-        surface: "typebot_bubble",
+        surface: source === "typebot" ? "typebot_bubble" : "kaxi_chat",
         properties,
       }).catch((analyticsError) => {
         console.warn("[POST /api/typebot-rag] product analytics failed", analyticsError);
       }));
     };
-    trackTypebotProductEvent("chatbot_question_sent", { category: deterministicCategory });
+    trackChatProductEvent("chatbot_question_sent", { category: deterministicCategory });
     let conversationHistory: Array<{ question: string; answer: string }> = [];
     let sessionMetadata: Record<string, unknown> = {};
     let profile = parseSessionProfile(null);
@@ -228,7 +274,7 @@ export async function POST(req: NextRequest) {
     let studentId: string | null = null;
     let accountRow: StudentChatProfileFields | null = null;
     try {
-      const snapshot = await loadChatSessionSnapshot(sessionId, {
+      const snapshot = await loadChatSessionSnapshot(tenantContext, sessionId, {
         source,
         messageLimit: 4,
         attachmentLimit: 1,
@@ -275,12 +321,17 @@ export async function POST(req: NextRequest) {
     } catch (profileError) {
       console.warn("[POST /api/typebot-rag] profile extraction failed", profileError);
     }
-    const mediation = await mediateRagQuestion({
-      question,
-      locale,
-      deterministicCategory,
-      conversationHistory,
-      profile,
+    const mediation = await withSpan({
+      name: "rag.mediation",
+      parent: trace,
+      attributes: { requestId: identity.requestId, channel: source, tenantId: PLATFORM_TENANT_ID },
+      run: () => mediateRagQuestion({
+        question,
+        locale,
+        deterministicCategory,
+        conversationHistory,
+        profile,
+      }),
     });
     if (mediation.profileSignals) {
       // Fill-over-account: a genuine session-stated value (deterministic or
@@ -323,7 +374,7 @@ export async function POST(req: NextRequest) {
     const n8nRequest = {
       ...n8nQuestionPlan(question, mediation),
       sessionId,
-      tenant_id: "default",
+      tenant_id: PLATFORM_TENANT_ID,
       category,
       source,
       locale,
@@ -331,6 +382,8 @@ export async function POST(req: NextRequest) {
       requestId: identity.requestId,
       idempotencyKey: identity.idempotencyKey,
       externalRequestId: identity.externalRequestId,
+      traceId: trace.traceId,
+      traceparent: trace.traceparent,
       attachments: verifiedAttachments,
       conversationContext: conversationHistory,
       profile: hasProfileFacts(profile) ? profile : undefined,
@@ -346,7 +399,7 @@ export async function POST(req: NextRequest) {
           requestId: identity.requestId,
           idempotencyKey: identity.idempotencyKey,
           sessionKey: sessionId,
-          tenantId: "default",
+          tenantContext,
           locale,
           source,
           typebotResultId: typebotResultId || undefined,
@@ -399,8 +452,47 @@ export async function POST(req: NextRequest) {
       after(() => recordGatewayOpsEvent(...args));
     };
 
+    const runCanonicalRag = async (fallbackReason: string, allowStoredVectorExpansion?: boolean) => {
+      const applicationResult = await runRagAnswerUseCase({
+        context: {
+          requestId: identity.requestId,
+          idempotencyKey: identity.idempotencyKey,
+          principal: { kind: "anonymous-session", sessionId },
+          tenantContext,
+          locale,
+          channel: "typebot",
+          traceId: trace.traceId,
+          traceparent: trace.traceparent,
+          signal: req.signal,
+          deadlineAt: startedAt + 55_000,
+        },
+        question,
+        retrievalQuery: mediation.searchQuery,
+        category,
+        fallbackReason,
+        attachmentCount: verifiedAttachments.length,
+        allowStoredVectorExpansion,
+        requireOpenAiEmbedding: true,
+        mediation,
+        conversationHistory,
+        profile,
+      }, {
+        observeStage: (stage, run) => withSpan({
+          name: `rag.${stage}`,
+          parent: trace,
+          attributes: { requestId: identity.requestId, channel: source, tenantId: PLATFORM_TENANT_ID },
+          run: () => run(),
+        }),
+      });
+      if (!applicationResult.ok) {
+        throw new Error(`${applicationResult.error.code}:${applicationResult.error.detail || applicationResult.error.message}`);
+      }
+      return applicationResult.value;
+    };
+
     let upstreamPayload: GuardedChatResponse;
     let provenance: RagProvenance;
+    let runtimeRecoveryReason: string | null = null;
     if (mediation.action === "clarify") {
       provenance = questionMediationProvenance(mediation);
       let clarificationAnswer = mediation.clarificationQuestion;
@@ -450,26 +542,13 @@ export async function POST(req: NextRequest) {
       };
     } else if (ragRuntimePrimary() === "direct") {
       try {
-        upstreamPayload = await runDirectRagFallback({
-          question,
-          retrievalQuery: mediation.searchQuery,
-          category,
-          locale,
-          tenantId: "default",
-          requestId: identity.requestId,
-          fallbackReason: "kaxi_direct_primary",
-          attachmentCount: verifiedAttachments.length,
-          allowStoredVectorExpansion: false,
-          requireOpenAiEmbedding: true,
-          mediation,
-          conversationHistory,
-          profile,
-        });
+        upstreamPayload = await runCanonicalRag("kaxi_direct_primary", false);
         provenance = resolveRagProvenance(upstreamPayload);
       } catch (directError) {
         console.warn("[POST /api/typebot-rag] direct primary failed; trying n8n backup", directError);
-        const n8nAttempt = await requestN8nRuntime(n8nRequest);
+        const n8nAttempt = await requestN8nRuntime(n8nRequest, { traceparent: trace.traceparent });
         if (n8nAttempt.ok) {
+          runtimeRecoveryReason = "direct_primary_failed";
           upstreamPayload = n8nAttempt.payload;
           provenance = n8nAttempt.provenance;
           reportOpsEventAsync(
@@ -486,6 +565,7 @@ export async function POST(req: NextRequest) {
         } else {
           const directExecutionId = `direct-${identity.requestId}`;
           await persistFailure("rag_runtime_unavailable", DIRECT_LEXICAL_PROVENANCE, directExecutionId);
+          trackChatProductEvent("chatbot_answer_failed", { category, stage: "runtime", reason: "all_runtimes_failed" });
           reportOpsEventAsync(
             "rag_runtime_unavailable",
             "Both the KARXY direct runtime and n8n backup runtime failed.",
@@ -507,7 +587,7 @@ export async function POST(req: NextRequest) {
         }
       }
     } else {
-      const n8nAttempt = await requestN8nRuntime(n8nRequest);
+      const n8nAttempt = await requestN8nRuntime(n8nRequest, { traceparent: trace.traceparent });
       const n8nNeedsCanonicalRetry = n8nAttempt.ok && shouldRetryN8nNoContext(n8nAttempt.payload);
       const fallbackReason = n8nAttempt.ok ? "n8n_no_context" : n8nAttempt.fallbackReason;
       const fallbackHttpStatus = n8nAttempt.ok ? 200 : n8nAttempt.httpStatus;
@@ -517,25 +597,13 @@ export async function POST(req: NextRequest) {
         upstreamPayload = n8nAttempt.payload;
         provenance = n8nAttempt.provenance;
       } else {
+        runtimeRecoveryReason = fallbackReason;
         console.warn("[POST /api/typebot-rag] using canonical Supabase fallback", {
           reason: fallbackReason,
           httpStatus: fallbackHttpStatus,
         });
         try {
-          upstreamPayload = await runDirectRagFallback({
-            question,
-            retrievalQuery: mediation.searchQuery,
-            category,
-            locale,
-            tenantId: "default",
-            requestId: identity.requestId,
-            fallbackReason,
-            attachmentCount: verifiedAttachments.length,
-            requireOpenAiEmbedding: true,
-            mediation,
-            conversationHistory,
-            profile,
-          });
+          upstreamPayload = await runCanonicalRag(fallbackReason);
           provenance = resolveRagProvenance(upstreamPayload);
           reportOpsEventAsync(
             "n8n_runtime_fallback_succeeded",
@@ -570,6 +638,7 @@ export async function POST(req: NextRequest) {
           } else {
             const directExecutionId = `direct-${identity.requestId}`;
             await persistFailure("rag_runtime_unavailable", DIRECT_LEXICAL_PROVENANCE, directExecutionId);
+            trackChatProductEvent("chatbot_answer_failed", { category, stage: "runtime", reason: "all_runtimes_failed" });
             reportOpsEventAsync(
               "rag_runtime_unavailable",
               "Both the n8n runtime and KARXY direct Supabase fallback failed.",
@@ -594,16 +663,13 @@ export async function POST(req: NextRequest) {
     }
 
     upstreamPayload = withQuestionMediation(upstreamPayload, mediation);
-    if (mediation.needsHumanReview && mediation.action === "retrieve") {
-      upstreamPayload = {
-        ...upstreamPayload,
-        needsHuman: true,
-        riskLevel: upstreamPayload.riskLevel === "high" ? "high" : "medium",
-        leadStage: upstreamPayload.riskLevel === "high" ? "urgent" : "review",
-      };
-    }
-
-    const guardedPayload = applyChatResponseGuardrail(upstreamPayload, question, locale);
+    // Retrieval responses already passed the shared Application guardrail in
+    // runRagAnswerUseCase (including the signed n8n path). Clarification is the
+    // only locally constructed response and therefore the only adapter-owned
+    // guardrail invocation.
+    const guardedPayload = mediation.action === "clarify"
+      ? applyChatResponseGuardrail(upstreamPayload, question, locale)
+      : upstreamPayload;
     const normalizedPayload = { ...guardedPayload, ...provenance };
 
     let storedMessageId: string | undefined;
@@ -614,11 +680,16 @@ export async function POST(req: NextRequest) {
       try {
         const needsHuman = normalizeBoolean(normalizedPayload.needsHuman);
         const riskLevel = typeof normalizedPayload.riskLevel === "string" ? normalizedPayload.riskLevel : "low";
-        const persisted = await persistChatExchange({
+        const requiredState = await withSpan({
+          name: "chat.transaction",
+          parent: trace,
+          attributes: { requestId: identity.requestId, channel: source, tenantId: PLATFORM_TENANT_ID },
+          run: () => persistAtomicChatTurn({
           requestId: identity.requestId,
           idempotencyKey: identity.idempotencyKey,
+          traceId: trace.traceId,
           sessionKey: sessionId,
-          tenantId: "default",
+          tenantContext,
           locale,
           source,
           typebotResultId: typebotResultId || undefined,
@@ -635,43 +706,12 @@ export async function POST(req: NextRequest) {
           searchMeta: normalizedPayload.searchMeta,
           latencyMs: Date.now() - startedAt,
           sessionMetadata: sessionMetadataWithProfile,
+          }),
         });
-        storedMessageId = persisted.id.toString();
-        persistenceMode = persisted.mode;
-        if (needsHuman) {
-          try {
-            handoffTaskPersisted = await persistCanonicalHandoffTask({
-              requestId: identity.requestId,
-              idempotencyKey: identity.idempotencyKey,
-              messageId: persisted.id,
-              sessionKey: sessionId,
-              tenantId: "default",
-              locale,
-              source,
-              typebotResultId: typebotResultId || undefined,
-              question,
-              answer: normalizedPayload.answer || "",
-              riskLevel,
-              needsHuman,
-              leadStage: typeof normalizedPayload.leadStage === "string" ? normalizedPayload.leadStage : undefined,
-              nextStep: normalizedPayload.nextStep,
-              executionId: normalizedPayload.executionId,
-              provenance,
-              sources: normalizedPayload.sources,
-              searchMeta: normalizedPayload.searchMeta,
-              latencyMs: Date.now() - startedAt,
-            });
-          } catch (handoffError) {
-            console.error("[POST /api/typebot-rag] canonical handoff persistence failed", handoffError);
-            await recordGatewayOpsEvent(
-              "handoff_persistence_failed",
-              "A required human handoff could not be persisted.",
-              provenance,
-              normalizedPayload.executionId,
-            );
-          }
-        }
-        return true;
+        storedMessageId = requiredState.id.toString();
+        persistenceMode = requiredState.mode;
+        handoffTaskPersisted = requiredState.handoffTaskPersisted;
+        return requiredState.persistenceAccepted;
       } catch (persistError) {
         console.error("[POST /api/typebot-rag] chat persistence failed", persistError);
         await recordGatewayOpsEvent(
@@ -691,12 +731,31 @@ export async function POST(req: NextRequest) {
       ? normalizedPayload.searchMeta as Record<string, unknown>
       : {};
     const noContext = responseSearchMeta.noContext === true;
-    trackTypebotProductEvent(noContext ? "chatbot_no_context" : "chatbot_answer_succeeded", {
+    trackChatProductEvent(noContext ? "chatbot_no_context" : "chatbot_answer_succeeded", {
       category,
       persisted: persistenceAccepted,
       needsHuman: normalizeBoolean(normalizedPayload.needsHuman),
       sourceCount: Array.isArray(normalizedPayload.sources) ? normalizedPayload.sources.length : 0,
     });
+    const answerMode = typeof responseSearchMeta.answerMode === "string" ? responseSearchMeta.answerMode : "unknown";
+    const answerAttempts = Number(responseSearchMeta.answerAttempts || 0);
+    const providerAttempts = Number(responseSearchMeta.answerProviderAttempts || 0);
+    const mediationAttempts = Number(responseSearchMeta.mediationAttempts || 0);
+    if (runtimeRecoveryReason || answerAttempts > 1 || providerAttempts > 1 || mediationAttempts > 1) {
+      trackChatProductEvent("chatbot_retry", {
+        category,
+        stage: runtimeRecoveryReason ? "runtime" : providerAttempts > 1 ? "provider" : answerAttempts > 1 ? "answer" : "mediation",
+        attempts: Math.max(answerAttempts, providerAttempts, mediationAttempts, runtimeRecoveryReason ? 2 : 0),
+      });
+    }
+    if (runtimeRecoveryReason || answerMode.includes("fallback") || responseSearchMeta.serviceDegraded === true) {
+      trackChatProductEvent("chatbot_fallback", {
+        category,
+        mode: answerMode.slice(0, 80),
+        reason: (runtimeRecoveryReason || String(responseSearchMeta.answerGenerationFailureReason || "degraded_answer")).slice(0, 120),
+        degraded: responseSearchMeta.serviceDegraded === true,
+      });
+    }
 
     const handoffToken = source === "typebot" ? createTypebotHandoffToken(sessionId) : undefined;
     return ragJson({
@@ -717,6 +776,7 @@ export async function POST(req: NextRequest) {
       return ragJson({ error: "n8n runtime is not configured" }, { status: 503 });
     }
     console.error("[POST /api/typebot-rag]", error);
+    trackChatProductEvent?.("chatbot_answer_failed", { stage: "gateway", reason: "internal_error" });
     return ragJson({ error: "Internal error" }, { status: 500 });
   }
 }

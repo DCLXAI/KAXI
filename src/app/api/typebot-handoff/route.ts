@@ -1,5 +1,6 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createSupabaseServiceRoleClient } from "@/infrastructure/supabase/service-role-client";
 import { getClientIp, parseLimit, rateLimit } from "@/lib/api/security";
 import { JsonBodyError, readJsonBody } from "@/lib/api/json-body";
 import {
@@ -15,6 +16,11 @@ import {
   recordHandoffConsentEvidence,
 } from "@/lib/privacy/handoff-consent";
 import { verifyTypebotGatewayHeaders } from "@/lib/typebot/gateway-auth";
+import {
+  PLATFORM_TENANT_ID,
+  platformAnonymousTenantContext,
+  type TenantContext,
+} from "@/application/tenancy/tenant-context";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -84,16 +90,17 @@ function redactName(value: string) {
   return `${name.slice(0, 1)}***${name.slice(-1)}`;
 }
 
-async function typebotSessionExists(sessionId: string) {
-  const url = configured(process.env.NEXT_PUBLIC_SUPABASE_URL);
-  const serviceRoleKey = configured(process.env.SUPABASE_SERVICE_ROLE_KEY);
-  if (!url || !serviceRoleKey) throw new Error("SUPABASE_CHAT_PERSISTENCE_NOT_CONFIGURED");
-  const supabase = createClient(url, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+async function typebotSessionExists(tenantContext: TenantContext, sessionId: string) {
+  let supabase;
+  try {
+    supabase = createSupabaseServiceRoleClient();
+  } catch {
+    throw new Error("SUPABASE_CHAT_PERSISTENCE_NOT_CONFIGURED");
+  }
   const result = await supabase
     .from("chat_sessions")
     .select("session_key")
+    .eq("tenant_id", tenantContext.tenantId)
     .eq("session_key", sessionId)
     .eq("source", "typebot")
     .maybeSingle();
@@ -104,7 +111,7 @@ async function typebotSessionExists(sessionId: string) {
 export async function POST(req: NextRequest) {
   const limited = await rateLimit(req, {
     key: "typebot-handoff",
-    limit: parseLimit(process.env.TYPEBOT_HANDOFF_RATE_LIMIT, 10),
+    limit: parseLimit(runtimeEnvironment().TYPEBOT_HANDOFF_RATE_LIMIT, 10),
     windowMs: 60 * 1000,
   });
   if (limited) return handoffRateLimitJson(limited);
@@ -126,7 +133,8 @@ export async function POST(req: NextRequest) {
     ) {
       return handoffJson({ error: "Invalid handoff request" }, { status: 401 });
     }
-    if (!(await typebotSessionExists(sessionId))) {
+    const tenantContext = platformAnonymousTenantContext(`typebot:${typebotResultId}:${sessionId}`);
+    if (!(await typebotSessionExists(tenantContext, sessionId))) {
       return handoffJson({ error: "Typebot session not found" }, { status: 404 });
     }
     const locale = text(body?.locale, 8) || "ko";
@@ -141,6 +149,7 @@ export async function POST(req: NextRequest) {
       }, { status: 428 });
     }
     await recordHandoffConsentEvidence({
+      tenantContext,
       sessionId,
       typebotResultId,
       locale,
@@ -163,7 +172,7 @@ export async function POST(req: NextRequest) {
     const payload = {
       sessionId,
       typebotResultId,
-      tenant_id: "default",
+      tenant_id: PLATFORM_TENANT_ID,
       locale,
       source: "typebot",
       privacyConsent: "accepted",

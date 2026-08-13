@@ -18,6 +18,8 @@ import {
   summarizeRagProvenance,
 } from "../src/lib/n8n/provenance";
 import { signN8nPayload } from "../src/lib/n8n/signature";
+import { evaluateProductionEvaluationTarget } from "../src/lib/ops/evaluation-target";
+import { PLATFORM_TENANT_ID } from "../src/application/tenancy/tenant-context";
 
 type EvaluationCase = {
   id: string;
@@ -48,6 +50,10 @@ type EvaluationCase = {
     expectedVisaCodes?: string[];
     expectedOpenAiVector?: boolean;
     expectedCategories?: string[];
+    cohort?: "regression" | "expert-blind";
+    reviewStatus?: "engineering_regression" | "pending_expert_review" | "expert_approved" | "rejected" | "needs_revision";
+    reviewedBy?: string;
+    reviewedAt?: string;
   } | null;
 };
 
@@ -92,13 +98,15 @@ type RagResponse = {
   workflowVersionId?: string;
   modelVersion?: string;
   promptVersion?: string;
+  n8nWorkflowId?: string;
+  n8nWorkflowVersionId?: string;
   runtimePath?: string;
   persisted?: boolean;
   messageId?: string;
   error?: string;
 };
 
-type EvaluationStage = "smoke" | "locale" | "full";
+type EvaluationStage = "smoke" | "locale" | "full" | "blind";
 
 type ShadowComparison = {
   embeddingStatus: string;
@@ -115,10 +123,10 @@ const baseUrl = (process.env.KAXI_E2E_BASE_URL?.trim() || "http://localhost:3002
 if (!supabaseUrl || !serviceKey) throw new Error("Supabase service configuration is required");
 const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 const requestedStage = (process.env.RAG_EVAL_STAGE || "full").trim().toLowerCase();
-const evaluationStage: EvaluationStage = requestedStage === "smoke" || requestedStage === "locale"
+const evaluationStage: EvaluationStage = requestedStage === "smoke" || requestedStage === "locale" || requestedStage === "blind"
   ? requestedStage
   : "full";
-const stageLimit = { smoke: 10, locale: 16, full: 96 }[evaluationStage];
+const stageLimit = { smoke: 10, locale: 16, full: 96, blind: 300 }[evaluationStage];
 const configuredLimit = process.env.RAG_EVAL_LIMIT?.trim()
   ? Number(process.env.RAG_EVAL_LIMIT)
   : stageLimit;
@@ -127,6 +135,13 @@ const caseIdFilter = process.env.RAG_EVAL_CASE_ID?.trim() || "";
 const transport = process.env.RAG_EVAL_TRANSPORT?.trim() === "direct-n8n" ? "direct-n8n" : "gateway";
 const shadowMode = process.env.RAG_EVAL_SHADOW?.trim().toLowerCase() === "true";
 const expectedProvenance = resolveRagProvenance();
+const requireProductionTarget = process.env.RAG_EVAL_REQUIRE_PRODUCTION?.trim().toLowerCase() === "true"
+  || ((evaluationStage === "full" || evaluationStage === "blind")
+    && process.env.RAG_EVAL_REQUIRE_PRODUCTION?.trim().toLowerCase() !== "false");
+const productionTarget = evaluateProductionEvaluationTarget(baseUrl);
+if (requireProductionTarget && !productionTarget.ok) {
+  throw new Error(`RAG_EVALUATION_PRODUCTION_TARGET_REQUIRED: ${productionTarget.reason} (${baseUrl})`);
+}
 
 const SMOKE_CASE_IDS = [
   "ko-d4-extension-multi-intent-partial",
@@ -307,6 +322,7 @@ function responseRuntimePath(payload: RagResponse) {
 function provenanceMatchesRuntimePath(
   runtimePath: string,
   provenance: ReturnType<typeof extractRagProvenance>,
+  payload: RagResponse,
 ) {
   if (!provenance) return false;
   if (runtimePath === "kaxi-direct-lexical" || runtimePath === "kaxi-direct-hybrid") {
@@ -323,8 +339,13 @@ function provenanceMatchesRuntimePath(
       && provenance.promptVersion === QUESTION_MEDIATOR_PROMPT_VERSION;
   }
   if (runtimePath.startsWith("n8n-")) {
-    return provenance.workflowId === expectedProvenance.workflowId
-      && Boolean(provenance.workflowVersionId && provenance.modelVersion && provenance.promptVersion);
+    const observedWorkflowId = payload.n8nWorkflowId?.trim() || provenance.workflowId;
+    const observedWorkflowVersionId = payload.n8nWorkflowVersionId?.trim() || provenance.workflowVersionId;
+    const configuredWorkflowId = process.env.N8N_RAG_WORKFLOW_ID?.trim() || "";
+    const configuredWorkflowVersionId = process.env.N8N_RAG_WORKFLOW_VERSION_ID?.trim() || "";
+    return Boolean(observedWorkflowId && observedWorkflowVersionId && provenance.modelVersion && provenance.promptVersion)
+      && (!configuredWorkflowId || observedWorkflowId === configuredWorkflowId)
+      && (!configuredWorkflowVersionId || observedWorkflowVersionId === configuredWorkflowVersionId);
   }
   return false;
 }
@@ -342,17 +363,25 @@ function syntheticAttachments(testCase: EvaluationCase) {
 
 function selectEvaluationCases(allCases: EvaluationCase[]) {
   if (caseIdFilter) return allCases.filter((item) => item.id === caseIdFilter).slice(0, 1);
+  const eligibleCases = evaluationStage === "blind"
+    ? allCases.filter((item) =>
+        item.metadata?.cohort === "expert-blind"
+        && item.metadata?.reviewStatus === "expert_approved"
+        && Boolean(item.metadata.reviewedBy?.trim())
+        && Boolean(item.metadata.reviewedAt?.trim()),
+      )
+    : allCases.filter((item) => item.metadata?.cohort !== "expert-blind");
   const preferredIds = evaluationStage === "smoke"
     ? SMOKE_CASE_IDS
     : evaluationStage === "locale"
       ? LOCALE_CASE_IDS
       : [];
-  if (preferredIds.length === 0) return allCases.slice(0, limit);
+  if (preferredIds.length === 0) return eligibleCases.slice(0, limit);
 
-  const byId = new Map(allCases.map((item) => [item.id, item]));
+  const byId = new Map(eligibleCases.map((item) => [item.id, item]));
   const preferred = preferredIds.flatMap((id) => byId.get(id) || []);
   const selectedIds = new Set(preferred.map((item) => item.id));
-  const remaining = allCases.filter((item) => !selectedIds.has(item.id));
+  const remaining = eligibleCases.filter((item) => !selectedIds.has(item.id));
   return [...preferred, ...remaining].slice(0, limit);
 }
 
@@ -371,7 +400,7 @@ async function runShadowComparison(testCase: EvaluationCase): Promise<ShadowComp
   if (!shadowMode) return null;
   const category = inferChatCategory(testCase.question, testCase.category);
   const commonFilter = {
-    tenant_id: "default",
+    tenant_id: PLATFORM_TENANT_ID,
     category,
     category_mode: "strict",
     locale: testCase.locale,
@@ -380,14 +409,14 @@ async function runShadowComparison(testCase: EvaluationCase): Promise<ShadowComp
     question: testCase.question,
     category,
     locale: testCase.locale as "ko" | "en" | "vi" | "mn",
-    tenantId: "default",
+    tenantId: PLATFORM_TENANT_ID,
     requestId: testCase.id,
     fallbackReason: "evaluation_shadow",
   });
 
   try {
     const [lexical, embedding] = await Promise.all([
-      supabase.rpc("match_rag_documents_lexical", {
+      supabase.rpc("match_rag_documents_lexical_v3", {
         match_count: 6,
         filter: { ...commonFilter, query_text: queryText, shadow_mode: true },
       }),
@@ -412,7 +441,7 @@ async function runShadowComparison(testCase: EvaluationCase): Promise<ShadowComp
       : null;
     const vectorStrategy = embedding.vector ? "provider-query" : "lexical-centroid";
     const [vectorOnly, hybrid] = await Promise.all([
-      supabase.rpc("match_rag_documents_hybrid_v3", {
+      supabase.rpc("match_rag_documents_hybrid_v4", {
         query_embedding: queryEmbedding,
         match_count: 6,
         filter: {
@@ -424,7 +453,7 @@ async function runShadowComparison(testCase: EvaluationCase): Promise<ShadowComp
           vector_seed_count: 3,
         },
       }),
-      supabase.rpc("match_rag_documents_hybrid_v3", {
+      supabase.rpc("match_rag_documents_hybrid_v4", {
         query_embedding: queryEmbedding,
         match_count: 6,
         filter: {
@@ -463,11 +492,15 @@ const casesQuery = supabase
   .eq("active", true);
 const casesResult = caseIdFilter
   ? await casesQuery.eq("id", caseIdFilter).limit(1)
-  : await casesQuery.order("id").limit(200);
+  : await casesQuery.order("id").limit(500);
 if (casesResult.error) throw casesResult.error;
 const cases = selectEvaluationCases((casesResult.data || []) as EvaluationCase[]);
 if (cases.length === 0) {
-  throw new Error(caseIdFilter ? `No active RAG evaluation case: ${caseIdFilter}` : "No active RAG evaluation cases");
+  throw new Error(caseIdFilter
+    ? `No active RAG evaluation case: ${caseIdFilter}`
+    : evaluationStage === "blind"
+      ? "No expert-approved blind evaluation cases; seed candidates and apply identified expert reviews first"
+      : "No active RAG evaluation cases");
 }
 
 const serving = await supabase.from("rag_serving_chunks").select("canonical_chunk_id,content_hash", { count: "exact" }).eq("status", "ready");
@@ -528,7 +561,7 @@ for (const testCase of cases) {
       const signed = signN8nPayload("typebot-runtime", {
         question: testCase.question,
         sessionId: auditSessionId,
-        tenant_id: "default",
+        tenant_id: PLATFORM_TENANT_ID,
         requestId,
         idempotencyKey: `evaluation:${testCase.id}:${requestId}`,
         externalRequestId: requestId,
@@ -582,7 +615,7 @@ for (const testCase of cases) {
     const responseProvenance = extractRagProvenance(payload);
     if (!runtimePath) failures.push("runtime_path_missing");
     if (!responseProvenance) failures.push("response_provenance_missing");
-    else if (!provenanceMatchesRuntimePath(runtimePath, responseProvenance)) failures.push("response_provenance_mismatch");
+    else if (!provenanceMatchesRuntimePath(runtimePath, responseProvenance, payload)) failures.push("response_provenance_mismatch");
     if (transport === "gateway" && payload.persisted !== true) failures.push("persistence_failed");
     shadowComparison = await runShadowComparison(testCase);
 
@@ -758,6 +791,8 @@ for (const testCase of cases) {
         executionId: payload.executionId || null,
         workflowId: responseProvenance?.workflowId || null,
         workflowVersionId: responseProvenance?.workflowVersionId || null,
+        n8nWorkflowId: payload.n8nWorkflowId || null,
+        n8nWorkflowVersionId: payload.n8nWorkflowVersionId || null,
         modelVersion: responseProvenance?.modelVersion || null,
         promptVersion: responseProvenance?.promptVersion || null,
         runtimePath: runtimePath || null,
@@ -948,8 +983,11 @@ const completed = await supabase.from("rag_evaluation_runs").update({
     byCategory,
     latencyMs: { p50: percentile(0.5), p95: p95LatencyMs },
     baseUrl,
+    productionTarget,
+    productionTargetRequired: requireProductionTarget,
     transport,
     evaluationStage,
+    evaluationCohort: evaluationStage === "blind" ? "expert-blind" : "regression",
     runtimePathDistribution,
     retrievalPathDistribution,
     shadow: shadowMetrics,

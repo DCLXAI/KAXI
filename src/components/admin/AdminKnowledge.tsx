@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, RefreshCw, RotateCcw, Satellite, Trash2 } from "lucide-react";
 import { useAdminApi } from "@/components/admin/AdminShell";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { AdminKnowledgeItem, AdminKnowledgeReadiness } from "@/lib/admin/types";
 
 interface MonitorResult {
+  queued?: boolean;
+  jobId?: string;
   checkedAt: string;
   persistCandidates: boolean;
   total: number;
@@ -37,7 +39,7 @@ interface MonitorResult {
   }>;
 }
 
-interface KnowledgePagination {
+export interface KnowledgePagination {
   page: number;
   pageSize: number;
   total: number;
@@ -55,20 +57,28 @@ function todayDateInputValue() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function AdminKnowledge() {
+type AdminKnowledgeInitialData = {
+  documents: AdminKnowledgeItem[];
+  source: "db" | "static";
+  readiness: AdminKnowledgeReadiness;
+  pagination: KnowledgePagination;
+};
+
+export function AdminKnowledge({ initialData = null }: { initialData?: AdminKnowledgeInitialData | null }) {
   const { adminFetch } = useAdminApi();
-  const [documents, setDocuments] = useState<AdminKnowledgeItem[]>([]);
-  const [readiness, setReadiness] = useState<AdminKnowledgeReadiness | null>(null);
+  const [documents, setDocuments] = useState<AdminKnowledgeItem[]>(initialData?.documents || []);
+  const [readiness, setReadiness] = useState<AdminKnowledgeReadiness | null>(initialData?.readiness || null);
   const [diffByDocId, setDiffByDocId] = useState<Record<string, NonNullable<AdminKnowledgeItem["diff"]>>>({});
-  const [source, setSource] = useState<"db" | "static">("db");
-  const [loading, setLoading] = useState(true);
+  const [source, setSource] = useState<"db" | "static">(initialData?.source || "db");
+  const [loading, setLoading] = useState(!initialData);
+  const initialPending = useRef(Boolean(initialData));
   const [savingDocId, setSavingDocId] = useState<string | null>(null);
   const [bulkAction, setBulkAction] = useState<"approve" | "discard" | null>(null);
   const [monitoringMode, setMonitoringMode] = useState<"preview" | "persist" | null>(null);
   const [monitorResult, setMonitorResult] = useState<MonitorResult | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [pagination, setPagination] = useState<KnowledgePagination>({
+  const [pagination, setPagination] = useState<KnowledgePagination>(initialData?.pagination || {
     page: 1,
     pageSize: 25,
     total: 0,
@@ -104,7 +114,11 @@ export function AdminKnowledge() {
   }, [adminFetch, page, pageSize]);
 
   useEffect(() => {
-    loadDocuments();
+    if (initialPending.current) {
+      initialPending.current = false;
+      return;
+    }
+    void loadDocuments();
   }, [loadDocuments]);
 
   const requestCandidateReview = () => {
@@ -148,16 +162,30 @@ export function AdminKnowledge() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "공식 출처 감시를 실행하지 못했습니다.");
-      setMonitorResult(data);
-      const diffEntries = Object.fromEntries(
-        (data.results || [])
-          .filter((item: MonitorResult["results"][number]) => item.diff)
-          .map((item: MonitorResult["results"][number]) => [item.docId, item.diff])
+      const result = data.accepted ? {
+        queued: true,
+        jobId: data.job?.id,
+        checkedAt: new Date().toISOString(),
+        persistCandidates,
+        total: 0,
+        changed: 0,
+        unchanged: 0,
+        failed: 0,
+        candidatesCreated: 0,
+        results: [],
+      } satisfies MonitorResult : data as MonitorResult;
+      setMonitorResult(result);
+      const diffEntries = (result.results || []).reduce<Record<string, NonNullable<AdminKnowledgeItem["diff"]>>>(
+        (entries, item) => {
+          if (item.diff) entries[item.docId] = item.diff;
+          return entries;
+        },
+        {},
       );
       if (Object.keys(diffEntries).length > 0) {
         setDiffByDocId((prev) => ({ ...prev, ...diffEntries }));
       }
-      if (persistCandidates) await loadDocuments();
+      if (persistCandidates && !result.queued) await loadDocuments();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -329,7 +357,9 @@ export function AdminKnowledge() {
         <div className="rounded-md border bg-card px-4 py-3 text-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="font-medium">
-              공식 출처 감시 결과: 변경 {monitorResult.changed}개, 실패 {monitorResult.failed}개, 후보 생성 {monitorResult.candidatesCreated}개
+              {monitorResult.queued
+                ? `공식 출처 감시가 Worker에 등록되었습니다.${monitorResult.jobId ? ` 작업 ${monitorResult.jobId}` : ""}`
+                : `공식 출처 감시 결과: 변경 ${monitorResult.changed}개, 실패 ${monitorResult.failed}개, 후보 생성 ${monitorResult.candidatesCreated}개`}
             </div>
             <div className="text-xs text-muted-foreground">{formatDate(monitorResult.checkedAt)}</div>
           </div>

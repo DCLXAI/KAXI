@@ -2,6 +2,7 @@ import {
   getRagServingProjectionStatus,
   syncRagServingProjection,
 } from "../src/lib/knowledge/serving-projection";
+import { platformServiceTenantContext } from "../src/application/tenancy/tenant-context";
 
 const ACTIVE_CONTRACT = "2026-07-14.v4";
 
@@ -87,7 +88,10 @@ async function main() {
     const current = await getRagServingProjectionStatus();
     if (current.vectorReadyChunks >= current.eligibleChunks) break;
 
-    const result = await syncRagServingProjection({ limit: batchSize });
+    const result = await syncRagServingProjection({
+      tenantContext: platformServiceTenantContext("rag-serving-projection-cli"),
+      limit: batchSize,
+    });
     console.log(JSON.stringify({ phase: "sync", batch, result }, null, 2));
 
     if (result.failed.length > 0) {

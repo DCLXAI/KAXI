@@ -11,6 +11,7 @@ const { KNOWLEDGE_DOCS } = await import("../src/lib/data/knowledge");
 const { canUseSchoolSeedFallback } = await import("../src/lib/schools/repository");
 const { getOpsAlertDiagnostics, sendOpsAlert } = await import("../src/lib/ops/alerts");
 const { evaluateRagQualityRun, summarizeRagSystemHealth } = await import("../src/lib/ops/rag-system-health");
+const { expectedRetrievalIdentity } = await import("../src/lib/ops/provenance-verdict");
 
 // Prisma validates DATABASE_URL when its engine starts on the FIRST query, then
 // keeps that URL for the life of the process. Several tests below point
@@ -42,7 +43,7 @@ async function testProductionReadinessFlagsMissingOpsConfig() {
       VERCEL: "1",
       DATABASE_URL: "https://not-a-postgres-database.example",
       RATE_LIMIT_BACKEND: "auto",
-      AI_PROVIDER: "kimi",
+      AI_PROVIDER: "openai",
       OPENAI_API_KEY: "",
       AI_AGENT_RATE_LIMIT: "0",
       AI_AGENT_DAILY_QUOTA: "0",
@@ -141,10 +142,16 @@ async function testImageOcrReadiness() {
       NODE_ENV: "production",
       VERCEL_ENV: "production",
       VERCEL: "1",
-      AI_PROVIDER: "kimi",
-      OPENAI_API_KEY: "kimi-production-key",
-      OPENAI_BASE_URL: "https://api.moonshot.ai/v1",
-      OPENAI_MODEL: "kimi-k2.6",
+      AI_PROVIDER: "openai",
+      OPENAI_API_KEY: "openai-production-key",
+      OPENAI_BASE_URL: "https://api.openai.com/v1",
+      OPENAI_MODEL: "gpt-4.1-mini",
+      ANTHROPIC_API_KEY: "anthropic-production-key",
+      ANTHROPIC_BASE_URL: "https://api.anthropic.com",
+      ANTHROPIC_MODEL: "claude-opus-4-8",
+      AI_LLM_PROVIDER_FAILOVER_ENABLED: "true",
+      CODEX_THREAD_ID: "desktop-runtime-metadata",
+      CODEX_SHELL: "/bin/zsh",
     });
     const payload = await getReadinessPayload();
     const check = payload.checks.find((item) => item.key === "chat.attachment_ocr_provider");
@@ -152,15 +159,15 @@ async function testImageOcrReadiness() {
       fail(`configured image OCR provider should pass production readiness: ${JSON.stringify(check)}`);
     }
     const backendPolicy = payload.checks.find((item) => item.key === "ai.backend_policy");
-    if (backendPolicy?.ok || backendPolicy?.severity !== "warning") {
-      fail(`single-provider production AI should expose the missing failover warning: ${JSON.stringify(backendPolicy)}`);
+    if (!backendPolicy?.ok || backendPolicy?.severity !== "required") {
+      fail(`independent OpenAI and Anthropic providers should pass production readiness: ${JSON.stringify(backendPolicy)}`);
     }
 
-    process.env.AI_REQUIRE_PROVIDER_FAILOVER = "true";
+    process.env.AI_LLM_PROVIDER_FAILOVER_ENABLED = "false";
     const strictPayload = await getReadinessPayload();
     const strictBackendPolicy = strictPayload.checks.find((item) => item.key === "ai.backend_policy");
     if (strictBackendPolicy?.ok || strictBackendPolicy?.severity !== "required" || strictPayload.status !== "degraded") {
-      fail(`required provider failover should fail closed in production: ${JSON.stringify(strictBackendPolicy)}`);
+      fail(`disabled provider failover should fail closed in production: ${JSON.stringify(strictBackendPolicy)}`);
     }
   } finally {
     restoreEnv(snapshot);
@@ -532,6 +539,16 @@ function testRagQualityGate() {
     modelVersion: "model",
     promptVersion: "prompt",
   };
+  const productionBaseUrl = process.env.KAXI_PRODUCTION_BASE_URL
+    || process.env.NEXT_PUBLIC_SITE_URL
+    || (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL.replace(/^https?:\/\//, "")}`
+      : "https://kaxi.example");
+  const productionRunMetadata = {
+    baseUrl: productionBaseUrl,
+    runtimePaths: ["kaxi-direct-hybrid"],
+    retrieval: expectedRetrievalIdentity(),
+  };
   const passing = evaluateRagQualityRun({
     id: "run",
     status: "passed",
@@ -543,6 +560,7 @@ function testRagQualityGate() {
     prompt_version: provenance.promptVersion,
     completed_at: new Date().toISOString(),
     metrics: {
+      ...productionRunMetadata,
       passRate: 1,
       minimumGroupPassRate: 1,
       expectedDocumentRecall: 1,
@@ -567,6 +585,7 @@ function testRagQualityGate() {
     prompt_version: provenance.promptVersion,
     completed_at: new Date().toISOString(),
     metrics: {
+      ...productionRunMetadata,
       passRate: 0.98,
       minimumGroupPassRate: 0.95,
       expectedDocumentRecall: 0.9,

@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import sharp from "sharp";
 import { createHash } from "crypto";
 import { isEnvTrue } from "@/lib/env";
@@ -49,7 +50,7 @@ function scannerUrl(env: NodeJS.ProcessEnv) {
   }
 }
 
-export function getChatAttachmentSecurityDiagnostics(env: NodeJS.ProcessEnv = process.env) {
+export function getChatAttachmentSecurityDiagnostics(env: NodeJS.ProcessEnv = runtimeEnvironment()) {
   const mode = env.ATTACHMENT_MALWARE_SCAN_MODE?.trim().toLowerCase() === "http" ? "http" : "structural";
   const urlConfigured = Boolean(scannerUrl(env));
   const tokenConfigured = configured(env.ATTACHMENT_MALWARE_SCAN_TOKEN).length >= 16;
@@ -84,7 +85,7 @@ function assertPdfSafe(bytes: Buffer) {
 }
 
 async function assertImageSafe(bytes: Buffer, mimeType: string) {
-  let metadata: sharp.Metadata;
+  let metadata: Awaited<ReturnType<ReturnType<typeof sharp>["metadata"]>>;
   try {
     metadata = await sharp(bytes, { failOn: "warning", limitInputPixels: MAX_IMAGE_PIXELS }).metadata();
   } catch {
@@ -153,7 +154,7 @@ async function normalizeImage(bytes: Buffer, mimeType: string) {
 export async function secureChatAttachmentUpload(
   bytes: Buffer,
   mimeType: string,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = runtimeEnvironment(),
 ) {
   if (mimeType === "application/pdf") assertPdfSafe(bytes);
   else await assertImageSafe(bytes, mimeType);
@@ -175,7 +176,7 @@ export async function verifyStoredChatAttachment(bytes: Buffer, mimeType: string
   else await assertImageSafe(bytes, mimeType);
 }
 
-export async function checkManagedAttachmentScanner(env: NodeJS.ProcessEnv = process.env) {
+export async function checkManagedAttachmentScanner(env: NodeJS.ProcessEnv = runtimeEnvironment()) {
   const diagnostics = getChatAttachmentSecurityDiagnostics(env);
   if (!diagnostics.uploadsRequested) {
     return { ok: true, detail: "Chat attachment uploads are disabled.", engine: null };

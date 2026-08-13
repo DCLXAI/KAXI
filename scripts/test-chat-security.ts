@@ -438,29 +438,29 @@ console.log("PASS chat security: provenance, signed ownership, Typebot gateway a
 // documents or prompt injection. These assertions fail if a client-facing
 // answer path ships without it again.
 {
-  const answerRoutes = [
-    "src/app/api/ai/unified/route.ts",
+  const answerModules = [
+    "src/application/ai/unified-ai.ts",
     "src/app/api/ai/chat/route.ts",
-    "src/app/api/ai/consult/route.ts",
-    // Omitting this one is how the raw agent endpoint kept returning
-    // unguarded model prose while every sibling enforced the refusals.
-    "src/app/api/ai/agent/route.ts",
+    // Agent and consult adapters are intentionally thin. Their application
+    // use cases own the answer policy shared by direct and unified callers.
+    "src/application/ai/expert-consult.ts",
+    "src/application/ai/action-agent.ts",
+    "src/application/ai/rag-answer.ts",
     "src/app/api/typebot-rag/route.ts",
-    "src/app/api/internal/n8n/rag-runtime/route.ts",
   ];
-  for (const route of answerRoutes) {
-    const source = readFileSync(route, "utf8");
+  for (const modulePath of answerModules) {
+    const source = readFileSync(modulePath, "utf8");
     assert(
       /applyChatResponseGuardrail|guardAnswerFields/.test(source),
-      `${route} returns answers to users and must run the chat guardrail`
+      `${modulePath} returns answers to users and must run the chat guardrail`
     );
   }
 
-  // The stream route is exempt only because it delegates to unified, which is
-  // guarded. If that delegation ever goes away this assertion should too.
+  // The stream route is exempt only because it delegates to the guarded
+  // unified HTTP adapter. If that delegation ever goes away this assertion should too.
   const streamSource = readFileSync("src/app/api/ai/unified/stream/route.ts", "utf8");
   assert(
-    /runUnifiedAi/.test(streamSource),
+    /runUnifiedAiHttpAdapter/.test(streamSource),
     "the stream route inherits the guardrail via unified; it must keep delegating there"
   );
 

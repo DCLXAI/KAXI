@@ -55,6 +55,7 @@ process.env.PII_HASH_SECRET = "handoff-dedupe-test-keyed-hash-secret";
 prepareTestDb("handoff contact dedupe");
 
 const { db } = await import("../src/lib/db");
+const { PLATFORM_TENANT_ID } = await import("../src/application/tenancy/tenant-context");
 const { preparePiiField } = await import("../src/lib/privacy/pii");
 const sessionKey = "typebot-handoff-dedupe-test";
 const contact = "010-1234-5678";
@@ -67,13 +68,13 @@ const protectedNote = preparePiiField("만료일은 2026-12-31입니다.", { kin
 for (let attempt = 0; attempt < 2; attempt += 1) {
   await db.$executeRaw`
     INSERT INTO "handoff_updates" (
-      "session_id", "lead_name", "lead_name_ciphertext", "lead_name_redacted",
+      "session_id", "tenant_id", "lead_name", "lead_name_ciphertext", "lead_name_redacted",
       "lead_contact", "lead_contact_ciphertext", "lead_contact_hash", "lead_contact_redacted",
       "lead_note", "lead_note_ciphertext", "lead_note_hash", "lead_note_redacted",
       "question", "question_ciphertext", "question_hash", "question_redacted",
       "answer", "answer_ciphertext", "answer_hash", "answer_redacted"
     ) VALUES (
-      ${sessionKey}, ${protectedName.plaintext}, ${protectedName.ciphertext}, ${protectedName.redacted},
+      ${sessionKey}, ${PLATFORM_TENANT_ID}, ${protectedName.plaintext}, ${protectedName.ciphertext}, ${protectedName.redacted},
       ${protectedContact.plaintext}, ${protectedContact.ciphertext}, ${protectedContact.hash}, ${protectedContact.redacted},
       ${protectedNote.plaintext}, ${protectedNote.ciphertext}, ${protectedNote.hash}, ${protectedNote.redacted},
       ${protectedQuestion.plaintext}, ${protectedQuestion.ciphertext}, ${protectedQuestion.hash}, ${protectedQuestion.redacted},
@@ -88,7 +89,9 @@ assert(contacts[0].contactHash === protectedContact.hash, "handoff contact must 
 assert(Boolean(contacts[0].contactCiphertext), "handoff contact ciphertext must propagate");
 assert(contacts[0].contactValue !== contact, "handoff contact display value must stay redacted");
 
-const lead = await db.handoffLead.findUnique({ where: { sessionKey } });
+const lead = await db.handoffLead.findUnique({
+  where: { tenantId_sessionKey: { tenantId: PLATFORM_TENANT_ID, sessionKey } },
+});
 assert(Boolean(lead?.questionCiphertext && lead.notesCiphertext), "encrypted handoff question and note must propagate to lead");
 const tasks = await db.$queryRaw<Array<{ question_ciphertext: string | null; notes_ciphertext: string | null }>>`
   SELECT "question_ciphertext", "notes_ciphertext"
@@ -99,9 +102,10 @@ assert(tasks.length === 1, `repeat handoff must reuse one open task, got ${tasks
 assert(Boolean(tasks[0].question_ciphertext && tasks[0].notes_ciphertext), "encrypted handoff content must propagate to task");
 
 const canonicalSessionKey = "kaxi-owned-handoff-test";
-await db.chatSession.create({ data: { sessionKey: canonicalSessionKey } });
+await db.chatSession.create({ data: { tenantId: PLATFORM_TENANT_ID, sessionKey: canonicalSessionKey } });
 const canonicalMessage = await db.chatMessage.create({
   data: {
+    tenantId: PLATFORM_TENANT_ID,
     sessionKey: canonicalSessionKey,
     question: protectedQuestion.plaintext || "",
     questionCiphertext: protectedQuestion.ciphertext,
@@ -118,10 +122,10 @@ const canonicalMessage = await db.chatMessage.create({
 for (let attempt = 0; attempt < 2; attempt += 1) {
   await db.$executeRaw`
     INSERT INTO "handoff_tasks" (
-      "source_chat_message_id", "session_id", "question", "question_ciphertext", "question_hash", "question_redacted",
+      "source_chat_message_id", "session_id", "tenant_id", "question", "question_ciphertext", "question_hash", "question_redacted",
       "answer", "answer_ciphertext", "answer_hash", "answer_redacted", "risk_level", "lead_stage", "status", "dedupe_key"
     ) VALUES (
-      ${canonicalMessage.id}, ${canonicalSessionKey}, ${protectedQuestion.plaintext}, ${protectedQuestion.ciphertext}, ${protectedQuestion.hash}, ${protectedQuestion.redacted},
+      ${canonicalMessage.id}, ${canonicalSessionKey}, ${PLATFORM_TENANT_ID}, ${protectedQuestion.plaintext}, ${protectedQuestion.ciphertext}, ${protectedQuestion.hash}, ${protectedQuestion.redacted},
       ${protectedAnswer.plaintext}, ${protectedAnswer.ciphertext}, ${protectedAnswer.hash}, ${protectedAnswer.redacted}, 'medium', 'review', 'open', 'kaxi-owned-handoff-dedupe'
     )
   `;

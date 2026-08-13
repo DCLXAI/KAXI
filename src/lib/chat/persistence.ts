@@ -1,8 +1,13 @@
 import { createHash, randomUUID } from "crypto";
-import { createClient } from "@supabase/supabase-js";
 import type { RagProvenance } from "@/lib/n8n/provenance";
 import { preparePiiField } from "@/lib/privacy/pii";
 import { retrievalConfidenceThreshold } from "@/lib/chat/retrieval-confidence";
+import { createSupabaseServiceRoleClient } from "@/infrastructure/supabase/service-role-client";
+import { assertTenantContext, type TenantContext } from "@/application/tenancy/tenant-context";
+import {
+  buildRetrievalPlanSnapshot,
+  withRetrievalPlanMetadata,
+} from "@/application/rag/retrieval-plan";
 
 type SupabaseErrorLike = {
   code?: string;
@@ -22,7 +27,7 @@ export interface PersistChatExchangeInput {
   requestId: string;
   idempotencyKey: string;
   sessionKey: string;
-  tenantId: string;
+  tenantContext: TenantContext;
   locale: string;
   source: string;
   typebotResultId?: string;
@@ -43,23 +48,15 @@ export interface PersistChatExchangeInput {
   sessionMetadata?: unknown;
 }
 
-function configured(value: string | undefined) {
-  const text = value?.trim() || "";
-  if (!text || /^replace-with-/i.test(text)) return "";
-  return text;
-}
-
 export function createSupabaseChatClient() {
-  const url = configured(process.env.NEXT_PUBLIC_SUPABASE_URL);
-  const serviceRoleKey = configured(process.env.SUPABASE_SERVICE_ROLE_KEY);
-
-  if (!url || !serviceRoleKey) {
-    throw new Error("SUPABASE_CHAT_PERSISTENCE_NOT_CONFIGURED");
+  try {
+    return createSupabaseServiceRoleClient();
+  } catch (error) {
+    if (error instanceof Error && error.message === "SUPABASE_SERVICE_ROLE_NOT_CONFIGURED") {
+      throw new Error("SUPABASE_CHAT_PERSISTENCE_NOT_CONFIGURED");
+    }
+    throw error;
   }
-
-  return createClient(url, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
 }
 
 function safeJson(value: unknown) {
@@ -133,15 +130,16 @@ function protectConversationText(value: string, maxPlainLength: number) {
 
 export async function ensureChatSession(input: {
   sessionKey: string;
-  tenantId?: string;
+  tenantContext: TenantContext;
   locale?: string;
   source?: string;
   typebotResultId?: string;
   metadata?: unknown;
 }) {
+  assertTenantContext(input.tenantContext);
   const supabase = createSupabaseChatClient();
   const now = new Date().toISOString();
-  const tenantId = input.tenantId || "default";
+  const tenantId = input.tenantContext.tenantId;
   const locale = input.locale || "ko";
   const source = input.source || "kaxi-site";
   const channel = source === "typebot" ? "typebot" : "kaxi-site";
@@ -160,6 +158,7 @@ export async function ensureChatSession(input: {
   const updated = await supabase
     .from("chat_sessions")
     .update(updatePayload)
+    .eq("tenant_id", tenantId)
     .eq("session_key", input.sessionKey)
     .select("id")
     .maybeSingle();
@@ -200,12 +199,14 @@ export async function ensureChatSession(input: {
   return inserted.data;
 }
 
-export async function endChatSession(sessionKey: string) {
+export async function endChatSession(tenantContext: TenantContext, sessionKey: string) {
+  assertTenantContext(tenantContext);
   const supabase = createSupabaseChatClient();
   const now = new Date().toISOString();
   const result = await supabase
     .from("chat_sessions")
     .update({ status: "ended", ended_at: now, last_message_at: now })
+    .eq("tenant_id", tenantContext.tenantId)
     .eq("session_key", sessionKey)
     .eq("source", "kaxi-site");
   if (result.error && !isMissingRelationError(result.error) && !isMissingColumnError(result.error)) {
@@ -215,7 +216,7 @@ export async function endChatSession(sessionKey: string) {
 
 export async function persistChatAttachment(input: {
   sessionKey: string;
-  tenantId?: string;
+  tenantContext: TenantContext;
   locale?: string;
   source?: string;
   bucket: string;
@@ -230,7 +231,7 @@ export async function persistChatAttachment(input: {
   const supabase = createSupabaseChatClient();
   const session = await ensureChatSession({
     sessionKey: input.sessionKey,
-    tenantId: input.tenantId,
+    tenantContext: input.tenantContext,
     locale: input.locale,
     source: input.source,
   });
@@ -238,6 +239,7 @@ export async function persistChatAttachment(input: {
   if (!session) return null;
 
   const updatePayload = compactUndefined({
+    tenant_id: input.tenantContext.tenantId,
     session_id: input.sessionKey,
     bucket: input.bucket,
     original_name: input.originalName,
@@ -251,6 +253,7 @@ export async function persistChatAttachment(input: {
   const updated = await supabase
     .from("chat_attachments")
     .update(updatePayload)
+    .eq("tenant_id", input.tenantContext.tenantId)
     .eq("storage_key", input.storageKey)
     .select("id")
     .maybeSingle();
@@ -266,6 +269,7 @@ export async function persistChatAttachment(input: {
     .from("chat_attachments")
     .insert({
       id: randomUUID(),
+      tenant_id: input.tenantContext.tenantId,
       session_id: input.sessionKey,
       bucket: input.bucket,
       storage_key: input.storageKey,
@@ -298,6 +302,7 @@ async function linkAttachmentsToMessage(input: PersistChatExchangeInput, message
   const linked = await supabase
     .from("chat_attachments")
     .update({ message_id: messageId })
+    .eq("tenant_id", input.tenantContext.tenantId)
     .eq("session_id", input.sessionKey)
     .in("storage_key", storageKeys);
 
@@ -322,11 +327,13 @@ export function retrievalRunHasNoContext(searchMeta: Record<string, unknown>, re
 
 async function persistRetrievalRun(input: PersistChatExchangeInput, messageId: number | string) {
   const supabase = createSupabaseChatClient();
-  const searchMeta = record(input.searchMeta);
+  const searchMeta = withRetrievalPlanMetadata(input.searchMeta, input.sources);
+  const retrievalPlan = buildRetrievalPlanSnapshot(searchMeta, input.sources);
   const retrievedCount = Math.max(0, Math.trunc(finiteNumber(searchMeta.retrievedCount) || 0));
   const protectedQuery = protectConversationText(input.question, 1_200);
   const payload = {
     request_id: input.requestId,
+    tenant_id: input.tenantContext.tenantId,
     message_id: messageId,
     session_id: input.sessionKey,
     execution_id: input.executionId || null,
@@ -346,12 +353,29 @@ async function persistRetrievalRun(input: PersistChatExchangeInput, messageId: n
     rejected_citation_count: Math.max(0, Math.trunc(finiteNumber(searchMeta.rejectedCitationCount) || 0)),
     no_context: retrievalRunHasNoContext(searchMeta, retrievedCount),
     no_context_reason: typeof searchMeta.noContextReason === "string" ? searchMeta.noContextReason : null,
+    plan_version: retrievalPlan.planVersion,
+    score_version: retrievalPlan.scoreVersion,
+    threshold_set: retrievalPlan.thresholdSet,
+    embedding_source: retrievalPlan.embeddingSource,
+    candidate_count: retrievalPlan.candidateCount,
+    corpus_snapshot_id: retrievalPlan.corpusSnapshotId,
+    replay_spec: safeJson(retrievalPlan.replaySpec),
     sources: safeJson(input.sources ?? []),
     search_meta: safeJson(searchMeta),
   };
   let result = await supabase.from("retrieval_runs").upsert(payload, { onConflict: "message_id" });
   if (result.error && isMissingColumnError(result.error)) {
-    result = await supabase.from("retrieval_runs").upsert(withoutChatPrivacyColumns(payload), { onConflict: "message_id" });
+    const compatibilityPayload = withoutChatPrivacyColumns(payload);
+    for (const key of [
+      "plan_version",
+      "score_version",
+      "threshold_set",
+      "embedding_source",
+      "candidate_count",
+      "corpus_snapshot_id",
+      "replay_spec",
+    ]) delete compatibilityPayload[key];
+    result = await supabase.from("retrieval_runs").upsert(compatibilityPayload, { onConflict: "message_id" });
   }
   if (result.error && !isMissingRelationError(result.error)) throw result.error;
 }
@@ -370,7 +394,7 @@ async function persistN8nAuditMetadata(input: PersistChatExchangeInput, messageI
     request_id: input.requestId,
     idempotency_key: input.idempotencyKey,
     session_id: input.sessionKey,
-    tenant_id: input.tenantId,
+    tenant_id: input.tenantContext.tenantId,
     locale: input.locale,
     source: input.source,
     channel: input.source === "typebot" ? "typebot" : "kaxi-site",
@@ -408,10 +432,10 @@ function completedTurn(input: PersistChatExchangeInput) {
   return (input.status || "completed") === "completed";
 }
 
-function handoffDedupeKey(input: Pick<PersistChatExchangeInput, "tenantId" | "sessionKey" | "question">) {
+function handoffDedupeKey(input: Pick<PersistChatExchangeInput, "tenantContext" | "sessionKey" | "question">) {
   const normalizedQuestion = input.question.trim().replace(/\s+/g, " ").toLowerCase();
   return createHash("sha256")
-    .update(`${input.tenantId.toLowerCase()}\n${input.sessionKey.trim().toLowerCase()}\n${normalizedQuestion}`)
+    .update(`${input.tenantContext.tenantId}\n${input.sessionKey.trim().toLowerCase()}\n${normalizedQuestion}`)
     .digest("hex");
 }
 
@@ -426,7 +450,7 @@ export async function persistCanonicalHandoffTask(
   const payload = {
     source_chat_message_id: input.messageId,
     session_id: input.sessionKey,
-    tenant_id: input.tenantId,
+    tenant_id: input.tenantContext.tenantId,
     question: protectedQuestion.plaintext || "[encrypted-chat-question]",
     question_ciphertext: protectedQuestion.ciphertext,
     question_hash: protectedQuestion.hash,
@@ -510,10 +534,11 @@ async function updateExistingChatExchange(
 }
 
 export async function persistChatExchange(input: PersistChatExchangeInput) {
+  assertTenantContext(input.tenantContext);
   const supabase = createSupabaseChatClient();
   await ensureChatSession({
     sessionKey: input.sessionKey,
-    tenantId: input.tenantId,
+    tenantContext: input.tenantContext,
     locale: input.locale,
     source: input.source,
     typebotResultId: input.typebotResultId,
@@ -525,6 +550,7 @@ export async function persistChatExchange(input: PersistChatExchangeInput) {
   const existing = await supabase
     .from("chat_messages")
     .select("id,status,session_id")
+    .eq("tenant_id", input.tenantContext.tenantId)
     .eq("idempotency_key", input.idempotencyKey)
     .maybeSingle();
   if (existing.error) throw existing.error;
@@ -536,7 +562,7 @@ export async function persistChatExchange(input: PersistChatExchangeInput) {
     request_id: input.requestId,
     idempotency_key: input.idempotencyKey,
     session_id: input.sessionKey,
-    tenant_id: input.tenantId,
+    tenant_id: input.tenantContext.tenantId,
     question: protectedQuestion.plaintext || "",
     question_ciphertext: protectedQuestion.ciphertext,
     question_hash: protectedQuestion.hash,
@@ -582,6 +608,7 @@ export async function persistChatExchange(input: PersistChatExchangeInput) {
       const raced = await supabase
         .from("chat_messages")
         .select("id,status,session_id")
+        .eq("tenant_id", input.tenantContext.tenantId)
         .eq("idempotency_key", input.idempotencyKey)
         .maybeSingle();
       if (raced.data) {
@@ -598,6 +625,7 @@ export async function persistChatExchange(input: PersistChatExchangeInput) {
   await supabase
     .from("chat_sessions")
     .update({ last_message_at: new Date().toISOString() })
+    .eq("tenant_id", input.tenantContext.tenantId)
     .eq("session_key", input.sessionKey)
     .then((result) => {
       if (result.error && !isMissingRelationError(result.error)) throw result.error;

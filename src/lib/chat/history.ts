@@ -1,6 +1,7 @@
-import { createSupabaseChatClient } from "@/lib/chat/persistence";
+import { createSupabaseServiceRoleClient as createSupabaseChatClient } from "@/infrastructure/supabase/service-role-client";
 import type { RagProvenance } from "@/lib/n8n/provenance";
 import { readPiiField } from "@/lib/privacy/pii";
+import { assertTenantContext, type TenantContext } from "@/application/tenancy/tenant-context";
 
 export type ChatHistorySource = {
   title?: string;
@@ -93,6 +94,7 @@ function attachmentState(status: string, processingStatus: string) {
 }
 
 export async function loadChatSessionSnapshot(
+  tenantContext: TenantContext,
   sessionKey: string,
   options: {
     messageLimit?: number;
@@ -100,6 +102,7 @@ export async function loadChatSessionSnapshot(
     source?: "kaxi-site" | "typebot";
   } = {},
 ): Promise<ChatSessionSnapshot | null> {
+  assertTenantContext(tenantContext);
   const messageLimit = Math.min(50, Math.max(1, Math.trunc(options.messageLimit || 20)));
   const attachmentLimit = Math.min(3, Math.max(1, Math.trunc(options.attachmentLimit || 3)));
   const source = options.source === "typebot" ? "typebot" : "kaxi-site";
@@ -108,6 +111,7 @@ export async function loadChatSessionSnapshot(
   const session = await supabase
     .from("chat_sessions")
     .select("id,metadata")
+    .eq("tenant_id", tenantContext.tenantId)
     .eq("session_key", sessionKey)
     .eq("source", source)
     .eq("channel", channel)
@@ -119,6 +123,7 @@ export async function loadChatSessionSnapshot(
   const messagesResult = await supabase
     .from("chat_messages")
     .select("id,request_id,question,question_ciphertext,answer,answer_ciphertext,status,error_code,next_step,sources,sources_json,workflow_id,workflow_version_id,model_version,prompt_version,created_at")
+    .eq("tenant_id", tenantContext.tenantId)
     .eq("session_id", sessionKey)
     .eq("source", source)
     .eq("channel", channel)
@@ -134,6 +139,7 @@ export async function loadChatSessionSnapshot(
     const retrievals = await supabase
       .from("retrieval_runs")
       .select("message_id,sources")
+      .eq("tenant_id", tenantContext.tenantId)
       .in("message_id", messageIds);
     if (retrievals.error) throw retrievals.error;
     for (const row of retrievals.data || []) {
@@ -145,6 +151,7 @@ export async function loadChatSessionSnapshot(
   const attachmentsResult = await supabase
     .from("chat_attachments")
     .select("id,message_id,bucket,storage_key,original_name,size_bytes,mime_type,sha256,status,processing_status,created_at")
+    .eq("tenant_id", tenantContext.tenantId)
     .eq("session_id", sessionKey)
     .is("deleted_at", null)
     .order("created_at", { ascending: false })

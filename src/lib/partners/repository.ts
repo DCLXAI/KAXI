@@ -1,5 +1,6 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { canWriteRuntimeDatabase, db } from "@/lib/db";
-import { parsePositiveInt } from "@/lib/api/security";
+import { parsePositiveInt } from "@/lib/runtime/config";
 import { canPersistPiiValue, preparePiiField, retentionUntil } from "@/lib/privacy/pii";
 import type { PartnerRequest } from "@prisma/client";
 import {
@@ -61,7 +62,7 @@ async function createAnonymousLead() {
       requiredDocs: "[]",
       warningsJson: "[]",
       nextActionsJson: "[]",
-      retentionUntil: retentionUntil(parsePositiveInt(process.env.PRIVACY_LEAD_RETENTION_DAYS, 365)),
+      retentionUntil: retentionUntil(parsePositiveInt(runtimeEnvironment().PRIVACY_LEAD_RETENTION_DAYS, 365)),
     },
   });
 }
@@ -158,7 +159,7 @@ export async function createPartnerRequest(input: CreatePartnerRequestInput): Pr
       questionCiphertext: protectedQuestion.ciphertext,
       questionHash: protectedQuestion.hash,
       questionRedacted: protectedQuestion.redacted,
-      retentionUntil: retentionUntil(parsePositiveInt(process.env.PRIVACY_PARTNER_REQUEST_RETENTION_DAYS, 180)),
+      retentionUntil: retentionUntil(parsePositiveInt(runtimeEnvironment().PRIVACY_PARTNER_REQUEST_RETENTION_DAYS, 180)),
     },
   });
 

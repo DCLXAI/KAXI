@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { NextRequest, NextResponse } from "next/server";
 import { parseLimit, rateLimit } from "@/lib/api/security";
 import { JsonBodyError, readJsonBody } from "@/lib/api/json-body";
@@ -11,6 +12,7 @@ import {
   issueChatSessionToken,
   verifyChatSessionToken,
 } from "@/lib/chat/session-token";
+import { platformAnonymousTenantContext } from "@/application/tenancy/tenant-context";
 
 export const runtime = "nodejs";
 
@@ -29,7 +31,7 @@ function privateJson(body: unknown, init?: ResponseInit) {
 export async function GET(req: NextRequest) {
   const limited = await rateLimit(req, {
     key: "chat-session-history",
-    limit: parseLimit(process.env.CHAT_SESSION_HISTORY_RATE_LIMIT, 30),
+    limit: parseLimit(runtimeEnvironment().CHAT_SESSION_HISTORY_RATE_LIMIT, 30),
     windowMs: 60 * 1000,
   });
   if (limited) return markPrivate(limited);
@@ -40,7 +42,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const snapshot = await loadChatSessionSnapshot(current.sessionId);
+    const tenantContext = platformAnonymousTenantContext(current.sessionId);
+    const snapshot = await loadChatSessionSnapshot(tenantContext, current.sessionId);
     if (!snapshot) return privateJson({ error: "Chat session not found" }, { status: 404 });
     // Session metadata (e.g. the stored user profile) is internal runtime
     // context and must never be exposed through the client response.
@@ -55,7 +58,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const limited = await rateLimit(req, {
     key: "chat-session",
-    limit: parseLimit(process.env.CHAT_SESSION_RATE_LIMIT, 30),
+    limit: parseLimit(runtimeEnvironment().CHAT_SESSION_RATE_LIMIT, 30),
     windowMs: 60 * 1000,
   });
   if (limited) return markPrivate(limited);
@@ -65,16 +68,17 @@ export async function POST(req: NextRequest) {
     const forceNew = body?.forceNew === true;
     const current = verifyChatSessionToken(req.cookies.get(CHAT_SESSION_COOKIE)?.value);
     if (forceNew && current?.sessionId) {
-      await endChatSession(current.sessionId).catch((error) => {
+      await endChatSession(platformAnonymousTenantContext(current.sessionId), current.sessionId).catch((error) => {
         console.warn("[POST /api/chat-session] unable to close previous session", error);
       });
     }
     const sessionId = !forceNew && current?.sessionId ? current.sessionId : createKaxiSessionId();
+    const tenantContext = platformAnonymousTenantContext(sessionId);
     const locale = typeof body?.locale === "string" && LOCALES.has(body.locale) ? body.locale : "ko";
 
     await ensureChatSession({
       sessionKey: sessionId,
-      tenantId: "default",
+      tenantContext,
       locale,
       source: "kaxi-site",
       metadata: { ownership: "signed-http-only-cookie" },
@@ -90,7 +94,7 @@ export async function POST(req: NextRequest) {
     response.cookies.set(CHAT_SESSION_COOKIE, issueChatSessionToken(sessionId), {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: runtimeEnvironment().NODE_ENV === "production",
       path: "/",
       maxAge: CHAT_SESSION_MAX_AGE_SECONDS,
     });

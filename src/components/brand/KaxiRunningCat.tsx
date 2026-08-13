@@ -18,6 +18,7 @@ export function KaxiRunningCat({
         width={1774}
         height={887}
         sizes={`${size * 2}px`}
+        loading="eager"
         className="h-auto shrink-0 object-contain"
         style={{ width: size * 2, height: size }}
       />

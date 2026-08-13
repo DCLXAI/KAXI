@@ -770,7 +770,7 @@ export function parseRuntimeQuestionMediation(
   );
   if (!parsed) return undefined;
 
-  const backend = raw.backend === "kimi" || raw.backend === "claude"
+  const backend = raw.backend === "openai" || raw.backend === "anthropic" || raw.backend === "kimi" || raw.backend === "claude"
     ? raw.backend
     : "none";
   const durationMs = Number(raw.durationMs);

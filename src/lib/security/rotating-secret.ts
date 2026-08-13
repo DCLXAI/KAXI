@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { timingSafeEqual } from "crypto";
 
 function configured(value: string | undefined, minLength: number) {
@@ -49,7 +50,7 @@ export function bearerToken(headers: Pick<Headers, "get">) {
   return headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || "";
 }
 
-export function getCredentialRotationDiagnostics(env: NodeJS.ProcessEnv = process.env) {
+export function getCredentialRotationDiagnostics(env: NodeJS.ProcessEnv = runtimeEnvironment()) {
   const raw = env.SECURITY_CREDENTIALS_ROTATED_AT?.trim() || "";
   const timestamp = raw ? Date.parse(raw) : Number.NaN;
   const configuredDays = Number.parseInt(env.SECURITY_CREDENTIAL_ROTATION_DAYS || "90", 10);

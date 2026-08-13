@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { tr } from "@/lib/i18n/translations";
 import { DOCUMENT_WORKFLOW_ITEMS } from "@/lib/documents/workflow";
 
@@ -48,6 +49,6 @@ export function isAllowedDocumentMimeType(value: unknown): value is AllowedDocum
 }
 
 export function maxDocumentUploadBytes(): number {
-  const configured = Number(process.env.DOCUMENT_UPLOAD_MAX_BYTES);
+  const configured = Number(runtimeEnvironment().DOCUMENT_UPLOAD_MAX_BYTES);
   return Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : MAX_DOCUMENT_UPLOAD_BYTES;
 }

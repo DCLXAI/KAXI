@@ -1,8 +1,9 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { db } from "@/lib/db";
-import { parsePositiveInt } from "@/lib/api/security";
+import { parsePositiveInt } from "@/lib/runtime/config";
 import { expireLeadConsentsForRetention } from "@/lib/privacy/consent";
 import { enforceTypebotResultRetention, type TypebotResultRetentionResult } from "@/lib/typebot/result-retention";
-import { createClient } from "@supabase/supabase-js";
+import { createSupabaseServiceRoleClient } from "@/infrastructure/supabase/service-role-client";
 
 export interface RetentionResult {
   dryRun: boolean;
@@ -17,6 +18,7 @@ export interface RetentionResult {
   canonicalChatSessionDeleteFailures: number;
   canonicalAuditRowsDeleted: number;
   canonicalHandoffRowsDeleted: number;
+  outboxEventsDeleted: number;
   productEventsDeleted: number;
   typebotResults: TypebotResultRetentionResult;
 }
@@ -36,11 +38,11 @@ function daysAgo(days: number): Date {
 
 export function retentionConfig() {
   return {
-    chatLogDays: parsePositiveInt(process.env.PRIVACY_CHATLOG_RETENTION_DAYS, 90),
-    partnerRequestDays: parsePositiveInt(process.env.PRIVACY_PARTNER_REQUEST_RETENTION_DAYS, 180),
-    leadDays: parsePositiveInt(process.env.PRIVACY_LEAD_RETENTION_DAYS, 365),
-    chatAttachmentDays: parsePositiveInt(process.env.PRIVACY_CHAT_ATTACHMENT_RETENTION_DAYS, 30),
-    productAnalyticsDays: parsePositiveInt(process.env.PRIVACY_PRODUCT_ANALYTICS_RETENTION_DAYS, 180),
+    chatLogDays: parsePositiveInt(runtimeEnvironment().PRIVACY_CHATLOG_RETENTION_DAYS, 90),
+    partnerRequestDays: parsePositiveInt(runtimeEnvironment().PRIVACY_PARTNER_REQUEST_RETENTION_DAYS, 180),
+    leadDays: parsePositiveInt(runtimeEnvironment().PRIVACY_LEAD_RETENTION_DAYS, 365),
+    chatAttachmentDays: parsePositiveInt(runtimeEnvironment().PRIVACY_CHAT_ATTACHMENT_RETENTION_DAYS, 30),
+    productAnalyticsDays: parsePositiveInt(runtimeEnvironment().PRIVACY_PRODUCT_ANALYTICS_RETENTION_DAYS, 180),
   };
 }
 
@@ -52,10 +54,12 @@ async function deleteExpiredChatAttachments(now: Date) {
   });
   if (candidates.length === 0) return { deleted: 0, failures: 0 };
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || "";
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || "";
-  if (!url || !key) return { deleted: 0, failures: candidates.length };
-  const supabase = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  let supabase;
+  try {
+    supabase = createSupabaseServiceRoleClient();
+  } catch {
+    return { deleted: 0, failures: candidates.length };
+  }
   const removedIds: string[] = [];
   const byBucket = new Map<string, typeof candidates>();
   for (const item of candidates) {
@@ -89,12 +93,12 @@ async function deleteExpiredCanonicalChatSessions(now: Date) {
     return { sessionsDeleted: 0, failures: 0, auditRowsDeleted: 0, handoffRowsDeleted: 0 };
   }
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || "";
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || "";
-  if (!url || !key) {
+  let supabase;
+  try {
+    supabase = createSupabaseServiceRoleClient();
+  } catch {
     return { sessionsDeleted: 0, failures: sessions.length, auditRowsDeleted: 0, handoffRowsDeleted: 0 };
   }
-  const supabase = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
   let sessionsDeleted = 0;
   let failures = 0;
   let auditRowsDeleted = 0;
@@ -182,7 +186,7 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
   };
 
   if (dryRun) {
-    const [chatLogs, partnerRequests, leadsRedacted, leadsDeleted, redactLeads, deleteLeads, chatAttachmentsDeleted, canonicalChatSessionsDeleted, productEventsDeleted, typebotResults] = await Promise.all([
+    const [chatLogs, partnerRequests, leadsRedacted, leadsDeleted, redactLeads, deleteLeads, chatAttachmentsDeleted, canonicalChatSessionsDeleted, outboxEventsDeleted, productEventsDeleted, typebotResults] = await Promise.all([
       db.chatLog.count({ where: chatWhere }),
       db.partnerRequest.count({ where: partnerWhere }),
       db.diagnosisLead.count({ where: leadRedactWhere }),
@@ -196,6 +200,7 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
           OR: [{ deleteRequestedAt: { not: null } }, { retentionUntil: { lte: now } }],
         },
       }),
+      db.outboxEvent.count({ where: { retentionUntil: { lte: now } } }),
       db.productEvent.count({ where: { occurredAt: { lt: daysAgo(config.productAnalyticsDays) } } }),
       enforceTypebotResultRetention({ dryRun: true, now }),
     ]);
@@ -227,6 +232,7 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
       canonicalChatSessionDeleteFailures: 0,
       canonicalAuditRowsDeleted: 0,
       canonicalHandoffRowsDeleted: 0,
+      outboxEventsDeleted,
       productEventsDeleted,
       typebotResults,
     };
@@ -292,6 +298,9 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
   const productEvents = await db.productEvent.deleteMany({
     where: { occurredAt: { lt: daysAgo(config.productAnalyticsDays) } },
   });
+  const outboxEvents = await db.outboxEvent.deleteMany({
+    where: { retentionUntil: { lte: now } },
+  });
 
   return {
     dryRun,
@@ -306,6 +315,7 @@ export async function enforcePrivacyRetention(options: { dryRun?: boolean } = {}
     canonicalChatSessionDeleteFailures: canonicalChatRetention.failures,
     canonicalAuditRowsDeleted: canonicalChatRetention.auditRowsDeleted,
     canonicalHandoffRowsDeleted: canonicalChatRetention.handoffRowsDeleted,
+    outboxEventsDeleted: outboxEvents.count,
     productEventsDeleted: productEvents.count,
     typebotResults,
   };

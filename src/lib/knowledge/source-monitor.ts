@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { createHash } from "crypto";
 import { db } from "../db";
 import {
@@ -12,7 +13,10 @@ import {
   isOfficialProtocolDowngrade,
 } from "./official-source";
 import type { VerifiedOfficialKnowledgeSource } from "./verified-official-sources";
-import { OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST } from "./official-source-watchlist";
+import {
+  DEFAULT_CRON_KNOWLEDGE_SOURCE_IDS,
+  OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST,
+} from "./official-source-watchlist";
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -49,18 +53,7 @@ export interface OfficialKnowledgeMonitorSummary {
 }
 
 export { OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST };
-
-export const DEFAULT_CRON_KNOWLEDGE_SOURCE_IDS = [
-  "immigration-law-recent-promulgations",
-  "immigration-law-interpretation-hierarchy",
-  "immigration-decree-current-text",
-  "immigration-rule-stay-permission-review-criteria",
-  "hikorea-homepage-urgent-notices",
-  "hikorea-policy-notice-monitor",
-  "moj-immigration-policy-news",
-  "accredited-university",
-  "visa-portal-visa-types",
-] as const;
+export { DEFAULT_CRON_KNOWLEDGE_SOURCE_IDS };
 
 function sha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
@@ -450,18 +443,18 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
 }
 
 export function getOfficialKnowledgeSourceWatchlist(): OfficialKnowledgeSource[] {
-  const configured = (process.env.KNOWLEDGE_MONITOR_SOURCE_IDS || "")
+  const configured = (runtimeEnvironment().KNOWLEDGE_MONITOR_SOURCE_IDS || "")
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
   const sources = configured.length > 0
     ? OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST.filter((source) => configured.includes(source.docId))
     : OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST;
-  const maxSources = parsePositiveInt(process.env.KNOWLEDGE_MONITOR_MAX_SOURCES, sources.length);
+  const maxSources = parsePositiveInt(runtimeEnvironment().KNOWLEDGE_MONITOR_MAX_SOURCES, sources.length);
   return sources.slice(0, maxSources);
 }
 
-export function getCronOfficialKnowledgeSources(env: NodeJS.ProcessEnv = process.env) {
+export function getCronOfficialKnowledgeSources(env: NodeJS.ProcessEnv = runtimeEnvironment()) {
   const configuredIds = (env.KNOWLEDGE_MONITOR_CRON_SOURCE_IDS || "")
     .split(",")
     .map((item) => item.trim())
@@ -492,7 +485,7 @@ export async function runOfficialKnowledgeSourceMonitor(
   const actor = options.actor || "knowledge-monitor";
   const sources = options.sources || getOfficialKnowledgeSourceWatchlist();
   const configuredConcurrency = parsePositiveInt(
-    process.env.KNOWLEDGE_MONITOR_CONCURRENCY,
+    runtimeEnvironment().KNOWLEDGE_MONITOR_CONCURRENCY,
     DEFAULT_MONITOR_CONCURRENCY,
   );
   const concurrency = Math.min(

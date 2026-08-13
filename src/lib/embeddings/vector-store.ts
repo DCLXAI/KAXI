@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 // Transformer 기반 Vector Store
 // - 1차: multilingual-e5-small (384차원 의미 임베딩)
 // - 폴백: TF-IDF vectorizer.ts (vocabulary 기반 희소 벡터)
@@ -28,6 +29,7 @@ import {
 import { searchPgvectorKnowledge, shouldUsePgvector } from "./pgvector-rag";
 import * as fs from "fs";
 import * as path from "path";
+import { synonymCacheVersion } from "./synonym-cache-signal";
 
 export interface ScoredDoc {
   doc: KnowledgeDoc;
@@ -65,17 +67,17 @@ let store: VectorStore = {
 };
 
 const CACHE_FILE =
-  process.env.VECTOR_CACHE_FILE ||
+  runtimeEnvironment().VECTOR_CACHE_FILE ||
   path.join(/*turbopackIgnore: true*/ process.cwd(), "data", "vector-store", "embeddings-cache.json");
 
 function vectorCacheLocation(): "custom" | "project-data" {
-  return process.env.VECTOR_CACHE_FILE?.trim() ? "custom" : "project-data";
+  return runtimeEnvironment().VECTOR_CACHE_FILE?.trim() ? "custom" : "project-data";
 }
 
 function sanitizeDiagnosticText(value: unknown): string {
   const text = (value instanceof Error ? value.message : String(value)).slice(0, 240);
   const cwd = process.cwd();
-  const home = process.env.HOME;
+  const home = runtimeEnvironment().HOME;
   return text
     .replaceAll(cwd, "<project>")
     .replaceAll(home || "__no_home__", "<home>");
@@ -85,7 +87,7 @@ function getVectorCacheDiagnostics() {
   try {
     if (!fs.existsSync(/*turbopackIgnore: true*/ CACHE_FILE)) {
       return {
-        configured: Boolean(process.env.VECTOR_CACHE_FILE?.trim()),
+        configured: Boolean(runtimeEnvironment().VECTOR_CACHE_FILE?.trim()),
         location: vectorCacheLocation(),
         exists: false,
         bytes: 0,
@@ -99,7 +101,7 @@ function getVectorCacheDiagnostics() {
       ? Object.keys(parsed).length
       : 0;
     return {
-      configured: Boolean(process.env.VECTOR_CACHE_FILE?.trim()),
+      configured: Boolean(runtimeEnvironment().VECTOR_CACHE_FILE?.trim()),
       location: vectorCacheLocation(),
       exists: true,
       bytes: stat.size,
@@ -107,7 +109,7 @@ function getVectorCacheDiagnostics() {
     };
   } catch (error) {
     return {
-      configured: Boolean(process.env.VECTOR_CACHE_FILE?.trim()),
+      configured: Boolean(runtimeEnvironment().VECTOR_CACHE_FILE?.trim()),
       location: vectorCacheLocation(),
       exists: false,
       bytes: 0,
@@ -177,7 +179,7 @@ function buildStoreFromDocs(
 
 async function refreshRuntimeKnowledgeDocs(): Promise<void> {
   const currentReviewDateKey = reviewDateKey();
-  const mode = process.env.KNOWLEDGE_RAG_SOURCE || "governed";
+  const mode = runtimeEnvironment().KNOWLEDGE_RAG_SOURCE || "governed";
   if (mode === "static") {
     if (!store.ready || store.reviewDateKey !== currentReviewDateKey || store.knowledgeSource !== "static") {
       buildStoreFromDocs(searchableDocs(), `static:${currentReviewDateKey}`, "static", currentReviewDateKey);
@@ -404,6 +406,7 @@ const FALLBACK_SYNONYMS: Record<string, string[]> = {
 // 캐시된 동의어 (DB에서 로드, 5분 캐싱)
 let cachedSynonyms: Record<string, string[]> | null = null;
 let synonymCacheTime = 0;
+let cachedSynonymVersion = -1;
 const SYNONYM_CACHE_TTL = 5 * 60 * 1000; // 5분
 
 // DB에서 활성화된 동의어 로드
@@ -431,18 +434,14 @@ async function loadSynonymsFromDB(): Promise<Record<string, string[]>> {
 
 async function getSynonyms(): Promise<Record<string, string[]>> {
   const now = Date.now();
-  if (cachedSynonyms && now - synonymCacheTime < SYNONYM_CACHE_TTL) {
+  const version = synonymCacheVersion();
+  if (cachedSynonyms && cachedSynonymVersion === version && now - synonymCacheTime < SYNONYM_CACHE_TTL) {
     return cachedSynonyms;
   }
   cachedSynonyms = await loadSynonymsFromDB();
   synonymCacheTime = now;
+  cachedSynonymVersion = version;
   return cachedSynonyms;
-}
-
-// 동의어 캐시 무효화 (관리자가 동의어 변경시 호출 가능)
-export function invalidateSynonymCache(): void {
-  cachedSynonyms = null;
-  synonymCacheTime = 0;
 }
 
 async function expandSynonyms(query: string): Promise<string> {

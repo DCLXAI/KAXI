@@ -10,10 +10,14 @@ import { AdminNationalityCard } from "./AdminNationalityCard";
 import { AdminPartnerRequestQueue } from "./AdminPartnerRequestQueue";
 import { AdminStatsCards } from "./AdminStatsCards";
 import { useAdminDashboard } from "./useAdminDashboard";
+import type { AdminLead, Stats } from "./types";
+import type { QueuePayload } from "./AdminPartnerRequestQueue";
 
-export function AdminDashboard() {
+export function AdminDashboard({ initialData = null }: {
+  initialData?: { leads: AdminLead[]; stats: Stats; partnerQueue: QueuePayload } | null;
+}) {
   const t = useTranslations();
-  const dashboard = useAdminDashboard();
+  const dashboard = useAdminDashboard(initialData);
 
   if (!dashboard.hasAdminAccess) {
     return (
@@ -46,7 +50,7 @@ export function AdminDashboard() {
       {dashboard.stats && <AdminStatsCards locale={dashboard.locale} stats={dashboard.stats} />}
       {dashboard.stats && <AdminNationalityCard locale={dashboard.locale} stats={dashboard.stats} />}
 
-      <AdminPartnerRequestQueue />
+      <AdminPartnerRequestQueue initialData={initialData?.partnerQueue || null} />
 
       <AdminLeadTable
         leads={dashboard.filteredLeads}

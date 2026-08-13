@@ -28,6 +28,10 @@ const { NextRequest } = await import("next/server");
 const { db } = await import("../src/lib/db");
 const { seedAdminDemo } = await import("./seed-admin-demo");
 const { PGVECTOR_EMBEDDING_DIM, PGVECTOR_EMBEDDING_MODEL } = await import("../src/lib/embeddings/pgvector-rag");
+const { claimWorkerJobs, completeWorkerJob } = await import("../src/infrastructure/worker/job-repository");
+const { processGenericWorkerJob } = await import("../src/worker/handlers/generic-job");
+const { platformServiceTenantContext } = await import("../src/application/tenancy/tenant-context");
+const tenantContext = platformServiceTenantContext("admin-dashboard-test-worker");
 
 function adminRequest(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers || {});
@@ -42,6 +46,16 @@ function adminRequest(path: string, init: RequestInit = {}) {
 
 function vectorLiteral(dim: number): string {
   return `[${Array.from({ length: dim }, (_, index) => (index === 0 ? "1" : "0")).join(",")}]`;
+}
+
+async function executeAcceptedMonitor(response: Response) {
+  const accepted = await json(response);
+  assert(accepted.accepted === true && accepted.job?.id, "monitor route should enqueue a Worker job");
+  const claimed = (await claimWorkerJobs({ tenantContext, limit: 25 })).find((job) => job.id === accepted.job.id);
+  assert(claimed, "enqueued monitor job should be claimable");
+  const result = await processGenericWorkerJob(claimed, tenantContext, new AbortController().signal) as Record<string, unknown>;
+  await completeWorkerJob(claimed, result);
+  return { ...accepted, ...result };
 }
 
 try {
@@ -170,7 +184,7 @@ try {
       headers: { "content-type": "text/html; charset=utf-8" },
     })) as unknown as typeof fetch;
   try {
-    const monitorPreview = await json(
+    const monitorPreview = await executeAcceptedMonitor(
       await knowledgeMonitorRoute.POST(
         adminRequest("/api/knowledge/monitor", {
           method: "POST",
@@ -181,7 +195,7 @@ try {
     assert(monitorPreview.changed === 1, "admin monitor preview should detect source changes");
     assert(monitorPreview.candidatesCreated === 0, "admin monitor preview must not persist candidates");
 
-    const sourceFilteredPreview = await json(
+    const sourceFilteredPreview = await executeAcceptedMonitor(
       await knowledgeMonitorRoute.POST(
         adminRequest("/api/knowledge/monitor", {
           method: "POST",
@@ -198,7 +212,7 @@ try {
       "admin monitor sourceIds should select the requested source"
     );
 
-    const pausedPersist = await json(
+    const pausedPersist = await executeAcceptedMonitor(
       await knowledgeMonitorRoute.POST(
         adminRequest("/api/knowledge/monitor", {
           method: "POST",
@@ -210,7 +224,7 @@ try {
     assert(pausedPersist.candidatesCreated === 0, "paused candidate writes must not create a pending candidate");
 
     process.env.KNOWLEDGE_MONITOR_PERSIST_CANDIDATES = "true";
-    const monitorPersist = await json(
+    const monitorPersist = await executeAcceptedMonitor(
       await knowledgeMonitorRoute.POST(
         adminRequest("/api/knowledge/monitor", {
           method: "POST",

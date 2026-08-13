@@ -1,4 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
+import { createSupabaseServiceRoleClient } from "@/infrastructure/supabase/service-role-client";
 import { sendOpsAlert, type OpsAlertResult } from "@/lib/ops/alerts";
 import { siteBaseUrl } from "@/lib/config/site-url";
 
@@ -40,18 +41,19 @@ export type RecordOpsEventResult = {
 };
 
 function isolatedTestRuntime() {
-  const runtimeDatabase = process.env.DATABASE_URL?.trim() || "";
+  const runtimeDatabase = runtimeEnvironment().DATABASE_URL?.trim() || "";
   return Boolean(
-    process.env.TEST_DATABASE_URL &&
+    runtimeEnvironment().TEST_DATABASE_URL &&
     /^postgres(?:ql)?:\/\/(?:[^@]+@)?(?:localhost|127\.0\.0\.1|\[::1\])/i.test(runtimeDatabase),
   );
 }
 
 function serviceClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || "";
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || "";
-  if (!url || !key) throw new Error("SUPABASE_OPS_NOT_CONFIGURED");
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  try {
+    return createSupabaseServiceRoleClient();
+  } catch {
+    throw new Error("SUPABASE_OPS_NOT_CONFIGURED");
+  }
 }
 
 function mapEvent(row: Record<string, unknown>): OpsEvent {
@@ -85,6 +87,16 @@ export async function listOpenOpsEvents(limit = 50) {
   return (result.data || []).map((row) => mapEvent(row));
 }
 
+export async function countOpenOpsEvents() {
+  if (isolatedTestRuntime()) return 0;
+  const result = await serviceClient()
+    .from("ops_events")
+    .select("id", { count: "exact", head: true })
+    .is("acknowledged_at", null);
+  if (result.error) throw result.error;
+  return result.count || 0;
+}
+
 export async function acknowledgeOpsEvent(id: string, actor: string) {
   if (isolatedTestRuntime()) throw new Error("SUPABASE_OPS_DISABLED_IN_TEST");
   const acknowledgedAt = new Date().toISOString();
@@ -97,6 +109,54 @@ export async function acknowledgeOpsEvent(id: string, actor: string) {
     .maybeSingle();
   if (result.error) throw result.error;
   return result.data ? mapEvent(result.data) : null;
+}
+
+export async function acknowledgeOpsEvents(input: {
+  actor: string;
+  eventIds?: string[];
+  before?: string;
+  limit?: number;
+}) {
+  if (isolatedTestRuntime()) throw new Error("SUPABASE_OPS_DISABLED_IN_TEST");
+  const supabase = serviceClient();
+  const limit = Math.min(1_000, Math.max(1, Math.trunc(input.limit || 1_000)));
+  const explicitIds = [...new Set((input.eventIds || []).map((id) => id.trim()))];
+  if (explicitIds.length > 200) throw new Error("OPS_EVENT_IDS_LIMIT_EXCEEDED");
+
+  let ids = explicitIds;
+  if (ids.length === 0) {
+    const before = input.before?.trim() || "";
+    const beforeDate = new Date(before);
+    if (!before || !Number.isFinite(beforeDate.getTime()) || beforeDate.getTime() > Date.now()) {
+      throw new Error("OPS_EVENT_BEFORE_INVALID");
+    }
+    const pending = await supabase
+      .from("ops_events")
+      .select("id")
+      .is("acknowledged_at", null)
+      .lte("created_at", beforeDate.toISOString())
+      .order("created_at", { ascending: true })
+      .limit(limit);
+    if (pending.error) throw pending.error;
+    ids = (pending.data || []).map((row) => String(row.id));
+  }
+
+  if (ids.length === 0) return { requested: 0, acknowledged: 0, eventIds: [] as string[] };
+  const acknowledgedAt = new Date().toISOString();
+  const acknowledgedIds: string[] = [];
+  for (let index = 0; index < ids.length; index += 100) {
+    const chunk = ids.slice(index, index + 100);
+    const updated = await supabase
+      .from("ops_events")
+      .update({ acknowledged_at: acknowledgedAt, acknowledged_by: input.actor.slice(0, 160) })
+      .in("id", chunk)
+      .is("acknowledged_at", null)
+      .select("id");
+    if (updated.error) throw updated.error;
+    acknowledgedIds.push(...(updated.data || []).map((row) => String(row.id)));
+  }
+
+  return { requested: ids.length, acknowledged: acknowledgedIds.length, eventIds: acknowledgedIds };
 }
 
 // ops_events.workflow_id / workflow_version_id / model_version /

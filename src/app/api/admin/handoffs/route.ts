@@ -5,6 +5,7 @@ import { recordRequestAudit } from "@/lib/audit";
 import {
   listAdminHandoffs,
   updateAdminHandoff,
+  updateAdminHandoffsBulk,
   type HandoffAction,
   type HandoffResolutionCode,
 } from "@/lib/handoffs/admin";
@@ -43,14 +44,19 @@ export async function PATCH(req: NextRequest) {
   try {
     const body = await readJsonBody<Record<string, unknown>>(req, 16 * 1024);
     const id = typeof body.id === "string" || typeof body.id === "number" ? String(body.id).trim() : "";
+    const ids = Array.isArray(body.ids)
+      ? [...new Set(body.ids.map((value) => typeof value === "string" || typeof value === "number" ? String(value).trim() : ""))]
+      : [];
+    const isBulk = ids.length > 0;
     const action = typeof body.action === "string" ? body.action.trim() as HandoffAction : "" as HandoffAction;
-    if (!/^\d+$/.test(id)) return NextResponse.json({ error: "A valid handoff id is required" }, { status: 400 });
+    if ((!isBulk && !/^\d+$/.test(id)) || (isBulk && (ids.length > 100 || ids.some((value) => !/^\d+$/.test(value))))) {
+      return NextResponse.json({ error: "One to 100 valid handoff ids are required" }, { status: 400 });
+    }
     if (!["assign", "start", "contacted", "resolve", "close", "reopen"].includes(action)) {
       return NextResponse.json({ error: "A valid handoff action is required" }, { status: 400 });
     }
 
-    const result = await updateAdminHandoff({
-      id,
+    const shared = {
       action,
       actor: context?.actor || "admin",
       assignee: typeof body.assignee === "string" ? body.assignee : undefined,
@@ -62,7 +68,31 @@ export async function PATCH(req: NextRequest) {
       resolutionCode: typeof body.resolutionCode === "string"
         ? body.resolutionCode.trim() as HandoffResolutionCode
         : undefined,
-    });
+    };
+    if (isBulk) {
+      const bulk = await updateAdminHandoffsBulk({ ...shared, ids });
+      await recordRequestAudit(req, {
+        actor: context?.actor || "admin",
+        actorRole: context?.role || "admin",
+        action: `admin.handoff.${action}`,
+        targetType: "HandoffTask",
+        targetId: "bulk",
+        metadata: {
+          status: "bulk",
+          assigneeSet: Boolean(body.assigneeUserId),
+          assigneeUserIdSet: Boolean(body.assigneeUserId),
+          slaMinutes: typeof body.slaMinutes === "number" ? body.slaMinutes : null,
+          noteProvided: Boolean(body.note),
+          resolutionCode: typeof body.resolutionCode === "string" ? body.resolutionCode : null,
+          requested: bulk.requested,
+          succeeded: bulk.succeeded,
+          failed: bulk.failed,
+        },
+      });
+      return NextResponse.json({ bulk });
+    }
+
+    const result = await updateAdminHandoff({ ...shared, id });
     await recordRequestAudit(req, {
       actor: context?.actor || "admin",
       actorRole: context?.role || "admin",
@@ -78,6 +108,9 @@ export async function PATCH(req: NextRequest) {
         resolutionCode: typeof body.resolutionCode === "string" ? body.resolutionCode : null,
         evaluationCaseId: "evaluationCaseId" in result ? result.evaluationCaseId : null,
         evaluationActive: "evaluationActive" in result ? result.evaluationActive : null,
+        requested: 1,
+        succeeded: 1,
+        failed: 0,
       },
     });
     return NextResponse.json({ task: result });
@@ -94,6 +127,7 @@ export async function PATCH(req: NextRequest) {
           "HANDOFF_CONTACT_REQUIRED",
           "HANDOFF_RESOLUTION_INVALID",
           "HANDOFF_REVIEWER_REQUIRED",
+          "HANDOFF_IDS_INVALID",
         ].includes(message)
         ? 400
         : 500;

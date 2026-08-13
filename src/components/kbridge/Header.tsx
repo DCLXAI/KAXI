@@ -7,7 +7,6 @@ import { useLangStore } from "@/store/kbridge";
 import { useKaxiSession } from "@/hooks/useKaxiSession";
 import { LANGS, tr, type Lang } from "@/lib/i18n/translations";
 import { viewToPath } from "@/lib/kbridge/views";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
 import { KaxiPawMark } from "@/components/brand/KaxiPawMark";
 import { KaxiRunningCat } from "@/components/brand/KaxiRunningCat";
@@ -348,8 +347,7 @@ export function Header({
   const accountLabel = role === "PLATFORM_ADMIN" ? "Admin" : role === "PARTNER_AGENT" ? "Partner" : "Student";
 
   const logout = async () => {
-    const client = await createSupabaseBrowserClient();
-    await client.auth.signOut?.();
+    await fetch("/api/auth/session", { method: "DELETE", credentials: "same-origin" });
     await mutate();
     router.push("/");
     router.refresh();

@@ -1,11 +1,12 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { createHash } from "crypto";
 import { after, NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createSupabaseServiceRoleClient } from "@/infrastructure/supabase/service-role-client";
 import { parseLimit, rateLimit } from "@/lib/api/security";
 import { persistChatAttachment } from "@/lib/chat/persistence";
 import { CHAT_ATTACHMENT_MIME_TYPES, detectChatAttachmentMimeType } from "@/lib/chat/attachment-files";
-import { drainChatAttachmentJobs, enqueueChatAttachmentJob, retryChatAttachmentJob } from "@/lib/chat/attachment-jobs";
-import { getChatAttachmentStatus, processChatAttachment } from "@/lib/chat/attachment-processing";
+import { enqueueChatAttachmentJob, retryChatAttachmentJob } from "@/lib/chat/attachment-jobs";
+import { getChatAttachmentStatus } from "@/lib/chat/attachment-status";
 import {
   ChatAttachmentScannerUnavailableError,
   getChatAttachmentSecurityDiagnostics,
@@ -14,6 +15,8 @@ import {
 } from "@/lib/chat/attachment-security";
 import { CHAT_SESSION_COOKIE, isKaxiSessionId, verifyChatSessionToken } from "@/lib/chat/session-token";
 import { recordOpsEvent } from "@/lib/ops/events";
+import { platformAnonymousTenantContext } from "@/application/tenancy/tenant-context";
+import { requestTraceContext } from "@/infrastructure/observability/trace-context";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -21,8 +24,8 @@ export const maxDuration = 30;
 const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 function chatAttachmentBucket() {
   return (
-    process.env.SUPABASE_CHAT_ATTACHMENTS_BUCKET?.trim() ||
-    process.env.SUPABASE_STORAGE_BUCKET?.trim() ||
+    runtimeEnvironment().SUPABASE_CHAT_ATTACHMENTS_BUCKET?.trim() ||
+    runtimeEnvironment().SUPABASE_STORAGE_BUCKET?.trim() ||
     "kaxi-documents"
   );
 }
@@ -55,15 +58,11 @@ function reportAttachmentSecurityEvent(
 }
 
 async function createSupabaseStorageClient() {
-  const url = configured(process.env.NEXT_PUBLIC_SUPABASE_URL);
-  const serviceRoleKey = configured(process.env.SUPABASE_SERVICE_ROLE_KEY);
-  if (!url || !serviceRoleKey) {
+  try {
+    return createSupabaseServiceRoleClient();
+  } catch {
     throw new Error("SUPABASE_STORAGE_NOT_CONFIGURED");
   }
-
-  return createClient(url, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
 }
 
 function sanitizeFileName(name: string) {
@@ -89,6 +88,8 @@ function ownedSession(req: NextRequest, sessionId: string) {
 }
 
 export async function POST(req: NextRequest) {
+  const requestId = req.headers.get("x-request-id")?.trim().slice(0, 128) || crypto.randomUUID();
+  const trace = requestTraceContext(req.headers);
   if (!getChatAttachmentSecurityDiagnostics().uploadsEnabled) {
     return NextResponse.json(
       { error: "attachment uploads are not enabled", code: "ATTACHMENTS_DISABLED" },
@@ -97,7 +98,7 @@ export async function POST(req: NextRequest) {
   }
   const limited = await rateLimit(req, {
     key: "chat-attachments",
-    limit: parseLimit(process.env.CHAT_ATTACHMENT_RATE_LIMIT, 12),
+    limit: parseLimit(runtimeEnvironment().CHAT_ATTACHMENT_RATE_LIMIT, 12),
     windowMs: 60 * 1000,
   });
   if (limited) return limited;
@@ -110,6 +111,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid or expired chat session" }, { status: 401 });
     }
     const sessionId = sanitizePathSegment(rawSessionId);
+    const tenantContext = platformAnonymousTenantContext(sessionId);
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "file is required" }, { status: 400 });
@@ -154,7 +156,7 @@ export async function POST(req: NextRequest) {
 
     const persistedAttachment = await persistChatAttachment({
       sessionKey: sessionId,
-      tenantId: "default",
+      tenantContext,
       locale: "ko",
       source: "kaxi-site",
       bucket,
@@ -180,18 +182,18 @@ export async function POST(req: NextRequest) {
     }
 
     const attachmentId = String(persistedAttachment.id);
-    const queued = await enqueueChatAttachmentJob(attachmentId).catch((error) => {
+    const queued = await enqueueChatAttachmentJob(tenantContext, attachmentId, {
+      requestId,
+      traceId: trace.traceId,
+      traceparent: trace.traceparent,
+    }).catch((error) => {
       console.error("[chat attachment queue]", error);
       return false;
     });
-    after(async () => {
-      const processing = queued
-        ? drainChatAttachmentJobs({ limit: 3 })
-        : processChatAttachment(attachmentId);
-      await processing.catch((error) => {
-        console.error("[chat attachment processing]", error);
-      });
-    });
+    if (!queued) {
+      await supabase.storage.from(bucket).remove([storageKey]);
+      return NextResponse.json({ error: "attachment worker queue unavailable" }, { status: 503 });
+    }
 
     return NextResponse.json({
       attachment: {
@@ -205,6 +207,8 @@ export async function POST(req: NextRequest) {
         status: "quarantined",
       },
       persisted: Boolean(persistedAttachment),
+      requestId,
+      traceId: trace.traceId,
     });
   } catch (error) {
     if (error instanceof UnsafeChatAttachmentError) {
@@ -243,6 +247,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const requestId = req.headers.get("x-request-id")?.trim().slice(0, 128) || crypto.randomUUID();
+  const trace = requestTraceContext(req.headers);
   if (!getChatAttachmentSecurityDiagnostics().uploadsEnabled) {
     return NextResponse.json(
       { error: "attachment uploads are not enabled", code: "ATTACHMENTS_DISABLED" },
@@ -258,19 +264,23 @@ export async function PATCH(req: NextRequest) {
   if (!attachmentId) return NextResponse.json({ error: "attachmentId is required" }, { status: 400 });
 
   try {
-    const attachment = await getChatAttachmentStatus(attachmentId, sessionId);
+    const tenantContext = platformAnonymousTenantContext(sessionId);
+    const attachment = await getChatAttachmentStatus(tenantContext, attachmentId, sessionId);
     if (!attachment) return NextResponse.json({ error: "Attachment not found" }, { status: 404 });
     if (attachment.status === "ready") return NextResponse.json({ attachment });
     if (attachment.status === "rejected") {
       return NextResponse.json({ error: "Rejected attachments must be uploaded again" }, { status: 409 });
     }
-    await retryChatAttachmentJob(attachmentId);
-    after(async () => {
-      await drainChatAttachmentJobs({ limit: 3 }).catch((error) => {
-        console.error("[chat attachment retry]", error);
-      });
+    await retryChatAttachmentJob(tenantContext, attachmentId, {
+      requestId,
+      traceId: trace.traceId,
+      traceparent: trace.traceparent,
     });
-    return NextResponse.json({ attachment: { ...attachment, status: "quarantined", processing_status: "queued" } }, { status: 202 });
+    return NextResponse.json({
+      attachment: { ...attachment, status: "quarantined", processing_status: "queued" },
+      requestId,
+      traceId: trace.traceId,
+    }, { status: 202 });
   } catch (error) {
     console.error("[PATCH /api/chat-attachments]", error);
     return NextResponse.json({ error: "Unable to retry attachment" }, { status: 500 });
@@ -286,15 +296,12 @@ export async function GET(req: NextRequest) {
   if (!attachmentId) return NextResponse.json({ error: "attachmentId is required" }, { status: 400 });
 
   try {
-    const attachment = await getChatAttachmentStatus(attachmentId, sessionId);
+    const attachment = await getChatAttachmentStatus(
+      platformAnonymousTenantContext(sessionId),
+      attachmentId,
+      sessionId,
+    );
     if (!attachment) return NextResponse.json({ error: "Attachment not found" }, { status: 404 });
-    if (attachment.status !== "ready") {
-      after(async () => {
-        await drainChatAttachmentJobs({ limit: 3 }).catch((error) => {
-          console.error("[chat attachment poll drain]", error);
-        });
-      });
-    }
     return NextResponse.json({ attachment });
   } catch (error) {
     console.error("[GET /api/chat-attachments]", error);
@@ -312,12 +319,21 @@ export async function DELETE(req: NextRequest) {
   if (!attachmentId) return NextResponse.json({ error: "attachmentId is required" }, { status: 400 });
 
   try {
-    const attachment = await getChatAttachmentStatus(attachmentId, sessionId);
+    const attachment = await getChatAttachmentStatus(
+      platformAnonymousTenantContext(sessionId),
+      attachmentId,
+      sessionId,
+    );
     if (!attachment) return NextResponse.json({ deleted: true });
     const supabase = await createSupabaseStorageClient();
     const removed = await supabase.storage.from(attachment.bucket).remove([attachment.storage_key]);
     if (removed.error) throw removed.error;
-    const deleted = await supabase.from("chat_attachments").delete().eq("id", attachmentId).eq("session_id", sessionId);
+    const deleted = await supabase
+      .from("chat_attachments")
+      .delete()
+      .eq("tenant_id", platformAnonymousTenantContext(sessionId).tenantId)
+      .eq("id", attachmentId)
+      .eq("session_id", sessionId);
     if (deleted.error) throw deleted.error;
     return NextResponse.json({ deleted: true });
   } catch (error) {

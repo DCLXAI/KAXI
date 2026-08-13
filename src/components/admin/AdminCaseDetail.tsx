@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertOctagon,
   ArrowLeft,
@@ -130,20 +130,23 @@ const actions: Array<{
   { action: "stop_suspected_fraud", label: "허위/위조 의심: 처리 중단", icon: AlertOctagon, variant: "destructive" },
 ];
 
-export function AdminCaseDetail({ caseId }: { caseId: string }) {
+export function AdminCaseDetail({ caseId, initialData = null }: { caseId: string; initialData?: AdminCaseDetailType | null }) {
   const { adminFetch } = useAdminApi();
-  const [caseItem, setCaseItem] = useState<AdminCaseDetailType | null>(null);
-  const [draft, setDraft] = useState("");
+  const [caseItem, setCaseItem] = useState<AdminCaseDetailType | null>(initialData);
+  const [draft, setDraft] = useState(initialData?.aiDraft || "");
   const [note, setNote] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialData);
+  const initialPending = useRef(Boolean(initialData));
   const [savingAction, setSavingAction] = useState<AdminCaseAction | null>(null);
   const [savingDocumentId, setSavingDocumentId] = useState<string | null>(null);
   const [verifyingDocumentId, setVerifyingDocumentId] = useState<string | null>(null);
   const [feedbackDocumentId, setFeedbackDocumentId] = useState<string | null>(null);
   const [verifyingAll, setVerifyingAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [partnerOfficeId, setPartnerOfficeId] = useState("");
-  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+  const [partnerOfficeId, setPartnerOfficeId] = useState(initialData?.organizationId || initialData?.partnerOffices?.[0]?.id || "");
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>(
+    initialData?.caseDocumentLinks?.filter((link) => link.requested).map((link) => link.documentItemId) || [],
+  );
 
   const loadCase = useCallback(async () => {
     setLoading(true);
@@ -164,7 +167,11 @@ export function AdminCaseDetail({ caseId }: { caseId: string }) {
   }, [adminFetch, caseId]);
 
   useEffect(() => {
-    loadCase();
+    if (initialPending.current) {
+      initialPending.current = false;
+      return;
+    }
+    void loadCase();
   }, [loadCase]);
 
   const submitAction = async (action: AdminCaseAction, extra: Record<string, unknown> = {}) => {

@@ -423,7 +423,7 @@ const contextualProviderFallback = await mediateRagQuestion({
 }, {
   forceLlm: true,
   generate: async () => {
-    throw new LlmNotConfiguredError("kimi", "Kimi is not configured");
+    throw new LlmNotConfiguredError("openai", "OpenAI is not configured");
   },
 });
 assert.equal(contextualProviderFallback.status, "fallback");
@@ -802,7 +802,12 @@ assert.equal(readyEmbedding.status, "ready");
 assert.equal(readyEmbedding.vector?.length, RAG_QUERY_EMBEDDING_DIMENSIONS);
 
 let hybridVectorSupplied = false;
+const observedDirectStages: string[] = [];
 const hybridResponse = await runDirectRagFallback(input, {
+  observeDirectStage: async (stage, run) => {
+    observedDirectStages.push(stage);
+    return run();
+  },
   createEmbedding: async () => readyEmbedding,
   rpc: async ({ queryEmbedding, matchCount, filter }) => {
     hybridVectorSupplied = Boolean(queryEmbedding?.startsWith("[1.00000000,"));
@@ -837,6 +842,12 @@ assert.equal(hybridResponse.runtimePath, DIRECT_HYBRID_RUNTIME_PATH);
 assert.equal((hybridResponse.searchMeta as Record<string, unknown>).retrievalMode, "hybrid-provider");
 assert.equal((hybridResponse.searchMeta as Record<string, unknown>).vectorStrategy, "provider-query");
 assert.equal((hybridResponse.searchMeta as Record<string, unknown>).vectorCandidateCount, 20);
+assert.deepEqual(observedDirectStages, [
+  "vector_embedding",
+  "lexical_vector",
+  "rerank",
+  "answer_provider_attempt",
+]);
 
 const sharedServingSearch = await searchServingRagDocuments({
   ...input,
@@ -1197,6 +1208,23 @@ assert.equal(partialMultiIntentMeta.answerMode, "extractive-partial-fallback");
 assert.match(partialMultiIntentResponse.answer, /비용.*확인하지 못했어요/);
 assert.equal(partialMultiIntentResponse.needsHuman, false);
 
+const vagueMultiIntentRow = {
+  ...validRow,
+  id: 41,
+  content: "D-4 연장 신청에는 여권과 외국인등록증을 제출합니다. 비용과 기간은 기관에 확인하세요.",
+};
+const vagueMultiIntentResponse = buildDirectLexicalResponseFromRows(
+  [vagueMultiIntentRow],
+  partialMultiIntentInput,
+);
+const vagueMultiIntentMeta = vagueMultiIntentResponse.searchMeta as Record<string, unknown>;
+assert.deepEqual(vagueMultiIntentMeta.coveredIntents, ["required_documents"]);
+assert.deepEqual(
+  vagueMultiIntentMeta.missingIntents,
+  ["cost", "deadline_or_timing"],
+  "mentioning the words cost or period without an amount, cost breakdown, or precise deadline is not evidence",
+);
+
 let partialGenerationCalls = 0;
 const generatedPartialMultiIntent = await runDirectRagFallback({ ...partialMultiIntentInput, requireOpenAiEmbedding: false }, {
   createEmbedding: async () => missingEmbeddingProvider,
@@ -1492,6 +1520,13 @@ const profileResult = await runDirectRagFallback({ ...profileTestInput, requireO
 });
 assert.equal(observedProfileBlock.includes("D-2"), true, "profile must reach the grounded generator");
 assert.ok(profileResult, "extractive degradation still answers");
+assert.equal(profileResult.needsHuman, true, "generation failure must create a review handoff");
+assert.equal(
+  (profileResult.searchMeta as Record<string, unknown>).answerMode,
+  "degraded-extractive-fallback",
+  "generation failure must never look like a normal extractive answer",
+);
+assert.match(profileResult.answer, /답변 생성 서비스에 문제가 있어/);
 
 for (const status of [400, 401, 402, 404, 429, 500, 503]) {
   assert.equal(shouldUseDirectLexicalFallback({ status }), true, `HTTP ${status} should use direct fallback`);

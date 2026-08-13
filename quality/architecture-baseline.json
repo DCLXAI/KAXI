@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-08-13",
+  "sourceRevision": "main@4b9e210-plus-local-worktree",
+  "policy": {
+    "maxGrowthPercent": 5,
+    "maxMajorPublicClientPercentOfBaseline": 40
+  },
+  "clientRoutes": {
+    "/[locale]": { "chunks": 20, "rawBytes": 1790570 },
+    "/[locale]/agent": { "chunks": 20, "rawBytes": 1790570 },
+    "/[locale]/diagnose": { "chunks": 20, "rawBytes": 1790570 },
+    "/[locale]/schools": { "chunks": 20, "rawBytes": 1790570 },
+    "/[locale]/cost": { "chunks": 20, "rawBytes": 1790570 },
+    "/[locale]/docs": { "chunks": 20, "rawBytes": 1790570 },
+    "/[locale]/partners": { "chunks": 20, "rawBytes": 1790570 },
+    "/[locale]/guide": { "chunks": 8, "rawBytes": 161228 }
+  },
+  "serverRoutes": {
+    "/api/ai/agent": {
+      "files": 273,
+      "rawBytes": 198334667,
+      "onnxBytes": 79477048,
+      "prismaBytes": 115531222,
+      "pdfBytes": 0
+    },
+    "/api/ai/chat": {
+      "files": 268,
+      "rawBytes": 198119392,
+      "onnxBytes": 79477048,
+      "prismaBytes": 115531222,
+      "pdfBytes": 0
+    },
+    "/api/ai/consult": {
+      "files": 270,
+      "rawBytes": 198177388,
+      "onnxBytes": 79477048,
+      "prismaBytes": 115531222,
+      "pdfBytes": 0
+    },
+    "/api/synonyms/suggest": {
+      "files": 263,
+      "rawBytes": 197680283,
+      "onnxBytes": 79477048,
+      "prismaBytes": 115531222,
+      "pdfBytes": 0
+    },
+    "/api/typebot-rag": {
+      "files": 375,
+      "rawBytes": 138220978,
+      "onnxBytes": 0,
+      "prismaBytes": 115531222,
+      "pdfBytes": 1049039
+    },
+    "/api/internal/chat-attachments/process": {
+      "files": 371,
+      "rawBytes": 138087530,
+      "onnxBytes": 0,
+      "prismaBytes": 115531222,
+      "pdfBytes": 1049039
+    },
+    "/api/knowledge/monitor": {
+      "files": 729,
+      "rawBytes": 176042134,
+      "onnxBytes": 0,
+      "prismaBytes": 115531222,
+      "pdfBytes": 57967259
+    }
+  },
+  "standalone": {
+    "rawBytes": 337161771,
+    "nodeModulesBytes": 300604164
+  }
+}

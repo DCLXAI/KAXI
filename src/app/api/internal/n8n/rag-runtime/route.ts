@@ -1,16 +1,17 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { NextRequest, NextResponse } from "next/server";
 import { JsonBodyError, readJsonBody } from "@/lib/api/json-body";
 import { parseLimit, rateLimit } from "@/lib/api/security";
 import { inferChatCategory } from "@/lib/chat/category";
-import { runDirectRagFallback } from "@/lib/chat/direct-lexical-fallback";
+import { runRagAnswerUseCase } from "@/application/ai/rag-answer";
 import { parseRuntimeQuestionMediation } from "@/lib/chat/question-mediator";
 import { parseSessionProfile } from "@/lib/chat/session-profile";
-import {
-  applyChatResponseGuardrail,
-  type GuardrailLocale,
-} from "@/lib/chat/response-guardrail";
+import { type GuardrailLocale } from "@/lib/chat/response-guardrail";
 import { verifyN8nVerificationReceipt } from "@/lib/n8n/signature";
 import { resolveProvidedEmbedding } from "@/lib/n8n/provided-query-embedding";
+import { parseTraceparent, requestTraceContext } from "@/infrastructure/observability/trace-context";
+import { withSpan } from "@/infrastructure/observability/tracing";
+import { tenantContextFromVerifiedChannelPayload } from "@/application/tenancy/tenant-context";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -48,7 +49,7 @@ function conversationHistory(value: unknown) {
 export async function POST(req: NextRequest) {
   const limited = await rateLimit(req, {
     key: "n8n-rag-runtime",
-    limit: parseLimit(process.env.N8N_RAG_CORE_RATE_LIMIT, 240),
+    limit: parseLimit(runtimeEnvironment().N8N_RAG_CORE_RATE_LIMIT, 240),
     windowMs: 60 * 1000,
   });
   if (limited) return limited;
@@ -72,10 +73,17 @@ export async function POST(req: NextRequest) {
 
     const question = text(payload.question, 1_200);
     const sessionId = text(payload.sessionId, 120);
-    const tenantId = text(payload.tenant_id, 120) || "default";
+    const tenantContext = tenantContextFromVerifiedChannelPayload({
+      tenantId: payload.tenant_id,
+      purpose: "typebot-runtime",
+      nonce: verified.claims.nonce,
+      verified: true,
+    });
+    const tenantId = tenantContext.tenantId;
     const requestId = text(payload.requestId, 120) || verified.claims.nonce;
+    const inboundTrace = parseTraceparent(text(payload.traceparent, 80)) || requestTraceContext(req.headers);
     const resolvedLocale = locale(payload.locale);
-    if (!question || !sessionId || tenantId !== "default") {
+    if (!question || !sessionId) {
       return NextResponse.json({ ok: false, error: "Invalid runtime payload" }, { status: 400 });
     }
 
@@ -92,13 +100,22 @@ export async function POST(req: NextRequest) {
     // signed payload n8n forwards must stay byte-identical; the vector rides
     // outside it and is treated as untrusted data (validated below).
     const providedEmbedding = resolveProvidedEmbedding(body?.queryEmbedding);
-    const direct = await runDirectRagFallback({
+    const applicationResult = await runRagAnswerUseCase({
+      context: {
+        requestId,
+        idempotencyKey: text(payload.idempotencyKey, 180) || `n8n-rag-${requestId}`,
+        principal: { kind: "service", service: "n8n-rag-runtime" },
+        tenantContext,
+        locale: resolvedLocale,
+        channel: "n8n",
+        traceId: inboundTrace.traceId,
+        traceparent: inboundTrace.traceparent,
+        signal: req.signal,
+        deadlineAt: Date.now() + 55_000,
+      },
       question,
       retrievalQuery,
       category,
-      locale: resolvedLocale,
-      tenantId,
-      requestId,
       fallbackReason: "n8n_orchestrated_runtime",
       attachmentCount: Array.isArray(payload.attachments) ? Math.min(payload.attachments.length, 3) : 0,
       allowStoredVectorExpansion: false,
@@ -106,8 +123,24 @@ export async function POST(req: NextRequest) {
       mediation,
       conversationHistory: conversationHistory(payload.conversationContext),
       profile: parseSessionProfile(payload.profile),
-    }, providedEmbedding.dependencies);
-    const guarded = applyChatResponseGuardrail(direct, question, resolvedLocale);
+    }, {
+      ...providedEmbedding.dependencies,
+      observeStage: (stage, run) => withSpan({
+        name: `rag.${stage}`,
+        parent: inboundTrace,
+        attributes: { requestId, channel: "n8n", tenantId },
+        run: () => run(),
+      }),
+    });
+    if (!applicationResult.ok) {
+      return NextResponse.json({
+        ok: false,
+        error: applicationResult.error.message,
+        code: applicationResult.error.code,
+        requestId,
+      }, { status: applicationResult.error.code === "retrieval_unavailable" ? 503 : 502 });
+    }
+    const guarded = applicationResult.value;
     const currentSearchMeta = record(guarded.searchMeta) || {};
 
     return NextResponse.json({
@@ -116,12 +149,12 @@ export async function POST(req: NextRequest) {
       searchMeta: {
         ...currentSearchMeta,
         runtimePath: ORCHESTRATED_RUNTIME_PATH,
-        retrievalRuntimePath: direct.runtimePath,
+        retrievalRuntimePath: guarded.runtimePath,
         retrievalProvenance: {
-          workflowId: direct.workflowId,
-          workflowVersionId: direct.workflowVersionId,
-          modelVersion: direct.modelVersion,
-          promptVersion: direct.promptVersion,
+          workflowId: guarded.workflowId,
+          workflowVersionId: guarded.workflowVersionId,
+          modelVersion: guarded.modelVersion,
+          promptVersion: guarded.promptVersion,
         },
         embeddingSource: providedEmbedding.embeddingSource,
         providedEmbeddingRejected: providedEmbedding.rejectedReason,

@@ -38,6 +38,9 @@ try {
     ["chatbot_opened", {}],
     ["chatbot_question_sent", { retry: false }],
     ["chatbot_answer_succeeded", { sourceCount: 2 }],
+    ["chatbot_answer_failed", { stage: "runtime", reason: "all_runtimes_failed" }],
+    ["chatbot_retry", { stage: "provider", attempts: 2 }],
+    ["chatbot_fallback", { mode: "degraded-extractive-fallback", degraded: true }],
     ["citation_clicked", { sourceIndex: 0 }],
     ["handoff_created", {}],
   ] as const) {
@@ -56,11 +59,14 @@ try {
   assert(analytics.funnel.diagnosisSelectionRate === 1, "diagnosis selection rate should be 100%");
   assert(analytics.funnel.firstQuestionRate === 1, "first-question rate should be 100%");
   assert(analytics.funnel.answerSuccessRate === 1, "answer success rate should be 100%");
+  assert(analytics.funnel.failures === 1, "answer failure events should be counted");
+  assert(analytics.funnel.fallbacks === 1, "fallback events should be counted");
+  assert(analytics.funnel.retries === 1, "retry events should be counted");
   assert(analytics.funnel.citationClickRate === 1, "citation click rate should be 100%");
   assert(analytics.locales[0]?.dropoffRate === 0, "engaged Korean session should not be counted as dropoff");
 
   const stored = await db.productEvent.count();
-  assert(stored === 9, `expected nine unique safe events, got ${stored}`);
+  assert(stored === 12, `expected twelve unique safe events, got ${stored}`);
   console.log("PASS product analytics: privacy guard, idempotency, funnel rates, locale dropoff");
 } finally {
   await db.$disconnect();

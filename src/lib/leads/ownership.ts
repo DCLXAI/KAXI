@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 import { primarySecret, rotatingSecrets } from "@/lib/security/rotating-secret";
 
@@ -64,11 +65,11 @@ function equal(left: string, right: string) {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-export function isLeadAccessConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
+export function isLeadAccessConfigured(env: NodeJS.ProcessEnv = runtimeEnvironment()): boolean {
   return Boolean(primarySecret(env, LEAD_ACCESS_SECRET_KEY));
 }
 
-export function issueLeadAccessToken(leadId: string, now = Date.now(), env: NodeJS.ProcessEnv = process.env): string | null {
+export function issueLeadAccessToken(leadId: string, now = Date.now(), env: NodeJS.ProcessEnv = runtimeEnvironment()): string | null {
   const secret = primarySecret(env, LEAD_ACCESS_SECRET_KEY);
   if (!secret || !leadId) return null;
 
@@ -88,7 +89,7 @@ export function issueLeadAccessToken(leadId: string, now = Date.now(), env: Node
 export function verifyLeadAccessToken(
   token: string | undefined | null,
   now = Date.now(),
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = runtimeEnvironment(),
 ): LeadAccessPayload | null {
   const [encoded, signature] = String(token || "").split(".");
   if (!encoded || !signature) return null;
@@ -199,7 +200,7 @@ export async function resolveOwnedLead(
   return { leadId: null, proof: null, reason: "cookie_missing_or_invalid" };
 }
 
-export function leadAccessCookieOptions(env: NodeJS.ProcessEnv = process.env) {
+export function leadAccessCookieOptions(env: NodeJS.ProcessEnv = runtimeEnvironment()) {
   return {
     httpOnly: true,
     sameSite: "lax" as const,

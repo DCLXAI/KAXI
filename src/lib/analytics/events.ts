@@ -7,6 +7,7 @@ export const PRODUCT_EVENT_NAMES = [
   "chatbot_question_sent",
   "chatbot_answer_succeeded",
   "chatbot_answer_failed",
+  "chatbot_fallback",
   "chatbot_no_context",
   "chatbot_retry",
   "citation_clicked",

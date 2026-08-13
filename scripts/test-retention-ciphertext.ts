@@ -46,6 +46,7 @@ prepareTestDb("retention ciphertext");
 const { db } = await import("../src/lib/db");
 const { preparePiiField, decryptPii } = await import("../src/lib/privacy/pii");
 const { enforcePrivacyRetention, RETENTION_POLICY_VERSION } = await import("../src/lib/privacy/retention");
+const { PLATFORM_TENANT_ID } = await import("../src/application/tenancy/tenant-context");
 
 const DAY = 24 * 60 * 60 * 1000;
 const ago = (days: number) => new Date(Date.now() - days * DAY);
@@ -99,6 +100,55 @@ async function seedPartnerRequest(leadId: string, createdAt: Date) {
   });
 }
 
+async function seedOutbox(retentionUntil: Date, suffix: string) {
+  return db.outboxEvent.create({
+    data: {
+      tenantId: PLATFORM_TENANT_ID,
+      requestId: `retention-request-${suffix}`,
+      aggregateType: "retention-fixture",
+      aggregateId: suffix,
+      eventType: "retention.fixture",
+      idempotencyKey: `retention-outbox-${suffix}`,
+      payload: { fixture: true },
+      traceId: `retention-trace-${suffix}`,
+      retentionUntil,
+    },
+    select: { id: true },
+  });
+}
+
+async function seedMessageLinkedOutbox() {
+  const sessionKey = `retention-cascade-${crypto.randomUUID()}`;
+  const session = await db.chatSession.create({
+    data: { tenantId: PLATFORM_TENANT_ID, sessionKey },
+  });
+  const message = await db.chatMessage.create({
+    data: {
+      tenantId: PLATFORM_TENANT_ID,
+      sessionKey,
+      question: "[redacted]",
+      answer: "[redacted]",
+      requestId: crypto.randomUUID(),
+      idempotencyKey: `retention-message-${crypto.randomUUID()}`,
+    },
+  });
+  const event = await db.outboxEvent.create({
+    data: {
+      tenantId: PLATFORM_TENANT_ID,
+      requestId: message.requestId,
+      aggregateType: "chat-message",
+      aggregateId: message.id.toString(),
+      eventType: "retention.cascade-fixture",
+      idempotencyKey: `retention-cascade-${message.id}`,
+      messageId: message.id,
+      payload: {},
+      traceId: `retention-cascade-trace-${message.id}`,
+    },
+    select: { id: true },
+  });
+  return { sessionId: session.id, messageId: message.id, eventId: event.id };
+}
+
 try {
   // ---- expired rows, written the way production writes them ----
   const expiredLead = await seedLead("expired", ago(400));
@@ -109,6 +159,15 @@ try {
   const freshLead = await seedLead("fresh", ago(10));
   const freshChat = await seedChatLog(ago(3));
   const freshPartner = await seedPartnerRequest(freshLead.id, ago(5));
+  const expiredOutbox = await seedOutbox(ago(1), "expired");
+  const freshOutbox = await seedOutbox(new Date(Date.now() + DAY), "fresh");
+  const cascade = await seedMessageLinkedOutbox();
+  await db.chatMessage.delete({ where: { id: cascade.messageId } });
+  assertOk(
+    await db.outboxEvent.findUnique({ where: { id: cascade.eventId } }) === null,
+    "deleting a canonical message must cascade to its linked outbox event",
+  );
+  await db.chatSession.delete({ where: { id: cascade.sessionId } });
 
   // 1. The dry run must see the same targets the real run will act on. A dry run
   //    that counts differently is worse than none: it is used to decide whether
@@ -117,6 +176,7 @@ try {
   assertOk(dry.chatLogs >= 1, `dry run must see the expired chat log, saw ${dry.chatLogs}`);
   assertOk(dry.partnerRequests >= 1, `dry run must see the expired partner request, saw ${dry.partnerRequests}`);
   assertOk(dry.leadsRedacted >= 1, `dry run must see the expired lead, saw ${dry.leadsRedacted}`);
+  assertOk(dry.outboxEventsDeleted === 1, `dry run must see one expired outbox event, saw ${dry.outboxEventsDeleted}`);
 
   const real = await enforcePrivacyRetention();
   if (real.chatLogs !== dry.chatLogs) fail(`dry run counted ${dry.chatLogs} chat logs, real run processed ${real.chatLogs}`);
@@ -125,6 +185,9 @@ try {
   }
   if (real.leadsRedacted !== dry.leadsRedacted) {
     fail(`dry run counted ${dry.leadsRedacted} leads, real run processed ${real.leadsRedacted}`);
+  }
+  if (real.outboxEventsDeleted !== dry.outboxEventsDeleted) {
+    fail(`dry run counted ${dry.outboxEventsDeleted} outbox events, real run deleted ${real.outboxEventsDeleted}`);
   }
 
   console.log("PASS retention ciphertext: the dry run counts exactly what the real run processes");
@@ -150,6 +213,15 @@ try {
   assertOk(lead.retentionProcessedAt, "the lead must be stamped as processed");
 
   console.log("PASS retention ciphertext: expired encrypted rows lose ciphertext, hash and plaintext");
+  assertOk(
+    await db.outboxEvent.findUnique({ where: { id: expiredOutbox.id } }) === null,
+    "an expired outbox event must be deleted by the retention sweep",
+  );
+  assertOk(
+    await db.outboxEvent.findUnique({ where: { id: freshOutbox.id } }) !== null,
+    "an in-window outbox event must survive the retention sweep",
+  );
+  console.log("PASS outbox privacy: canonical deletion cascades and retention removes only expired events");
 
   // 3. Rows inside their window are untouched — the sweep must not be a blunt
   //    "delete everything" that happens to satisfy the assertions above.
@@ -171,9 +243,10 @@ try {
   //    that keeps reporting the same work is indistinguishable from one that is
   //    failing to make progress.
   const second = await enforcePrivacyRetention();
-  if (second.chatLogs !== 0 || second.partnerRequests !== 0 || second.leadsRedacted !== 0) {
+  if (second.chatLogs !== 0 || second.partnerRequests !== 0 || second.leadsRedacted !== 0 || second.outboxEventsDeleted !== 0) {
     fail(`a second sweep must find nothing left: ${JSON.stringify({
       chatLogs: second.chatLogs, partnerRequests: second.partnerRequests, leadsRedacted: second.leadsRedacted,
+      outboxEventsDeleted: second.outboxEventsDeleted,
     })}`);
   }
   const secondDry = await enforcePrivacyRetention({ dryRun: true });

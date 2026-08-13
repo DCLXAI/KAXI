@@ -1,4 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
+import { createSupabaseServiceRoleClient } from "@/infrastructure/supabase/service-role-client";
 import { EscalationStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { recordOpsEvent } from "@/lib/ops/events";
@@ -58,9 +59,9 @@ export type SlaQueueCounts = {
 };
 
 function isolatedTestRuntime() {
-  const runtimeDatabase = process.env.DATABASE_URL?.trim() || "";
+  const runtimeDatabase = runtimeEnvironment().DATABASE_URL?.trim() || "";
   return Boolean(
-    process.env.TEST_DATABASE_URL &&
+    runtimeEnvironment().TEST_DATABASE_URL &&
     /^postgres(?:ql)?:\/\/(?:[^@]+@)?(?:localhost|127\.0\.0\.1|\[::1\])/i.test(runtimeDatabase),
   );
 }
@@ -84,10 +85,11 @@ export function classifySlaItem(input: {
 }
 
 function serviceClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || "";
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || "";
-  if (!url || !key) throw new Error("SUPABASE_OPS_NOT_CONFIGURED");
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  try {
+    return createSupabaseServiceRoleClient();
+  } catch {
+    throw new Error("SUPABASE_OPS_NOT_CONFIGURED");
+  }
 }
 
 function record(value: unknown): Record<string, unknown> {

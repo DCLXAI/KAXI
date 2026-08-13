@@ -1,3 +1,7 @@
+import {
+  runtimeEnvironment,
+  setRuntimeEnvironmentValue,
+} from "@/infrastructure/config/runtime-environment";
 import { PrismaClient, type Prisma } from "@prisma/client";
 
 export type RuntimeDatabaseKind = "missing" | "postgresql" | "unsupported";
@@ -75,15 +79,15 @@ function databaseUrlFromEnv(env: NodeJS.ProcessEnv) {
 }
 
 function normalizeDatabaseEnv() {
-  const { url } = databaseUrlFromEnv(process.env);
+  const { url } = databaseUrlFromEnv(runtimeEnvironment());
   if (isPostgresUrl(url)) {
-    process.env.DATABASE_URL = url;
+    setRuntimeEnvironmentValue("DATABASE_URL", url);
   }
 }
 
 normalizeDatabaseEnv();
 
-export function getRuntimeDatabaseInfo(env: NodeJS.ProcessEnv = process.env): RuntimeDatabaseInfo {
+export function getRuntimeDatabaseInfo(env: NodeJS.ProcessEnv = runtimeEnvironment()): RuntimeDatabaseInfo {
   const { url, source } = databaseUrlFromEnv(env);
   const hostedRuntime = isHostedRuntime(env);
   const postgresqlConfigured = isPostgresUrl(url);
@@ -133,7 +137,7 @@ export function getRuntimeDatabaseInfo(env: NodeJS.ProcessEnv = process.env): Ru
 }
 
 function createPrismaClient() {
-  const log: Prisma.LogLevel[] = process.env.DEBUG_PRISMA === "true" ? ["query"] : [];
+  const log: Prisma.LogLevel[] = runtimeEnvironment().DEBUG_PRISMA === "true" ? ["query"] : [];
   return new PrismaClient({ log });
 }
 
@@ -143,7 +147,7 @@ const globalForPrisma = globalThis as unknown as {
 
 export const db = globalForPrisma.prisma ?? createPrismaClient();
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
+if (runtimeEnvironment().NODE_ENV !== "production") globalForPrisma.prisma = db;
 
 export function canWriteRuntimeDatabase(): boolean {
   return getRuntimeDatabaseInfo().writable;

@@ -1,18 +1,19 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { bearerToken, matchesRotatingSecret, primarySecret } from "@/lib/security/rotating-secret";
 
 export const TYPEBOT_GATEWAY_HEADER = "x-kaxi-typebot-token";
 
-function configuredSecret(env: NodeJS.ProcessEnv = process.env) {
+function configuredSecret(env: NodeJS.ProcessEnv = runtimeEnvironment()) {
   return primarySecret(env, "TYPEBOT_GATEWAY_SECRET");
 }
 
-export function isTypebotGatewayAuthConfigured(env: NodeJS.ProcessEnv = process.env) {
+export function isTypebotGatewayAuthConfigured(env: NodeJS.ProcessEnv = runtimeEnvironment()) {
   return Boolean(configuredSecret(env));
 }
 
 export function verifyTypebotGatewayHeaders(
   headers: Pick<Headers, "get">,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = runtimeEnvironment(),
 ) {
   if (!configuredSecret(env)) return false;
 

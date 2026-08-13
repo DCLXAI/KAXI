@@ -39,6 +39,7 @@ prepareTestDb("document flow");
 
 const { NextRequest } = await import("next/server");
 const { db } = await import("../src/lib/db");
+const { PLATFORM_TENANT_ID } = await import("../src/application/tenancy/tenant-context");
 // NOTE: Routes now require a student session (Supabase env is absent in tests,
 // so route-level calls assert the 401 contract). Repository/crypto functions
 // and the token-authenticated upload-direct route are exercised directly below.
@@ -146,6 +147,7 @@ try {
   await db.chatSession.create({
     data: {
       id: "queue-session-row",
+      tenantId: PLATFORM_TENANT_ID,
       sessionKey: "queue-session-test",
       source: "kaxi-site",
       channel: "kaxi-site",
@@ -154,6 +156,7 @@ try {
   await db.chatAttachment.create({
     data: {
       id: "queue-attachment-test",
+      tenantId: PLATFORM_TENANT_ID,
       sessionKey: "queue-session-test",
       bucket: "test-private-bucket",
       storageKey: "chat-attachments/quarantine/queue-test.pdf",
@@ -164,16 +167,23 @@ try {
     },
   });
   await db.chatAttachmentJob.create({
-    data: { attachmentId: "queue-attachment-test" },
+    data: {
+      tenantId: PLATFORM_TENANT_ID,
+      requestId: "document-flow-attachment-request",
+      traceId: "a".repeat(32),
+      traceparent: `00-${"a".repeat(32)}-${"b".repeat(16)}-01`,
+      attachmentId: "queue-attachment-test",
+    },
   });
-  const firstClaim = await db.$queryRaw<Array<{ status: string; attempts: number; lock_token: string | null }>>`
-    SELECT status, attempts, lock_token
+  const firstClaim = await db.$queryRaw<Array<{ status: string; attempts: number; lock_token: string | null; request_id: string }>>`
+    SELECT status, attempts, lock_token, request_id
     FROM public.kaxi_claim_chat_attachment_jobs(1, 120)
   `;
   assert(
     firstClaim.length === 1 && firstClaim[0]?.status === "processing" && firstClaim[0]?.attempts === 1 && firstClaim[0]?.lock_token,
     "attachment queue should atomically claim a queued job with a lease token",
   );
+  assert(firstClaim[0]?.request_id === "document-flow-attachment-request", "attachment claim must preserve request correlation");
   const duplicateClaim = await db.$queryRaw<Array<{ id: string }>>`
     SELECT id FROM public.kaxi_claim_chat_attachment_jobs(1, 120)
   `;
@@ -186,7 +196,11 @@ try {
     SELECT attempts FROM public.kaxi_claim_chat_attachment_jobs(1, 30)
   `;
   assert(reclaimed[0]?.attempts === 2, "expired attachment job lease should be reclaimable");
-  await db.chatSession.delete({ where: { sessionKey: "queue-session-test" } });
+  await db.chatSession.delete({
+    where: {
+      tenantId_sessionKey: { tenantId: PLATFORM_TENANT_ID, sessionKey: "queue-session-test" },
+    },
+  });
 
   assert(
     localUploadPath("student/passport.pdf").startsWith(process.env.DOCUMENT_UPLOAD_DIR!),

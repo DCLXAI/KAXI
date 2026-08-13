@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { JsonBodyError, readJsonBody } from "@/lib/api/json-body";
-import { syncRagServingProjection } from "@/lib/knowledge/serving-projection";
+import { enqueueWorkerJob } from "@/infrastructure/worker/job-repository";
+import { requestTraceContext } from "@/infrastructure/observability/trace-context";
+import { platformServiceTenantContext } from "@/application/tenancy/tenant-context";
 import {
   N8N_NONCE_HEADER,
   N8N_PURPOSE_HEADER,
@@ -39,11 +41,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const result = await syncRagServingProjection({
-      limit: boundedLimit(payload.limit),
-      force: payload.force === true,
+    const trace = requestTraceContext(req.headers);
+    const job = await enqueueWorkerJob({
+      tenantContext: platformServiceTenantContext("internal-rag-serving-sync"),
+      requestId: req.headers.get("x-request-id")?.trim().slice(0, 128)
+        || req.headers.get(N8N_NONCE_HEADER)?.trim().slice(0, 128)
+        || crypto.randomUUID(),
+      jobType: "rag-serving-sync",
+      idempotencyKey: req.headers.get(N8N_NONCE_HEADER) || crypto.randomUUID(),
+      payload: { limit: boundedLimit(payload.limit), force: payload.force === true },
+      traceId: trace.traceId,
+      traceparent: trace.traceparent,
+      timeoutMs: 10 * 60_000,
+      deadlineAt: new Date(Date.now() + 2 * 60 * 60_000),
     });
-    return NextResponse.json(result, { status: result.failed.length > 0 ? 207 : 200 });
+    return NextResponse.json({ accepted: true, executionOwner: "kaxi-worker", job }, { status: 202 });
   } catch (error) {
     if (error instanceof JsonBodyError) {
       return NextResponse.json({ error: "Invalid request" }, { status: error.status });

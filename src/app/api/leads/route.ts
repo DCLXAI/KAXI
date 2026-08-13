@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { JsonBodyError, readJsonBody } from "@/lib/api/json-body";
@@ -170,7 +171,7 @@ export async function POST(req: NextRequest) {
         contactHash: protectedContact.hash,
         contactRedacted: protectedContact.redacted,
         contactType: data.contactType || null,
-        retentionUntil: retentionUntil(parsePositiveInt(process.env.PRIVACY_LEAD_RETENTION_DAYS, 365)),
+        retentionUntil: retentionUntil(parsePositiveInt(runtimeEnvironment().PRIVACY_LEAD_RETENTION_DAYS, 365)),
       },
     });
 

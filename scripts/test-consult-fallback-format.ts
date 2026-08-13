@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-const { buildOfficialSummaryFallback } = await import("../src/app/api/ai/consult/route");
+const { buildOfficialSummaryFallback } = await import("../src/application/ai/expert-consult");
 
 const docs = [
   {

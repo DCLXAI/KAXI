@@ -87,6 +87,7 @@ export async function getProductAnalytics(days: number) {
   const questionAttempts = events("chatbot_question_sent");
   const answers = events("chatbot_answer_succeeded");
   const failures = events("chatbot_answer_failed");
+  const fallbacks = events("chatbot_fallback");
   const noContext = events("chatbot_no_context");
   const answerWithSources = number(answerSourceRows[0]?.count);
   const citationSessions = sessions("citation_clicked");
@@ -107,6 +108,10 @@ export async function getProductAnalytics(days: number) {
       questionAttempts,
       answers,
       answerSuccessRate: rate(answers, questionAttempts),
+      failures,
+      failureRate: rate(failures, questionAttempts),
+      fallbacks,
+      fallbackRate: rate(fallbacks, questionAttempts),
       noContext,
       noContextRate: rate(noContext, answers),
       retries: events("chatbot_retry"),

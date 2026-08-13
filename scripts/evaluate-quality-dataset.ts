@@ -8,6 +8,8 @@ import {
   searchSharedOpenAiRag,
   sharedOpenAiRagRuntimeInfo,
 } from "../src/lib/chat/shared-openai-rag";
+import { platformServiceTenantContext } from "../src/application/tenancy/tenant-context";
+import { createSupabaseServiceRoleClient } from "../src/infrastructure/supabase/service-role-client";
 
 interface QualityCase {
   id: string;
@@ -21,13 +23,13 @@ interface QualityCase {
 const datasetPath = "quality/multilingual-eval-cases.json";
 
 // This dataset now scores the SAME retrieval path production requests use:
-// searchSharedOpenAiRag -> OpenAI 1536d query embedding + Supabase hybrid_v3
+// searchSharedOpenAiRag -> OpenAI 1536d query embedding + Supabase hybrid_v4
 // (the core behind /api/typebot-rag, the agent, and consult). That path needs a
 // live Postgres knowledge store, the OpenAI embedding key, and the Supabase
 // serving credentials, so this stays an opt-in integration run rather than a
 // unit test — it is not expected to execute in the standard local/CI gates.
 // Skip cleanly rather than fail when the RAG runtime is absent. This eval now
-// scores the real serving path (OpenAI 1536d + Supabase hybrid_v3), which needs
+// scores the real serving path (OpenAI 1536d + Supabase hybrid_v4), which needs
 // production-like credentials the standard CI gate does not carry. A hard throw
 // here would turn an opt-in integration eval into a red unit gate — exactly the
 // contradiction above. It runs for real wherever the credentials exist (a
@@ -52,6 +54,20 @@ if (!ragRuntime.ready) {
 }
 
 const cases = JSON.parse(readFileSync(datasetPath, "utf-8")) as QualityCase[];
+
+const rpcReadiness = await createSupabaseServiceRoleClient().rpc("match_rag_documents_hybrid_v4", {
+  query_embedding: null,
+  match_count: 1,
+  filter: { tenant_id: "platform", category_mode: "strict", locale: "ko", query_text: "readiness" },
+});
+if (rpcReadiness.error) {
+  const message = rpcReadiness.error.message || "retrieval RPC unavailable";
+  if (process.env.RAG_EVAL_REQUIRE_READY === "true") {
+    throw new Error(`RAG_EVAL_SCHEMA_NOT_READY: ${message}`);
+  }
+  console.log(`SKIP quality dataset evaluation: production retrieval RPC v4 is not deployed (${message}).`);
+  process.exit(0);
+}
 
 function validateSchema(testCase: QualityCase): string[] {
   const errors: string[] = [];
@@ -109,6 +125,7 @@ async function main() {
     const sharedRag = await searchSharedOpenAiRag({
       query: testCase.question,
       locale: testCase.lang,
+      tenantContext: platformServiceTenantContext("quality-dataset-evaluator"),
       maxDocuments: 5,
     });
     const ids = sharedRag.docs.map((doc) => doc.id);

@@ -1,3 +1,5 @@
+import { publicBuildEnvironment, deploymentBuildEnvironment } from "@/infrastructure/config/build-environment";
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 // Single source of truth for the production base URL used across the app
 // (ops alert admin links, sitemap, notification emails, persisted source
 // metadata, etc). At a future domain cutover, override via
@@ -14,8 +16,9 @@
 export const DEFAULT_SITE_BASE_URL = "https://kaxi.vercel.app";
 
 export function siteBaseUrl(): string {
-  const explicit = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
+  const explicit = publicBuildEnvironment().NEXT_PUBLIC_APP_URL || runtimeEnvironment().APP_URL;
   if (explicit?.trim()) return explicit.trim().replace(/\/+$/, "");
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL.replace(/\/+$/, "")}`;
+  const vercelUrl = deploymentBuildEnvironment().VERCEL_URL;
+  if (vercelUrl) return `https://${vercelUrl.replace(/\/+$/, "")}`;
   return DEFAULT_SITE_BASE_URL;
 }

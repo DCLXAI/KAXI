@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recordAuditLog } from "@/lib/audit";
 import { getAdminContext, getClientIp, requireAdmin } from "@/lib/api/security";
-import { verifyDocumentSet } from "@/lib/documents/verification";
+import { enqueueWorkerJob } from "@/infrastructure/worker/job-repository";
+import { requestTraceContext } from "@/infrastructure/observability/trace-context";
+import { platformServiceTenantContext } from "@/application/tenancy/tenant-context";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -30,7 +32,7 @@ export async function POST(req: NextRequest) {
 
     const context = await getAdminContext(req);
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-    const result = await verifyDocumentSet({
+    const options = {
       studentProfileId: optionalString(body.studentProfileId),
       caseId: optionalString(body.caseId),
       visaType: optionalString(body.visaType),
@@ -42,49 +44,40 @@ export async function POST(req: NextRequest) {
       minRagKeywordScore: optionalNumber(body.minRagKeywordScore),
       persist: optionalBoolean(body.persist) ?? true,
       createMissingPlaceholders: optionalBoolean(body.createMissingPlaceholders) ?? false,
+    };
+    if (!options.studentProfileId) {
+      return NextResponse.json({ error: "studentProfileId is required" }, { status: 400 });
+    }
+    const trace = requestTraceContext(req.headers);
+    const job = await enqueueWorkerJob({
+      tenantContext: platformServiceTenantContext("admin-document-verification-batch"),
+      requestId: req.headers.get("x-request-id")?.trim().slice(0, 128) || crypto.randomUUID(),
+      jobType: "document-verify-set",
+      idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+      payload: { options },
+      traceId: trace.traceId,
+      traceparent: trace.traceparent,
+      timeoutMs: 30 * 60_000,
+      deadlineAt: new Date(Date.now() + 4 * 60 * 60_000),
     });
 
     await recordAuditLog({
       actor: context?.actor || "admin",
       actorRole: context?.role || "admin",
-      action: "document.set_verified",
-      targetType: result.caseId ? "escalationCase" : "studentProfile",
-      targetId: result.caseId || result.studentProfileId,
+      action: "document.set_verification_enqueued",
+      targetType: options.caseId ? "escalationCase" : "studentProfile",
+      targetId: options.caseId || options.studentProfileId,
       ip: getClientIp(req),
       userAgent: req.headers.get("user-agent"),
       metadata: {
-        visaType: result.visaType,
-        stayAction: result.stayAction,
-        applicantContext: result.applicantContext,
-        status: result.status,
-        severity: result.severity,
-        summary: result.summary,
-        rag: {
-          acceptedSourceCount: result.documents.reduce(
-            (sum, document) => sum + (document.layerDetails.rag?.acceptedSourceCount || 0),
-            0
-          ),
-          officialSourceCount: result.documents.reduce(
-            (sum, document) => sum + (document.layerDetails.rag?.officialSourceCount || 0),
-            0
-          ),
-          latestCheckedAt: result.documents
-            .map((document) => document.basis.latestCheckedAt)
-            .filter(Boolean)
-            .sort()
-            .at(-1) || null,
-          llmStatuses: result.documents.reduce<Record<string, number>>((counts, document) => {
-            const status = document.layerDetails.rag?.llm.status || "unknown";
-            counts[status] = (counts[status] || 0) + 1;
-            return counts;
-          }, {}),
-        },
-        setIssueCodes: result.setIssues.map((item) => item.code).slice(0, 50),
-        missingRequirementCodes: result.missingRequirements.map((item) => item.requirementCode).slice(0, 50),
+        workerJobId: job.id,
+        executionOwner: "kaxi-worker",
+        enableRag: options.enableRag,
+        enableLlm: options.enableLlm,
       },
     });
 
-    return NextResponse.json({ ok: true, verification: result });
+    return NextResponse.json({ ok: true, accepted: true, executionOwner: "kaxi-worker", job }, { status: 202 });
   } catch (err) {
     console.error("[POST /api/admin/documents/verify-batch]", err);
     return NextResponse.json({ error: err instanceof Error ? err.message : "Internal error" }, { status: 400 });

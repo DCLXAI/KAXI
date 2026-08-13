@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "suites": {
+    "types": ["ci:types", "lint"],
+    "domain": ["ci:domain"],
+    "ops": ["ci:ops"],
+    "integration": [
+      "test:atomic-chat-outbox",
+      "test:worker-runtime",
+      "test:tenant-isolation",
+      "test:retrieval-plan",
+      "test:n8n-orchestration",
+      "test:disaster-recovery"
+    ],
+    "e2e": ["test:e2e"],
+    "performance": [
+      "test:stream-load",
+      "test:worker-load",
+      "test:architecture-baseline"
+    ]
+  }
+}

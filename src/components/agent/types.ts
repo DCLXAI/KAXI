@@ -62,22 +62,24 @@ export interface AgentStatus {
   status: "ready" | "needs_configuration";
   backend: string;
   llm?: {
-    backend: "kimi" | "claude";
+    backend: "openai" | "anthropic" | "kimi" | "claude";
     apiKeyConfigured: boolean;
     model: string;
     baseUrl: string | null;
     managedApi: boolean;
   };
-  kimi?: {
+  openai?: {
     apiKeyConfigured: boolean;
     model: string;
     baseUrl: string;
     protocol: string;
     managedApi: boolean;
   };
-  claude?: {
+  anthropic?: {
     apiKeyConfigured: boolean;
     model: string;
+    baseUrl?: string;
+    genuineProvider?: boolean;
     managedApi: boolean;
   };
   preflight?: {

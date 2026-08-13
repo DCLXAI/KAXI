@@ -1,4 +1,6 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { randomUUID } from "crypto";
+import { assertTenantContext, type TenantContext } from "@/application/tenancy/tenant-context";
 import { inferChatCategory, type ChatCategory } from "@/lib/chat/category";
 import {
   searchServingRagDocuments,
@@ -37,7 +39,7 @@ export type SharedOpenAiRagResult = {
   };
 };
 
-export function sharedOpenAiRagRuntimeInfo(env: NodeJS.ProcessEnv = process.env) {
+export function sharedOpenAiRagRuntimeInfo(env: NodeJS.ProcessEnv = runtimeEnvironment()) {
   const embeddingConfigured = Boolean(
     env.OPENAI_EMBEDDING_API_KEY?.trim()
     || (env.KAXI_QUERY_EMBEDDINGS_USE_OPENAI_KEY === "true" && env.OPENAI_API_KEY?.trim()),
@@ -52,7 +54,7 @@ export function sharedOpenAiRagRuntimeInfo(env: NodeJS.ProcessEnv = process.env)
     supabaseConfigured,
     embeddingModel: "text-embedding-3-small",
     embeddingDimensions: 1536,
-    vectorFunction: "match_rag_documents_hybrid_v3",
+    vectorFunction: "match_rag_documents_hybrid_v4",
     fallbackEnabled: false,
   };
 }
@@ -121,16 +123,17 @@ export async function searchSharedOpenAiRag(input: {
   query: string;
   locale: Lang;
   category?: ChatCategory;
-  tenantId?: string;
+  tenantContext: TenantContext;
   maxDocuments?: number;
 }): Promise<SharedOpenAiRagResult> {
+  assertTenantContext(input.tenantContext);
   const resolvedCategory = input.category || inferChatCategory(input.query);
   const search = await searchServingRagDocuments({
     question: input.query,
     retrievalQuery: input.query,
     category: resolvedCategory,
     locale: input.locale,
-    tenantId: input.tenantId || "default",
+    tenantId: input.tenantContext.tenantId,
     requestId: randomUUID(),
     fallbackReason: "shared_openai_rag",
     allowStoredVectorExpansion: false,

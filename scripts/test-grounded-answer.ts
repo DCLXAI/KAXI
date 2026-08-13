@@ -6,9 +6,11 @@ type Scripted = { text?: string; throw?: Error };
 let script: Scripted[] = [];
 let calls = 0;
 class FakeNotConfigured extends Error {}
+class FakeQuotaExhausted extends Error {}
 mock.module("@/lib/ai/llm-gateway", () => ({
   isLlmConfigured: () => true,
   isLlmNotConfiguredError: (error: unknown) => error instanceof FakeNotConfigured,
+  isLlmQuotaExhaustedError: (error: unknown) => error instanceof FakeQuotaExhausted,
   generateLlmText: async () => {
     calls += 1;
     const step = script.shift();
@@ -66,4 +68,10 @@ script = [{ throw: new Error("boom") }, { throw: new Error("boom again") }];
 result = await generateGroundedRagAnswer(request);
 assert.deepEqual(result, { status: "unavailable", reason: "generation_failed", attempts: 2, retryReason: "generation_failed" });
 
-console.log("PASS grounded answer: tolerant parse, single retry, no not_configured retry");
+// 8. quota exhaustion is a readiness incident, not a retryable generation error
+script = [{ throw: new FakeQuotaExhausted("usage limit reached") }]; calls = 0;
+result = await generateGroundedRagAnswer(request);
+assert.deepEqual(result, { status: "unavailable", reason: "provider_quota_exhausted", attempts: 1, retryReason: null });
+assert.equal(calls, 1);
+
+console.log("PASS grounded answer: tolerant parse, single retry, quota and configuration fail fast");

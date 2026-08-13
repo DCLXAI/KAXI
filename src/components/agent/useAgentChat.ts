@@ -22,24 +22,12 @@ import {
 } from "./agent-config";
 import type { AgentLocale, AgentMessage, AgentProgress, AgentStatus, ClarifyDraft } from "./types";
 
-// The old budget was a single 25s timer armed at request start and never reset,
-// which broke in two ways.
-//
-// createUnifiedAiEventStream() resolves the whole answer first and only then
-// replays it as deltas at 12ms per ~42-char chunk — 0.3s to 1.7s of replay for a
-// realistic answer. That replay runs after the server's generation budget has
-// already been cleared, so it was fully exposed to the client's fixed deadline:
-// a request that spent its generation budget and then started delivering could
-// be aborted mid-replay, throwing away an answer the server had already produced
-// in full. Inactivity cannot do that — an event every 12ms keeps feeding it.
-//
-// The other half is who owns the timeout. The server governs generation with
+// The server governs generation with
 // unifiedAiStreamTimeoutMs() (20s by default, raisable to
 // UNIFIED_AI_STREAM_TIMEOUT_MAX_MS) and fails with a localized, retryable error
-// of its own. During generation it goes quiet after the 650ms "generating"
-// progress event, so a client deadline below that ceiling pre-empts the server's
-// better error with a generic client abort. Derive from the ceiling instead of
-// hardcoding, so raising the server budget cannot silently reintroduce this.
+// of its own. The client uses inactivity rather than a request-start deadline;
+// real use-case stage events reset it, and the complete event atomically reveals
+// the guarded answer. No post-processing fake deltas are replayed.
 const CLIENT_STREAM_INACTIVITY_MS = UNIFIED_AI_STREAM_TIMEOUT_MAX_MS + 5_000;
 // Pure backstop for a stream that trickles events forever. It sits near the
 // route's maxDuration = 60 platform ceiling and should never be what fires.
@@ -55,6 +43,27 @@ async function fetchAgent(payload: unknown, signal: AbortSignal): Promise<Respon
     body: JSON.stringify(payload),
     signal,
   });
+}
+
+async function readAgentResponse(
+  response: Response,
+  onEvent: (event: UnifiedAiStreamEvent) => void,
+): Promise<Record<string, unknown>> {
+  const contentType = response.headers.get("content-type") || "";
+  const streamVersion = response.headers.get("x-kaxi-stream-version");
+  if (contentType.includes("application/x-ndjson") && streamVersion) {
+    return readUnifiedAiEventStream(response, onEvent);
+  }
+  const data = await response.json().catch(() => ({})) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new UnifiedAiStreamError({
+      code: typeof data.errorCode === "string" ? data.errorCode : "upstream_error",
+      message: typeof data.error === "string" ? data.error : "The AI request could not be completed.",
+      status: response.status,
+      retryable: response.status === 429 || response.status >= 500,
+    });
+  }
+  return data;
 }
 
 function agentMessageFromResponse(data: Record<string, unknown>, requestId: string): AgentMessage {
@@ -265,7 +274,7 @@ export function useAgentChat() {
         previousExpertMode: previousAgentMessage?.expert?.mode,
       }, controller.signal);
 
-      const completedData = await readUnifiedAiEventStream(res, (event: UnifiedAiStreamEvent) => {
+      const completedData = await readAgentResponse(res, (event: UnifiedAiStreamEvent) => {
         if (activeRequestIdRef.current !== requestId) return;
         // Any event proves the stream is alive, including progress-only stages
         // like retrieval that legitimately produce no tokens for a while.
