@@ -1,4 +1,7 @@
-export type LlmBackend = "kimi" | "claude";
+export type ManagedLlmBackend = "openai" | "anthropic";
+// Legacy values remain readable for historical rows and old evaluation fixtures.
+// New runtime generations must use ManagedLlmBackend.
+export type LlmBackend = ManagedLlmBackend | "kimi" | "claude";
 export type LlmRole = "system" | "user" | "assistant";
 export type LlmGatewayContent = string | Array<Record<string, unknown>>;
 

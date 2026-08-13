@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { POST as runUnifiedAi } from "@/app/api/ai/unified/route";
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
+import { runUnifiedAiHttpAdapter } from "@/adapters/http/ai/unified-ai";
 import {
   createUnifiedAiEventStream,
   unifiedAiStreamTimeoutMs,
@@ -35,18 +36,6 @@ function previousExpertMode(value: unknown): UnifiedExpertMode | null {
     : null;
 }
 
-function delegatedRequest(req: NextRequest, body: Record<string, unknown>): NextRequest {
-  const headers = new Headers(req.headers);
-  headers.set("content-type", "application/json");
-  headers.delete("content-length");
-  headers.delete("accept-encoding");
-  return new NextRequest(new URL("/api/ai/unified", req.url), {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-  });
-}
-
 export async function POST(req: NextRequest) {
   const contentLength = Number(req.headers.get("content-length") || 0);
   if (Number.isFinite(contentLength) && contentLength > 100_000) {
@@ -67,12 +56,15 @@ export async function POST(req: NextRequest) {
     previousCapability: previousCapability(body.previousCapability),
     previousExpertMode: previousExpertMode(body.previousExpertMode),
   });
+  const requestedMode = req.headers.get("x-kaxi-stream-mode")?.trim().toLowerCase();
+  const mode = requestedMode === "verified-delta" ? "verified-delta" as const : "progress-only" as const;
   const stream = createUnifiedAiEventStream({
     capability: decision.capability,
+    mode,
     signal: req.signal,
-    timeoutMs: unifiedAiStreamTimeoutMs(),
-    run: async (): Promise<UnifiedAiStreamRunnerResult> => {
-      const response = await runUnifiedAi(delegatedRequest(req, body));
+    timeoutMs: unifiedAiStreamTimeoutMs(runtimeEnvironment()),
+    run: async (reportProgress, reportVerifiedDelta): Promise<UnifiedAiStreamRunnerResult> => {
+      const response = await runUnifiedAiHttpAdapter(req, body, { reportProgress, reportVerifiedDelta });
       return {
         ok: response.ok,
         status: response.status,
@@ -88,7 +80,8 @@ export async function POST(req: NextRequest) {
       "Content-Type": "application/x-ndjson; charset=utf-8",
       "X-Accel-Buffering": "no",
       "X-Content-Type-Options": "nosniff",
-      "X-KAXI-Stream-Version": "1",
+      "X-KAXI-Stream-Version": "2",
+      "X-KAXI-Stream-Mode": mode,
     },
   });
 }

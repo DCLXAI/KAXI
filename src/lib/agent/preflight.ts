@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import type { AgentStep } from "@/lib/agent/agent";
 import { analyzeAgentIntent, type AgentIntentAnalysis } from "@/lib/agent/planner";
 import { sanitizeToolArgsForDisplay, TOOL_MAP, type ToolContext, type ToolResult } from "@/lib/agent/tools";
@@ -170,8 +171,8 @@ function buildGroundingContext(toolResults: ToolResult[], lang: Lang, analysis: 
 
 function buildGroundedQuestion(question: string, groundingContext: string): string {
   if (!groundingContext) return redactSensitiveText(question);
-  const contextMaxChars = Number(process.env.AI_AGENT_CONTEXT_MAX_CHARS || DEFAULT_CONTEXT_MAX_CHARS);
-  const totalMaxChars = Number(process.env.AI_AGENT_GROUNDED_QUESTION_MAX_CHARS || DEFAULT_GROUNDED_QUESTION_MAX_CHARS);
+  const contextMaxChars = Number(runtimeEnvironment().AI_AGENT_CONTEXT_MAX_CHARS || DEFAULT_CONTEXT_MAX_CHARS);
+  const totalMaxChars = Number(runtimeEnvironment().AI_AGENT_GROUNDED_QUESTION_MAX_CHARS || DEFAULT_GROUNDED_QUESTION_MAX_CHARS);
   const safeContextMax = Number.isFinite(contextMaxChars) && contextMaxChars > 500 ? contextMaxChars : DEFAULT_CONTEXT_MAX_CHARS;
   const safeTotalMax = Number.isFinite(totalMaxChars) && totalMaxChars > 1_000 ? totalMaxChars : DEFAULT_GROUNDED_QUESTION_MAX_CHARS;
 
@@ -197,7 +198,7 @@ export async function runAgentPreflight(
   lang: Lang,
   ctx: ToolContext
 ): Promise<AgentPreflightResult> {
-  if (isEnvFalse(process.env.AI_AGENT_PREFLIGHT_ENABLED)) {
+  if (isEnvFalse(runtimeEnvironment().AI_AGENT_PREFLIGHT_ENABLED)) {
     return { enabled: false, groundedQuestion: question, groundingContext: "", steps: [], toolResults: [] };
   }
 

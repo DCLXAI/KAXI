@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { getRuntimeDatabaseInfo } from "@/lib/db";
 import { getDocumentUploadSigningSecret } from "./crypto";
 import { getDocumentStorageInfo } from "./storage";
@@ -48,7 +49,7 @@ function storageRequirements(reason: string): string[] {
 
 export function getDocumentWorkspaceIssue(
   action: DocumentWorkspaceAction,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = runtimeEnvironment()
 ): DocumentWorkspaceIssue | null {
   const database = getRuntimeDatabaseInfo(env);
   const storage = getDocumentStorageInfo(env);

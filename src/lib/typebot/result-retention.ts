@@ -1,4 +1,5 @@
-import { parsePositiveInt } from "@/lib/api/security";
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
+import { parsePositiveInt } from "@/lib/runtime/config";
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -59,7 +60,7 @@ export async function enforceTypebotResultRetention(options: {
   fetchImpl?: FetchLike;
   now?: Date;
 } = {}): Promise<TypebotResultRetentionResult> {
-  const env = options.env || process.env;
+  const env = options.env || runtimeEnvironment();
   const now = options.now || new Date();
   const dryRun = Boolean(options.dryRun);
   const summary = resultBase({ env, now, dryRun });

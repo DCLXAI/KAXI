@@ -82,7 +82,12 @@ const fonts = readFileSync("src/app/fonts.ts", "utf8");
 //    나오지 않았고, admin은 운영자 전용이라 제외한다.
 {
   const LOCALE_AWARE_VIEWS = ["Landing", "CostCalculator", "Documents", "Partners"] as const;
-  const page = readFileSync("src/components/kbridge/KaxiPage.tsx", "utf8");
+  const routeByView = {
+    Landing: "src/app/[locale]/page.tsx",
+    CostCalculator: "src/app/[locale]/cost/page.tsx",
+    Documents: "src/app/[locale]/docs/page.tsx",
+    Partners: "src/app/[locale]/partners/page.tsx",
+  } as const;
 
   for (const view of LOCALE_AWARE_VIEWS) {
     const source = readFileSync(`src/components/kbridge/${view}.tsx`, "utf8");
@@ -90,10 +95,9 @@ const fonts = readFileSync("src/app/fonts.ts", "utf8");
       /locale\s*\?\?\s*storeLang/.test(source),
       `${view}가 라우트 locale보다 클라이언트 스토어를 우선한다; 서버 렌더가 다시 한국어로 나간다`,
     );
-    assertOk(
-      new RegExp(`<${view}[^>]*locale=\\{locale\\}`).test(page),
-      `KaxiPage가 ${view}에 locale을 넘기지 않는다; prop을 받아도 항상 undefined다`,
-    );
+    const route = readFileSync(routeByView[view], "utf8");
+    assertOk(new RegExp(`<${view}[^>]*locale=\\{locale\\}`).test(route),
+      `${view} route가 locale을 넘기지 않는다; prop을 받아도 항상 undefined다`);
   }
 }
 

@@ -1,7 +1,8 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 const DEFAULT_KNOWLEDGE_REVIEW_MAX_AGE_DAYS = 92;
 
 export function knowledgeReviewMaxAgeDays(): number {
-  const days = Number.parseInt(process.env.KNOWLEDGE_REVIEW_AFTER_DAYS || "", 10);
+  const days = Number.parseInt(runtimeEnvironment().KNOWLEDGE_REVIEW_AFTER_DAYS || "", 10);
   return Number.isFinite(days) && days > 0 ? days : DEFAULT_KNOWLEDGE_REVIEW_MAX_AGE_DAYS;
 }
 

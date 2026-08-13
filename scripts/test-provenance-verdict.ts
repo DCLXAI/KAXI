@@ -150,6 +150,7 @@ console.log("PASS provenance verdict: a changed retriever or a declared-and-move
       passRate: 1, expectedDocumentRecall: 1, citationValidityRate: 1,
       strictCategoryAccuracy: 1, localeSourceAccuracy: 1, highRiskRecall: 1,
       noContextAccuracy: 1, minimumGroupPassRate: 1,
+      baseUrl: "https://kaxi.example.com",
       runtimePathDistribution: { "kaxi-direct-hybrid": 60, "kaxi-question-mediator": 10 },
       retrieval: RETRIEVAL,
     },

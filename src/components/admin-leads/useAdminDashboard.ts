@@ -1,23 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocale } from "next-intl";
 import { useKaxiSession } from "@/hooks/useKaxiSession";
 import { defaultLocale, isLocale } from "@/i18n/routing";
 import { useLeadStore } from "@/store/kbridge";
 import type { AdminLead, Stats } from "./types";
 
-export function useAdminDashboard() {
+export function useAdminDashboard(initialData?: { leads: AdminLead[]; stats: Stats } | null) {
   const activeLocale = useLocale();
   const locale = isLocale(activeLocale) ? activeLocale : defaultLocale;
   const { data: session, status } = useKaxiSession();
   const isSessionAdmin = session?.user?.role === "PLATFORM_ADMIN";
-  const { leads, fetchLeads, loading } = useLeadStore();
+  const { leads: fetchedLeads, fetchLeads, loading } = useLeadStore();
+  const leads = fetchedLeads.length > 0 ? fetchedLeads : initialData?.leads || [];
   const [authError, setAuthError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [stats, setStats] = useState<Stats | null>(null);
+  const [stats, setStats] = useState<Stats | null>(initialData?.stats || null);
   const [statsLoading, setStatsLoading] = useState(false);
+  const initialPending = useRef(Boolean(initialData));
   const hasAdminAccess = isSessionAdmin;
 
   const loadAll = useCallback(async () => {
@@ -45,7 +47,12 @@ export function useAdminDashboard() {
   }, [fetchLeads, hasAdminAccess, locale]);
 
   useEffect(() => {
-    if (hasAdminAccess) loadAll();
+    if (!hasAdminAccess) return;
+    if (initialPending.current) {
+      initialPending.current = false;
+      return;
+    }
+    void loadAll();
   }, [hasAdminAccess, loadAll]);
 
   const filteredLeads = leads.filter((lead) =>

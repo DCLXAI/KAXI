@@ -71,6 +71,13 @@ for (const model of requiredModels) {
 }
 assert(/model\s+ChatAttachmentJob\s+\{/.test(schema), "missing Prisma ChatAttachmentJob model");
 assert(schema.includes('@@map("chat_attachment_jobs")'), "ChatAttachmentJob must map to the server-only queue table");
+for (const modelName of ["OutboxEvent", "WorkerJob", "ChatAttachmentJob"]) {
+  const modelBody = schema.match(new RegExp(`model\\s+${modelName}\\s+\\{([\\s\\S]*?)\\n\\}`))?.[1] || "";
+  assert(/^\s*requestId\s+String\s+/m.test(modelBody), `${modelName}.requestId must be required`);
+}
+const attachmentJobBody = schema.match(/model\s+ChatAttachmentJob\s+\{([\s\S]*?)\n\}/)?.[1] || "";
+assert(/^\s*traceId\s+String\s+/m.test(attachmentJobBody), "ChatAttachmentJob.traceId must be required");
+assert(/^\s*traceparent\s+String\s*$/m.test(attachmentJobBody), "ChatAttachmentJob.traceparent must be required");
 
 for (const requiredField of [
   "conditionAst   Json",
@@ -136,5 +143,24 @@ for (const provenanceColumn of ["workflow_version_id", "model_version", "prompt_
   assert(postgresSql.includes(provenanceColumn), `missing RAG provenance column ${provenanceColumn}`);
 }
 assert(postgresSql.includes("kaxi_visa_document_requirement_public_read"), "missing visa document matrix RLS policy");
+assert(
+  postgresSql.includes("20260813085000_trace_request_correlation") ||
+    migrationFiles.some((file) => file.includes("20260813085000_trace_request_correlation")),
+  "missing request/trace correlation migration",
+);
+for (const table of ["outbox_events", "worker_jobs", "chat_attachment_jobs"]) {
+  assert(
+    new RegExp(`ALTER TABLE public\\.${table} ALTER COLUMN request_id SET NOT NULL`, "i").test(postgresSql),
+    `${table}.request_id must be backfilled and required`,
+  );
+}
+assert(
+  /ALTER TABLE public\.chat_attachment_jobs ALTER COLUMN trace_id SET NOT NULL/i.test(postgresSql),
+  "chat_attachment_jobs.trace_id must be backfilled and required",
+);
+assert(
+  /ALTER TABLE public\.chat_attachment_jobs ALTER COLUMN traceparent SET NOT NULL/i.test(postgresSql),
+  "chat_attachment_jobs.traceparent must be backfilled and required",
+);
 
 console.log(`PASS DB schema policy: ${requiredModels.length} domain models, single PostgreSQL schema, pgvector indexes, and RRF function verified`);

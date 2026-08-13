@@ -369,9 +369,9 @@ export const t = {
   docs_connect_admin: { ko: "행정사 연결", vi: "Kết nối chuyên gia hành chính", mn: "Зөвлөгөө холбох", en: "Connect administrative scrivener" },
 
   // 파트너
-  partners_title: { ko: "검증 파트너 연결", vi: "Kết nối đối tác", mn: "Шалгагдсан түнш", en: "Verified partners" },
-  partners_subtitle: { ko: "민감 케이스는 전문가에게 넘기세요. 취업 매칭은 법적 위험으로 제공하지 않습니다.", vi: "Trường hợp nhạy cảm → chuyên gia. Không ghép việc làm.", mn: "Эмзэг тохиолдол → мэргэжилтэн. Ажлын байр холбохгүй.", en: "Sensitive cases → experts. No job matching (legal risk)." },
-  partner_admin: { ko: "행정사 (비자·체류)", vi: "Chuyên gia hành chính", mn: "Зөвлөгөөнөөр хангагч", en: "Administrative scrivener (visa)" },
+  partners_title: { ko: "권영근 행정사 상담 연결", vi: "Kết nối với chuyên gia Kwon Young-geun", mn: "Квон Ён Гын зөвлөхтэй холбогдох", en: "Connect with Kwon Young-geun" },
+  partners_subtitle: { ko: "KARXY 공식 제휴 파트너인 로뎀행정사사무소 권영근 행정사에게 비자·체류 및 행정 상담을 요청하세요.", vi: "Yêu cầu tư vấn visa, cư trú và thủ tục hành chính với đối tác chính thức Kwon Young-geun của Văn phòng Rodem.", mn: "KARXY-ийн албан ёсны түнш Родэм албаны Квон Ён Гын зөвлөхөд виз, оршин суух болон захиргааны зөвлөгөө хүсээрэй.", en: "Request visa, stay, and administrative consultation with official KARXY partner Kwon Young-geun of Rodem Office." },
+  partner_admin: { ko: "권영근 행정사 (로뎀행정사사무소)", vi: "Kwon Young-geun (Văn phòng Rodem)", mn: "Квон Ён Гын (Родэм алба)", en: "Kwon Young-geun (Rodem Office)" },
   partner_translation: { ko: "번역·공증", vi: "Dịch+công chứng", mn: "Орчуулга+гэрчилгээ", en: "Translation & notarization" },
   partner_academy: { ko: "한국어 학원", vi: "Trung tâm tiếng Hàn", mn: "Солонгос хэлний төв", en: "Korean academy" },
   partner_admission: { ko: "학교 입학처", vi: "Phòng tuyển sinh", mn: "Элсэлтийн алба", en: "School admission office" },

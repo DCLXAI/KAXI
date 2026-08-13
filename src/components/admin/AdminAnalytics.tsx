@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BarChart3, MessageCircle, MousePointerClick, RefreshCw, UserRoundCheck } from "lucide-react";
 import { useAdminApi } from "@/components/admin/AdminShell";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,10 @@ type Funnel = {
   questionAttempts: number;
   answers: number;
   answerSuccessRate: number;
+  failures: number;
+  failureRate: number;
+  fallbacks: number;
+  fallbackRate: number;
   noContext: number;
   noContextRate: number;
   retries: number;
@@ -61,11 +65,12 @@ function Metric({ label, value, rate, detail, icon: Icon }: { label: string; val
   );
 }
 
-export function AdminAnalytics() {
+export function AdminAnalytics({ initialData = null }: { initialData?: AnalyticsResponse | null }) {
   const { adminFetch } = useAdminApi();
   const [days, setDays] = useState("30");
-  const [data, setData] = useState<AnalyticsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<AnalyticsResponse | null>(initialData);
+  const [loading, setLoading] = useState(!initialData);
+  const initialPending = useRef(Boolean(initialData));
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -83,7 +88,13 @@ export function AdminAnalytics() {
     }
   }, [adminFetch, days]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (initialPending.current) {
+      initialPending.current = false;
+      return;
+    }
+    void load();
+  }, [load]);
   const funnel = data?.funnel;
 
   return (
@@ -106,8 +117,10 @@ export function AdminAnalytics() {
 
       <section aria-labelledby="quality-title" className="space-y-3">
         <h2 id="quality-title" className="font-semibold">답변 품질과 행동</h2>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Metric label="답변 성공률" value={funnel?.answers || 0} rate={funnel?.answerSuccessRate || 0} detail={`${funnel?.questionAttempts || 0}회 질문 시도 기준`} icon={BarChart3} />
+          <Metric label="답변 실패율" value={funnel?.failures || 0} rate={funnel?.failureRate || 0} detail="질문 시도 중 응답 실패" icon={BarChart3} />
+          <Metric label="Fallback율" value={funnel?.fallbacks || 0} rate={funnel?.fallbackRate || 0} detail="복구 경로 또는 저하 응답" icon={RefreshCw} />
           <Metric label="No-context율" value={funnel?.noContext || 0} rate={funnel?.noContextRate || 0} detail="성공 응답 중 근거 부족" icon={BarChart3} />
           <Metric label="재시도율" value={funnel?.retries || 0} rate={funnel?.retryRate || 0} detail="실패 응답 기준" icon={RefreshCw} />
           <Metric label="출처 클릭률" value={funnel?.citationSessions || 0} rate={funnel?.citationClickRate || 0} detail={`${funnel?.answersWithSources || 0}건 출처 포함 답변 기준`} icon={MousePointerClick} />

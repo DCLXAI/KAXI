@@ -26,6 +26,10 @@ prepareTestDb("document verification api");
 
 const { NextRequest } = await import("next/server");
 const { db } = await import("../src/lib/db");
+const { claimWorkerJobs, completeWorkerJob } = await import("../src/infrastructure/worker/job-repository");
+const { processGenericWorkerJob } = await import("../src/worker/handlers/generic-job");
+const { platformServiceTenantContext } = await import("../src/application/tenancy/tenant-context");
+const tenantContext = platformServiceTenantContext("document-verification-api-test-worker");
 const verifyRoute = await import("../src/app/api/admin/documents/[id]/verify/route");
 const feedbackRoute = await import("../src/app/api/admin/documents/[id]/verification-feedback/route");
 const { VISA_DOCUMENT_REQUIREMENT_SEEDS } = await import("../src/lib/documents/visa-document-matrix");
@@ -48,6 +52,13 @@ function adminRequest(path: string, body: Record<string, unknown>) {
 
 async function responseJson(response: Response) {
   const body = await response.json();
+  if (response.status === 202 && body?.job?.id) {
+    const claimed = await claimWorkerJobs({ tenantContext, limit: 1 });
+    assert(claimed.length === 1 && claimed[0].id === body.job.id, "verification job should be claimable by the Worker");
+    const verification = await processGenericWorkerJob(claimed[0], tenantContext, new AbortController().signal);
+    await completeWorkerJob(claimed[0], verification);
+    body.verification = verification;
+  }
   return { ok: response.ok, status: response.status, body };
 }
 
@@ -301,7 +312,7 @@ try {
   const saved = await db.documentItem.findUnique({ where: { id: document.id } });
   assert(saved?.ocrValidation, "verification API should persist ocrValidation");
   const audit = await db.adminAuditLog.findFirst({
-    where: { action: "document.verified", targetId: document.id },
+    where: { action: "document.verification_enqueued", targetId: document.id },
   });
   assert(audit, "verification API should write admin audit log");
 

@@ -50,6 +50,7 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "node_modules/**",
     ".next/**",
     "**/.next/**",
+    ".claude/worktrees/**",
     ".vercel/**",
     ".worktrees/**",
     ".superpowers/**",

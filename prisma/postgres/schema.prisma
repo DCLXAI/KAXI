@@ -86,13 +86,41 @@ enum RiskLevel {
   UNKNOWN
 }
 
+model Tenant {
+  id            String   @id
+  slug          String   @unique
+  name          String
+  status        String   @default("active")
+  keyVersion    Int      @default(1) @map("key_version")
+  retentionDays Int      @default(90) @map("retention_days")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  organizations    Organization[]
+  handoffLeads     HandoffLead[]
+  chatSessions     ChatSession[]
+  chatMessages     ChatMessage[]
+  handoffConsents  HandoffConsentEvidence[]
+  retrievalRuns    RetrievalRun[]
+  chatAttachments  ChatAttachment[]
+  attachmentJobs   ChatAttachmentJob[]
+  handoffTasks     HandoffTask[]
+  outboxEvents     OutboxEvent[]
+  workerJobs       WorkerJob[]
+  n8nAuditMessages N8nAuditMessage[]
+
+  @@map("tenants")
+}
+
 model Organization {
   id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
   name      String
   type      OrgType
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   users               User[]
   escalationCases     EscalationCase[]
   partnerRequests     PartnerRequest[]
@@ -487,8 +515,8 @@ model UserNotification {
 
 model HandoffLead {
   id                 String   @id
-  sessionKey         String   @unique @map("session_id")
-  tenantId           String   @default("default") @map("tenant_id")
+  sessionKey         String   @map("session_id")
+  tenantId           String   @map("tenant_id")
   locale             String   @default("ko")
   source             String   @default("typebot")
   status             String   @default("contact_received")
@@ -515,7 +543,9 @@ model HandoffLead {
   updatedAt          DateTime @updatedAt @map("updated_at")
 
   contacts HandoffLeadContact[]
+  tenant   Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
+  @@unique([tenantId, sessionKey])
   @@index([tenantId, status, createdAt])
   @@index([source])
   @@index([leadStage, riskLevel])
@@ -622,12 +652,12 @@ model ChatLog {
 
 model ChatSession {
   id                String    @id @default(cuid())
-  sessionKey        String    @unique @map("session_key")
-  tenantId          String    @default("default") @map("tenant_id")
+  sessionKey        String    @map("session_key")
+  tenantId          String    @map("tenant_id")
   locale            String    @default("ko")
   source            String    @default("kaxi-site")
   channel           String    @default("kaxi-site")
-  typebotResultId   String?   @unique @map("typebot_result_id")
+  typebotResultId   String?   @map("typebot_result_id")
   userId            String?   @map("user_id")
   status            String    @default("active")
   startedAt         DateTime  @default(now()) @map("started_at")
@@ -644,7 +674,10 @@ model ChatSession {
   handoffConsents HandoffConsentEvidence[]
   messages        ChatMessage[]
   retrievalRuns   RetrievalRun[]
+  tenant          Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
+  @@unique([tenantId, sessionKey])
+  @@unique([tenantId, typebotResultId])
   @@index([tenantId])
   @@index([locale])
   @@index([source])
@@ -657,6 +690,7 @@ model ChatSession {
 
 model HandoffConsentEvidence {
   id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id")
   sessionKey      String    @map("session_id")
   typebotResultId String?   @map("typebot_result_id")
   scope           String    @default("HANDOFF_CONTACT_COLLECTION")
@@ -672,9 +706,10 @@ model HandoffConsentEvidence {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  session ChatSession @relation(fields: [sessionKey], references: [sessionKey], onDelete: Cascade)
+  session ChatSession @relation(fields: [tenantId, sessionKey], references: [tenantId, sessionKey], onDelete: Cascade)
+  tenant  Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
-  @@unique([sessionKey, scope, noticeVersion])
+  @@unique([tenantId, sessionKey, scope, noticeVersion])
   @@index([typebotResultId])
   @@index([acceptedAt])
   @@index([retentionUntil])
@@ -685,8 +720,8 @@ model ChatMessage {
   id                 BigInt   @id @default(autoincrement())
   sessionKey         String   @map("session_id")
   requestId          String   @unique @default(uuid()) @map("request_id") @db.Uuid
-  idempotencyKey     String?  @unique @map("idempotency_key")
-  tenantId           String   @default("default") @map("tenant_id")
+  idempotencyKey     String?  @map("idempotency_key")
+  tenantId           String   @map("tenant_id")
   question           String
   questionCiphertext String?  @map("question_ciphertext")
   questionHash       String?  @map("question_hash")
@@ -718,10 +753,14 @@ model ChatMessage {
   createdAt          DateTime @default(now()) @map("created_at")
 
   attachments  ChatAttachment[]
-  session      ChatSession      @relation(fields: [sessionKey], references: [sessionKey], onDelete: Cascade)
+  session      ChatSession      @relation(fields: [tenantId, sessionKey], references: [tenantId, sessionKey], onDelete: Cascade)
   retrievalRun RetrievalRun?
   auditMessage N8nAuditMessage?
+  handoffTasks HandoffTask[]
+  outboxEvents OutboxEvent[]
+  tenant       Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
+  @@unique([tenantId, idempotencyKey])
   @@index([sessionKey])
   @@index([tenantId])
   @@index([source])
@@ -733,8 +772,163 @@ model ChatMessage {
   @@map("chat_messages")
 }
 
+model HandoffTask {
+  id                  BigInt    @id @default(autoincrement())
+  sourceChatMessageId BigInt?   @map("source_chat_message_id")
+  sessionKey          String    @map("session_id")
+  tenantId            String    @map("tenant_id")
+  question            String
+  questionCiphertext  String?   @map("question_ciphertext")
+  questionHash        String?   @map("question_hash")
+  questionRedacted    Boolean   @default(false) @map("question_redacted")
+  answer              String
+  answerCiphertext    String?   @map("answer_ciphertext")
+  answerHash          String?   @map("answer_hash")
+  answerRedacted      Boolean   @default(false) @map("answer_redacted")
+  riskLevel           String    @default("medium") @map("risk_level")
+  leadStage           String    @default("review") @map("lead_stage")
+  status              String    @default("open")
+  assignee            String?
+  notes               String?
+  notesCiphertext     String?   @map("notes_ciphertext")
+  notesHash           String?   @map("notes_hash")
+  notesRedacted       Boolean   @default(false) @map("notes_redacted")
+  dedupeKey           String?   @map("dedupe_key")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  closedAt            DateTime? @map("closed_at")
+
+  sourceChatMessage ChatMessage? @relation(fields: [sourceChatMessageId], references: [id], onDelete: SetNull)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([tenantId, status])
+  @@index([riskLevel, leadStage])
+  @@index([sourceChatMessageId])
+  @@map("handoff_tasks")
+}
+
+model OutboxEvent {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @map("tenant_id")
+  requestId      String    @map("request_id")
+  aggregateType  String    @map("aggregate_type")
+  aggregateId    String    @map("aggregate_id")
+  eventType      String    @map("event_type")
+  idempotencyKey String    @map("idempotency_key")
+  messageId      BigInt?   @map("message_id")
+  payload        Json      @default("{}")
+  traceId        String    @map("trace_id")
+  status         String    @default("queued")
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(12) @map("max_attempts")
+  availableAt    DateTime  @default(now()) @map("available_at")
+  lockedAt       DateTime? @map("locked_at")
+  lockToken      String?   @map("lock_token") @db.Uuid
+  lastError      String?   @map("last_error")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  processedAt    DateTime? @map("processed_at")
+  retentionUntil DateTime  @default(dbgenerated("now() + interval '90 days'")) @map("retention_until")
+
+  message ChatMessage? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, eventType, idempotencyKey])
+  @@index([status, availableAt])
+  @@index([lockedAt])
+  @@index([tenantId, createdAt])
+  @@index([requestId, createdAt])
+  @@index([aggregateType, aggregateId])
+  @@index([messageId])
+  @@index([retentionUntil])
+  @@map("outbox_events")
+}
+
+model WorkerJob {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @map("tenant_id")
+  requestId      String    @map("request_id")
+  jobType        String    @map("job_type")
+  idempotencyKey String    @map("idempotency_key")
+  payload        Json      @default("{}")
+  result         Json?
+  traceId        String    @map("trace_id")
+  traceparent    String?
+  tenantClaim    String?   @map("tenant_claim")
+  status         String    @default("queued")
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(8) @map("max_attempts")
+  availableAt    DateTime  @default(now()) @map("available_at")
+  lockedAt       DateTime? @map("locked_at")
+  lockToken      String?   @map("lock_token") @db.Uuid
+  heartbeatAt    DateTime? @map("heartbeat_at")
+  timeoutMs      Int       @default(300000) @map("timeout_ms")
+  deadlineAt     DateTime? @map("deadline_at")
+  lastError      String?   @map("last_error")
+  startedAt      DateTime? @map("started_at")
+  completedAt    DateTime? @map("completed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  sourceCheckpoints WorkerSourceCheckpoint[]
+  tenant            Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, jobType, idempotencyKey])
+  @@index([status, availableAt])
+  @@index([lockedAt])
+  @@index([tenantId, createdAt])
+  @@index([requestId, createdAt])
+  @@index([jobType, status])
+  @@map("worker_jobs")
+}
+
+model WorkerSourceCheckpoint {
+  jobId       String    @map("job_id") @db.Uuid
+  sourceId    String    @map("source_id")
+  ordinal     Int
+  status      String    @default("pending")
+  contentHash String?   @map("content_hash")
+  lastError   String?   @map("last_error")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  job WorkerJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@id([jobId, sourceId])
+  @@index([sourceId, completedAt])
+  @@index([jobId, ordinal])
+  @@map("worker_source_checkpoints")
+}
+
+model TraceSpan {
+  id           String   @id @default(uuid()) @db.Uuid
+  traceId      String   @map("trace_id")
+  spanId       String   @unique @map("span_id")
+  parentSpanId String?  @map("parent_span_id")
+  requestId    String?  @map("request_id")
+  service      String
+  name         String
+  status       String
+  startedAt    DateTime @map("started_at")
+  endedAt      DateTime @map("ended_at")
+  durationMs   Float    @map("duration_ms")
+  attributes   Json     @default("{}")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([traceId, startedAt])
+  @@index([requestId, startedAt])
+  @@index([service, name, startedAt])
+  @@index([status, startedAt])
+  @@map("trace_spans")
+}
+
 model RetrievalRun {
   id                    String   @id @default(uuid()) @db.Uuid
+  tenantId              String   @map("tenant_id")
   requestId             String   @unique @map("request_id") @db.Uuid
   messageId             BigInt   @unique @map("message_id")
   sessionKey            String   @map("session_id")
@@ -755,16 +949,25 @@ model RetrievalRun {
   rejectedCitationCount Int      @default(0) @map("rejected_citation_count")
   noContext             Boolean  @default(false) @map("no_context")
   noContextReason       String?  @map("no_context_reason")
+  planVersion           String   @default("legacy-unversioned") @map("plan_version")
+  scoreVersion          String   @default("legacy-unversioned") @map("score_version")
+  thresholdSet          String   @default("legacy-unversioned") @map("threshold_set")
+  embeddingSource       String   @default("unknown") @map("embedding_source")
+  candidateCount        Int      @default(0) @map("candidate_count")
+  corpusSnapshotId      String   @default("legacy-unversioned") @map("corpus_snapshot_id")
+  replaySpec            Json     @default("{}") @map("replay_spec")
   sources               Json     @default("[]")
   searchMeta            Json     @default("{}") @map("search_meta")
   createdAt             DateTime @default(now()) @map("created_at")
 
   message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  session ChatSession @relation(fields: [sessionKey], references: [sessionKey], onDelete: Cascade)
+  session ChatSession @relation(fields: [tenantId, sessionKey], references: [tenantId, sessionKey], onDelete: Cascade)
+  tenant  Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@index([sessionKey, createdAt])
   @@index([executionId])
   @@index([workflowId, workflowVersionId])
+  @@index([planVersion, scoreVersion, createdAt])
   @@index([noContext, createdAt])
   @@map("retrieval_runs")
 }
@@ -809,16 +1012,16 @@ model ProductEvent {
 
 model N8nAuditMessage {
   id                  BigInt   @id @default(autoincrement())
-  executionId         String?  @unique @map("execution_id")
+  executionId         String?  @map("execution_id")
   workflowId          String   @default("legacy-unversioned") @map("workflow_id")
   workflowVersionId   String   @default("legacy-unversioned") @map("workflow_version_id")
   modelVersion        String   @default("legacy-unversioned") @map("model_version")
   promptVersion       String   @default("legacy-unversioned") @map("prompt_version")
   sourceChatMessageId BigInt?  @unique @map("source_chat_message_id")
-  requestId           String?  @unique @map("request_id") @db.Uuid
+  requestId           String?  @map("request_id") @db.Uuid
   idempotencyKey      String?  @map("idempotency_key")
   sessionKey          String   @map("session_id")
-  tenantId            String   @default("default") @map("tenant_id")
+  tenantId            String   @map("tenant_id")
   locale              String   @default("ko")
   source              String   @default("typebot")
   channel             String   @default("typebot")
@@ -839,6 +1042,11 @@ model N8nAuditMessage {
 
   sourceChatMessage ChatMessage? @relation(fields: [sourceChatMessageId], references: [id], onDelete: SetNull)
 
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, executionId])
+  @@unique([tenantId, requestId])
+  @@unique([tenantId, idempotencyKey])
   @@index([sessionKey, createdAt])
   @@index([tenantId, createdAt])
   @@index([channel])
@@ -849,6 +1057,7 @@ model N8nAuditMessage {
 
 model ChatAttachment {
   id               String    @id @default(cuid())
+  tenantId         String    @map("tenant_id")
   sessionKey       String    @map("session_id")
   messageId        BigInt?   @map("message_id")
   bucket           String
@@ -867,11 +1076,14 @@ model ChatAttachment {
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
-  session       ChatSession               @relation(fields: [sessionKey], references: [sessionKey], onDelete: Cascade)
+  session       ChatSession               @relation(fields: [tenantId, sessionKey], references: [tenantId, sessionKey], onDelete: Cascade)
   message       ChatMessage?              @relation(fields: [messageId], references: [id], onDelete: SetNull)
   extraction    ChatAttachmentExtraction?
   processingJob ChatAttachmentJob?
+  promotion     ChatAttachmentPromotion?
+  tenant        Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
+  @@index([tenantId, sessionKey])
   @@index([sessionKey])
   @@index([messageId])
   @@index([sha256])
@@ -885,6 +1097,11 @@ model ChatAttachment {
 
 model ChatAttachmentJob {
   id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id")
+  tenantClaim  String?   @map("tenant_claim")
+  requestId    String    @map("request_id")
+  traceId      String    @map("trace_id")
+  traceparent  String
   attachmentId String    @unique @map("attachment_id")
   status       String    @default("queued")
   attempts     Int       @default(0)
@@ -898,7 +1115,10 @@ model ChatAttachmentJob {
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
   attachment ChatAttachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
+  @@index([tenantId, status])
+  @@index([requestId, createdAt])
   @@index([status, availableAt])
   @@index([lockedAt])
   @@map("chat_attachment_jobs")
@@ -924,6 +1144,25 @@ model ChatAttachmentExtraction {
   attachment ChatAttachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
 
   @@map("chat_attachment_extractions")
+}
+
+model ChatAttachmentPromotion {
+  attachmentId       String    @id @map("attachment_id")
+  sourceKey          String    @map("source_key")
+  destinationKey     String    @map("destination_key")
+  status             String    @default("promotion_planned")
+  attempts           Int       @default(0)
+  lastError          String?   @map("last_error")
+  objectMovedAt      DateTime? @map("object_moved_at")
+  pointerCommittedAt DateTime? @map("pointer_committed_at")
+  readyAt            DateTime? @map("ready_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  attachment ChatAttachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+
+  @@index([status, updatedAt])
+  @@map("chat_attachment_promotions")
 }
 
 // AI Agent 요청 비용/품질 원장

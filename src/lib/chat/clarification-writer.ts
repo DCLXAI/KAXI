@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { generateLlmText, isLlmConfigured } from "@/lib/ai/llm-gateway";
 import type { GuardrailLocale } from "@/lib/chat/response-guardrail";
 import { profilePromptBlock, type SessionProfile } from "@/lib/chat/session-profile";
@@ -29,7 +30,7 @@ export type LlmClarification = {
   durationMs: number;
 };
 
-export function clarificationWriterTimeoutMs(env: NodeJS.ProcessEnv = process.env) {
+export function clarificationWriterTimeoutMs(env: NodeJS.ProcessEnv = runtimeEnvironment()) {
   const configured = Number.parseInt(env.RAG_CLARIFICATION_TIMEOUT_MS || "", 10);
   return Number.isFinite(configured) ? Math.min(Math.max(configured, 2_000), 8_000) : 4_000;
 }

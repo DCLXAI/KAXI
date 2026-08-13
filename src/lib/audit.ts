@@ -1,6 +1,4 @@
-import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { getClientIp } from "@/lib/api/security";
 
 export interface AuditInput {
   actor: string;
@@ -41,12 +39,19 @@ export async function recordAuditLog(input: AuditInput): Promise<void> {
 }
 
 export async function recordRequestAudit(
-  req: NextRequest,
+  req: { headers: Headers },
   input: Omit<AuditInput, "ip" | "userAgent">
 ): Promise<void> {
+  const trusted = req.headers.get("x-vercel-forwarded-for")?.trim()
+    || req.headers.get("x-real-ip")?.trim();
+  const forwarded = req.headers.get("x-forwarded-for")
+    ?.split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .at(-1);
   await recordAuditLog({
     ...input,
-    ip: getClientIp(req),
+    ip: trusted || forwarded || "unknown",
     userAgent: req.headers.get("user-agent") || null,
   });
 }

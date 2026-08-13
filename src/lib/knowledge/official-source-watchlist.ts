@@ -3,6 +3,18 @@ import {
   type VerifiedOfficialKnowledgeSource,
 } from "./verified-official-sources";
 
+export const DEFAULT_CRON_KNOWLEDGE_SOURCE_IDS = [
+  "immigration-law-recent-promulgations",
+  "immigration-law-interpretation-hierarchy",
+  "immigration-decree-current-text",
+  "immigration-rule-stay-permission-review-criteria",
+  "hikorea-homepage-urgent-notices",
+  "hikorea-policy-notice-monitor",
+  "moj-immigration-policy-news",
+  "accredited-university",
+  "visa-portal-visa-types",
+] as const;
+
 const LAW_ACT_URL = "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=272921";
 const LAW_DECREE_URL = "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=271319";
 const LAW_RULE_URL = "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=283059";
@@ -118,6 +130,10 @@ const STUDY_IN_KOREA_CERTIFIED_UNIVERSITY_URL =
   "https://studyinkorea.go.kr/ko/plan/certifiedUniversity.do";
 const STUDY_IN_KOREA_D10_DOCUMENTS_URL =
   "https://studyinkorea.go.kr/ko/life/residenceAndStayInfo.do?tab=job-seeker-visa";
+const STUDY_IN_KOREA_STUDY_EXPENSES_URL =
+  "https://www.studyinkorea.go.kr/en_US/plan/abroadExpenses.do";
+const STUDY_IN_KOREA_LIVING_EXPENSES_URL =
+  "https://studyinkorea.go.kr/ko/life/livingExpense.do";
 const VISA_PORTAL_VISA_TYPES_URL = "https://www.visa.go.kr/openPage.do?LANG_TYPE=EN&MENU_ID=10102";
 
 export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: VerifiedOfficialKnowledgeSource[] = [
@@ -907,6 +923,26 @@ export const OFFICIAL_KNOWLEDGE_SOURCE_WATCHLIST: VerifiedOfficialKnowledgeSourc
     legalPriority: 3,
     monitorCadence: "daily",
     changeSignals: ["d10", "job_seeking", "required_documents", "financial_proof", "proof_of_residence"],
+  },
+  {
+    docId: "cost-breakdown",
+    title: "Study in Korea 학위과정 연간 등록금",
+    sourceUrl: STUDY_IN_KOREA_STUDY_EXPENSES_URL,
+    sourceType: "official_government",
+    topic: "cost",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["annual_tuition", "national_average", "public_private_average", "department_average"],
+  },
+  {
+    docId: "living-cost-breakdown",
+    title: "Study in Korea 월 생활비",
+    sourceUrl: STUDY_IN_KOREA_LIVING_EXPENSES_URL,
+    sourceType: "official_government",
+    topic: "cost",
+    legalPriority: 4,
+    monitorCadence: "daily",
+    changeSignals: ["monthly_living_expenses", "housing", "food", "transportation", "other_expenses"],
   },
   {
     docId: "accredited-university",

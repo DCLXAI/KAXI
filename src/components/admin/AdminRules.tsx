@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, RefreshCw, XCircle } from "lucide-react";
 import { useAdminApi } from "@/components/admin/AdminShell";
 import { Badge } from "@/components/ui/badge";
@@ -17,10 +17,11 @@ function JsonInline({ value }: { value: unknown }) {
   return <code className="break-all rounded bg-muted px-1.5 py-0.5 text-[11px]">{JSON.stringify(value)}</code>;
 }
 
-export function AdminRules() {
+export function AdminRules({ initialData = null }: { initialData?: AdminRuleItem[] | null }) {
   const { adminFetch } = useAdminApi();
-  const [rules, setRules] = useState<AdminRuleItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [rules, setRules] = useState<AdminRuleItem[]>(initialData || []);
+  const [loading, setLoading] = useState(!initialData);
+  const initialPending = useRef(Boolean(initialData));
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,7 +41,11 @@ export function AdminRules() {
   }, [adminFetch]);
 
   useEffect(() => {
-    loadRules();
+    if (initialPending.current) {
+      initialPending.current = false;
+      return;
+    }
+    void loadRules();
   }, [loadRules]);
 
   const updateReviewStatus = async (versionId: string, reviewStatus: "APPROVED" | "REJECTED" | "PENDING") => {

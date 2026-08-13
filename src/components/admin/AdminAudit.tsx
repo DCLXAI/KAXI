@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw, Search } from "lucide-react";
 import { useAdminApi } from "@/components/admin/AdminShell";
 import { Badge } from "@/components/ui/badge";
@@ -20,12 +20,13 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-export function AdminAudit() {
+export function AdminAudit({ initialData = null }: { initialData?: AdminAuditItem[] | null }) {
   const { adminFetch } = useAdminApi();
   const [caseId, setCaseId] = useState("");
   const [activeCaseId, setActiveCaseId] = useState("");
-  const [events, setEvents] = useState<AdminAuditItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [events, setEvents] = useState<AdminAuditItem[]>(initialData || []);
+  const [loading, setLoading] = useState(!initialData);
+  const initialPending = useRef(Boolean(initialData));
   const [error, setError] = useState<string | null>(null);
 
   const loadEvents = useCallback(async () => {
@@ -45,7 +46,11 @@ export function AdminAudit() {
   }, [adminFetch, activeCaseId]);
 
   useEffect(() => {
-    loadEvents();
+    if (initialPending.current) {
+      initialPending.current = false;
+      return;
+    }
+    void loadEvents();
   }, [loadEvents]);
 
   return (

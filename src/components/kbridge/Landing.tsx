@@ -2,19 +2,21 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
 import { useLangStore } from "@/store/kbridge";
 import { tr, type Lang } from "@/lib/i18n/translations";
 import type { School } from "@/lib/data/schools";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { AgentExperience } from "@/components/agent/AgentExperience";
+import { TypebotInline } from "@/components/typebot/TypebotInline";
 import { smoothScrollIntoView } from "@/lib/ui/scroll";
 import { HomeQuickDiagnosis } from "@/components/diagnosis/HomeQuickDiagnosis";
 import { HeroFluidInk } from "@/components/kbridge/HeroFluidInk";
+import { usePublicNavigation } from "@/components/kbridge/PublicShell";
 import { ArrowRight, Calculator, FileCheck, School as SchoolIcon, Users, Globe2, AlertTriangle } from "lucide-react";
 
-export function Landing({ onNavigate, locale }: { onNavigate: (v: string) => void; locale?: Lang }) {
+export function Landing({ onNavigate, locale }: { onNavigate?: (v: string) => void; locale?: Lang }) {
+  const shellNavigate = usePublicNavigation();
+  const navigate = onNavigate || shellNavigate;
   // 라우트의 locale이 먼저다. 스토어만 읽으면 서버 렌더에서 값이 항상 기본값
   // ko라, /vi 와 /mn 의 초기 HTML이 통째로 한국어로 나갔다 — h1까지 포함해서.
   // 하이드레이션 후에야 번역으로 바뀌므로 사람 눈에는 한국어가 한 번 번쩍이고,
@@ -22,18 +24,10 @@ export function Landing({ onNavigate, locale }: { onNavigate: (v: string) => voi
   // KaxiPage와 Header는 이미 이 방식이었고 Landing만 빠져 있었다.
   const { lang: storeLang } = useLangStore();
   const lang = locale ?? storeLang;
-  const shouldReduceMotion = useReducedMotion();
   const [schoolStats, setSchoolStats] = useState<{ total: number | null; accredited: number | null }>({
     total: null,
     accredited: null,
   });
-
-  const sectionReveal = {
-    initial: shouldReduceMotion ? { opacity: 0 } : { opacity: 0, transform: "translateY(8px)" },
-    whileInView: shouldReduceMotion ? { opacity: 1 } : { opacity: 1, transform: "translateY(0px)" },
-    viewport: { once: true, margin: "-60px" } as const,
-    transition: { duration: 0.25, ease: [0.23, 1, 0.32, 1] as const },
-  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -221,12 +215,7 @@ export function Landing({ onNavigate, locale }: { onNavigate: (v: string) => voi
               {tr("hero_cta_agent", lang)}
             </Button>
           </div>
-          <motion.div
-            initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, transform: "translateY(12px)" }}
-            animate={{ opacity: 1, transform: "translateY(0px)" }}
-            transition={{ duration: 0.45, ease: [0.23, 1, 0.32, 1], delay: 0.12 }}
-            className="relative mx-auto mt-8 w-full max-w-2xl"
-          >
+          <div className="relative mx-auto mt-8 w-full max-w-2xl animate-in fade-in slide-in-from-bottom-3 duration-500 motion-reduce:animate-none">
             <div aria-hidden className="absolute inset-x-[12%] bottom-[8%] h-10 rounded-[50%] bg-primary/20 blur-2xl" />
             <Image
               src="/mascot/karxy-mascot-trio.png"
@@ -237,17 +226,15 @@ export function Landing({ onNavigate, locale }: { onNavigate: (v: string) => voi
               className="relative h-auto w-full object-contain"
               priority
             />
-          </motion.div>
+          </div>
           <div className="mx-auto mt-10 h-px max-w-3xl bg-gradient-to-r from-transparent via-border to-transparent md:mt-12" aria-hidden="true" />
         </div>
       </section>
 
-      <HomeQuickDiagnosis lang={lang} onNavigate={onNavigate} />
+      <HomeQuickDiagnosis lang={lang} onNavigate={navigate} />
 
       <section id="kaxi-ai" aria-label="KARXY AI" className="mx-auto w-full max-w-3xl px-4">
-        <div className="rounded-2xl border border-primary/50 bg-gradient-to-b from-primary/20 via-primary/10 to-transparent p-3 shadow-[0_16px_40px_-24px_rgba(79,93,179,0.45)] sm:p-5 dark:border-primary/25 dark:from-primary/15 dark:via-primary/5 dark:shadow-[0_16px_40px_-24px_rgba(0,0,0,0.5)]">
-          <AgentExperience embedded />
-        </div>
+        <TypebotInline />
       </section>
 
       <section aria-label={tr("hero_stat_schools", lang)} className="mx-auto w-full max-w-2xl px-4">
@@ -290,16 +277,14 @@ export function Landing({ onNavigate, locale }: { onNavigate: (v: string) => voi
           {features.map((f, i) => {
             const Icon = f.icon;
             return (
-              <motion.div
+              <div
                 key={f.action}
-                initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, transform: "translateY(12px)" }}
-                whileInView={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, transform: "translateY(0px)" }}
-                viewport={{ once: true, margin: "-60px" }}
-                transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1], delay: i * 0.05 }}
+                className="animate-in fade-in slide-in-from-bottom-3 duration-300 motion-reduce:animate-none"
+                style={{ animationDelay: `${i * 50}ms` }}
               >
                 <Card
                   className="group cursor-pointer border-border/70 bg-card shadow-[0_1px_2px_rgba(31,30,29,0.04)] transition-[border-color,box-shadow,transform] duration-200 ease-snappy hover:border-primary-strong/40 hover:shadow-[0_12px_28px_-16px_rgba(79,93,179,0.45)] hover:-translate-y-0.5 dark:shadow-[0_1px_2px_rgba(0,0,0,0.3)] dark:hover:shadow-[0_12px_28px_-16px_rgba(0,0,0,0.6)]"
-                  onClick={() => onNavigate(f.action)}
+                  onClick={() => navigate(f.action)}
                 >
                   <CardHeader>
                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-icon-accent/25 to-icon-accent/10 ring-1 ring-inset ring-icon-accent/30">
@@ -315,7 +300,7 @@ export function Landing({ onNavigate, locale }: { onNavigate: (v: string) => voi
                     </Button>
                   </CardContent>
                 </Card>
-              </motion.div>
+              </div>
             );
           })}
         </div>
@@ -323,7 +308,7 @@ export function Landing({ onNavigate, locale }: { onNavigate: (v: string) => voi
       </section>
 
       {/* Broker comparison */}
-      <motion.section className="mx-auto max-w-5xl px-4" {...sectionReveal}>
+      <section className="mx-auto max-w-5xl px-4 animate-in fade-in slide-in-from-bottom-2 duration-300 motion-reduce:animate-none">
         <Card className="border-border/70">
           <CardHeader>
             <CardTitle className="font-serif flex items-center gap-2 text-xl">
@@ -356,10 +341,10 @@ export function Landing({ onNavigate, locale }: { onNavigate: (v: string) => voi
             </div>
           </CardContent>
         </Card>
-      </motion.section>
+      </section>
 
       {/* CTA */}
-      <motion.section className="mx-auto max-w-4xl px-4 pb-16" {...sectionReveal}>
+      <section className="mx-auto max-w-4xl px-4 pb-16 animate-in fade-in slide-in-from-bottom-2 duration-300 motion-reduce:animate-none">
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-primary to-[#b7c4fd] p-8 md:p-12 text-primary-foreground text-center shadow-[0_24px_48px_-24px_rgba(79,93,179,0.55)] ring-1 ring-inset ring-primary-foreground/10">
           <div className="relative">
             <div className="mb-4 flex justify-center">
@@ -381,7 +366,7 @@ export function Landing({ onNavigate, locale }: { onNavigate: (v: string) => voi
             </Button>
           </div>
         </div>
-      </motion.section>
+      </section>
     </div>
   );
 }

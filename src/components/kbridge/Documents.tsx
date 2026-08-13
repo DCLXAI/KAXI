@@ -39,6 +39,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { usePublicNavigation } from "@/components/kbridge/PublicShell";
 
 interface StudentDocument {
   id: string | null;
@@ -262,7 +263,9 @@ async function sha256File(file: File): Promise<string> {
     .join("");
 }
 
-export function Documents({ onNavigate, locale }: { onNavigate: (view: string) => void; locale?: Lang }) {
+export function Documents({ onNavigate, locale }: { onNavigate?: (view: string) => void; locale?: Lang }) {
+  const shellNavigate = usePublicNavigation();
+  const navigate = onNavigate || shellNavigate;
   // 라우트 locale이 먼저다. 스토어만 읽으면 서버 렌더에서 항상 기본값 ko가 되어
 
   // 이 화면 전체가 한국어로 나간다. 자세한 근거는 Landing.tsx 참고.
@@ -616,7 +619,7 @@ export function Documents({ onNavigate, locale }: { onNavigate: (view: string) =
                     </div>
 
                     {(doc.status === "NEEDS_REVIEW" || doc.status === "REJECTED") && (
-                      <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => onNavigate("partners")}>
+                      <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => navigate("partners")}>
                         {tr("docs_connect_admin", lang)}
                       </Button>
                     )}

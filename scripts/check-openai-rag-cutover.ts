@@ -5,6 +5,7 @@ import {
   RAG_QUERY_EMBEDDING_DIMENSIONS,
   RAG_QUERY_EMBEDDING_MODEL,
 } from "../src/lib/chat/query-embedding";
+import { PLATFORM_TENANT_ID } from "../src/application/tenancy/tenant-context";
 import { getRagServingProjectionStatus } from "../src/lib/knowledge/serving-projection";
 
 function configured(value: string | undefined) {
@@ -39,11 +40,11 @@ async function main() {
       failures.push("Supabase service role is not configured");
     } else {
       const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-      const result = await client.rpc("match_rag_documents_hybrid_v3", {
+      const result = await client.rpc("match_rag_documents_hybrid_v4", {
         query_embedding: `[${(embedding.vector as number[]).map((value) => Number(value).toFixed(8)).join(",")}]`,
         match_count: 6,
         filter: {
-          tenant_id: "default",
+          tenant_id: PLATFORM_TENANT_ID,
           category: "visa",
           category_mode: "strict",
           locale: "ko",

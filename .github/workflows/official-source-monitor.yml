@@ -62,6 +62,8 @@ jobs:
             source_ids: moj-office-jurisdiction-seoul-incheon-gyeonggi,moj-office-jurisdiction-busan-gyeongnam,moj-office-jurisdiction-gwangju-jeolla-jeju,moj-office-jurisdiction-daegu-gyeongbuk-gangwon,moj-office-jurisdiction-daejeon-chungcheong,moj-mobile-immigration-office
           - batch: study-visa-portal
             source_ids: study-in-korea-d10-change-documents,accredited-university,visa-portal-visa-types
+          - batch: study-costs
+            source_ids: cost-breakdown,living-cost-breakdown
           - batch: verified-easylaw-student-worker
             source_ids: easylaw-foreign-student-guide,easylaw-foreign-student-part-time-work,easylaw-foreign-worker-employment-guide,easylaw-foreign-worker-status-methods,easylaw-foreign-worker-workplace-change
           - batch: verified-easylaw-family-overseas-korean
@@ -113,20 +115,10 @@ jobs:
 
           echo "$response" | jq --arg batch "${{ matrix.batch }}" '{
             batch: $batch,
-            checkedAt,
-            total,
-            changed,
-            unchanged,
-            failed,
-            candidatesCreated,
-            alert,
-            changedDocIds: [.results[] | select(.status == "changed") | .docId],
-            failedDocIds: [.results[] | select(.status == "failed") | .docId],
-            failedResults: [.results[] | select(.status == "failed") | {docId, error}]
+            accepted,
+            executionOwner,
+            jobId: .job.id,
+            status: .job.status,
+            candidateWritesEnabled,
+            candidateWritePaused
           }'
-
-          failed="$(echo "$response" | jq '.failed')"
-          if [ "$failed" -gt 0 ]; then
-            echo "Official source monitor detected failed source checks."
-            exit 1
-          fi

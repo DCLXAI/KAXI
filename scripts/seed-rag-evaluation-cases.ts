@@ -1,5 +1,6 @@
 import { readFileSync } from "fs";
 import { createClient } from "@supabase/supabase-js";
+import { buildBlindEvaluationCandidates } from "../quality/blind-eval-candidates";
 
 type LegacyCase = {
   id: string;
@@ -45,7 +46,7 @@ const productionRegressionRows = [{
   locale: "ko",
   category: "cost",
   question: "한국 유학 준비 비용 항목을 한국어로 짧게 알려주세요.",
-  expected_doc_ids: ["cost-breakdown"],
+  expected_doc_ids: ["cost-breakdown", "living-cost-breakdown"],
   expected_risk_level: "low",
   expected_handoff: false,
   active: true,
@@ -58,7 +59,7 @@ const productionRegressionRows = [{
     expectedLocaleHeadings: true,
     expectedTopDocId: "cost-breakdown",
     expectedReranker: "deterministic-locale-intent-v11",
-    expectedAnswerTerms: ["등록금", "기숙사", "서류비", "번역", "항공", "정착비"],
+    expectedAnswerTerms: ["등록금", "생활비", "주거비", "식비", "교통비"],
     minimumExpectedAnswerTerms: 2,
     forbiddenDocIds: [
       "visa-documents",
@@ -82,7 +83,7 @@ const strictCategoryLocaleRows = [
 ].map((item) => ({
   ...item,
   category: "cost",
-  expected_doc_ids: ["cost-breakdown"],
+  expected_doc_ids: ["cost-breakdown", "living-cost-breakdown"],
   expected_risk_level: "low",
   expected_handoff: false,
   active: true,
@@ -290,7 +291,41 @@ const evaluationRows = [
   ...noContextRows,
   ...schoolCategoryLocaleRows,
   ...behaviorRegressionRows,
-];
+].map((row) => ({
+  ...row,
+  metadata: {
+    ...row.metadata,
+    cohort: "regression",
+    reviewStatus: "engineering_regression",
+  },
+}));
 const result = await supabase.from("rag_evaluation_cases").upsert(evaluationRows, { onConflict: "id" });
 if (result.error) throw result.error;
-console.log(`PASS seeded ${evaluationRows.length} governed RAG evaluation cases`);
+
+const blindRows = buildBlindEvaluationCandidates().map((candidate) => ({
+  id: candidate.id,
+  locale: candidate.locale,
+  category: candidate.category,
+  question: candidate.question,
+  expected_doc_ids: candidate.expectedDocIds,
+  expected_risk_level: candidate.expectedRiskLevel,
+  expected_handoff: candidate.expectedHandoff,
+  active: false,
+  metadata: {
+    source: "quality/blind-eval-candidates.ts",
+    cohort: "expert-blind",
+    reviewStatus: "pending_expert_review",
+    expectedNoContext: candidate.expectedNoContext,
+    expectedRefusal: candidate.expectedRefusal,
+    expectedStrictCategory: candidate.category !== "general",
+    expectedLocaleHeadings: !candidate.expectedNoContext,
+    expectedOpenAiVector: true,
+  },
+}));
+// A later seed must never overwrite an expert's approval or corrected expectation.
+const blindResult = await supabase
+  .from("rag_evaluation_cases")
+  .upsert(blindRows, { onConflict: "id", ignoreDuplicates: true });
+if (blindResult.error) throw blindResult.error;
+
+console.log(`PASS seeded ${evaluationRows.length} regression cases and ${blindRows.length} inactive expert-review candidates`);

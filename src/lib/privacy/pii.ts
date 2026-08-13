@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from "crypto";
 import { isEnvTrue } from "@/lib/env";
 
@@ -16,12 +17,12 @@ function normalizeSecret(value: string): Buffer {
 }
 
 function encryptionKey(): Buffer | null {
-  const secret = process.env.DATA_ENCRYPTION_KEY?.trim();
+  const secret = runtimeEnvironment().DATA_ENCRYPTION_KEY?.trim();
   return secret ? normalizeSecret(secret) : null;
 }
 
 function hashSecret(): Buffer {
-  return normalizeSecret(process.env.PII_HASH_SECRET || process.env.DATA_ENCRYPTION_KEY || "kaxi-local-pii-hash");
+  return normalizeSecret(runtimeEnvironment().PII_HASH_SECRET || runtimeEnvironment().DATA_ENCRYPTION_KEY || "kaxi-local-pii-hash");
 }
 
 function normalizeForHash(value: string): string {
@@ -33,7 +34,7 @@ export function isPiiEncryptionConfigured(): boolean {
 }
 
 export function requiresPiiEncryption(): boolean {
-  return process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
+  return runtimeEnvironment().NODE_ENV === "production" || runtimeEnvironment().VERCEL_ENV === "production";
 }
 
 export function canPersistPiiValue(value: string | null | undefined): boolean {
@@ -44,7 +45,7 @@ export function canPersistPiiValue(value: string | null | undefined): boolean {
 }
 
 function canStoreUnencryptedPlaintext(): boolean {
-  return isEnvTrue(process.env.PII_ALLOW_UNENCRYPTED_PLAINTEXT) && !requiresPiiEncryption();
+  return isEnvTrue(runtimeEnvironment().PII_ALLOW_UNENCRYPTED_PLAINTEXT) && !requiresPiiEncryption();
 }
 
 export function hashPii(value: string | null | undefined): string | null {

@@ -45,7 +45,9 @@ export class UnifiedAiStreamError extends Error {
 // retryable one, so the client must always sit above this.
 export const UNIFIED_AI_STREAM_TIMEOUT_MAX_MS = 30_000;
 
-export function unifiedAiStreamTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+export function unifiedAiStreamTimeoutMs(
+  env: Readonly<Record<string, string | undefined>> = {},
+): number {
   const configured = Number.parseInt(env.UNIFIED_AI_STREAM_TIMEOUT_MS || "", 10);
   return Number.isFinite(configured)
     ? Math.min(Math.max(configured, 8_000), UNIFIED_AI_STREAM_TIMEOUT_MAX_MS)
@@ -75,25 +77,6 @@ export function parseUnifiedAiStreamEvent(line: string): UnifiedAiStreamEvent | 
   });
 }
 
-export function chunkUnifiedAiAnswer(answer: string, targetLength = 42): string[] {
-  if (!answer) return [];
-  const maxLength = Math.max(16, targetLength);
-  const tokens = answer.match(/\S+\s*|\s+/gu) || [answer];
-  const chunks: string[] = [];
-  let current = "";
-
-  for (const token of tokens) {
-    if (current && current.length + token.length > maxLength) {
-      chunks.push(current);
-      current = token;
-    } else {
-      current += token;
-    }
-  }
-  if (current) chunks.push(current);
-  return chunks;
-}
-
 function errorText(data: Record<string, unknown>): string {
   return typeof data.error === "string" && data.error.trim()
     ? data.error.trim().slice(0, 240)
@@ -112,33 +95,27 @@ function retryableStatus(status: number): boolean {
   return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 export function createUnifiedAiEventStream(options: {
   capability: UnifiedAiCapability;
-  run: () => Promise<UnifiedAiStreamRunnerResult>;
+  mode?: "progress-only" | "verified-delta";
+  run: (
+    reportProgress: (stage: UnifiedAiProgressStage) => void,
+    reportVerifiedDelta: (delta: string) => void,
+  ) => Promise<UnifiedAiStreamRunnerResult>;
   signal?: AbortSignal;
   timeoutMs?: number;
-  progressDelayMs?: number;
-  chunkDelayMs?: number;
 }): ReadableStream<Uint8Array> {
   const timeoutMs = options.timeoutMs ?? unifiedAiStreamTimeoutMs();
-  const progressDelayMs = options.progressDelayMs ?? 650;
-  const chunkDelayMs = options.chunkDelayMs ?? 12;
 
   return new ReadableStream<Uint8Array>({
     start(controller) {
       let active = true;
-      let generationReported = false;
-      let progressTimer: ReturnType<typeof setTimeout> | undefined;
+      let lastStage: UnifiedAiProgressStage | null = null;
       let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
 
       const close = () => {
         if (!active) return;
         active = false;
-        if (progressTimer) clearTimeout(progressTimer);
         if (timeoutTimer) clearTimeout(timeoutTimer);
         try {
           controller.close();
@@ -153,7 +130,8 @@ export function createUnifiedAiEventStream(options: {
         }
       };
       const progress = (stage: UnifiedAiProgressStage) => {
-        if (stage === "generating") generationReported = true;
+        if (stage === lastStage) return;
+        lastStage = stage;
         emit({
           type: "progress",
           stage,
@@ -161,15 +139,16 @@ export function createUnifiedAiEventStream(options: {
           timestamp: Date.now(),
         });
       };
+      const verifiedDelta = (delta: string) => {
+        if (options.mode !== "verified-delta" || !delta) return;
+        emit({ type: "delta", delta });
+      };
 
       const abort = () => close();
       options.signal?.addEventListener("abort", abort, { once: true });
 
       void (async () => {
         progress("routing");
-        progress("searching");
-
-        progressTimer = setTimeout(() => progress("generating"), progressDelayMs);
         const timeout = new Promise<never>((_, reject) => {
           timeoutTimer = setTimeout(() => reject(new UnifiedAiStreamError({
             code: "stream_timeout",
@@ -179,8 +158,7 @@ export function createUnifiedAiEventStream(options: {
         });
 
         try {
-          const result = await Promise.race([options.run(), timeout]);
-          if (progressTimer) clearTimeout(progressTimer);
+          const result = await Promise.race([options.run(progress, verifiedDelta), timeout]);
           if (timeoutTimer) clearTimeout(timeoutTimer);
           if (!active) return;
 
@@ -196,14 +174,6 @@ export function createUnifiedAiEventStream(options: {
             return;
           }
 
-          if (!generationReported) progress("generating");
-          const answer = typeof result.data.answer === "string" ? result.data.answer : "";
-          for (const delta of chunkUnifiedAiAnswer(answer)) {
-            if (!active) return;
-            emit({ type: "delta", delta });
-            if (chunkDelayMs > 0) await sleep(chunkDelayMs);
-          }
-          progress("finalizing");
           emit({ type: "complete", data: result.data });
           close();
         } catch (error) {

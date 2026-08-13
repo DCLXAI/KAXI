@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import {
   Activity,
@@ -40,7 +40,7 @@ import {
 } from "@/components/ui/sheet";
 import { KarxyWordmark } from "@/components/brand/KarxyWordmark";
 import { useKaxiSession } from "@/hooks/useKaxiSession";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import type { KaxiSessionPayload } from "@/lib/supabase/session-types";
 
 interface AdminContextValue {
   hasAdminAccess: boolean;
@@ -203,9 +203,10 @@ function AdminAuthGate({ authenticated, available, nextPath, onSignOut }: { auth
   );
 }
 
-export function AdminShell({ children }: { children: ReactNode }) {
+export function AdminShell({ children, initialSession }: { children: ReactNode; initialSession: KaxiSessionPayload }) {
   const pathname = usePathname();
-  const { data: session, status, mutate } = useKaxiSession();
+  const router = useRouter();
+  const { data: session, status, mutate } = useKaxiSession(initialSession);
   const isSessionAdmin = session?.user?.role === "PLATFORM_ADMIN";
   const hasAdminAccess = isSessionAdmin;
   const canManageOps = hasAdminAccess;
@@ -225,11 +226,10 @@ export function AdminShell({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
-    const client = await createSupabaseBrowserClient();
-    await client.auth.signOut?.();
+    await fetch("/api/auth/session", { method: "DELETE", credentials: "same-origin" });
     await mutate();
-    window.location.assign(`/login?next=${encodeURIComponent(pathname)}`);
-  }, [mutate, pathname]);
+    router.push(`/login?next=${encodeURIComponent(pathname)}`);
+  }, [mutate, pathname, router]);
 
   if (status === "loading") {
     return (

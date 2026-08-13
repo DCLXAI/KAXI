@@ -25,6 +25,12 @@ const { getTransformerRuntimeInfo, resolveModelCacheDir } = await import(
 const { TOOL_MAP } = await import("../src/lib/agent/tools");
 const { getRagDocumentMetadata, pickLangText } = await import("../src/lib/data/knowledge");
 const { KNOWLEDGE_DOCS } = await import("../src/lib/data/knowledge-corpus");
+const { platformServiceTenantContext } = await import("../src/application/tenancy/tenant-context");
+const agentContext = {
+  lang: "ko" as const,
+  leadId: "local-agent-guard",
+  tenantContext: platformServiceTenantContext("agent-guard-test"),
+};
 
 function deterministicQueryEmbedding(seedText: string): number[] {
   let seed = 0;
@@ -82,7 +88,7 @@ globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters
       { status: 200, headers: { "content-type": "application/json" } },
     );
   }
-  if (/\/rest\/v1\/rpc\/match_rag_documents_(hybrid_v3|lexical)\b/.test(url)) {
+  if (/\/rest\/v1\/rpc\/match_rag_documents_(hybrid_v4|lexical_v3)\b/.test(url)) {
     const body = typeof init?.body === "string"
       ? JSON.parse(init.body) as { filter?: Record<string, unknown>; match_count?: number }
       : {};
@@ -149,25 +155,25 @@ function testBackendSelectorContracts() {
       AI_ALLOW_LLM_FALLBACK: "true",
     });
 
-    if (getAgentBackend() !== "claude") fail("agent backend selector should always use Claude");
-    if (getConsultBackend() !== "claude") fail("consult backend selector should always use Claude");
+    if (getAgentBackend() !== "anthropic") fail("agent backend selector should use Anthropic");
+    if (getConsultBackend() !== "anthropic") fail("consult backend selector should use Anthropic");
     if (shouldRequireAgentLlm()) fail("fallback policy should allow agent fallback by default");
     if (shouldRequireConsultLlm()) fail("fallback policy should allow consult fallback by default");
     const diagnostics = getAiBackendDiagnostics();
     if (
-      diagnostics.agent.backend !== "claude" ||
-      diagnostics.consult.backend !== "claude" ||
-      !diagnostics.claude.apiKeyConfigured ||
+      diagnostics.agent.backend !== "anthropic" ||
+      diagnostics.consult.backend !== "anthropic" ||
+      !diagnostics.anthropic.apiKeyConfigured ||
       diagnostics.issues.length !== 0
     ) {
       fail(`Claude diagnostics should show managed API backend: ${JSON.stringify(diagnostics)}`);
     }
     if (
       !diagnostics.agent.decisionTable.some(
-        (item) => item.code === "agent.backend.claude" && item.outcome === "selected"
+        (item) => item.code === "agent.backend.anthropic" && item.outcome === "selected"
       ) ||
       !diagnostics.consult.decisionTable.some(
-        (item) => item.code === "consult.backend.claude" && item.outcome === "selected"
+        (item) => item.code === "consult.backend.anthropic" && item.outcome === "selected"
       )
     ) {
       fail(`diagnostics should expose selected Claude decision path: ${JSON.stringify(diagnostics)}`);
@@ -186,20 +192,12 @@ function testBackendSelectorContracts() {
     });
     const kimiDiagnostics = getAiBackendDiagnostics();
     if (
-      getAgentBackend() !== "kimi" ||
-      getConsultBackend() !== "kimi" ||
-      kimiDiagnostics.llm.backend !== "kimi" ||
-      !kimiDiagnostics.kimi.apiKeyConfigured ||
-      kimiDiagnostics.llm.model !== "kimi-k2.6"
+      getAgentBackend() !== "anthropic" ||
+      getConsultBackend() !== "anthropic" ||
+      kimiDiagnostics.openai.genuineProvider ||
+      !kimiDiagnostics.issues.some((issue) => issue.includes("retired compatibility provider"))
     ) {
-      fail(`Kimi diagnostics should expose the OpenAI-compatible backend: ${JSON.stringify(kimiDiagnostics)}`);
-    }
-    if (
-      !kimiDiagnostics.agent.decisionTable.some(
-        (item) => item.code === "agent.backend.kimi" && item.outcome === "selected"
-      )
-    ) {
-      fail(`Kimi decision path missing: ${JSON.stringify(kimiDiagnostics)}`);
+      fail(`Kimi compatibility configuration should fail readiness diagnostics: ${JSON.stringify(kimiDiagnostics)}`);
     }
 
     Object.assign(process.env, {
@@ -212,8 +210,11 @@ function testBackendSelectorContracts() {
     });
 
     const hostedDiagnostics = getAiBackendDiagnostics();
-    if (!hostedDiagnostics.warnings.some((item) => item.includes("OPENAI_API_KEY")) || hostedDiagnostics.issues.length !== 0) {
-      fail(`hosted fallback diagnostics should warn, not fail strict readiness: ${JSON.stringify(hostedDiagnostics)}`);
+    if (
+      !hostedDiagnostics.issues.some((item) => item.includes("Production requires genuine OpenAI and Anthropic failover"))
+      || !hostedDiagnostics.issues.some((item) => item.includes("retired compatibility provider"))
+    ) {
+      fail(`hosted diagnostics must fail closed without both genuine providers: ${JSON.stringify(hostedDiagnostics)}`);
     }
 
     Object.assign(process.env, {
@@ -238,7 +239,7 @@ async function testPartnerToolDryRun() {
       partner_type: "admin",
       question: "D-2 refusal 상담 원해요. user@example.com 으로 연락주세요.",
     },
-    { lang: "ko", leadId: "local-agent-guard", dryRun: true }
+    { ...agentContext, dryRun: true }
   );
 
   const serialized = JSON.stringify({ result, summary });
@@ -256,7 +257,7 @@ async function testPreflightDoesNotPersistPartnerRequest() {
   const result = await runAgentPreflight(
     "D-2 비자 거절 상담을 행정사에게 연결해줘. user@example.com 으로 연락 가능해.",
     "ko",
-    { lang: "ko", leadId: "local-agent-guard" }
+    agentContext
   );
   const after = await db.partnerRequest.count();
   const serialized = JSON.stringify(result);
@@ -346,7 +347,7 @@ async function testSchoolToolFiltersByName() {
       school_name: "연세대학교",
       limit: 5,
     },
-    { lang: "ko", leadId: "local-agent-guard", dryRun: true }
+    { ...agentContext, dryRun: true }
   );
 
   if (!Array.isArray(result) || result.length === 0) {
@@ -361,7 +362,7 @@ async function testPreflightUsesDiagnosisPlanner() {
   const result = await runAgentPreflight(
     "고졸이고 TOPIK 2급, 예산 500만원인데 한국 유학 맞춤 로드맵 진단해줘",
     "ko",
-    { lang: "ko", leadId: "local-agent-guard" }
+    agentContext
   );
 
   if (!result.toolResults.some((item) => item.tool === "diagnose_path")) {
@@ -373,7 +374,7 @@ async function testPreflightCarriesPlannerContext() {
   const result = await runAgentPreflight(
     "비자 서류랑 학교 추천해줘",
     "ko",
-    { lang: "ko", leadId: "local-agent-guard" }
+    agentContext
   );
 
   if (!result.groundingContext.includes("Intent confidence") || !result.groundingContext.includes("Missing slots")) {
@@ -400,7 +401,7 @@ async function testFallbackPartnerRequestStaysDraft() {
     const result = await runFallbackAgent(
       "D-2 거절 상담을 행정사에게 연결해줘. user@example.com 으로 연락 가능해.",
       "ko",
-      { lang: "ko", leadId: "local-agent-guard" }
+      agentContext
     );
     const after = await db.partnerRequest.count();
     const serialized = JSON.stringify(result);
@@ -426,7 +427,7 @@ async function testFallbackAnswerIncludesCitationMarkers() {
   const result = await runFallbackAgent(
     "서울 어학당 500만원 예산으로 추천해줘",
     "ko",
-    { lang: "ko", leadId: "local-agent-guard" }
+    agentContext
   );
 
   if (!result.toolResults.some((item) => item.tool === "search_schools")) {
@@ -444,7 +445,7 @@ async function testAgentEscalatesTransientLlmFailure() {
       "D-10 변경 요건을 알려줘",
       "ko",
       [],
-      { lang: "ko", leadId: "local-agent-guard" },
+      agentContext,
       {
         generateText: async () => {
           throw new Error("simulated upstream timeout");
@@ -481,7 +482,7 @@ async function testGroundedShortCircuitOneShot() {
     "D-2 비자 연장 요건을 알려줘",
     "ko",
     [],
-    { lang: "ko", leadId: "local-agent-guard" },
+    agentContext,
     { generateText: stubAgentSystemPrompt(captured) },
     { grounded: true },
   );
@@ -520,7 +521,7 @@ async function testGroundedGapFillCapsIterations() {
     "D-10 구직 체류자격 변경 요건",
     "ko",
     [],
-    { lang: "ko", leadId: "local-agent-guard" },
+    agentContext,
     { generateText: grounded.stub },
     { grounded: true },
   );
@@ -533,7 +534,7 @@ async function testGroundedGapFillCapsIterations() {
     "D-10 구직 체류자격 변경 요건",
     "ko",
     [],
-    { lang: "ko", leadId: "local-agent-guard" },
+    agentContext,
     { generateText: nonGrounded.stub },
     { grounded: false },
   );
@@ -554,7 +555,7 @@ async function testGroundedForcesFinalOnLastIteration() {
     "D-10 구직 체류자격 변경 요건",
     "ko",
     [],
-    { lang: "ko", leadId: "local-agent-guard" },
+    agentContext,
     {
       generateText: async (opts) => {
         grForce.push(opts.messages.some((m) => typeof m.content === "string" && m.content.includes(forcing)));
@@ -583,7 +584,7 @@ async function testGroundedForcesFinalOnLastIteration() {
     "D-10 구직 체류자격 변경 요건",
     "ko",
     [],
-    { lang: "ko", leadId: "local-agent-guard" },
+    agentContext,
     {
       generateText: async (opts) => {
         ngForce.push(opts.messages.some((m) => typeof m.content === "string" && m.content.includes(forcing)));
@@ -601,7 +602,7 @@ async function testNonGroundedKeepsReasoningOn() {
     "D-10 변경 요건을 알려줘",
     "ko",
     [],
-    { lang: "ko", leadId: "local-agent-guard" },
+    agentContext,
     { generateText: stubAgentSystemPrompt(captured) },
     { grounded: false },
   );
@@ -616,7 +617,7 @@ async function testGroundedPromptPreservesSafetyRules() {
     "D-4 비자 서류를 알려줘",
     "ko",
     [],
-    { lang: "ko", leadId: "local-agent-guard" },
+    agentContext,
     { generateText: stubAgentSystemPrompt(nonGrounded) },
     { grounded: false },
   );
@@ -625,7 +626,7 @@ async function testGroundedPromptPreservesSafetyRules() {
     "D-4 비자 서류를 알려줘",
     "ko",
     [],
-    { lang: "ko", leadId: "local-agent-guard" },
+    agentContext,
     { generateText: stubAgentSystemPrompt(grounded) },
     { grounded: true },
   );
@@ -701,7 +702,7 @@ async function testD10KnowledgeKeepsQuestionSpecificDocuments() {
         query: "D-10 구직 체류자격으로 변경할 때 핵심 요건과 제출 서류",
         top_k: 4,
       },
-      { lang: "ko", leadId: "local-agent-guard", dryRun: true },
+      { ...agentContext, dryRun: true },
     );
     const ids = Array.isArray(result)
       ? result.flatMap((item) => isRecord(item) && typeof item.id === "string" ? [item.id] : [])
@@ -718,10 +719,10 @@ async function testAgentStatusRoute() {
   const snapshot = { ...process.env };
   try {
     Object.assign(process.env, {
-      AI_PROVIDER: "kimi",
-      OPENAI_API_KEY: "kimi-secret-key",
-      OPENAI_BASE_URL: "https://api.moonshot.ai/v1",
-      OPENAI_MODEL: "kimi-k2.6",
+      AI_PROVIDER: "openai",
+      OPENAI_API_KEY: "openai-secret-key",
+      OPENAI_BASE_URL: "https://api.openai.com/v1",
+      OPENAI_MODEL: "gpt-4.1-mini",
     });
     // Exercise the default budget (no env override) sealed under the 25s client abort.
     delete process.env.AI_AGENT_PREFLIGHT_TIMEOUT_MS;
@@ -731,7 +732,7 @@ async function testAgentStatusRoute() {
     const res = await route.GET();
     if (res.status !== 200) fail(`agent status expected 200, got ${res.status}`);
     const body = await res.json();
-    if (!body.backend || !body.preflight || !body.limits || !body.llm || !body.kimi) {
+    if (!body.backend || !body.preflight || !body.limits || !body.llm || !body.openai) {
       fail(`agent status shape incomplete: ${JSON.stringify(body)}`);
     }
     if (body.preflight.timeoutMs !== 4_000) {
@@ -743,10 +744,10 @@ async function testAgentStatusRoute() {
     if (!body.backendPolicy?.agent || !body.backendPolicy?.consult || !body.backendPolicy?.fallbackPolicy) {
       fail(`agent status should expose backend policy diagnostics: ${JSON.stringify(body)}`);
     }
-    if (body.backend !== "kimi" || !body.llm.apiKeyConfigured || !body.kimi.apiKeyConfigured) {
-      fail(`agent status should expose Kimi backend metadata: ${JSON.stringify(body)}`);
+    if (body.backend !== "openai" || !body.llm.apiKeyConfigured || !body.openai.apiKeyConfigured) {
+      fail(`agent status should expose OpenAI backend metadata: ${JSON.stringify(body)}`);
     }
-    for (const secret of ["kimi-secret-key"]) {
+    for (const secret of ["openai-secret-key"]) {
       const serialized = JSON.stringify(body);
       if (serialized.includes(secret)) fail(`agent status leaked secret material: ${secret}`);
     }

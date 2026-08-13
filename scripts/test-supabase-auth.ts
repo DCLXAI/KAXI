@@ -27,6 +27,7 @@ const [
   bootstrapAdminSource,
   passwordResetSource,
   supabaseConfigSource,
+  buildEnvironmentSource,
   supabaseDynamicSource,
   adminShellSource,
   apiSecuritySource,
@@ -36,6 +37,7 @@ const [
   Bun.file(new URL("./bootstrap-supabase-admin.ts", import.meta.url)).text(),
   Bun.file(new URL("../src/components/auth/PasswordResetForm.tsx", import.meta.url)).text(),
   Bun.file(new URL("../src/lib/supabase/config.ts", import.meta.url)).text(),
+  Bun.file(new URL("../src/infrastructure/config/build-environment.ts", import.meta.url)).text(),
   Bun.file(new URL("../src/lib/supabase/dynamic.ts", import.meta.url)).text(),
   Bun.file(new URL("../src/components/admin/AdminShell.tsx", import.meta.url)).text(),
   Bun.file(new URL("../src/lib/api/security.ts", import.meta.url)).text(),
@@ -57,9 +59,10 @@ assert(
   "password reset should accept only recovery fragments and remove tokens from the address bar"
 );
 assert(
-  supabaseConfigSource.includes("process.env.NEXT_PUBLIC_SUPABASE_URL") &&
-    supabaseConfigSource.includes("process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY"),
-  "client Supabase config must use statically analyzable NEXT_PUBLIC environment references"
+  supabaseConfigSource.includes("publicBuildEnvironment()") &&
+    buildEnvironmentSource.includes("process.env.NEXT_PUBLIC_SUPABASE_URL") &&
+    buildEnvironmentSource.includes("process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+  "client Supabase config must route through the typed build boundary with statically analyzable NEXT_PUBLIC references"
 );
 assert(
   supabaseDynamicSource.includes("createBrowserClient") &&
@@ -84,6 +87,7 @@ assert(
 );
 
 const { db } = await import("../src/lib/db");
+const { PLATFORM_TENANT_ID } = await import("../src/application/tenancy/tenant-context");
 const { areaForPath, canAccessArea, defaultLoginPath, postLoginPath } = await import("../src/lib/supabase/policy");
 const {
   createPartnerAgentInvite,
@@ -132,7 +136,12 @@ try {
   assert(profile, "student auth mapping should ensure StudentProfile exists");
 
   const organization = await db.organization.create({
-    data: { id: "org_auth_partner", name: "Auth Partner Office", type: "PARTNER_AGENT_OFFICE" },
+    data: {
+      id: "org_auth_partner",
+      tenantId: PLATFORM_TENANT_ID,
+      name: "Auth Partner Office",
+      type: "PARTNER_AGENT_OFFICE",
+    },
   });
   const token = "phase3-auth-invite-token-00000001";
   const created = await createPartnerAgentInvite({

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Loader2, RefreshCw, Users } from "lucide-react";
 import { useAdminApi } from "@/components/admin/AdminShell";
 import { Badge } from "@/components/ui/badge";
@@ -35,15 +35,16 @@ interface PartnerRequestRow {
   assignedUser: { id: string; email: string | null } | null;
 }
 
-interface QueuePayload {
+export interface QueuePayload {
   requests: PartnerRequestRow[];
   organizations: PartnerOrganizationOption[];
 }
 
-export function AdminPartnerRequestQueue() {
+export function AdminPartnerRequestQueue({ initialData = null }: { initialData?: QueuePayload | null }) {
   const { adminFetch, canManageOps } = useAdminApi();
-  const [payload, setPayload] = useState<QueuePayload>({ requests: [], organizations: [] });
-  const [loading, setLoading] = useState(true);
+  const [payload, setPayload] = useState<QueuePayload>(initialData || { requests: [], organizations: [] });
+  const [loading, setLoading] = useState(!initialData);
+  const initialPending = useRef(Boolean(initialData));
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [organizationByRequest, setOrganizationByRequest] = useState<Record<string, string>>({});
@@ -65,6 +66,10 @@ export function AdminPartnerRequestQueue() {
   }, [adminFetch]);
 
   useEffect(() => {
+    if (initialPending.current) {
+      initialPending.current = false;
+      return;
+    }
     void load();
   }, [load]);
 

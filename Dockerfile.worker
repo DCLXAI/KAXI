@@ -1,0 +1,12 @@
+FROM oven/bun:1.2.22-slim
+
+WORKDIR /app
+ENV NODE_ENV=production
+ENV KAXI_SERVICE_NAME=kaxi-worker
+
+COPY . .
+RUN bun install --frozen-lockfile --production
+RUN bun run db:generate
+
+EXPOSE 3001
+CMD ["bun", "run", "worker:start"]

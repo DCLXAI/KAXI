@@ -7,7 +7,7 @@ test("home quick diagnosis uses three answers for its path result", async ({ pag
   const quickDiagnosis = page.getByTestId("home-quick-diagnosis");
   await expect(page.locator('[data-kaxi-running-cat="travel"]')).toHaveCount(0);
   await expect(quickDiagnosis.locator('[data-kaxi-mark="paw"]')).toBeVisible();
-  await expect(page.locator('#kaxi-ai [data-kaxi-mark="paw"]')).toBeVisible();
+  await expect(page.locator('#kaxi-ai [data-karxy-mascot="trio"]')).toBeVisible();
   await expect(quickDiagnosis).toBeVisible();
   await expect(page.getByText("무료 진단 시작")).toHaveCount(0);
 

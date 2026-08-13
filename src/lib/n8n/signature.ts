@@ -1,5 +1,6 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "crypto";
-import { createClient } from "@supabase/supabase-js";
+import { createSupabaseServiceRoleClient } from "@/infrastructure/supabase/service-role-client";
 import { primarySecret, rotatingSecrets } from "@/lib/security/rotating-secret";
 
 export const N8N_SIGNATURE_HEADER = "x-kaxi-signature";
@@ -40,16 +41,16 @@ function configured(value: string | undefined) {
   return text;
 }
 
-function signingSecret(env: NodeJS.ProcessEnv = process.env) {
+function signingSecret(env: NodeJS.ProcessEnv = runtimeEnvironment()) {
   return primarySecret(env, "N8N_WEBHOOK_SIGNING_SECRET");
 }
 
-function maxAgeSeconds(env: NodeJS.ProcessEnv = process.env) {
+function maxAgeSeconds(env: NodeJS.ProcessEnv = runtimeEnvironment()) {
   const parsed = Number.parseInt(env.N8N_WEBHOOK_MAX_AGE_SECONDS || "300", 10);
   return Number.isFinite(parsed) ? Math.min(Math.max(parsed, 30), 900) : 300;
 }
 
-function receiptTtlSeconds(env: NodeJS.ProcessEnv = process.env) {
+function receiptTtlSeconds(env: NodeJS.ProcessEnv = runtimeEnvironment()) {
   const parsed = Number.parseInt(env.N8N_VERIFICATION_RECEIPT_TTL_SECONDS || "60", 10);
   return Number.isFinite(parsed) ? Math.min(Math.max(parsed, 15), 120) : 60;
 }
@@ -97,7 +98,7 @@ function typebotTokenDigest(secret: string, sessionId: string, timestamp: string
 }
 
 export function createTypebotHandoffToken(sessionId: string, options: { now?: number; env?: NodeJS.ProcessEnv } = {}) {
-  const env = options.env || process.env;
+  const env = options.env || runtimeEnvironment();
   const secret = signingSecret(env);
   if (!secret) throw new Error("N8N_WEBHOOK_NOT_CONFIGURED");
   const timestamp = String(options.now ?? Date.now());
@@ -109,7 +110,7 @@ export function verifyTypebotHandoffToken(
   token: string,
   options: { now?: number; env?: NodeJS.ProcessEnv } = {},
 ) {
-  const env = options.env || process.env;
+  const env = options.env || runtimeEnvironment();
   const secrets = rotatingSecrets(env, "N8N_WEBHOOK_SIGNING_SECRET");
   if (secrets.length === 0) return false;
   const [timestamp, signature, ...rest] = token.split(".");
@@ -124,7 +125,7 @@ export function verifyTypebotHandoffToken(
   );
 }
 
-export function getN8nWebhookConfig(purpose: N8nWebhookPurpose, env: NodeJS.ProcessEnv = process.env) {
+export function getN8nWebhookConfig(purpose: N8nWebhookPurpose, env: NodeJS.ProcessEnv = runtimeEnvironment()) {
   const urlKey =
     purpose === "typebot-runtime"
       ? "N8N_TYPEBOT_RAG_WEBHOOK_URL"
@@ -152,7 +153,7 @@ export function signN8nPayload(
   payload: unknown,
   options: { now?: number; nonce?: string; env?: NodeJS.ProcessEnv } = {},
 ) {
-  const env = options.env || process.env;
+  const env = options.env || runtimeEnvironment();
   const config = getN8nWebhookConfig(purpose, env);
   if (!config) throw new Error("N8N_WEBHOOK_NOT_CONFIGURED");
 
@@ -182,7 +183,7 @@ export function verifyN8nSignature(
   envelope: N8nSignatureEnvelope,
   options: { now?: number; env?: NodeJS.ProcessEnv } = {},
 ): SignatureVerification {
-  const env = options.env || process.env;
+  const env = options.env || runtimeEnvironment();
   const secrets = rotatingSecrets(env, "N8N_WEBHOOK_SIGNING_SECRET");
   if (secrets.length === 0) return { ok: false, reason: "misconfigured" };
   if (!/^[a-z0-9-]{16,128}$/i.test(envelope.nonce)) return { ok: false, reason: "invalid" };
@@ -222,7 +223,7 @@ export function createN8nVerificationReceipt(
   nonce: string,
   options: { now?: number; env?: NodeJS.ProcessEnv } = {},
 ) {
-  const env = options.env || process.env;
+  const env = options.env || runtimeEnvironment();
   const secret = signingSecret(env);
   if (!secret) throw new Error("N8N_WEBHOOK_NOT_CONFIGURED");
   if (!/^[a-z0-9-]{16,128}$/i.test(nonce)) throw new Error("N8N_RECEIPT_INVALID_NONCE");
@@ -246,7 +247,7 @@ export function verifyN8nVerificationReceipt(
   payload: unknown,
   options: { now?: number; env?: NodeJS.ProcessEnv } = {},
 ): ReceiptVerification {
-  const env = options.env || process.env;
+  const env = options.env || runtimeEnvironment();
   const secrets = rotatingSecrets(env, "N8N_WEBHOOK_SIGNING_SECRET");
   if (secrets.length === 0) return { ok: false, reason: "misconfigured" };
 
@@ -293,13 +294,12 @@ export async function verifyAndConsumeN8nSignature(envelope: N8nSignatureEnvelop
   const verification = verifyN8nSignature(envelope);
   if (!verification.ok) return verification;
 
-  const url = configured(process.env.NEXT_PUBLIC_SUPABASE_URL);
-  const serviceRoleKey = configured(process.env.SUPABASE_SERVICE_ROLE_KEY);
-  if (!url || !serviceRoleKey) return { ok: false as const, reason: "misconfigured" as const };
-
-  const supabase = createClient(url, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  let supabase;
+  try {
+    supabase = createSupabaseServiceRoleClient();
+  } catch {
+    return { ok: false as const, reason: "misconfigured" as const };
+  }
   const inserted = await supabase.from("webhook_nonces").insert({
     nonce: envelope.nonce,
     purpose: envelope.purpose,

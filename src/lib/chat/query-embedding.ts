@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 export const RAG_QUERY_EMBEDDING_MODEL = "text-embedding-3-small";
 export const RAG_QUERY_EMBEDDING_DIMENSIONS = 1536;
 export const CANONICAL_QUERY_EMBEDDING_MODEL = "Xenova/multilingual-e5-small";
@@ -26,7 +27,7 @@ function configured(value: string | undefined) {
   return normalized;
 }
 
-export function getRagEmbeddingStrategy(env: NodeJS.ProcessEnv = process.env): RagEmbeddingStrategy {
+export function getRagEmbeddingStrategy(env: NodeJS.ProcessEnv = runtimeEnvironment()): RagEmbeddingStrategy {
   const value = configured(env.KAXI_RAG_EMBEDDING_STRATEGY).toLowerCase();
   if (value === "e5-primary" || value === "openai-only") return value;
   return "openai-primary";
@@ -96,7 +97,7 @@ export async function createRagQueryEmbedding(
   options: QueryEmbeddingOptions = {},
 ): Promise<QueryEmbeddingResult> {
   const startedAt = Date.now();
-  const env = options.env || process.env;
+  const env = options.env || runtimeEnvironment();
   const model = configured(env.OPENAI_EMBEDDING_MODEL) || RAG_QUERY_EMBEDDING_MODEL;
   if (env.KAXI_QUERY_EMBEDDINGS_ENABLED === "false") {
     return result(startedAt, {

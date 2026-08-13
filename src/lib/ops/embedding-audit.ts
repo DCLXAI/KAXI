@@ -1,4 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
+import { createSupabaseServiceRoleClient } from "@/infrastructure/supabase/service-role-client";
 import {
   createRagQueryEmbedding,
   isOpenAiQueryEmbedding,
@@ -52,7 +53,7 @@ export function cosineSimilarity(a: number[], b: number[]): number | null {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-export function parseAuditConfig(env: NodeJS.ProcessEnv = process.env): {
+export function parseAuditConfig(env: NodeJS.ProcessEnv = runtimeEnvironment()): {
   sample: number;
   minCosine: number;
 } {
@@ -118,10 +119,7 @@ function configured(value: string | undefined) {
 }
 
 function serviceClient() {
-  const url = configured(process.env.NEXT_PUBLIC_SUPABASE_URL);
-  const key = configured(process.env.SUPABASE_SERVICE_ROLE_KEY);
-  if (!url || !key) throw new Error("SUPABASE_SERVICE_ROLE_NOT_CONFIGURED");
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  return createSupabaseServiceRoleClient();
 }
 
 function auditStamp(metadata: Record<string, unknown> | null, cosine: number | null) {

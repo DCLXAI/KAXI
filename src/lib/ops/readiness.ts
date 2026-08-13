@@ -1,3 +1,7 @@
+import {
+  runtimeEnvironment,
+  runtimeEnvironmentIssues,
+} from "@/infrastructure/config/runtime-environment";
 import { checkRuntimeDatabaseConnectivity, db, getRuntimeDatabaseInfo } from "@/lib/db";
 import { getAiBackendDiagnostics } from "@/lib/ai/backend-selector";
 import { getKnowledgeSourceAudit } from "@/lib/data/knowledge";
@@ -13,8 +17,11 @@ import { checkProductionSchemaParity } from "@/lib/ops/schema-parity";
 import { getChatAttachmentSecurityDiagnostics } from "@/lib/chat/attachment-security";
 import { getOpsAlertDiagnostics } from "@/lib/ops/alerts";
 import { getCredentialRotationDiagnostics } from "@/lib/security/rotating-secret";
-import { parseLimit } from "@/lib/api/security";
 import { smtpConfigured } from "@/lib/notifications/email";
+import {
+  applicationAiRuntimeConfigIssues,
+  getApplicationAiRuntimeConfig,
+} from "@/infrastructure/config/application-ai-config";
 
 export type ReadinessStatus = "ready" | "degraded";
 
@@ -95,8 +102,9 @@ function schoolReadinessDetail({
 }
 
 export async function getReadinessPayload(): Promise<ReadinessPayload> {
-  const env = process.env;
+  const env = runtimeEnvironment();
   const production = isProductionEnv(env);
+  const typedRuntimeIssues = runtimeEnvironmentIssues(env);
   const databaseInfo = getRuntimeDatabaseInfo(env);
   const databaseConnectivity = await checkRuntimeDatabaseConnectivity();
   const schemaParity =
@@ -132,18 +140,24 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
     env.N8N_RAG_INGESTION_WEBHOOK_URL,
     env.N8N_TYPEBOT_HANDOFF_WEBHOOK_URL,
   ].every(httpsUrl);
-  const chatGatewaySecurityReady = strongSecret(env.N8N_WEBHOOK_SIGNING_SECRET) && strongSecret(env.CHAT_SESSION_SIGNING_SECRET);
+  const chatGatewaySecurityReady =
+    strongSecret(env.N8N_WEBHOOK_SIGNING_SECRET) &&
+    strongSecret(env.CHAT_SESSION_SIGNING_SECRET) &&
+    strongSecret(env.TENANT_CONTEXT_SIGNING_SECRET);
   const chatImageOcrReady = aiBackendDiagnostics.llm.apiKeyConfigured;
   const attachmentSecurity = getChatAttachmentSecurityDiagnostics(env);
   const opsAlerts = getOpsAlertDiagnostics(env);
   const credentialRotation = getCredentialRotationDiagnostics(env);
+  const applicationAiConfig = getApplicationAiRuntimeConfig(env);
+  const applicationAiConfigIssues = applicationAiRuntimeConfigIssues(env);
   const aiAbuseControls = {
-    agentRateLimit: parseLimit(env.AI_AGENT_RATE_LIMIT, 6),
-    agentDailyQuota: parseLimit(env.AI_AGENT_DAILY_QUOTA, 30),
-    consultRateLimit: parseLimit(env.AI_CONSULT_RATE_LIMIT, 6),
-    consultDailyQuota: parseLimit(env.AI_CONSULT_DAILY_QUOTA, 30),
+    agentRateLimit: applicationAiConfig.agentRateLimit,
+    agentDailyQuota: applicationAiConfig.agentDailyQuota,
+    consultRateLimit: applicationAiConfig.expertRateLimit,
+    consultDailyQuota: applicationAiConfig.expertDailyQuota,
   };
-  const aiAbuseControlsReady = Object.values(aiAbuseControls).every((value) => value > 0);
+  const aiAbuseControlsReady = applicationAiConfigIssues.length === 0
+    && Object.values(aiAbuseControls).every((value) => value > 0);
 
   const managedDatabase = databaseInfo.sharedWritable && databaseConnectivity.ok;
   const linkedAdminCount = databaseConnectivity.ok
@@ -169,13 +183,31 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
 
   const checks: ReadinessCheck[] = [
     check(
+      "runtime.typed_configuration",
+      "Typed server runtime configuration",
+      typedRuntimeIssues.length === 0,
+      typedRuntimeIssues.length === 0
+        ? "Runtime numeric and boolean settings passed the shared startup schema."
+        : `Invalid runtime setting(s): ${typedRuntimeIssues.map((issue) => issue.key).join(", ")}.`,
+      {
+        issueCount: typedRuntimeIssues.length,
+        invalidKeys: typedRuntimeIssues.map((issue) => issue.key),
+      },
+      production ? "required" : "warning",
+    ),
+    check(
       "rag.gateway_security",
       "RAG gateway signing and endpoints",
       n8nUrlsReady && chatGatewaySecurityReady,
       n8nUrlsReady && chatGatewaySecurityReady
         ? "All n8n entry points use HTTPS and KARXY owns strong webhook/session signing secrets."
-        : "Configure all n8n HTTPS webhook URLs plus separate 32-byte webhook and chat-session signing secrets.",
-      { n8nUrlsReady, webhookSigningReady: strongSecret(env.N8N_WEBHOOK_SIGNING_SECRET), chatSessionSigningReady: strongSecret(env.CHAT_SESSION_SIGNING_SECRET) },
+        : "Configure all n8n HTTPS webhook URLs plus separate 32-byte webhook, chat-session, and tenant-context signing secrets.",
+      {
+        n8nUrlsReady,
+        webhookSigningReady: strongSecret(env.N8N_WEBHOOK_SIGNING_SECRET),
+        chatSessionSigningReady: strongSecret(env.CHAT_SESSION_SIGNING_SECRET),
+        tenantContextSigningReady: strongSecret(env.TENANT_CONTEXT_SIGNING_SECRET),
+      },
     ),
     check(
       "typebot.public_endpoint",
@@ -481,15 +513,13 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
         agent: aiBackendDiagnostics.agent,
         consult: aiBackendDiagnostics.consult,
         llm: aiBackendDiagnostics.llm,
-        kimi: aiBackendDiagnostics.kimi,
-        claude: aiBackendDiagnostics.claude,
+        openai: aiBackendDiagnostics.openai,
+        anthropic: aiBackendDiagnostics.anthropic,
         fallbackPolicy: aiBackendDiagnostics.fallbackPolicy,
         warningCount: aiBackendDiagnostics.warnings.length,
         issueCount: aiBackendDiagnostics.issues.length,
       },
-      production && aiBackendDiagnostics.issues.length > 0
-        ? "required"
-        : "warning"
+      production ? "required" : "warning"
     ),
     check(
       "ai.abuse_controls",
@@ -498,7 +528,7 @@ export async function getReadinessPayload(): Promise<ReadinessPayload> {
       aiAbuseControlsReady
         ? "AI agent and consultation endpoints have per-minute and daily request limits."
         : "Production AI endpoints must have positive per-minute and daily request limits.",
-      aiAbuseControls,
+      { ...aiAbuseControls, invalidConfigKeys: applicationAiConfigIssues },
       production ? "required" : "warning"
     ),
     check(

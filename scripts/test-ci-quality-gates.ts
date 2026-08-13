@@ -17,6 +17,10 @@ const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as PackageJ
 const scripts = packageJson.scripts || {};
 const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
 const deploymentWorkflow = readFileSync(".github/workflows/vercel-production.yml", "utf8");
+const testManifest = JSON.parse(readFileSync("quality/test-manifest.json", "utf8")) as {
+  schemaVersion?: number;
+  suites?: Record<string, string[]>;
+};
 
 function collectReferencedScripts(scriptName: string, seen = new Set<string>()): Set<string> {
   if (seen.has(scriptName)) return seen;
@@ -33,27 +37,29 @@ for (const required of ["ci:types", "ci:domain", "ci:ops", "ci"]) {
   assert(scripts[required], `missing CI profile script: ${required}`);
 }
 
-const ciReferences = collectReferencedScripts("ci");
-const excludedFromFullCi = new Set([
-  // Browser E2E is intentionally separate; CI still type-checks e2e fixtures through test:e2e:types.
-  "test:e2e",
-]);
-
 const testScripts = Object.keys(scripts)
   .filter((name) => name.startsWith("test:"))
-  .filter((name) => !excludedFromFullCi.has(name))
   .sort();
-
+const requiredSuites = ["types", "domain", "ops", "integration", "e2e", "performance"];
+assert(testManifest.schemaVersion === 1, "test manifest schemaVersion must be 1");
+for (const suite of requiredSuites) {
+  assert((testManifest.suites?.[suite]?.length || 0) > 0, `test manifest is missing suite: ${suite}`);
+}
+const manifestReferences = new Set<string>();
+for (const [suite, commands] of Object.entries(testManifest.suites || {})) {
+  for (const command of commands) {
+    assert(Boolean(scripts[command]), `test manifest ${suite} references missing package script: ${command}`);
+    for (const referenced of collectReferencedScripts(command)) manifestReferences.add(referenced);
+  }
+}
 for (const testScript of testScripts) {
-  assert(ciReferences.has(testScript), `${testScript} is not reachable from bun run ci`);
+  assert(manifestReferences.has(testScript), `${testScript} is not assigned to any test manifest suite`);
 }
-
-for (const profile of ["ci:types", "ci:domain", "ci:ops"]) {
-  assert(
-    workflow.includes(`bun run ${profile}`),
-    `.github/workflows/ci.yml should call bun run ${profile} instead of duplicating its test list`
-  );
-}
+assert(workflow.includes("matrix:") && workflow.includes("suite: [types, domain, ops, integration, performance]"),
+  "CI must run independent non-browser suites as a parallel matrix");
+assert(workflow.includes("bun run ci:suite -- ${{ matrix.suite }}"), "CI matrix must execute the standard manifest runner");
+assert(workflow.includes("bun run ci:suite -- e2e"), "CI must execute the e2e manifest suite");
+assert(workflow.includes("actions/upload-artifact"), "CI must upload suite, bundle and trace artifacts");
 
 for (const required of ["release:check:source", "release:check:backend", "release:check:typebot"]) {
   assert(scripts[required], `missing release gate script: ${required}`);
@@ -140,4 +146,4 @@ assert(
   "the ops health alert must compare the failing checks against the previous notice before commenting again",
 );
 
-console.log(`PASS CI quality gates: ${testScripts.length} test scripts covered by bun run ci`);
+console.log(`PASS CI quality gates: ${testScripts.length} test scripts assigned across ${requiredSuites.length} manifest suites`);

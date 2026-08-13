@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { DocumentStatus, Prisma, ReviewStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { generateLlmJson, getConfiguredLlmBackend, isLlmNotConfiguredError } from "@/lib/ai/llm-gateway";
@@ -70,7 +71,7 @@ export interface DocumentVerificationLayerDetails {
     llm: {
       enabled: boolean;
       status: DocumentVerificationLlmStatus;
-      provider: "kimi" | "claude" | null;
+      provider: "openai" | "anthropic" | "kimi" | "claude" | null;
       issueCount: number;
       errorCode?: string;
     };
@@ -380,7 +381,7 @@ function issue(input: {
 }
 
 function numericEnv(name: string, fallback: number): number {
-  const raw = process.env[name];
+  const raw = runtimeEnvironment()[name];
   if (!raw) return fallback;
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : fallback;

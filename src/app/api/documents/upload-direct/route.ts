@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getClientIp } from "@/lib/api/security";
 import { getDocumentUploadSigningSecret, verifyDocumentUploadToken } from "@/lib/documents/crypto";
 import { commitDocumentUpload } from "@/lib/documents/repository";
-import { processDocumentOcr } from "@/lib/documents/ocr";
 import { getDocumentWorkspaceIssue } from "@/lib/documents/workspace-availability";
 import { sendOpsAlert } from "@/lib/ops/alerts";
 import { siteBaseUrl } from "@/lib/config/site-url";
+import { enqueueWorkerJob } from "@/infrastructure/worker/job-repository";
+import { requestTraceContext } from "@/infrastructure/observability/trace-context";
+import { platformServiceTenantContext } from "@/application/tenancy/tenant-context";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -63,11 +65,17 @@ export async function PUT(req: NextRequest) {
       },
       context
     );
-    const processed = await processDocumentOcr(item.id, {
-      actor: context.actor,
-      actorRole: context.actorRole,
-      ip: context.ip,
-      userAgent: context.userAgent,
+    const trace = requestTraceContext(req.headers);
+    const job = await enqueueWorkerJob({
+      tenantContext: platformServiceTenantContext("document-upload"),
+      requestId: req.headers.get("x-request-id")?.trim().slice(0, 128) || crypto.randomUUID(),
+      jobType: "document-ocr",
+      idempotencyKey: `document-ocr:${item.id}:${payload.sha256}`,
+      payload: { documentItemId: item.id },
+      traceId: trace.traceId,
+      traceparent: trace.traceparent,
+      timeoutMs: 15 * 60_000,
+      deadlineAt: new Date(Date.now() + 2 * 60 * 60_000),
     });
 
     sendOpsAlert({
@@ -77,21 +85,22 @@ export async function PUT(req: NextRequest) {
       eventType: "document_uploaded",
       message: "새 서류가 업로드되었습니다.",
       occurredAt: new Date().toISOString(),
-      details: { documentItemId: processed.id, documentType: processed.documentType },
+      details: { documentItemId: item.id, documentType: item.documentType, workerJobId: job.id },
       adminUrl: `${siteBaseUrl()}/admin/documents`,
     }).catch((err) => console.warn("[ops alert] document upload", err instanceof Error ? err.message : err));
 
     return NextResponse.json({
       ok: true,
       document: {
-        id: processed.id,
-        documentType: processed.documentType,
-        status: processed.status,
-        reviewStatus: processed.reviewStatus,
-        reviewNote: processed.reviewNote,
-        fileId: processed.fileId,
+        id: item.id,
+        documentType: item.documentType,
+        status: item.status,
+        reviewStatus: item.reviewStatus,
+        reviewNote: item.reviewNote,
+        fileId: item.fileId,
       },
-    });
+      processing: { accepted: true, executionOwner: "kaxi-worker", job },
+    }, { status: 202 });
   } catch (err) {
     if (isExpectedValidationError(err)) {
       return NextResponse.json({ error: err instanceof Error ? err.message : "Invalid upload" }, { status: 400 });

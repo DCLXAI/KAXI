@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { createHash } from "crypto";
 import { Prisma } from "@prisma/client";
 import type { Lang } from "@/lib/i18n/translations";
@@ -365,7 +366,7 @@ export async function getProductionKnowledgeDocsForRag(
   options: { referenceDate?: Date; mode?: string } = {}
 ): Promise<ProductionKnowledgeDocs> {
   const now = options.referenceDate || new Date();
-  const mode = options.mode || process.env.KNOWLEDGE_RAG_SOURCE || "governed";
+  const mode = options.mode || runtimeEnvironment().KNOWLEDGE_RAG_SOURCE || "governed";
 
   if (mode === "static") {
     const docs = getKnowledgeDocsWithMetadata({ referenceDate: now }).map(({ sourceMeta: _sourceMeta, ...doc }) => doc);

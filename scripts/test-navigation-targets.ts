@@ -130,8 +130,9 @@ console.log("PASS crawler routes build their host from siteBaseUrl()");
     "the partner confirmation must not auto-dismiss — the user closes it"
   );
   assert(
-    /closeModal/.test(partners),
-    "closing the partner modal must reset the form, since the auto-reset that did it is gone"
+    /const resetForm = \(\) =>[\s\S]{0,500}?setName\(""\)[\s\S]{0,300}?setOverseasTransfer\(false\)/.test(partners)
+      && /onClick=\{resetForm\}/.test(partners),
+    "the persistent partner confirmation must offer an explicit action that resets every form field"
   );
 }
 

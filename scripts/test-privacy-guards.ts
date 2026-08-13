@@ -3,6 +3,7 @@ import { canPersistPiiValue, preparePiiField, readPiiField, redactSensitiveText 
 import { serializeLeadForResponse, serializePartnerRequestForResponse } from "../src/lib/privacy/serializers";
 import { LEAD_ACCESS_COOKIE } from "../src/lib/leads/ownership";
 import { prepareTestDb } from "./prepare-test-db";
+import { PLATFORM_TENANT_ID } from "../src/application/tenancy/tenant-context";
 
 function fail(message: string): never {
   console.error(`FAIL ${message}`);
@@ -278,9 +279,10 @@ async function testConsentThirdPartyFlow() {
     const canonicalQuestion = "D-4 상담 결과를 user@example.com으로 보내주세요";
     const protectedCanonicalQuestion = preparePiiField(canonicalQuestion, { kind: "text", maxPlainLength: 1_200 });
     const protectedCanonicalAnswer = preparePiiField("담당자 검토 후 안내드릴게요.", { kind: "text", maxPlainLength: 8_000 });
-    await db.chatSession.create({ data: { sessionKey: canonicalSessionKey } });
+    await db.chatSession.create({ data: { tenantId: PLATFORM_TENANT_ID, sessionKey: canonicalSessionKey } });
     const canonicalMessage = await db.chatMessage.create({
       data: {
+        tenantId: PLATFORM_TENANT_ID,
         sessionKey: canonicalSessionKey,
         question: protectedCanonicalQuestion.plaintext || "",
         questionCiphertext: protectedCanonicalQuestion.ciphertext,
@@ -294,6 +296,7 @@ async function testConsentThirdPartyFlow() {
     });
     const audit = await db.n8nAuditMessage.create({
       data: {
+        tenantId: PLATFORM_TENANT_ID,
         requestId: "215b87ff-c1ac-4f8c-a749-2131e23f88b2",
         sourceChatMessageId: canonicalMessage.id,
         sessionKey: canonicalSessionKey,
@@ -323,7 +326,13 @@ async function testConsentThirdPartyFlow() {
     // assertion vacuous.
     const canonicalLead = await createPrivacyLead(leadsRoute, "canonical-flow");
     await db.handoffLead.create({
-      data: { id: canonicalLead.leadId, sessionKey: canonicalSessionKey, locale: "ko", source: "privacy-test" },
+      data: {
+        id: canonicalLead.leadId,
+        tenantId: PLATFORM_TENANT_ID,
+        sessionKey: canonicalSessionKey,
+        locale: "ko",
+        source: "privacy-test",
+      },
     });
 
     const canonicalDelete = await readJson(
@@ -336,7 +345,9 @@ async function testConsentThirdPartyFlow() {
       ),
     );
     if (!canonicalDelete.ok) fail(`canonical chat delete request failed: ${canonicalDelete.status}`);
-    const markedCanonicalSession = await db.chatSession.findUnique({ where: { sessionKey: canonicalSessionKey } });
+    const markedCanonicalSession = await db.chatSession.findUnique({
+      where: { tenantId_sessionKey: { tenantId: PLATFORM_TENANT_ID, sessionKey: canonicalSessionKey } },
+    });
     if (!markedCanonicalSession?.deleteRequestedAt) fail("canonical chat session was not marked for privacy deletion");
 
     const questionSelector = await readJson(
@@ -357,7 +368,9 @@ async function testConsentThirdPartyFlow() {
     if (retention.canonicalChatSessionsDeleted < 1) {
       fail(`retention should delete canonical chat sessions, got ${retention.canonicalChatSessionsDeleted}`);
     }
-    if (await db.chatSession.findUnique({ where: { sessionKey: canonicalSessionKey } })) {
+    if (await db.chatSession.findUnique({
+      where: { tenantId_sessionKey: { tenantId: PLATFORM_TENANT_ID, sessionKey: canonicalSessionKey } },
+    })) {
       fail("canonical chat session survived retention deletion");
     }
     const expired = await db.consent.count({

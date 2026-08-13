@@ -1,13 +1,26 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { redactSensitiveText } from "@/lib/privacy/pii";
 import type { LlmGatewayContent, LlmGatewayMessage, LlmGatewayOptions, LlmGatewayResult } from "@/lib/ai/llm-types";
 
-export const DEFAULT_KIMI_BASE_URL = "https://api.moonshot.ai/v1";
-export const DEFAULT_KIMI_MODEL = "kimi-k2.6";
+export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+export const DEFAULT_OPENAI_MODEL = "gpt-4.1-mini";
 
 export class OpenAICompatibleNotConfiguredError extends Error {
-  constructor(message = "Kimi API key is not configured") {
+  constructor(message = "A genuine OpenAI API key is not configured") {
     super(message);
     this.name = "OpenAICompatibleNotConfiguredError";
+  }
+}
+
+export class OpenAIProviderError extends Error {
+  readonly status: number;
+  readonly providerCode: string | null;
+
+  constructor(status: number, detail: string, providerCode: string | null = null) {
+    super(`OpenAI API request failed (${status})${detail ? `: ${detail}` : ""}`);
+    this.name = "OpenAIProviderError";
+    this.status = status;
+    this.providerCode = providerCode;
   }
 }
 
@@ -15,29 +28,37 @@ function configured(value: string | undefined): string {
   return value?.trim() || "";
 }
 
-export function getOpenAICompatibleApiKey(env: NodeJS.ProcessEnv = process.env): string {
-  return configured(env.KIMI_API_KEY) || configured(env.MOONSHOT_API_KEY) || configured(env.OPENAI_API_KEY);
+export function getOpenAICompatibleApiKey(env: NodeJS.ProcessEnv = runtimeEnvironment()): string {
+  return configured(env.OPENAI_LLM_API_KEY) || configured(env.OPENAI_API_KEY);
 }
 
-export function getOpenAICompatibleBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
-  return (configured(env.KIMI_BASE_URL) || configured(env.OPENAI_BASE_URL) || DEFAULT_KIMI_BASE_URL).replace(/\/+$/, "");
+export function getOpenAICompatibleBaseUrl(env: NodeJS.ProcessEnv = runtimeEnvironment()): string {
+  return (configured(env.OPENAI_LLM_BASE_URL) || configured(env.OPENAI_BASE_URL) || DEFAULT_OPENAI_BASE_URL).replace(/\/+$/, "");
 }
 
-export function getOpenAICompatibleModel(env: NodeJS.ProcessEnv = process.env): string {
-  return configured(env.KIMI_MODEL) || configured(env.OPENAI_MODEL) || DEFAULT_KIMI_MODEL;
+export function getOpenAICompatibleModel(env: NodeJS.ProcessEnv = runtimeEnvironment()): string {
+  return configured(env.OPENAI_LLM_MODEL) || configured(env.OPENAI_MODEL) || DEFAULT_OPENAI_MODEL;
 }
 
-export function isOpenAICompatibleConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
-  return Boolean(getOpenAICompatibleApiKey(env));
+export function isGenuineOpenAIConfiguration(env: NodeJS.ProcessEnv = runtimeEnvironment()): boolean {
+  const baseUrl = getOpenAICompatibleBaseUrl(env);
+  const model = getOpenAICompatibleModel(env);
+  return /^https:\/\/api\.openai\.com(?:\/|$)/i.test(baseUrl)
+    && !/kimi|moonshot/i.test(`${baseUrl} ${model}`);
 }
 
-export function getOpenAICompatibleGatewayDiagnostics(env: NodeJS.ProcessEnv = process.env) {
+export function isOpenAICompatibleConfigured(env: NodeJS.ProcessEnv = runtimeEnvironment()): boolean {
+  return Boolean(getOpenAICompatibleApiKey(env)) && isGenuineOpenAIConfiguration(env);
+}
+
+export function getOpenAICompatibleGatewayDiagnostics(env: NodeJS.ProcessEnv = runtimeEnvironment()) {
   return {
     apiKeyConfigured: isOpenAICompatibleConfigured(env),
     model: getOpenAICompatibleModel(env),
     baseUrl: getOpenAICompatibleBaseUrl(env),
     protocol: "openai-chat-completions" as const,
-    provider: "kimi" as const,
+    provider: "openai" as const,
+    genuineProvider: isGenuineOpenAIConfiguration(env),
   };
 }
 
@@ -47,22 +68,15 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function timeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+function timeoutMs(env: NodeJS.ProcessEnv = runtimeEnvironment()): number {
   const parsed = Number.parseInt(env.AI_LLM_TIMEOUT_MS || "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 55_000;
-}
-
-function extensionFor(mediaType: string): string {
-  if (mediaType === "application/pdf") return "pdf";
-  if (mediaType === "image/png") return "png";
-  if (mediaType === "image/webp") return "webp";
-  return "jpg";
 }
 
 async function providerFetch(
   url: string,
   init: RequestInit,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = runtimeEnvironment(),
   timeoutOverrideMs?: number,
 ): Promise<Response> {
   const controller = new AbortController();
@@ -77,61 +91,23 @@ async function providerFetch(
   }
 }
 
-async function responseError(response: Response): Promise<Error> {
+async function responseError(response: Response): Promise<OpenAIProviderError> {
   let detail = "";
+  let providerCode: string | null = null;
   try {
     const payload = asRecord(await response.json());
     const error = asRecord(payload?.error);
     detail = typeof error?.message === "string" ? error.message : JSON.stringify(payload || {});
+    providerCode = typeof error?.code === "string" ? error.code : null;
   } catch {
     detail = await response.text().catch(() => "");
   }
   const safeDetail = redactSensitiveText(detail).replace(/\s+/g, " ").trim().slice(0, 500);
-  return new Error(`Kimi API request failed (${response.status})${safeDetail ? `: ${safeDetail}` : ""}`);
-}
-
-async function extractDocumentText(input: {
-  data: string;
-  mediaType: string;
-  apiKey: string;
-  baseUrl: string;
-}): Promise<string> {
-  const form = new FormData();
-  form.append("purpose", "file-extract");
-  form.append(
-    "file",
-    new Blob([new Uint8Array(Buffer.from(input.data, "base64"))], { type: input.mediaType }),
-    `document.${extensionFor(input.mediaType)}`
-  );
-
-  const upload = await providerFetch(`${input.baseUrl}/files`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${input.apiKey}` },
-    body: form,
-  });
-  if (!upload.ok) throw await responseError(upload);
-  const uploaded = asRecord(await upload.json());
-  const fileId = typeof uploaded?.id === "string" ? uploaded.id : "";
-  if (!fileId) throw new Error("Kimi file upload did not return a file id");
-
-  try {
-    const content = await providerFetch(`${input.baseUrl}/files/${encodeURIComponent(fileId)}/content`, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${input.apiKey}` },
-    });
-    if (!content.ok) throw await responseError(content);
-    return (await content.text()).trim();
-  } finally {
-    await providerFetch(`${input.baseUrl}/files/${encodeURIComponent(fileId)}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${input.apiKey}` },
-    }).catch(() => undefined);
-  }
+  return new OpenAIProviderError(response.status, safeDetail, providerCode);
 }
 
 async function normalizeContent(
   content: LlmGatewayContent,
-  credentials: { apiKey: string; baseUrl: string }
 ): Promise<LlmGatewayContent> {
   if (typeof content === "string") return redactSensitiveText(content);
 
@@ -152,8 +128,7 @@ async function normalizeContent(
       if (!data) continue;
 
       if (part.type === "document" || mediaType === "application/pdf") {
-        const extracted = await extractDocumentText({ ...credentials, data, mediaType });
-        normalized.push({ type: "text", text: `[Extracted document content]\n${extracted}` });
+        throw new Error("OpenAI chat completions cannot extract PDF attachments; use the document extraction pipeline before LLM generation");
       } else {
         normalized.push({
           type: "image_url",
@@ -170,12 +145,11 @@ async function normalizeContent(
 
 async function normalizeMessages(
   messages: LlmGatewayMessage[],
-  credentials: { apiKey: string; baseUrl: string }
 ): Promise<LlmGatewayMessage[]> {
   return Promise.all(
     messages.map(async (message) => ({
       role: message.role,
-      content: await normalizeContent(message.content, credentials),
+      content: await normalizeContent(message.content),
     }))
   );
 }
@@ -208,11 +182,11 @@ function textFromResponse(value: unknown): { text: string; model: string } {
     : 0;
   if (finishReason === "length") {
     throw new Error(
-      `Kimi API exhausted the output budget before completing the final answer${reasoningLength > 0 ? " after reasoning" : ""}`,
+      `OpenAI API exhausted the output budget before completing the final answer${reasoningLength > 0 ? " after reasoning" : ""}`,
     );
   }
   if (!text) {
-    throw new Error(`Kimi API returned an empty completion (finish_reason=${finishReason})`);
+    throw new Error(`OpenAI API returned an empty completion (finish_reason=${finishReason})`);
   }
   return { text, model };
 }
@@ -221,26 +195,21 @@ export async function generateOpenAICompatibleText(options: LlmGatewayOptions): 
   const startedAt = Date.now();
   const apiKey = getOpenAICompatibleApiKey();
   if (!apiKey) throw new OpenAICompatibleNotConfiguredError();
+  if (!isGenuineOpenAIConfiguration()) {
+    throw new OpenAICompatibleNotConfiguredError(
+      "OPENAI_BASE_URL and OPENAI_MODEL must identify the official OpenAI API; Kimi/Moonshot compatibility endpoints are not accepted",
+    );
+  }
 
   const baseUrl = getOpenAICompatibleBaseUrl();
   const model = getOpenAICompatibleModel();
-  const messages = await normalizeMessages(options.messages, { apiKey, baseUrl });
+  const messages = await normalizeMessages(options.messages);
   const body: Record<string, unknown> = {
     model,
     messages,
     max_completion_tokens: options.maxTokens ?? 1600,
   };
 
-  const configuredThinking = configured(process.env.KIMI_THINKING).toLowerCase();
-  const thinking = options.thinking
-    ?? (configuredThinking === "enabled" || configuredThinking === "disabled"
-      ? configuredThinking
-      : options.feature === "structured"
-        ? "disabled"
-        : "");
-  if (thinking && !model.startsWith("kimi-k2.7-code")) {
-    body.thinking = { type: thinking };
-  }
   if (options.jsonSchema) {
     body.response_format = {
       type: "json_schema",
@@ -259,14 +228,14 @@ export async function generateOpenAICompatibleText(options: LlmGatewayOptions): 
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
-  }, process.env, options.timeoutMs);
+  }, runtimeEnvironment(), options.timeoutMs);
   if (!response.ok) throw await responseError(response);
 
   const completion = textFromResponse(await response.json());
   return {
     text: completion.text,
     model: completion.model,
-    backend: "kimi",
+    backend: "openai",
     durationMs: Date.now() - startedAt,
     inputChars: JSON.stringify(messages).length,
     outputChars: completion.text.length,

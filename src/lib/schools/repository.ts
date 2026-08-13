@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { db } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 import {
@@ -70,7 +71,7 @@ export function isSchoolOperationalDatabaseError(error: unknown): error is Schoo
   return error instanceof SchoolOperationalDatabaseError;
 }
 
-export function canUseSchoolSeedFallback(env: NodeJS.ProcessEnv = process.env): boolean {
+export function canUseSchoolSeedFallback(env: NodeJS.ProcessEnv = runtimeEnvironment()): boolean {
   return !(env.NODE_ENV === "production" || env.VERCEL === "1" || Boolean(env.VERCEL_ENV));
 }
 

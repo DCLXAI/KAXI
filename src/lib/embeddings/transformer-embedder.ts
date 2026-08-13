@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 // Transformer 기반 다국어 Sentence Embedder
 // @huggingface/transformers + multilingual-e5-small (100+ 언어 지원, 384차원)
 // TF-IDF 방식보다 의미적 유사도 파악에 훨씬 우수
@@ -37,7 +38,7 @@ type TransformersEnv = {
   };
 };
 
-export function resolveModelCacheDir(env: ModelCacheEnv = process.env as ModelCacheEnv): string {
+export function resolveModelCacheDir(env: ModelCacheEnv = runtimeEnvironment() as ModelCacheEnv): string {
   const configured = env.MODEL_CACHE_DIR?.trim();
   if (configured) return configured;
 
@@ -48,7 +49,7 @@ export function resolveModelCacheDir(env: ModelCacheEnv = process.env as ModelCa
   return path.join(/*turbopackIgnore: true*/ process.cwd(), "data", "model-cache");
 }
 
-function modelCacheLocation(env: ModelCacheEnv = process.env as ModelCacheEnv): "custom" | "serverless-tmp" | "project-data" {
+function modelCacheLocation(env: ModelCacheEnv = runtimeEnvironment() as ModelCacheEnv): "custom" | "serverless-tmp" | "project-data" {
   if (env.MODEL_CACHE_DIR?.trim()) return "custom";
   if (env.VERCEL === "1" || env.VERCEL_ENV) return "serverless-tmp";
   return "project-data";
@@ -65,13 +66,13 @@ function cachePathExists(cacheDir: string): boolean {
 function sanitizeDiagnosticText(value: unknown): string {
   const text = (value instanceof Error ? value.message : String(value)).slice(0, 240);
   const cwd = process.cwd();
-  const home = process.env.HOME;
+  const home = runtimeEnvironment().HOME;
   return text
     .replaceAll(cwd, "<project>")
     .replaceAll(home || "__no_home__", "<home>");
 }
 
-export function getTransformerRuntimeInfo(env: ModelCacheEnv = process.env as ModelCacheEnv) {
+export function getTransformerRuntimeInfo(env: ModelCacheEnv = runtimeEnvironment() as ModelCacheEnv) {
   const cacheDir = resolveModelCacheDir(env);
   const allowRemoteModels = env.TRANSFORMERS_ALLOW_REMOTE !== "false";
   const allowLocalModels = env.TRANSFORMERS_ALLOW_LOCAL === "true";
@@ -106,8 +107,8 @@ export async function getEmbedder(): Promise<FeatureExtractionPipeline | null> {
         const { pipeline, env } = await import("@huggingface/transformers");
         const transformerEnv = env as TransformersEnv;
         env.cacheDir = resolveModelCacheDir();
-        env.allowRemoteModels = process.env.TRANSFORMERS_ALLOW_REMOTE !== "false";
-        env.allowLocalModels = process.env.TRANSFORMERS_ALLOW_LOCAL === "true";
+        env.allowRemoteModels = runtimeEnvironment().TRANSFORMERS_ALLOW_REMOTE !== "false";
+        env.allowLocalModels = runtimeEnvironment().TRANSFORMERS_ALLOW_LOCAL === "true";
         if (transformerEnv.backends?.onnx?.wasm) {
           transformerEnv.backends.onnx.wasm.proxy = false;
           transformerEnv.backends.onnx.wasm.numThreads = 1;
@@ -222,7 +223,7 @@ export function getEmbedDim(): number {
 }
 
 export function isTransformerAvailable(): boolean {
-  if (process.env.TRANSFORMERS_ALLOW_REMOTE === "false" && process.env.TRANSFORMERS_ALLOW_LOCAL !== "true") {
+  if (runtimeEnvironment().TRANSFORMERS_ALLOW_REMOTE === "false" && runtimeEnvironment().TRANSFORMERS_ALLOW_LOCAL !== "true") {
     return false;
   }
   return !loadFailed;

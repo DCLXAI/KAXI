@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { NextRequest, NextResponse } from "next/server";
 import { parseLimit, rateLimit } from "@/lib/api/security";
 import { db } from "@/lib/db";
@@ -9,7 +10,7 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   const limited = await rateLimit(req, {
     key: "chat-session-claim",
-    limit: parseLimit(process.env.CHAT_SESSION_CLAIM_RATE_LIMIT, 10),
+    limit: parseLimit(runtimeEnvironment().CHAT_SESSION_CLAIM_RATE_LIMIT, 10),
     windowMs: 60 * 1000,
   });
   if (limited) return limited;

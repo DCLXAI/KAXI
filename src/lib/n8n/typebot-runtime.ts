@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { shouldUseDirectLexicalFallback } from "@/lib/chat/direct-lexical-fallback";
 import {
   questionMediationRuntimePayload,
@@ -72,12 +73,12 @@ export function shouldRetryN8nNoContext(payload: { searchMeta?: unknown }) {
 }
 
 export function n8nRuntimeTimeoutMs() {
-  const configured = Number(process.env.N8N_RAG_TIMEOUT_MS);
+  const configured = Number(runtimeEnvironment().N8N_RAG_TIMEOUT_MS);
   if (!Number.isFinite(configured)) return 35_000;
   return Math.min(Math.max(Math.trunc(configured), 1_000), 45_000);
 }
 
-export function ragRuntimePrimary(env: NodeJS.ProcessEnv = process.env): "direct" | "n8n" {
+export function ragRuntimePrimary(env: NodeJS.ProcessEnv = runtimeEnvironment()): "direct" | "n8n" {
   return env.KAXI_RAG_RUNTIME_PRIMARY?.trim().toLowerCase() === "n8n" ? "n8n" : "direct";
 }
 
@@ -107,6 +108,7 @@ type N8nRuntimeSuccess = {
 
 export async function requestN8nRuntime(
   request: Record<string, unknown>,
+  options: { traceparent?: string } = {},
 ): Promise<N8nRuntimeSuccess | N8nRuntimeFailure> {
   let signed: ReturnType<typeof signN8nPayload>;
   try {
@@ -121,7 +123,7 @@ export async function requestN8nRuntime(
   try {
     response = await fetch(signed.url, {
       method: "POST",
-      headers: signed.headers,
+      headers: { ...signed.headers, ...(options.traceparent ? { traceparent: options.traceparent } : {}) },
       body: signed.body,
       signal: AbortSignal.timeout(n8nRuntimeTimeoutMs()),
     });

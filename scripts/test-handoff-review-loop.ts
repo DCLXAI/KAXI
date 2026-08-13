@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { db } from "../src/lib/db";
 import { notifyHandoffAssignee } from "../src/lib/handoffs/admin";
 import { prepareTestDb } from "./prepare-test-db";
+import { PLATFORM_TENANT_ID } from "../src/application/tenancy/tenant-context";
 
 prepareTestDb("handoff review loop");
 
@@ -28,10 +29,17 @@ async function createTurn(input: {
   sources: Array<{ docId: string; title: string }>;
 }) {
   await db.chatSession.create({
-    data: { sessionKey: input.sessionKey, locale: "ko", source: "kaxi-site", channel: "kaxi-site" },
+    data: {
+      tenantId: PLATFORM_TENANT_ID,
+      sessionKey: input.sessionKey,
+      locale: "ko",
+      source: "kaxi-site",
+      channel: "kaxi-site",
+    },
   });
   const message = await db.chatMessage.create({
     data: {
+      tenantId: PLATFORM_TENANT_ID,
       sessionKey: input.sessionKey,
       question: input.question,
       answer: input.answer,
@@ -51,6 +59,7 @@ async function createTurn(input: {
   });
   await db.retrievalRun.create({
     data: {
+      tenantId: PLATFORM_TENANT_ID,
       requestId: randomUUID(),
       messageId: message.id,
       sessionKey: input.sessionKey,

@@ -1,8 +1,13 @@
-import { createClient } from "@supabase/supabase-js";
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
+import { createSupabaseServiceRoleClient } from "@/infrastructure/supabase/service-role-client";
 import { NextRequest, NextResponse } from "next/server";
 import { JsonBodyError, readJsonBody } from "@/lib/api/json-body";
 import { parseLimit, rateLimit } from "@/lib/api/security";
 import { verifyN8nVerificationReceipt } from "@/lib/n8n/signature";
+import {
+  tenantContextFromVerifiedChannelPayload,
+  type TenantContext,
+} from "@/application/tenancy/tenant-context";
 
 export const runtime = "nodejs";
 
@@ -16,25 +21,16 @@ function record(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function configured(value: string | undefined) {
-  const result = value?.trim() || "";
-  return !result || /^(replace-with-|change_me)/i.test(result) ? "" : result;
-}
-
 function serviceClient() {
-  const url = configured(process.env.NEXT_PUBLIC_SUPABASE_URL);
-  const key = configured(process.env.SUPABASE_SERVICE_ROLE_KEY);
-  if (!url || !key) throw new Error("SUPABASE_SERVICE_ROLE_NOT_CONFIGURED");
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  return createSupabaseServiceRoleClient();
 }
 
-function handoffRow(payload: Record<string, unknown>) {
+function handoffRow(payload: Record<string, unknown>, tenantContext: TenantContext) {
   const sessionId = text(payload.sessionId, 120);
-  const tenantId = text(payload.tenant_id, 120) || "default";
-  if (!sessionId || tenantId !== "default") throw new Error("HANDOFF_PAYLOAD_INVALID");
+  if (!sessionId) throw new Error("HANDOFF_PAYLOAD_INVALID");
   return {
     session_id: sessionId,
-    tenant_id: tenantId,
+    tenant_id: tenantContext.tenantId,
     locale: text(payload.locale, 8) || "ko",
     source: text(payload.source, 40) || "typebot",
     lead_name: text(payload.leadName, 160) || null,
@@ -70,7 +66,7 @@ function handoffRow(payload: Record<string, unknown>) {
 export async function POST(req: NextRequest) {
   const limited = await rateLimit(req, {
     key: "n8n-handoff-update-core",
-    limit: parseLimit(process.env.N8N_HANDOFF_CORE_RATE_LIMIT, 120),
+    limit: parseLimit(runtimeEnvironment().N8N_HANDOFF_CORE_RATE_LIMIT, 120),
     windowMs: 60 * 1000,
   });
   if (limited) return limited;
@@ -90,10 +86,16 @@ export async function POST(req: NextRequest) {
     if (!verified.ok) {
       return NextResponse.json({ ok: false, error: "Invalid or expired verification receipt" }, { status: 401 });
     }
+    const tenantContext = tenantContextFromVerifiedChannelPayload({
+      tenantId: payload.tenant_id,
+      purpose: "typebot-handoff",
+      nonce: verified.claims.nonce,
+      verified: true,
+    });
 
     const insert = await serviceClient()
       .from("handoff_updates")
-      .insert(handoffRow(payload))
+      .insert(handoffRow(payload, tenantContext))
       .select("id,lead_id,lead_contact_id,handoff_task_id,update_status,response_payload")
       .single();
     if (insert.error) throw insert.error;

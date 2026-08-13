@@ -10,16 +10,11 @@
 - `RESTORE_MODEL_CACHE_ON_INSTALL`: Set `true` to decompress the local Transformer model during install. Vercel builds skip this by default to keep function bundles under file-size limits.
 - `AI_*_RATE_LIMIT`, `AI_*_DAILY_QUOTA`: Optional AI abuse and cost controls. Use `0` to disable a specific limit. Public Agent and Consult demos default to disabled limits until a managed shared limiter is configured.
 - `RATE_LIMIT_BACKEND`: `auto`, `database`, or `memory`. Use `database` with a writable shared PostgreSQL production DB so Vercel instances share quota.
-- `AI_PROVIDER`: Managed application LLM selector. Use `kimi` for Kimi's OpenAI-compatible API or `claude` for the optional Anthropic fallback.
-- `OPENAI_API_KEY`: Server-only Kimi key when `AI_PROVIDER=kimi`. `KIMI_API_KEY` and `MOONSHOT_API_KEY` are accepted aliases.
-- `OPENAI_BASE_URL`: Kimi OpenAI-compatible base URL. Defaults to `https://api.moonshot.ai/v1`.
-- `OPENAI_MODEL`: Kimi model override. Defaults to `kimi-k2.6`.
-- Kimi Code membership keys are a separate credential realm. They require `OPENAI_BASE_URL=https://api.kimi.com/coding/v1` and `OPENAI_MODEL=kimi-for-coding`. Kimi documents this endpoint for interactive coding agents and recommends Kimi Platform for product integrations; record any production exception and migrate to a Platform key before broad public usage.
-- `KIMI_THINKING`: Optional `enabled` or `disabled` override for compatible Kimi models. Omit it to retain the provider default.
-- `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`: Optional Claude fallback credentials used only when `AI_PROVIDER=claude` or automatic selection resolves to Claude. The Anthropic SDK also honors `ANTHROPIC_BASE_URL` for Anthropic-compatible endpoints.
-- Recorded production exception (2026-07-15): the managed-provider failover slot currently uses a Kimi Code membership key through the Anthropic-compatible endpoint (`ANTHROPIC_BASE_URL=https://api.kimi.com/anthropic`, `ANTHROPIC_MODEL=kimi-for-coding`). Both primary and failover are Moonshot-operated, so this is not vendor-level redundancy; replace it with a real Anthropic key or another provider before broad public usage.
+- `AI_PROVIDER`: Managed application LLM selector. Use `openai` or `anthropic`; `claude` remains an Anthropic alias. Kimi/Moonshot compatibility providers are retired and fail readiness.
+- `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`: Official OpenAI generation credentials. The base URL must be `https://api.openai.com/v1`; generation defaults to `gpt-4.1-mini` when no model is set.
+- `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL`: Independent official Anthropic fallback credentials. The base URL must be `https://api.anthropic.com`.
 - `AI_LLM_PROVIDER_FAILOVER_ENABLED`: Defaults to `true`. When both providers are configured, retry a failed, timed-out, empty, truncated, or invalid-JSON primary response once on the secondary provider.
-- `AI_REQUIRE_PROVIDER_FAILOVER`: Set `true` in production to make missing secondary-provider credentials a readiness issue.
+- `AI_REQUIRE_PROVIDER_FAILOVER`: Set `true` outside production when both providers should be mandatory there as well. Hosted production always requires both independent providers.
 - `AI_REQUIRE_LLM`, `AI_ALLOW_LLM_FALLBACK`: Global LLM strictness policy. Keep fallback allowed in CI and local development without an API key.
 - `AI_AGENT_PREFLIGHT_ENABLED`: Enables deterministic server-side tool/RAG preflight before managed LLM calls.
 - `AI_AGENT_PREFLIGHT_TIMEOUT_MS`, `AI_AGENT_CONTEXT_MAX_CHARS`, `AI_AGENT_GROUNDED_QUESTION_MAX_CHARS`: Bound preflight latency and context sent to the managed LLM.
@@ -203,6 +198,17 @@ bun run rag:serving:cutover
 bun run rag:serving:cutover --execute --confirm CUTOVER_LEGACY_RAG --expected-ready 201
 ```
 
+The standard regression suite and the expert-blind suite are separate cohorts. `rag:evaluation:seed` upserts regression cases and inserts 208 multilingual blind candidates as inactive rows without overwriting later expert decisions. Candidate expectations are engineering proposals, not legal ground truth.
+
+```bash
+bun run rag:evaluation:blind:candidates
+bun run rag:evaluation:blind:review-packet > blind-review.json
+RAG_BLIND_REVIEW_FILE=blind-review.json bun run rag:evaluation:blind:apply-review
+bun run rag:evaluation:blind
+```
+
+An expert must change each reviewed row's `decision`, identify themselves in `reviewer`, provide an ISO `reviewedAt`, and correct the expected documents/risk/handoff fields. Only `approved` rows become active with `reviewStatus=expert_approved`; rejected or revision-needed rows stay out of evaluation. The `blind` runner refuses to use unreviewed candidates, requires a production target by default, supports up to 300 cases, and sends only the question and normal request context to the answer runtime. Expected values are applied only after the response returns.
+
 The database function rechecks the counts inside the cutover transaction, copies legacy rows to `legacy_rag_chunks_quarantine`, and removes only IDs confirmed in quarantine. The 2026-07-11 production cutover copied and removed 100 rows; `knowledge_chunks` is now empty while the governed projection remains 201/201. Never call the cutover RPC directly during a partial sync.
 
 ## Data Source Policy
@@ -339,8 +345,8 @@ The rule now: **assert what you can derive, report what you cannot.** `evaluateR
 ## Managed LLM Backend
 
 Agent, Consult, general chat, OCR, and structured admin suggestions use `src/lib/ai/llm-gateway.ts`.
-The default Kimi adapter calls the OpenAI-compatible Chat Completions endpoint, defaults to `kimi-k2.6`, converts image blocks to OpenAI format, and uses `response_format.type=json_schema` for structured outputs. PDF OCR uploads the file with `purpose=file-extract`, retrieves extracted content, and deletes the temporary provider file. When both Kimi and Claude credentials are configured, the gateway automatically makes one secondary-provider attempt after a timeout, empty/truncated response, provider error, or invalid structured JSON.
-`OPENAI_MODEL` and `OPENAI_BASE_URL` can override the model and endpoint without code changes.
+The OpenAI adapter calls the official Chat Completions endpoint, converts image blocks to OpenAI format, and uses `response_format.type=json_schema` for structured outputs. PDFs are extracted by the application document pipeline before generation. When both official OpenAI and Anthropic credentials are configured, the gateway makes one secondary-provider attempt after a timeout, empty/truncated response, provider error, or invalid structured JSON.
+Provider base URLs are identity controls, not arbitrary compatibility endpoints. Kimi/Moonshot URLs and models are rejected by readiness and runtime configuration checks.
 
 Every ordinary text call passes through the gateway, which redacts emails, phone numbers, and private messenger handles before sending text to the selected provider. OCR media remains available to the provider because field extraction requires the visible document content.
 Agent preflight, rate limits, daily quotas, `AgentRequestLedger`, and citation normalization remain enforced around the gateway.
@@ -348,16 +354,83 @@ Agent preflight, rate limits, daily quotas, `AgentRequestLedger`, and citation n
 ### AI Backend Decision Table
 
 The runtime selector in `src/lib/ai/backend-selector.ts` is the single policy source for Agent, Consult, `/api/ai/agent` status, and `/api/readiness`.
-`AI_PROVIDER=kimi` selects Kimi. `AI_PROVIDER=claude` selects Anthropic. In automatic mode, an explicit Kimi/Moonshot key or Moonshot/Kimi base URL selects Kimi; otherwise the legacy Claude path remains available.
+`AI_PROVIDER=openai` selects OpenAI. `AI_PROVIDER=anthropic` selects Anthropic; `claude` is retained as an alias. Automatic mode prefers a genuinely configured OpenAI provider and otherwise selects Anthropic.
 
 | condition | behavior |
 | --- | --- |
-| `AI_PROVIDER=kimi` and a Kimi key is configured | Kimi OpenAI-compatible API serves Agent/Consult/OCR. |
-| `AI_PROVIDER=claude` and `ANTHROPIC_API_KEY` is configured | Claude serves Agent/Consult/OCR as an optional fallback provider. |
+| `AI_PROVIDER=openai` and an official OpenAI key is configured | OpenAI serves Agent/Consult/image OCR. |
+| `AI_PROVIDER=anthropic` and an official Anthropic key is configured | Anthropic serves first and OpenAI remains the independent fallback. |
 | primary and secondary credentials are configured | The selected provider runs first; a classified runtime or structured-output failure retries once on the other managed provider. |
+| a provider reports quota exhaustion | The failure is classified as `quota_exhausted`, daily health fails, and RAG returns an explicit degraded response requiring human review. |
+| Kimi/Moonshot key, endpoint, or retired provider selector is present | production readiness fails until the compatibility configuration is removed. |
 | key missing and `AI_REQUIRE_LLM=false` | Agent uses built-in tools; Consult summarizes retrieved approved official sources. |
 | key missing and `AI_REQUIRE_LLM=true` with no fallback override | endpoints return `503 LLM backend unavailable`; readiness reports an AI backend issue. |
 | legacy Codex/bridge/Z.ai env vars present | ignored and surfaced as warnings only. |
 
 Inspect `GET /api/ai/agent` `backendPolicy.agent.decisionTable` and `backendPolicy.consult.decisionTable` first when the site says it is using fallback.
 Authenticated operators can inspect the same safe diagnostics in `/admin/ops` and `GET /api/admin/ops`, which pair the backend decision table with readiness, the latest integration health run, and open `ops_events`. Owners and admins can run a fresh check with `POST /api/admin/ops` and acknowledge an event with `PATCH /api/admin/ops` using `{ "eventId": "<uuid>" }`; each action is written to `AdminAuditLog`.
+
+## Parallel Worktrees
+
+One worktree per concurrent Claude session. Create with:
+
+```bash
+bash scripts/worktree-new.sh <slug> [<branch>] [--isolated-db]
+```
+
+Branch defaults to `slice/<slug>` and is always cut from `origin/main`, never from the
+primary checkout's HEAD — that tree carries uncommitted work (see the Worktree warning in
+`CLAUDE.md`) which must not leak into new branches.
+
+The script lands the worktree in `.worktrees/<slug>` (already ignored by `.gitignore`,
+`eslint.config.mjs`, and `.vercelignore`), then:
+
+- assigns the lowest free port slot — dev `3410, 3420, …`, e2e `3411, 3421, …`, clear of
+  3000 (`dev`), 3100 (Playwright), 3210 (`launch.json`), 3003, and 81 (Caddy);
+- copies `.env.local` and **appends a localhost override block**. `.env.local` declares
+  `DATABASE_URL` three times and the last one wins, which resolves to the remote Supabase
+  pooler; without the override every parallel session would point at production. The
+  script re-reads the effective values afterwards and destroys the worktree rather than
+  hand back one aimed at a remote host;
+- writes a `.claude/launch.json` on the assigned port (`.claude` is gitignored, so a fresh
+  worktree has none);
+- runs `bun install`, whose `postinstall` generates the Prisma client and restores the
+  runtime artifacts.
+
+Then start a session with `cd .worktrees/<slug> && claude`.
+
+### Databases
+
+The dev database is shared (`kaxi_phase0`) by default, so read-mostly work starts without
+re-seeding. **Do not run `db:migrate` in a shared worktree** — two branches migrating one
+database produce divergent `_prisma_migrations` ledgers, and nothing locks the dev DB.
+Pass `--isolated-db` for migration work; it creates `kaxi_wt_<slug>` and runs the same
+migrate/seed chain as `.github/workflows/ci.yml`.
+
+The test database is always per-worktree (`kaxi_wt_<slug>_test`), created **and migrated**
+by the setup script. `prepare-e2e-db.ts` cannot bootstrap one itself: it never issues a
+`CREATE DATABASE`, and its migrate step shells out to `scripts/prepare-test-db.ts`, which
+only *exports* `prepareTestDb()` and therefore exits without doing anything. That no-op is
+invisible on the default `kaxi_phase0_test` because that database is already populated, but
+a fresh one fails at the first seed. The lock file in `prepare-test-db.ts` keys off a hash
+of the database *URL*, so distinct names are what let sessions run `test:e2e` concurrently
+instead of the second failing with `another test process is already using`.
+
+`playwright.config.ts` reads `E2E_PORT` and `TEST_DATABASE_URL` out of `.env.local`
+directly. It has to: `test:e2e` resolves to `playwright`, which runs under node, and node
+does not auto-load `.env.local` the way bun does — values already present in the
+environment still win, so CI is unaffected. A non-default `E2E_PORT` also disables
+`reuseExistingServer`, so a run can never attach to another worktree's server and report
+green against the wrong code.
+
+Local Postgres port defaults to 5433 (cluster at `/opt/homebrew/var/postgresql@17`, started
+manually); override with `KAXI_PG_PORT`. The script warns
+rather than fails when no cluster is listening, since UI-only work needs no database.
+
+### Teardown
+
+```bash
+git worktree remove .worktrees/<slug>
+git branch -D <branch>                       # if unmerged
+dropdb -h localhost -p 5433 kaxi_wt_<slug>_test
+```

@@ -1,8 +1,11 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { NextRequest, NextResponse } from "next/server";
 import { JsonBodyError, readJsonBody } from "@/lib/api/json-body";
 import { parseLimit, rateLimit } from "@/lib/api/security";
-import { ingestRagServingPayload } from "@/lib/knowledge/serving-projection";
 import { verifyN8nVerificationReceipt } from "@/lib/n8n/signature";
+import { enqueueWorkerJob } from "@/infrastructure/worker/job-repository";
+import { requestTraceContext } from "@/infrastructure/observability/trace-context";
+import { tenantContextFromVerifiedChannelPayload } from "@/application/tenancy/tenant-context";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -20,7 +23,7 @@ function record(value: unknown): Record<string, unknown> | null {
 export async function POST(req: NextRequest) {
   const limited = await rateLimit(req, {
     key: "n8n-rag-ingestion-core",
-    limit: parseLimit(process.env.N8N_RAG_INGESTION_RATE_LIMIT, 120),
+    limit: parseLimit(runtimeEnvironment().N8N_RAG_INGESTION_RATE_LIMIT, 120),
     windowMs: 60 * 1000,
   });
   if (limited) return limited;
@@ -43,11 +46,27 @@ export async function POST(req: NextRequest) {
 
     // chunkEmbedding is top-level, OUTSIDE the receipt-bound payload: the
     // verification receipt binds the payloadHash KARXY originally signed, and
-    // n8n attaches its computed vector alongside (same pattern as the
-    // rag-runtime queryEmbedding). It is validated in the governed writer.
-    return NextResponse.json(
-      await ingestRagServingPayload(payload, { providedEmbedding: body.chunkEmbedding }),
-    );
+    // n8n attaches its computed vector alongside. The Worker validates it in
+    // the governed writer without loading ingestion dependencies in Web.
+    const trace = requestTraceContext(req.headers);
+    const tenantContext = tenantContextFromVerifiedChannelPayload({
+      tenantId: payload.tenant_id,
+      purpose: "rag-ingestion",
+      nonce: verified.claims.nonce,
+      verified: true,
+    });
+    const job = await enqueueWorkerJob({
+      tenantContext,
+      requestId: text(payload.requestId, 128) || verified.claims.nonce,
+      jobType: "rag-serving-ingest",
+      idempotencyKey: text(payload.idempotencyKey, 180) || verified.claims.nonce,
+      payload: { payload, providedEmbedding: body.chunkEmbedding },
+      traceId: trace.traceId,
+      traceparent: trace.traceparent,
+      timeoutMs: 5 * 60_000,
+      deadlineAt: new Date(Date.now() + 60 * 60_000),
+    });
+    return NextResponse.json({ ok: true, accepted: true, executionOwner: "kaxi-worker", job }, { status: 202 });
   } catch (error) {
     if (error instanceof JsonBodyError) {
       return NextResponse.json({ ok: false, error: error.message }, { status: error.status });

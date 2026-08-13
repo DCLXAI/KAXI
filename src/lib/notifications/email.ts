@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import type { Transporter } from "nodemailer";
 import { siteBaseUrl } from "@/lib/config/site-url";
 
@@ -21,7 +22,7 @@ export function __setTransportForTest(t: typeof testTransport) { testTransport =
  * needs no auth at all (a local relay) still works, because SMTP_USER is unset
  * in that case and there is nothing to be missing.
  */
-export function smtpConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
+export function smtpConfigured(env: NodeJS.ProcessEnv = runtimeEnvironment()): boolean {
   if (!env.SMTP_HOST?.trim() || !env.SMTP_FROM?.trim()) return false;
   if (env.SMTP_USER?.trim() && !env.SMTP_PASS?.trim()) return false;
   return true;
@@ -31,11 +32,11 @@ async function getTransport() {
   if (testTransport) return testTransport;
   const nodemailer = await import("nodemailer");
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: process.env.SMTP_SECURE === "true",
-    auth: process.env.SMTP_USER
-      ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+    host: runtimeEnvironment().SMTP_HOST,
+    port: Number(runtimeEnvironment().SMTP_PORT || 587),
+    secure: runtimeEnvironment().SMTP_SECURE === "true",
+    auth: runtimeEnvironment().SMTP_USER
+      ? { user: runtimeEnvironment().SMTP_USER, pass: runtimeEnvironment().SMTP_PASS }
       : undefined,
   }) as unknown as Transporter;
 }
@@ -48,7 +49,7 @@ export async function sendNotificationEmail(input: SendInput): Promise<SendResul
       ? `${input.body}\n\n${siteBaseUrl()}${input.href}`
       : input.body;
     await transport.sendMail({
-      from: process.env.SMTP_FROM,
+      from: runtimeEnvironment().SMTP_FROM,
       to: input.to,
       subject: input.subject,
       text,

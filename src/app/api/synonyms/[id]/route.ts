@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { invalidateSynonymCache } from "@/lib/embeddings/vector-store";
+import { invalidateSynonymCache } from "@/lib/embeddings/synonym-cache-signal";
 import { getAdminContext, requireAdmin } from "@/lib/api/security";
 import { recordRequestAudit } from "@/lib/audit";
 

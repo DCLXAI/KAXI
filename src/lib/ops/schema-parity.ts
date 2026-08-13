@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 
-export const REQUIRED_PRODUCTION_MIGRATION = "20260802140000_retention_processed_at";
+export const REQUIRED_PRODUCTION_MIGRATION = "20260813085000_trace_request_correlation";
 
 const REQUIRED_SCHEMA_OBJECTS = [
   "migration_ledger",
@@ -28,6 +28,12 @@ const REQUIRED_SCHEMA_OBJECTS = [
   "product_analytics_events",
   "rag_confidence_policy",
   "rag_provider_independent_hybrid",
+  "platform_tenant",
+  "worker_queue",
+  "trace_span_ledger",
+  "retrieval_plan_columns",
+  "tenant_required_retrieval_rpcs",
+  "request_correlation_columns",
   // P0-2. The retention sweep selects on retentionProcessedAt. Without the
   // column it throws at runtime, but the whole lesson of P0-2 is that a sweep
   // which quietly does nothing looks identical to one with nothing to do — so
@@ -159,7 +165,43 @@ export async function checkProductionSchemaParity(): Promise<SchemaParityResult>
             'lexical-centroid' IN pg_get_functiondef(
               to_regprocedure('public.match_rag_documents_hybrid_v3(vector,integer,jsonb)')
             )
-          ) > 0 AS rag_provider_independent_hybrid
+          ) > 0 AS rag_provider_independent_hybrid,
+        EXISTS (
+          SELECT 1 FROM public.tenants WHERE id = 'platform'
+        ) AS platform_tenant,
+        to_regclass('public.worker_jobs') IS NOT NULL AS worker_queue,
+        to_regclass('public.trace_spans') IS NOT NULL AS trace_span_ledger,
+        (
+          SELECT count(*) = 7
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'retrieval_runs'
+            AND column_name IN (
+              'plan_version', 'score_version', 'threshold_set', 'embedding_source',
+              'candidate_count', 'corpus_snapshot_id', 'replay_spec'
+            )
+        ) AS retrieval_plan_columns,
+        to_regprocedure('public.match_rag_documents_lexical_v3(integer,jsonb)') IS NOT NULL
+          AND to_regprocedure('public.match_rag_documents_hybrid_v4(vector,integer,jsonb)') IS NOT NULL
+          AND position(
+            'valid tenant_id is required' IN pg_get_functiondef(
+              to_regprocedure('public.match_rag_documents_hybrid_v4(vector,integer,jsonb)')
+            )
+          ) > 0 AS tenant_required_retrieval_rpcs,
+        (
+          SELECT count(*) = 5
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND is_nullable = 'NO'
+            AND (
+              (table_name = 'outbox_events' AND column_name = 'request_id')
+              OR (table_name = 'worker_jobs' AND column_name = 'request_id')
+              OR (
+                table_name = 'chat_attachment_jobs'
+                AND column_name IN ('request_id', 'trace_id', 'traceparent')
+              )
+            )
+        ) AS request_correlation_columns
     `;
     const row = rows[0];
     const missing = REQUIRED_SCHEMA_OBJECTS.filter((key) => row?.[key] !== true);

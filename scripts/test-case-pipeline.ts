@@ -25,6 +25,7 @@ prepareTestDb("case pipeline");
 
 const { NextRequest } = await import("next/server");
 const { db } = await import("../src/lib/db");
+const { PLATFORM_TENANT_ID } = await import("../src/application/tenancy/tenant-context");
 const { slaDefaultMinutes, slaTierForMinutes } = await import("../src/lib/ops/sla-policy");
 const actionRoute = await import("../src/app/api/admin/cases/[id]/actions/route");
 const detailRoute = await import("../src/app/api/admin/cases/[id]/route");
@@ -63,7 +64,7 @@ async function json(res: Response) {
 
 async function seedPartnerOffice(id: string, name: string) {
   const organization = await db.organization.create({
-    data: { id, name, type: "PARTNER_AGENT_OFFICE" },
+    data: { id, tenantId: PLATFORM_TENANT_ID, name, type: "PARTNER_AGENT_OFFICE" },
   });
   const user = await db.user.create({
     data: {

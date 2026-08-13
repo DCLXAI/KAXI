@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Clock3, FileWarning, Mail, MessageSquareText, Phone, RefreshCw, SearchX, UserRoundCheck } from "lucide-react";
 import { useAdminApi } from "@/components/admin/AdminShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -133,10 +134,11 @@ function contactHref(task: HandoffTask) {
   return undefined;
 }
 
-export function AdminHandoffs() {
+export function AdminHandoffs({ initialData = null }: { initialData?: HandoffResponse | null }) {
   const { adminFetch, canManageOps } = useAdminApi();
-  const [data, setData] = useState<HandoffResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<HandoffResponse | null>(initialData);
+  const [loading, setLoading] = useState(!initialData);
+  const initialPending = useRef(Boolean(initialData));
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState("active");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -145,6 +147,11 @@ export function AdminHandoffs() {
   const [note, setNote] = useState("");
   const [resolutionCode, setResolutionCode] = useState<ResolutionCode | "">("");
   const [updating, setUpdating] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkAssigneeUserId, setBulkAssigneeUserId] = useState("");
+  const [bulkSlaMinutes, setBulkSlaMinutes] = useState("1440");
+  const [bulkResolutionCode, setBulkResolutionCode] = useState<ResolutionCode | "">("");
+  const [bulkUpdating, setBulkUpdating] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -162,6 +169,10 @@ export function AdminHandoffs() {
   }, [adminFetch]);
 
   useEffect(() => {
+    if (initialPending.current) {
+      initialPending.current = false;
+      return;
+    }
     void load();
   }, [load]);
 
@@ -185,6 +196,67 @@ export function AdminHandoffs() {
     if (tab === "closed") return tasks.filter((task) => ["resolved", "closed", "duplicate"].includes(task.status));
     return tasks;
   }, [data?.tasks, tab]);
+
+  useEffect(() => {
+    const available = new Set((data?.tasks || []).map((task) => task.id));
+    setSelectedIds((current) => new Set([...current].filter((id) => available.has(id))));
+  }, [data?.tasks]);
+
+  const bulkSelectedAssignee = data?.assignees.find((item) => item.id === bulkAssigneeUserId) || null;
+  const allFilteredSelected = filtered.length > 0 && filtered.every((task) => selectedIds.has(task.id));
+
+  const toggleAllFiltered = (checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      for (const task of filtered) {
+        if (checked) next.add(task.id);
+        else next.delete(task.id);
+      }
+      return next;
+    });
+  };
+
+  const toggleTask = (id: string, checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const updateTasksBulk = async (action: "assign" | "resolve") => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    if (action === "resolve" && !window.confirm(`${ids.length}건을 선택한 최종 판정으로 완료할까요?`)) return;
+    setBulkUpdating(true);
+    setError(null);
+    try {
+      const response = await adminFetch("/api/admin/handoffs", {
+        method: "PATCH",
+        body: JSON.stringify({
+          ids,
+          action,
+          assigneeUserId: action === "assign" ? bulkAssigneeUserId : undefined,
+          organizationId: action === "assign" ? bulkSelectedAssignee?.organizationId : undefined,
+          slaMinutes: action === "assign" ? Number(bulkSlaMinutes) : undefined,
+          slaPolicy: action === "assign" ? "kaxi-handoff-v1" : undefined,
+          resolutionCode: action === "resolve" ? bulkResolutionCode : undefined,
+        }),
+      });
+      const payload = await response.json() as { error?: string; bulk?: { succeeded: number; failed: number; failures: Array<{ id: string; error: string }> } };
+      if (!response.ok) throw new Error(payload.error || "상담전환 일괄 변경에 실패했습니다.");
+      setSelectedIds(new Set());
+      await load();
+      if (payload.bulk?.failed) {
+        setError(`${payload.bulk.succeeded}건 처리, ${payload.bulk.failed}건 실패: ${payload.bulk.failures.slice(0, 3).map((item) => `#${item.id} ${item.error}`).join(", ")}`);
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
 
   const updateTask = async (action: HandoffAction) => {
     if (!selected) return;
@@ -252,6 +324,30 @@ export function AdminHandoffs() {
         </TabsList>
       </Tabs>
 
+      {canManageOps && selectedIds.size > 0 && (
+        <div className="flex flex-col gap-3 rounded-md border bg-muted/20 p-3 lg:flex-row lg:items-end">
+          <div className="min-w-24 pb-2 text-sm font-medium">{selectedIds.size}건 선택</div>
+          <div className="grid flex-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <label htmlFor="bulk-handoff-assignee" className="mb-1 block text-xs font-medium">담당자</label>
+              <Select value={bulkAssigneeUserId} onValueChange={setBulkAssigneeUserId}><SelectTrigger id="bulk-handoff-assignee"><SelectValue placeholder="담당자 선택" /></SelectTrigger><SelectContent>{data?.assignees.map((item) => <SelectItem key={item.id} value={item.id}>{item.email || item.id} · {item.organizationName}</SelectItem>)}</SelectContent></Select>
+            </div>
+            <div>
+              <label htmlFor="bulk-handoff-sla" className="mb-1 block text-xs font-medium">첫 응답 SLA</label>
+              <Select value={bulkSlaMinutes} onValueChange={setBulkSlaMinutes}><SelectTrigger id="bulk-handoff-sla"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="120">긴급 · 2시간</SelectItem><SelectItem value="1440">표준 · 24시간</SelectItem></SelectContent></Select>
+            </div>
+            <div>
+              <label htmlFor="bulk-handoff-resolution" className="mb-1 block text-xs font-medium">최종 판정</label>
+              <Select value={bulkResolutionCode} onValueChange={(value) => setBulkResolutionCode(value as ResolutionCode)}><SelectTrigger id="bulk-handoff-resolution"><SelectValue placeholder="판정 선택" /></SelectTrigger><SelectContent><SelectItem value="resolved">해결</SelectItem><SelectItem value="inaccurate">부정확</SelectItem><SelectItem value="missing_document">문서 부족</SelectItem></SelectContent></Select>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Button variant="outline" onClick={() => void updateTasksBulk("assign")} disabled={bulkUpdating || !bulkAssigneeUserId}>일괄 배정</Button>
+            <Button onClick={() => void updateTasksBulk("resolve")} disabled={bulkUpdating || !bulkResolutionCode}><CheckCircle2 className="h-4 w-4" />일괄 판정·완료</Button>
+          </div>
+        </div>
+      )}
+
       <Card>
         <CardContent className="p-0">
           {loading && !data ? (
@@ -260,11 +356,12 @@ export function AdminHandoffs() {
             <p className="py-14 text-center text-sm text-muted-foreground">이 상태의 상담전환 요청이 없습니다.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1120px] text-sm">
-                <thead><tr className="border-b bg-muted/30 text-left text-xs text-muted-foreground"><th className="px-4 py-3 font-medium">유형</th><th className="px-3 py-3 font-medium">위험</th><th className="px-3 py-3 font-medium">상태</th><th className="px-3 py-3 font-medium">질문</th><th className="px-3 py-3 font-medium">담당자</th><th className="px-3 py-3 font-medium">SLA</th><th className="px-3 py-3 font-medium">접수</th><th className="px-4 py-3 font-medium"><span className="sr-only">상세</span></th></tr></thead>
+              <table className="w-full min-w-[1160px] text-sm">
+                <thead><tr className="border-b bg-muted/30 text-left text-xs text-muted-foreground">{canManageOps && <th className="px-4 py-3 font-medium"><Checkbox checked={allFilteredSelected} onCheckedChange={(checked) => toggleAllFiltered(checked === true)} aria-label="표시된 상담전환 전체 선택" /></th>}<th className="px-4 py-3 font-medium">유형</th><th className="px-3 py-3 font-medium">위험</th><th className="px-3 py-3 font-medium">상태</th><th className="px-3 py-3 font-medium">질문</th><th className="px-3 py-3 font-medium">담당자</th><th className="px-3 py-3 font-medium">SLA</th><th className="px-3 py-3 font-medium">접수</th><th className="px-4 py-3 font-medium"><span className="sr-only">상세</span></th></tr></thead>
                 <tbody>
                   {filtered.map((task) => (
                     <tr key={task.id} className="border-b last:border-0 hover:bg-muted/30">
+                      {canManageOps && <td className="px-4 py-3"><Checkbox checked={selectedIds.has(task.id)} onCheckedChange={(checked) => toggleTask(task.id, checked === true)} aria-label={`상담전환 ${task.id} 선택`} /></td>}
                       <td className="px-4 py-3"><Badge variant={task.queueReason === "no_context" ? "destructive" : "outline"}>{QUEUE_LABELS[task.queueReason] || task.queueReason}</Badge></td>
                       <td className="px-3 py-3"><Badge variant={riskVariant(task.riskLevel)}>{task.riskLevel}</Badge></td>
                       <td className="px-3 py-3"><Badge variant="outline">{STATUS_LABELS[task.status] || task.status}</Badge></td>

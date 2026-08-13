@@ -14,6 +14,7 @@ import { viewToPath } from "../kbridge/views";
 import { redactSensitiveText } from "../privacy/pii";
 import { evaluateVisaRulesWithDbFallback } from "../rules/visa-rule-engine";
 import { VISA_DOCUMENT_REQUIREMENT_SEEDS } from "../documents/visa-document-matrix";
+import type { TenantContext } from "@/application/tenancy/tenant-context";
 
 // D-10/E-7 have no approved executable compliance rule version
 // (complianceCoverage, src/lib/data/diagnosis.ts:355-363). Per the binding honesty
@@ -50,6 +51,7 @@ export interface Tool {
 
 export interface ToolContext {
   lang: Lang;
+  tenantContext?: TenantContext;
   leadId?: string | null;
   dryRun?: boolean;
 }
@@ -353,11 +355,13 @@ const searchKnowledgeTool: Tool = {
     required: ["query"],
   },
   execute: async (args, ctx) => {
+    if (!ctx.tenantContext) throw new Error("TENANT_CONTEXT_REQUIRED");
     const query = stringArg(args, "query");
     const requestedTopK = Math.max(1, Math.min(10, Math.round(numberArg(args, "top_k", 3))));
     const sharedRag = await searchSharedOpenAiRag({
       query,
       locale: ctx.lang,
+      tenantContext: ctx.tenantContext,
       maxDocuments: Math.max(requestedTopK, 5),
     });
     const retrieval = sharedRag.retrieval;

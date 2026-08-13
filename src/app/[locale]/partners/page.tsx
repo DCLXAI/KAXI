@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import { KaxiPage } from "@/components/kbridge/KaxiPage";
+import { PublicShell } from "@/components/kbridge/PublicShell";
+import { Partners } from "@/components/kbridge/Partners";
 import { isLocale } from "@/i18n/routing";
 import { publicViewMetadata } from "@/lib/kbridge/public-routes";
 
@@ -20,7 +21,7 @@ export default async function PartnersPage({ params }: PageProps) {
   if (!isLocale(locale)) notFound();
   return (
     <Suspense fallback={<div className="min-h-screen bg-background" />}>
-      <KaxiPage view="partners" locale={locale} />
+      <PublicShell view="partners" locale={locale}><Partners locale={locale} /></PublicShell>
     </Suspense>
   );
 }

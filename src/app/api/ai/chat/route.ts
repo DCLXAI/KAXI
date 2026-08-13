@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { NextRequest, NextResponse } from "next/server";
 import {
   buildKnowledgeAnswerBasis,
@@ -30,13 +31,14 @@ import {
   sanitizeAiBody,
   withTimeout,
 } from "@/lib/api/security";
+import { platformAnonymousTenantContext } from "@/application/tenancy/tenant-context";
 
 // POST /api/ai/chat - RAG 기반 채팅 (Transformer Vector Search + LLM)
 export async function POST(req: NextRequest) {
   try {
     const limited = await rateLimit(req, {
       key: "ai:chat",
-      limit: parseLimit(process.env.AI_CHAT_RATE_LIMIT, AI_CHAT_DEFAULT_RATE_LIMIT),
+      limit: parseLimit(runtimeEnvironment().AI_CHAT_RATE_LIMIT, AI_CHAT_DEFAULT_RATE_LIMIT),
       windowMs: 60 * 1000,
     });
     if (limited) return limited;
@@ -44,13 +46,13 @@ export async function POST(req: NextRequest) {
     const quotaExceeded = await consumeDailyQuota(
       req,
       "ai:chat",
-      parseLimit(process.env.AI_CHAT_DAILY_QUOTA, AI_CHAT_DEFAULT_DAILY_QUOTA)
+      parseLimit(runtimeEnvironment().AI_CHAT_DAILY_QUOTA, AI_CHAT_DEFAULT_DAILY_QUOTA)
     );
     if (quotaExceeded) return quotaExceeded;
 
     const body = await req.json();
     const parsed = sanitizeAiBody(body || {}, {
-      maxQuestionLength: parsePositiveInt(process.env.AI_CHAT_MAX_CHARS, 1200),
+      maxQuestionLength: parsePositiveInt(runtimeEnvironment().AI_CHAT_MAX_CHARS, 1200),
       maxHistoryItems: 6,
       maxHistoryItemLength: 1200,
     });
@@ -63,6 +65,7 @@ export async function POST(req: NextRequest) {
     const sharedRag = await searchSharedOpenAiRag({
       query: question,
       locale: lang,
+      tenantContext: platformAnonymousTenantContext(crypto.randomUUID()),
       maxDocuments: 3,
     });
     const docs: KnowledgeDoc[] = sharedRag.docs;
@@ -97,7 +100,7 @@ export async function POST(req: NextRequest) {
       try {
         const llmAnswer = await withTimeout(
           generateWithLLM(question, lang, docs, history),
-          parsePositiveInt(process.env.AI_LLM_TIMEOUT_MS, 25_000),
+          parsePositiveInt(runtimeEnvironment().AI_LLM_TIMEOUT_MS, 25_000),
           "LLM generation"
         );
         if (llmAnswer) {

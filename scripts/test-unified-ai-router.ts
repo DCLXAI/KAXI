@@ -8,7 +8,7 @@ import { recommendPath } from "../src/lib/data/diagnosis";
 import {
   quickDiagnosisInput,
 } from "../src/lib/data/quick-diagnosis";
-import { normalizeExpertResponse } from "../src/app/api/ai/unified/route";
+import { normalizeExpertResponse } from "../src/application/ai/unified-ai";
 import { buildAgentMeta, docsWorkspaceHref, DOCS_WORKSPACE_CTA_LABELS } from "../src/lib/agent/meta";
 import { TOOL_MAP } from "../src/lib/agent/tools";
 
@@ -60,9 +60,11 @@ const landing = readFileSync("src/components/kbridge/Landing.tsx", "utf8");
 const header = readFileSync("src/components/kbridge/Header.tsx", "utf8");
 const agentHook = readFileSync("src/components/agent/useAgentChat.ts", "utf8");
 const unifiedApi = readFileSync("src/app/api/ai/unified/route.ts", "utf8");
+const unifiedApplication = readFileSync("src/application/ai/unified-ai.ts", "utf8");
 const consultPage = readFileSync("src/app/[locale]/consult/page.tsx", "utf8");
 const sitemap = readFileSync("src/app/sitemap.ts", "utf8");
 const widget = readFileSync("src/components/typebot/TypebotBubble.tsx", "utf8");
+const inlineTypebot = readFileSync("src/components/typebot/TypebotInline.tsx", "utf8");
 const quickDiagnosis = readFileSync("src/components/diagnosis/HomeQuickDiagnosis.tsx", "utf8");
 const pawMark = readFileSync("src/components/brand/KaxiPawMark.tsx", "utf8");
 const agentLanding = readFileSync("src/components/agent/AgentLanding.tsx", "utf8");
@@ -73,8 +75,11 @@ const button = readFileSync("src/components/ui/button.tsx", "utf8");
 const runningCat = readFileSync("src/components/brand/KaxiRunningCat.tsx", "utf8");
 
 assert.doesNotMatch(landing, /onNavigate\("consult"\)/, "landing must expose one AI entry point");
-assert.match(landing, /<AgentExperience embedded \/>/, "home must embed the working unified AI experience");
+assert.match(landing, /<TypebotInline \/>/, "home must embed the published Typebot conversation entry point");
 assert.match(landing, /id="kaxi-ai"/, "home AI must have its own layout section outside the hero");
+assert.match(inlineTypebot, /open, setInputValue, submitInput/, "the inline composer must open and submit into the shared Typebot runtime");
+assert.match(inlineTypebot, /<label htmlFor="karxy-home-chat-question"/, "the inline composer must expose an accessible input label");
+assert.match(inlineTypebot, /data-chat-surface="typebot"/, "the inline composer must identify the canonical chat surface");
 assert.match(landing, /<HomeQuickDiagnosis/, "home must show an immediate card-based path finder");
 assert.doesNotMatch(landing, /tr\("cta_start"/, "home must not gate participation behind a generic diagnosis CTA");
 assert.doesNotMatch(landing, /kaxi-home-chat-launcher/, "home must not keep a second floating AI launcher");
@@ -92,8 +97,9 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(header, />\s*K\s*<\/div>/, "the legacy K badge must be removed from the header");
 assert.match(agentHook, /\/api\/ai\/unified/, "the single AI screen must use the server-side router");
-assert.match(unifiedApi, /runExpertConsult/, "regulated guidance must retain the expert backend boundary");
-assert.match(unifiedApi, /runActionAgent/, "task execution must retain the action backend boundary");
+assert.match(unifiedApi, /runUnifiedAiHttpAdapter/, "the route must stay a thin HTTP adapter");
+assert.match(unifiedApplication, /runExpertConsultUseCase/, "regulated guidance must retain the expert application boundary");
+assert.match(unifiedApplication, /runActionAgentUseCase/, "task execution must retain the action application boundary");
 
 const officialSummaryDecision = decideUnifiedAiRoute("D-4 체류기간 연장 기준이 어떻게 되나요?");
 const officialSummaryNormalized = normalizeExpertResponse(
@@ -116,7 +122,7 @@ assert.equal(
 
 const llmDecision = decideUnifiedAiRoute("D-4 체류기간 연장 기준이 어떻게 되나요?");
 const llmNormalized = normalizeExpertResponse(
-  { answer: "LLM이 생성한 답변", backend: "kimi" },
+  { answer: "LLM이 생성한 답변", backend: "openai" },
   llmDecision,
   "ko",
   "D-4 체류기간 연장 기준이 어떻게 되나요?",
@@ -127,7 +133,7 @@ assert.equal(llmNormalized.meta.quality.intentConfidence, "high", "LLM-backed an
 
 const documentsDecision = { capability: "expert" as const, mode: "documents" as const, reason: "safety_high_risk" as const };
 const documentsWithTrackNormalized = normalizeExpertResponse(
-  { answer: "서류 안내", backend: "kimi" },
+  { answer: "서류 안내", backend: "openai" },
   documentsDecision,
   "ko",
   "D-4 비자 서류 알려줘",
@@ -138,7 +144,7 @@ assert.equal(documentsWithTrackNormalized.meta.suggestions[0]?.href, "/docs?trac
 assert.equal(documentsWithTrackNormalized.meta.suggestions[0]?.label, DOCS_WORKSPACE_CTA_LABELS.ko, "the CTA label must match the ko workspace copy");
 
 const documentsWithoutTrackNormalized = normalizeExpertResponse(
-  { answer: "서류 안내", backend: "kimi" },
+  { answer: "서류 안내", backend: "openai" },
   documentsDecision,
   "ko",
   "유학 비자 서류가 뭐가 필요해요?",
@@ -147,7 +153,7 @@ const documentsWithoutTrackNormalized = normalizeExpertResponse(
 assert.equal(documentsWithoutTrackNormalized.meta.suggestions[0]?.href, "/docs", "a visa-code-free documents question must fall back to the general docs workspace");
 
 const documentsD10Normalized = normalizeExpertResponse(
-  { answer: "서류 안내", backend: "kimi" },
+  { answer: "서류 안내", backend: "openai" },
   documentsDecision,
   "ko",
   "D-10 비자로 바꾸려면 서류 뭐가 필요해?",
@@ -156,7 +162,7 @@ const documentsD10Normalized = normalizeExpertResponse(
 assert.equal(documentsD10Normalized.meta.suggestions[0]?.href, "/docs?track=D-10", "a D-10 documents question must route to the D-10 lifecycle track");
 
 const documentsE7Normalized = normalizeExpertResponse(
-  { answer: "서류 안내", backend: "kimi" },
+  { answer: "서류 안내", backend: "openai" },
   documentsDecision,
   "ko",
   "E-7 취업 비자로 바꾸려면 어떤 서류가 필요한가요?",

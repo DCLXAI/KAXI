@@ -1,6 +1,5 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
 import { AgentToolSteps } from "./AgentToolSteps";
 import { AgentProgressCard } from "./AgentProgressCard";
 import { AgentResponseCard } from "./AgentResponseCard";
@@ -40,18 +39,14 @@ export function AgentMessageList({
   onSend,
   onSendDraft,
 }: AgentMessageListProps) {
-  const shouldReduceMotion = useReducedMotion();
   const hasStreamingAnswer = messages.some((message) => message.state === "streaming");
 
   return (
     <div className={compact ? "space-y-6 mb-4" : "space-y-6"} aria-live="polite">
       {messages.map((message, index) => (
-        <motion.div
+        <div
           key={message.requestId || index}
-          initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, transform: "translateY(10px)" }}
-          animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, transform: "translateY(0px)" }}
-          transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
-          className={message.role === "user" ? "flex justify-end" : "flex justify-start"}
+          className={`${message.role === "user" ? "flex justify-end" : "flex justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-200 motion-reduce:animate-none`}
         >
           <div className={`max-w-[95%] ${message.role === "user" ? "" : "w-full"}`}>
             {message.role === "user" ? (
@@ -78,18 +73,13 @@ export function AgentMessageList({
               </div>
             )}
           </div>
-        </motion.div>
+        </div>
       ))}
 
       {loading && !hasStreamingAnswer && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
-          className="flex justify-start"
-        >
+        <div className="flex justify-start animate-in fade-in duration-200 motion-reduce:animate-none">
           <AgentProgressCard locale={locale} progress={progress} />
-        </motion.div>
+        </div>
       )}
       <div ref={endRef} className={compact ? "h-4" : "h-44"} />
     </div>

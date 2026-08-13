@@ -26,7 +26,7 @@ function assertOk(condition: unknown, message: string): asserts condition {
   if (!condition) fail(message);
 }
 
-const corpus = getKnowledgeDocsWithMetadata({ referenceDate: new Date("2026-07-31T00:00:00Z") });
+const corpus = getKnowledgeDocsWithMetadata({ referenceDate: new Date("2026-08-10T00:00:00Z") });
 assertOk(corpus.length > 0, "the corpus must be non-empty — an empty import would make every assertion vacuous");
 
 /** What the database looks like right after a faithful ingestion. */

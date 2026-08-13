@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Clock, FileWarning, RefreshCw, ShieldAlert } from "lucide-react";
 import { useAdminApi } from "@/components/admin/AdminShell";
 import { Badge } from "@/components/ui/badge";
@@ -40,12 +40,15 @@ function statusBadge(status: string, risk: string) {
   return <Badge variant="secondary">{status}</Badge>;
 }
 
-export function AdminCases() {
+type AdminCasesInitialData = { cases: AdminCaseListItem[]; counts: AdminCaseCounts };
+
+export function AdminCases({ initialData = null }: { initialData?: AdminCasesInitialData | null }) {
   const { adminFetch } = useAdminApi();
   const [bucket, setBucket] = useState<AdminCaseBucket>("new");
-  const [cases, setCases] = useState<AdminCaseListItem[]>([]);
-  const [counts, setCounts] = useState<AdminCaseCounts | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [cases, setCases] = useState<AdminCaseListItem[]>(initialData?.cases || []);
+  const [counts, setCounts] = useState<AdminCaseCounts | null>(initialData?.counts || null);
+  const [loading, setLoading] = useState(!initialData);
+  const initialPending = useRef(Boolean(initialData));
   const [error, setError] = useState<string | null>(null);
 
   const loadCases = useCallback(async () => {
@@ -65,7 +68,11 @@ export function AdminCases() {
   }, [adminFetch, bucket]);
 
   useEffect(() => {
-    loadCases();
+    if (initialPending.current) {
+      initialPending.current = false;
+      return;
+    }
+    void loadCases();
   }, [loadCases]);
 
   return (

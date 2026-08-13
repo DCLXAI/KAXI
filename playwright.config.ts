@@ -1,8 +1,34 @@
 import { defineConfig, devices } from "@playwright/test";
+import { readFileSync } from "fs";
 import { join } from "path";
 
+// `test:e2e` resolves to node, not bun, so .env.local is not auto-loaded here —
+// only the two keys a worktree needs to stay isolated are read, and anything
+// already in the environment wins so CI's explicit values still take priority.
+function fromEnvLocal(key: string): string | undefined {
+  if (process.env[key]) return process.env[key];
+  let contents: string;
+  try {
+    contents = readFileSync(join(process.cwd(), ".env.local"), "utf8");
+  } catch {
+    return undefined; // absent in CI
+  }
+  let found: string | undefined;
+  for (const line of contents.split("\n")) {
+    const match = line.match(new RegExp(`^${key}\\s*=\\s*(.*)$`));
+    if (match) found = match[1].trim().replace(/^["']|["']$/g, ""); // last wins
+  }
+  return found || undefined;
+}
+
 const e2eDatabaseUrl =
-  process.env.TEST_DATABASE_URL || "postgresql://sunsu@localhost:5433/kaxi_phase0_test?schema=public";
+  fromEnvLocal("TEST_DATABASE_URL") || "postgresql://sunsu@localhost:5433/kaxi_phase0_test?schema=public";
+
+// Worktrees set E2E_PORT so parallel sessions don't share a dev server. Its
+// presence also forces a fresh server: reusing one started by another worktree
+// would test that worktree's code and still report green.
+const e2ePort = fromEnvLocal("E2E_PORT") || "3100";
+const e2eUrl = `http://127.0.0.1:${e2ePort}`;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -11,7 +37,7 @@ export default defineConfig({
   fullyParallel: false,
   reporter: [["list"]],
   use: {
-    baseURL: "http://127.0.0.1:3100",
+    baseURL: e2eUrl,
     trace: "retain-on-failure",
   },
   projects: [
@@ -21,9 +47,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "bun run scripts/prepare-e2e-db.ts && bunx next dev -p 3100",
-    url: "http://127.0.0.1:3100",
-    reuseExistingServer: !process.env.CI,
+    command: `bun run scripts/prepare-e2e-db.ts && bunx next dev -p ${e2ePort}`,
+    url: e2eUrl,
+    reuseExistingServer: !process.env.CI && e2ePort === "3100",
     timeout: 120_000,
     env: {
       DATABASE_URL: e2eDatabaseUrl,

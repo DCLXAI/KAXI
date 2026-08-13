@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 export type RagProvenance = {
   workflowId: string;
   workflowVersionId: string;
@@ -65,7 +66,7 @@ export function summarizeRagProvenance(
 
 export function resolveRagProvenance(
   value?: unknown,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = runtimeEnvironment(),
 ): RagProvenance {
   const candidate = record(value);
   return {

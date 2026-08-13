@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 import { primarySecret, rotatingSecrets } from "@/lib/security/rotating-secret";
 
@@ -12,7 +13,7 @@ type ChatSessionTokenPayload = {
   nonce: string;
 };
 
-function secret(env: NodeJS.ProcessEnv = process.env) {
+function secret(env: NodeJS.ProcessEnv = runtimeEnvironment()) {
   const value = primarySecret(env, "CHAT_SESSION_SIGNING_SECRET");
   if (!value) {
     throw new Error("CHAT_SESSION_SIGNING_SECRET_NOT_CONFIGURED");
@@ -53,7 +54,7 @@ export function verifyChatSessionToken(token: string | undefined | null, expecte
   const [encoded, signature] = String(token || "").split(".");
   if (!encoded || !signature) return null;
 
-  const validSignature = rotatingSecrets(process.env, "CHAT_SESSION_SIGNING_SECRET")
+  const validSignature = rotatingSecrets(runtimeEnvironment(), "CHAT_SESSION_SIGNING_SECRET")
     .some((candidate) => equal(signature, createHmac("sha256", candidate).update(encoded).digest("base64url")));
   if (!validSignature) return null;
 

@@ -1,4 +1,5 @@
-import { parsePositiveInt } from "@/lib/api/security";
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
+import { parsePositiveInt } from "@/lib/runtime/config";
 import {
   canPersistPiiValue,
   preparePiiField,
@@ -18,7 +19,7 @@ export function protectChatQuestion(question: string) {
     questionCiphertext: protectedQuestion.ciphertext,
     questionHash: protectedQuestion.hash,
     questionRedacted: protectedQuestion.redacted,
-    retentionUntil: retentionUntil(parsePositiveInt(process.env.PRIVACY_CHATLOG_RETENTION_DAYS, 90)),
+    retentionUntil: retentionUntil(parsePositiveInt(runtimeEnvironment().PRIVACY_CHATLOG_RETENTION_DAYS, 90)),
   };
 }
 

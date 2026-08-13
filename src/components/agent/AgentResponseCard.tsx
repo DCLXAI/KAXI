@@ -18,7 +18,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { KaxiPawMark } from "@/components/brand/KaxiPawMark";
-import { MessageResponse } from "@/components/ai-elements/message";
 import {
   linkCitationMarkers,
   SourceAnnotations,
@@ -196,9 +195,9 @@ export function AgentResponseCard({
       )}
 
       <div className="text-sm leading-relaxed">
-        <MessageResponse>
+        <div className="whitespace-pre-wrap break-words">
           {linkCitationMarkers(message.text, agentSourceAnnotations(message), `agent-message-${messageIndex}`, 8)}
-        </MessageResponse>
+        </div>
         {message.state === "streaming" && (
           <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-foreground align-text-bottom" aria-hidden="true" />
         )}

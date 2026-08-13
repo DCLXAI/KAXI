@@ -7,11 +7,16 @@ on:
   workflow_call:
 
 jobs:
-  verify:
+  quality:
+    name: quality-${{ matrix.suite }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [types, domain, ops, integration, performance]
     services:
       postgres:
-        image: pgvector/pgvector:pg17
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_DB: kaxi_ci
           POSTGRES_PASSWORD: postgres
@@ -32,13 +37,14 @@ jobs:
       RESTORE_MODEL_CACHE_ON_INSTALL: "true"
       TRANSFORMERS_ALLOW_REMOTE: "false"
       TRANSFORMERS_ALLOW_LOCAL: "true"
-      AI_PROVIDER: "kimi"
+      AI_PROVIDER: "openai"
       OPENAI_API_KEY: ""
-      OPENAI_BASE_URL: "https://api.moonshot.ai/v1"
-      OPENAI_MODEL: "kimi-k2.6"
+      OPENAI_BASE_URL: "https://api.openai.com/v1"
+      OPENAI_MODEL: "gpt-4.1-mini"
       ANTHROPIC_API_KEY: ""
       ANTHROPIC_MODEL: "claude-opus-4-8"
       AI_ALLOW_LLM_FALLBACK: "true"
+      TENANT_CONTEXT_SIGNING_SECRET: "ci-tenant-context-signing-secret-with-32-bytes"
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
@@ -50,17 +56,75 @@ jobs:
         run: psql "postgresql://postgres:postgres@localhost:5432/postgres" -c "CREATE DATABASE kaxi_test;"
       - name: Prepare Supabase-compatible Postgres database
         run: bun run db:migrate:deploy && bun run db:seed:schools && bun run db:seed:synonyms && bun run db:seed:rules && bun run knowledge:pgvector
-      - name: Typecheck profiles
-        run: bun run ci:types
-      - name: Lint
-        run: bun run lint
-      - name: Verify domain quality gates
-        run: bun run ci:domain
-      - name: Verify operations quality gates
-        run: bun run ci:ops
-      - name: Build
+      - name: Build for bundle and trace performance gate
+        if: matrix.suite == 'performance'
         run: bun run build
+      - name: Run manifest suite with JUnit reporting
+        run: bun run ci:suite -- ${{ matrix.suite }}
+      - name: Capture bundle and server trace metrics
+        if: always() && matrix.suite == 'performance'
+        run: |
+          mkdir -p artifacts
+          bun run architecture:measure > artifacts/architecture-metrics.json
+      - name: Upload suite results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.suite }}
+          if-no-files-found: warn
+          path: |
+            artifacts/test-results/${{ matrix.suite }}.*
+            artifacts/architecture-metrics.json
+            .next/server/app/**/route.js.nft.json
+            .next/server/app/**/page_client-reference-manifest.js
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: kaxi_ci
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d kaxi_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/kaxi_ci?schema=public
+      SUPABASE_DIRECT_URL: postgresql://postgres:postgres@localhost:5432/kaxi_ci?schema=public
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/kaxi_test?schema=public
+      MODEL_CACHE_DIR: ${{ github.workspace }}/data/model-cache
+      VECTOR_CACHE_FILE: ${{ github.workspace }}/data/vector-store/embeddings-cache.json
+      RESTORE_MODEL_CACHE_ON_INSTALL: "true"
+      TRANSFORMERS_ALLOW_REMOTE: "false"
+      TRANSFORMERS_ALLOW_LOCAL: "true"
+      TENANT_CONTEXT_SIGNING_SECRET: "ci-tenant-context-signing-secret-with-32-bytes"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+      - name: Install and restore runtime artifacts
+        run: bun install --frozen-lockfile
+      - name: Create isolated test database
+        run: psql "postgresql://postgres:postgres@localhost:5432/postgres" -c "CREATE DATABASE kaxi_test;"
+      - name: Prepare Supabase-compatible Postgres database
+        run: bun run db:migrate:deploy && bun run db:seed:schools && bun run db:seed:synonyms && bun run db:seed:rules && bun run knowledge:pgvector
       - name: Install Playwright browsers
         run: bunx playwright install --with-deps chromium
       - name: End-to-end smoke
-        run: bun run test:e2e
+        run: bun run ci:suite -- e2e
+      - name: Upload E2E results and traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-e2e
+          if-no-files-found: warn
+          path: |
+            artifacts/test-results/e2e.*
+            test-results/**

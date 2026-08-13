@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
   ArrowRight,
@@ -81,8 +80,6 @@ function ChoiceButton({ icon: Icon, label, onSelect, selected }: ChoiceButtonPro
 export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpdate, submitting }: DiagnosisFormProps) {
   const t = useTranslations();
   const [step, setStep] = useState(initialStep);
-  const [direction, setDirection] = useState<1 | -1>(1);
-  const reducedMotion = useReducedMotion();
   const [goalConfirmed, setGoalConfirmed] = useState(initialStep > 0);
   const [koreanConfirmed, setKoreanConfirmed] = useState(initialStep > 2);
   const [brokerConfirmed, setBrokerConfirmed] = useState(initialStep > 4);
@@ -185,24 +182,10 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
   ];
 
   const next = () => {
-    setDirection(1);
     setStep((current) => Math.min(TOTAL_STEPS - 1, current + 1));
   };
   const previous = () => {
-    setDirection(-1);
     setStep((current) => Math.max(0, current - 1));
-  };
-
-  const stepVariants = {
-    enter: (dir: 1 | -1) => ({
-      opacity: 0,
-      transform: reducedMotion ? "translateX(0px)" : `translateX(${dir * 24}px)`,
-    }),
-    center: { opacity: 1, transform: "translateX(0px)" },
-    exit: (dir: 1 | -1) => ({
-      opacity: 0,
-      transform: reducedMotion ? "translateX(0px)" : `translateX(${dir * -24}px)`,
-    }),
   };
 
   return (
@@ -248,15 +231,9 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
       </CardHeader>
 
       <CardContent className="min-h-[20rem] px-5 py-6 sm:min-h-[21rem] sm:px-7 sm:py-8">
-      <AnimatePresence mode="wait" initial={false} custom={direction}>
-      <motion.div
+      <div
         key={step}
-        custom={direction}
-        variants={stepVariants}
-        initial="enter"
-        animate="center"
-        exit="exit"
-        transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+        className="animate-in fade-in slide-in-from-right-3 duration-200 motion-reduce:animate-none"
       >
         {step === 0 && (
           <div className="space-y-5">
@@ -481,8 +458,7 @@ export function DiagnosisForm({ initialStep = 0, input, locale, onSubmit, onUpda
             </div>
           </div>
         )}
-      </motion.div>
-      </AnimatePresence>
+      </div>
       </CardContent>
 
       <CardFooter className="sticky bottom-0 z-10 justify-between gap-3 border-t border-border bg-card/95 px-5 py-4 backdrop-blur sm:px-7">

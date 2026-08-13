@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { redactSensitiveText } from "@/lib/privacy/pii";
 
 export const DEFAULT_ANTHROPIC_MODEL = "claude-opus-4-8";
@@ -27,7 +28,7 @@ export interface ClaudeGatewayOptions {
 export interface ClaudeGatewayResult {
   text: string;
   model: string;
-  backend: "claude";
+  backend: "anthropic";
   durationMs: number;
   inputChars: number;
   outputChars: number;
@@ -48,25 +49,36 @@ type AnthropicClient = {
 };
 
 type AnthropicModule = {
-  default: new (options: { apiKey: string }) => AnthropicClient;
+  default: new (options: { apiKey: string; baseURL?: string }) => AnthropicClient;
 };
 
-function apiKey(env: NodeJS.ProcessEnv = process.env): string {
+function apiKey(env: NodeJS.ProcessEnv = runtimeEnvironment()): string {
   return env.ANTHROPIC_API_KEY?.trim() || "";
 }
 
-export function getAnthropicModel(env: NodeJS.ProcessEnv = process.env): string {
+export function getAnthropicModel(env: NodeJS.ProcessEnv = runtimeEnvironment()): string {
   return env.ANTHROPIC_MODEL?.trim() || DEFAULT_ANTHROPIC_MODEL;
 }
 
-export function isClaudeConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
-  return Boolean(apiKey(env));
+export function getAnthropicBaseUrl(env: NodeJS.ProcessEnv = runtimeEnvironment()): string {
+  return env.ANTHROPIC_BASE_URL?.trim().replace(/\/+$/, "") || "https://api.anthropic.com";
 }
 
-export function getClaudeGatewayDiagnostics(env: NodeJS.ProcessEnv = process.env) {
+export function isGenuineAnthropicConfiguration(env: NodeJS.ProcessEnv = runtimeEnvironment()): boolean {
+  return /^https:\/\/api\.anthropic\.com(?:\/|$)/i.test(getAnthropicBaseUrl(env))
+    && !/kimi|moonshot/i.test(`${getAnthropicBaseUrl(env)} ${getAnthropicModel(env)}`);
+}
+
+export function isClaudeConfigured(env: NodeJS.ProcessEnv = runtimeEnvironment()): boolean {
+  return Boolean(apiKey(env)) && isGenuineAnthropicConfiguration(env);
+}
+
+export function getClaudeGatewayDiagnostics(env: NodeJS.ProcessEnv = runtimeEnvironment()) {
   return {
     apiKeyConfigured: isClaudeConfigured(env),
     model: getAnthropicModel(env),
+    baseUrl: getAnthropicBaseUrl(env),
+    genuineProvider: isGenuineAnthropicConfiguration(env),
     thinking: { type: "adaptive" },
     structuredOutput: "output_config.format(json_schema)",
   };
@@ -101,7 +113,12 @@ async function loadAnthropicClient(): Promise<AnthropicClient> {
     // and every production call fails as "SDK unavailable".
     const mod = (await import("@anthropic-ai/sdk")) as unknown as AnthropicModule;
     const Anthropic = mod.default;
-    return new Anthropic({ apiKey: key });
+    if (!isGenuineAnthropicConfiguration()) {
+      throw new ClaudeNotConfiguredError(
+        "ANTHROPIC_BASE_URL and ANTHROPIC_MODEL must identify the official Anthropic API; compatibility endpoints are not accepted",
+      );
+    }
+    return new Anthropic({ apiKey: key, baseURL: getAnthropicBaseUrl() });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new ClaudeNotConfiguredError(`Anthropic SDK unavailable: ${message}`);
@@ -197,7 +214,7 @@ export async function generateClaudeText(options: ClaudeGatewayOptions): Promise
   return {
     text,
     model: getAnthropicModel(),
-    backend: "claude",
+    backend: "anthropic",
     durationMs: Date.now() - startedAt,
     inputChars,
     outputChars: text.length,

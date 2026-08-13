@@ -1,6 +1,6 @@
 import { createClient, type User as SupabaseUser } from "@supabase/supabase-js";
 import { db } from "../src/lib/db";
-import { getSupabaseServerConfig } from "../src/lib/supabase/config";
+import { getSupabaseServerConfig } from "../src/infrastructure/config/supabase-server-config";
 
 function fail(message: string): never {
   throw new Error(`[bootstrap-supabase-admin] ${message}`);

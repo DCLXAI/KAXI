@@ -217,6 +217,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = serviceRoleKey;
 try {
   const { loadChatSessionSnapshot, normalizeChatHistorySources } = await import("../src/lib/chat/history");
   const { persistChatExchange } = await import("../src/lib/chat/persistence");
+  const { platformAnonymousTenantContext } = await import("../src/application/tenancy/tenant-context");
   const {
     CHAT_SESSION_COOKIE,
     createKaxiSessionId,
@@ -225,13 +226,14 @@ try {
   const sessionRoute = await import("../src/app/api/chat-session/route");
 
   agentSessionKey = createKaxiSessionId();
+  const agentTenantContext = platformAnonymousTenantContext(agentSessionKey);
   const agentQuestion = "국비유학 비자 신청 절차가 궁금합니다.";
   const agentAnswer = "국비유학 비자는 학교 발급 서류와 정부 지원 확인서가 필요합니다.";
   await persistChatExchange({
     requestId: crypto.randomUUID(),
     idempotencyKey: `unified-${crypto.randomUUID()}`,
     sessionKey: agentSessionKey,
-    tenantId: "default",
+    tenantContext: agentTenantContext,
     locale: "ko",
     source: "kaxi-site",
     question: agentQuestion,
@@ -248,7 +250,7 @@ try {
     latencyMs: 42,
   });
 
-  const agentSnapshot = await loadChatSessionSnapshot(agentSessionKey);
+  const agentSnapshot = await loadChatSessionSnapshot(agentTenantContext, agentSessionKey);
   assert(agentSnapshot, "a persisted unified agent turn should be restorable from the cookie session");
   assert.equal(agentSnapshot.messages.length, 1);
   assert.equal(agentSnapshot.messages[0].question, agentQuestion);
@@ -257,7 +259,7 @@ try {
   assert.equal(agentSnapshot.messages[0].workflowVersionId, "kaxi-unified-chat@2026-07-21.v1");
   assert.equal(agentSnapshot.messages[0].status, "completed");
 
-  const snapshot = await loadChatSessionSnapshot(sessionKey);
+  const snapshot = await loadChatSessionSnapshot(platformAnonymousTenantContext(sessionKey), sessionKey);
   assert(snapshot, "owned KAXI session should produce a snapshot");
   assert.equal(snapshot.messages.length, 2);
   assert.equal(snapshot.messages[0].question, "D-4 비자 준비 서류를 알려주세요.");

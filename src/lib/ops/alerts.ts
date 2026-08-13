@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { createHmac } from "crypto";
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -102,7 +103,7 @@ function requiredChannels(env: NodeJS.ProcessEnv) {
   ));
 }
 
-export function getOpsAlertDiagnostics(env: NodeJS.ProcessEnv = process.env): OpsAlertDiagnostics {
+export function getOpsAlertDiagnostics(env: NodeJS.ProcessEnv = runtimeEnvironment()): OpsAlertDiagnostics {
   const targets = legacyWebhookTargets(env);
   const configuredChannels: OpsAlertChannel[] = [
     ...(targets.webhookUrl ? ["webhook" as const] : []),
@@ -200,7 +201,7 @@ export async function sendOpsAlert(
   payload: OpsAlertPayload,
   options: { fetchImpl?: FetchLike; env?: NodeJS.ProcessEnv } = {},
 ): Promise<OpsAlertResult> {
-  const env = options.env || process.env;
+  const env = options.env || runtimeEnvironment();
   const fetchImpl = options.fetchImpl || fetch;
   const targets = legacyWebhookTargets(env);
   const deliveries: Array<Promise<OpsAlertChannelResult>> = [];

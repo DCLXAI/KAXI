@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { decryptPii, encryptPii } from "@/lib/privacy/pii";
 
@@ -31,7 +32,7 @@ export function sha256Hex(value: Buffer | Uint8Array | string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-export function getDocumentUploadSigningSecret(env: NodeJS.ProcessEnv = process.env): string {
+export function getDocumentUploadSigningSecret(env: NodeJS.ProcessEnv = runtimeEnvironment()): string {
   const configured =
     env.DOCUMENT_UPLOAD_SIGNING_SECRET ||
     env.ADMIN_API_KEY ||

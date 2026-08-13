@@ -1,9 +1,8 @@
 import { cookies } from "next/headers";
 import type { NextRequest, NextResponse } from "next/server";
-import { getSupabasePublicConfig, getSupabaseServerConfig, supabaseMissingMessage } from "@/lib/supabase/config";
+import { getSupabasePublicConfig, supabaseMissingMessage } from "@/lib/supabase/config";
 import {
   SupabaseSdkUnavailableError,
-  loadSupabaseJs,
   loadSupabaseSsr,
   type SupabaseClientLike,
   type SupabaseAuthUser,
@@ -56,17 +55,6 @@ export async function createSupabaseMiddlewareClient(req: NextRequest, res: Next
         }
       },
     },
-  });
-}
-
-export async function createSupabaseServiceRoleClient(): Promise<SupabaseClientLike> {
-  const config = getSupabaseServerConfig();
-  if (!config?.serviceRoleKey) {
-    throw new SupabaseAuthConfigurationError("SUPABASE_SERVICE_ROLE_KEY is required for server-only admin Auth operations.");
-  }
-  const { createClient } = await loadSupabaseJs();
-  return createClient(config.url, config.serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
   });
 }
 

@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { DocumentStatus, Prisma, ReviewStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { recordAuditLog } from "@/lib/audit";
@@ -242,7 +243,7 @@ async function extractWithLlm(input: {
   mimeType: string;
   bytes: Buffer;
 }): Promise<OcrExtraction> {
-  const mock = process.env.DOCUMENT_OCR_MOCK_RESPONSE_JSON;
+  const mock = runtimeEnvironment().DOCUMENT_OCR_MOCK_RESPONSE_JSON;
   if (mock) return JSON.parse(mock) as OcrExtraction;
 
   const isPdf = input.mimeType === "application/pdf";
@@ -326,7 +327,7 @@ export async function processDocumentOcr(documentItemId: string, context: Docume
         ocrExtractedCiphertext: ciphertext,
         ocrExtractedRedacted: jsonValue(redactedExtraction(extraction)),
         ocrValidation: jsonValue(validation),
-        ocrModel: process.env.DOCUMENT_OCR_MOCK_RESPONSE_JSON ? "mock" : getLlmModel(),
+        ocrModel: runtimeEnvironment().DOCUMENT_OCR_MOCK_RESPONSE_JSON ? "mock" : getLlmModel(),
         ocrProcessedAt: new Date(),
       },
       include: { file: true },

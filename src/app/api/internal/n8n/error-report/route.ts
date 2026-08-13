@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { parseLimit, rateLimit } from "@/lib/api/security";
@@ -11,7 +12,7 @@ function text(value: unknown, maxLength: number) {
 }
 
 function configuredSecret() {
-  const secret = process.env.N8N_ERROR_REPORTING_SECRET?.trim() || "";
+  const secret = runtimeEnvironment().N8N_ERROR_REPORTING_SECRET?.trim() || "";
   return secret.length >= 32 && !/^(replace-with-|change_me)/i.test(secret) ? secret : "";
 }
 
@@ -29,7 +30,7 @@ function authorized(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const limited = await rateLimit(req, {
     key: "n8n-error-report",
-    limit: parseLimit(process.env.N8N_ERROR_REPORT_RATE_LIMIT, 120),
+    limit: parseLimit(runtimeEnvironment().N8N_ERROR_REPORT_RATE_LIMIT, 120),
     windowMs: 60 * 1000,
   });
   if (limited) return limited;

@@ -1,4 +1,5 @@
 import { AdminCaseDetail } from "@/components/admin/AdminCaseDetail";
+import { forPlatformAdmin, queryAdminCase } from "@/lib/admin/server-queries";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -6,5 +7,6 @@ type PageProps = {
 
 export default async function AdminCaseDetailPage({ params }: PageProps) {
   const { id } = await params;
-  return <AdminCaseDetail caseId={id} />;
+  const initialData = await forPlatformAdmin(() => queryAdminCase(id)).catch(() => null);
+  return <AdminCaseDetail caseId={id} initialData={initialData} />;
 }

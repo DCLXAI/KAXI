@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recordAuditLog } from "@/lib/audit";
 import { getAdminContext, getClientIp, requireAdmin } from "@/lib/api/security";
-import { verifyDocumentItem } from "@/lib/documents/verification";
+import { enqueueWorkerJob } from "@/infrastructure/worker/job-repository";
+import { requestTraceContext } from "@/infrastructure/observability/trace-context";
+import { platformServiceTenantContext } from "@/application/tenancy/tenant-context";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -35,7 +37,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     const context = await getAdminContext(req);
     const { id } = await params;
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-    const result = await verifyDocumentItem(id, {
+    const options = {
       visaType: optionalString(body.visaType),
       stayAction: optionalString(body.stayAction),
       applicantContext: optionalString(body.applicantContext),
@@ -44,42 +46,37 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       minRagVectorScore: optionalNumber(body.minRagVectorScore),
       minRagKeywordScore: optionalNumber(body.minRagKeywordScore),
       persist: optionalBoolean(body.persist) ?? true,
+    };
+    const trace = requestTraceContext(req.headers);
+    const job = await enqueueWorkerJob({
+      tenantContext: platformServiceTenantContext("admin-document-verification"),
+      requestId: req.headers.get("x-request-id")?.trim().slice(0, 128) || crypto.randomUUID(),
+      jobType: "document-verify",
+      idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+      payload: { documentItemId: id, options },
+      traceId: trace.traceId,
+      traceparent: trace.traceparent,
+      timeoutMs: 15 * 60_000,
+      deadlineAt: new Date(Date.now() + 2 * 60 * 60_000),
     });
 
     await recordAuditLog({
       actor: context?.actor || "admin",
       actorRole: context?.role || "admin",
-      action: "document.verified",
+      action: "document.verification_enqueued",
       targetType: "documentItem",
       targetId: id,
       ip: getClientIp(req),
       userAgent: req.headers.get("user-agent"),
       metadata: {
-        status: result.status,
-        severity: result.severity,
-        requirementCode: result.requirementCode,
-        layers: result.layers,
-        rag: result.layerDetails.rag
-            ? {
-              retrievedCount: result.layerDetails.rag.retrievedCount,
-              acceptedSourceCount: result.layerDetails.rag.acceptedSourceCount,
-              officialSourceCount: result.layerDetails.rag.officialSourceCount,
-              llmStatus: result.layerDetails.rag.llm.status,
-              llmErrorCode: result.layerDetails.rag.llm.errorCode,
-            }
-          : null,
-        basis: {
-          officialSourceCount: result.basis.officialSourceCount,
-          acceptedSourceCount: result.basis.acceptedSourceCount,
-          latestCheckedAt: result.basis.latestCheckedAt,
-          sourceLabels: result.basis.sourceLabels.slice(0, 10),
-        },
-        issueCodes: result.issues.map((issue) => issue.code).slice(0, 20),
-        sourceDocIds: result.sources.map((source) => source.docId).slice(0, 20),
+        workerJobId: job.id,
+        executionOwner: "kaxi-worker",
+        enableRag: options.enableRag,
+        enableLlm: options.enableLlm,
       },
     });
 
-    return NextResponse.json({ ok: true, verification: result });
+    return NextResponse.json({ ok: true, accepted: true, executionOwner: "kaxi-worker", job }, { status: 202 });
   } catch (err) {
     console.error("[POST /api/admin/documents/:id/verify]", err);
     return NextResponse.json({ error: err instanceof Error ? err.message : "Internal error" }, { status: 400 });

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentKaxiSession } from "@/lib/supabase/auth";
-import { isSupabaseAuthUnavailable } from "@/lib/supabase/server";
+import { createSupabaseServerClient, isSupabaseAuthUnavailable } from "@/lib/supabase/server";
 import type { KaxiSessionPayload } from "@/lib/supabase/session-types";
 
 export const runtime = "nodejs";
@@ -35,5 +35,17 @@ export async function GET() {
     }
     console.error("[GET /api/auth/session]", error);
     return NextResponse.json({ error: "Session lookup failed" }, { status: 500 });
+  }
+}
+
+export async function DELETE() {
+  try {
+    const client = await createSupabaseServerClient();
+    await client.auth.signOut?.();
+    return new NextResponse(null, { status: 204, headers: { "cache-control": "private, no-store" } });
+  } catch (error) {
+    if (isSupabaseAuthUnavailable(error)) return new NextResponse(null, { status: 204 });
+    console.error("[DELETE /api/auth/session]", error);
+    return NextResponse.json({ error: "Sign out failed" }, { status: 500 });
   }
 }

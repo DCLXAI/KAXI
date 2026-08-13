@@ -1,9 +1,11 @@
-import { createClient } from "@supabase/supabase-js";
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
+import { createSupabaseServiceRoleClient } from "@/infrastructure/supabase/service-role-client";
 import { db } from "@/lib/db";
 import { preparePiiField, readPiiField } from "@/lib/privacy/pii";
 import { productLocale } from "@/lib/analytics/events";
 import { recordServerProductEvent } from "@/lib/analytics/server";
 import { notifyUsers } from "@/lib/notifications/repository";
+import { resolveLegacyPlatformTenantId } from "@/application/tenancy/tenant-context";
 import {
   SLA_POLICY_VERSION,
   assertSlaMinutes,
@@ -129,9 +131,9 @@ type ConsentRow = {
 // Exported so src/lib/handoffs/partner.ts can reuse the exact same guard
 // instead of duplicating the loopback-detection logic.
 export function isolatedTestRuntime() {
-  const runtimeDatabase = process.env.DATABASE_URL?.trim() || "";
+  const runtimeDatabase = runtimeEnvironment().DATABASE_URL?.trim() || "";
   return Boolean(
-    process.env.TEST_DATABASE_URL &&
+    runtimeEnvironment().TEST_DATABASE_URL &&
     /^postgres(?:ql)?:\/\/(?:[^@]+@)?(?:localhost|127\.0\.0\.1|\[::1\])/i.test(runtimeDatabase),
   );
 }
@@ -139,10 +141,11 @@ export function isolatedTestRuntime() {
 // Exported so src/lib/handoffs/partner.ts can look up a task's own
 // assignment metadata before delegating its mutation to updateAdminHandoff.
 export function serviceClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || "";
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || "";
-  if (!url || !key) throw new Error("SUPABASE_HANDOFFS_NOT_CONFIGURED");
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  try {
+    return createSupabaseServiceRoleClient();
+  } catch {
+    throw new Error("SUPABASE_HANDOFFS_NOT_CONFIGURED");
+  }
 }
 
 function text(value: unknown) {
@@ -362,7 +365,7 @@ export async function listAdminHandoffs(options: { revealPii: boolean; limit?: n
     return {
       id: String(row.id),
       sessionId: String(row.session_id),
-      tenantId: String(row.tenant_id || "default"),
+      tenantId: resolveLegacyPlatformTenantId(row.tenant_id),
       status,
       riskLevel: String(row.risk_level || "medium"),
       leadStage: String(row.lead_stage || "review"),
@@ -684,5 +687,44 @@ export async function updateAdminHandoff(input: {
     assignee: text(updated.data.assignee),
     closedAt: text(updated.data.closed_at),
     updatedAt: String(updated.data.updated_at),
+  };
+}
+
+export type BulkHandoffUpdateResult = {
+  requested: number;
+  succeeded: number;
+  failed: number;
+  tasks: Awaited<ReturnType<typeof updateAdminHandoff>>[];
+  failures: Array<{ id: string; error: string }>;
+};
+
+export async function updateAdminHandoffsBulk(
+  input: Omit<Parameters<typeof updateAdminHandoff>[0], "id"> & { ids: string[] },
+): Promise<BulkHandoffUpdateResult> {
+  const ids = [...new Set(input.ids.map((id) => id.trim()))];
+  if (ids.length === 0 || ids.length > 100 || ids.some((id) => !/^\d+$/.test(id))) {
+    throw new Error("HANDOFF_IDS_INVALID");
+  }
+
+  const tasks: Awaited<ReturnType<typeof updateAdminHandoff>>[] = [];
+  const failures: Array<{ id: string; error: string }> = [];
+  const { ids: _ids, ...shared } = input;
+
+  // Run sequentially so assignment notifications, evaluation-case creation,
+  // and provider rate limits retain the same guarantees as a single update.
+  for (const id of ids) {
+    try {
+      tasks.push(await updateAdminHandoff({ ...shared, id }));
+    } catch (error) {
+      failures.push({ id, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  return {
+    requested: ids.length,
+    succeeded: tasks.length,
+    failed: failures.length,
+    tasks,
+    failures,
   };
 }

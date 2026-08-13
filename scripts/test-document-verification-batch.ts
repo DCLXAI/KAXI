@@ -19,6 +19,10 @@ prepareTestDb("document verification batch");
 
 const { NextRequest } = await import("next/server");
 const { db } = await import("../src/lib/db");
+const { claimWorkerJobs, completeWorkerJob } = await import("../src/infrastructure/worker/job-repository");
+const { processGenericWorkerJob } = await import("../src/worker/handlers/generic-job");
+const { platformServiceTenantContext } = await import("../src/application/tenancy/tenant-context");
+const tenantContext = platformServiceTenantContext("document-verification-batch-test-worker");
 const batchRoute = await import("../src/app/api/admin/documents/verify-batch/route");
 const { VISA_DOCUMENT_REQUIREMENT_SEEDS } = await import("../src/lib/documents/visa-document-matrix");
 const { verifyDocumentSet } = await import("../src/lib/documents/verification");
@@ -36,6 +40,13 @@ function adminRequest(path: string, body: Record<string, unknown>, includeKey = 
 
 async function responseJson(response: Response) {
   const body = await response.json();
+  if (response.status === 202 && body?.job?.id) {
+    const claimed = await claimWorkerJobs({ tenantContext, limit: 1 });
+    assert(claimed.length === 1 && claimed[0].id === body.job.id, "batch verification job should be claimable by the Worker");
+    const verification = await processGenericWorkerJob(claimed[0], tenantContext, new AbortController().signal);
+    await completeWorkerJob(claimed[0], verification);
+    body.verification = verification;
+  }
   return { ok: response.ok, status: response.status, body };
 }
 
@@ -153,7 +164,7 @@ try {
   assert(placeholder.ocrValidation, "missing placeholder should receive a verification snapshot");
 
   const audit = await db.adminAuditLog.findFirst({
-    where: { action: "document.set_verified", targetId: profile.id },
+    where: { action: "document.set_verification_enqueued", targetId: profile.id },
   });
   assert(audit, "batch verification API should write admin audit log");
 

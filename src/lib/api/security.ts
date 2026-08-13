@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from "@/infrastructure/config/runtime-environment";
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { canUseSharedRuntimeDatabase, db } from "@/lib/db";
@@ -5,6 +6,9 @@ import { getCurrentKaxiSession } from "@/lib/supabase/auth";
 import { getSupabasePublicConfig } from "@/lib/supabase/config";
 import { isSupabaseAuthUnavailable } from "@/lib/supabase/server";
 import { matchesRotatingSecret, primarySecret } from "@/lib/security/rotating-secret";
+import { parseLimit, parsePositiveInt } from "@/lib/runtime/config";
+
+export { parseLimit, parsePositiveInt, withTimeout } from "@/lib/runtime/config";
 
 type JsonBody = Record<string, unknown>;
 
@@ -65,19 +69,19 @@ function roleAllowed(role: AdminRole, allowed: AdminRole[]): boolean {
 }
 
 export async function getAdminContext(req: NextRequest): Promise<AdminContext | null> {
-  const expected = primarySecret(process.env, "ADMIN_API_KEY", 8);
+  const expected = primarySecret(runtimeEnvironment(), "ADMIN_API_KEY", 8);
   const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   const headerKey = req.headers.get("x-admin-key");
   const provided = bearer || headerKey || "";
 
   if (provided) {
-    if (!expected || !matchesRotatingSecret(provided, process.env, "ADMIN_API_KEY", "ADMIN_API_KEY_PREVIOUS", 8)) {
+    if (!expected || !matchesRotatingSecret(provided, runtimeEnvironment(), "ADMIN_API_KEY", "ADMIN_API_KEY_PREVIOUS", 8)) {
       return null;
     }
     const apiKeyRole: AdminRole =
-      process.env.ADMIN_API_KEY_ROLE === "owner"
+      runtimeEnvironment().ADMIN_API_KEY_ROLE === "owner"
         ? "owner"
-        : process.env.ADMIN_API_KEY_ROLE === "viewer"
+        : runtimeEnvironment().ADMIN_API_KEY_ROLE === "viewer"
           ? "viewer"
           : "admin";
     return {
@@ -112,7 +116,7 @@ export async function requireAdmin(
 ): Promise<NextResponse | null> {
   const context = await getAdminContext(req);
   if (!context) {
-    if (!process.env.ADMIN_API_KEY && !getSupabasePublicConfig()) {
+    if (!runtimeEnvironment().ADMIN_API_KEY && !getSupabasePublicConfig()) {
       return jsonError("Admin credentials are not configured", 503);
     }
     // Nothing else throttled admin authentication — no admin route calls
@@ -122,7 +126,7 @@ export async function requireAdmin(
     // meets this; a guesser gets ten tries a minute per client.
     const throttled = await rateLimit(req, {
       key: "admin:auth",
-      limit: parseLimit(process.env.ADMIN_AUTH_FAILURE_RATE_LIMIT, 10),
+      limit: parseLimit(runtimeEnvironment().ADMIN_AUTH_FAILURE_RATE_LIMIT, 10),
       windowMs: 60 * 1000,
     });
     if (throttled) return throttled;
@@ -140,21 +144,21 @@ function rateBucketKey(key: string, ip: string): string {
 }
 
 function canUseDatabaseRateLimit(): boolean {
-  const backend = (process.env.RATE_LIMIT_BACKEND || "auto").toLowerCase();
+  const backend = (runtimeEnvironment().RATE_LIMIT_BACKEND || "auto").toLowerCase();
   if (backend === "memory") return false;
   return canUseSharedRuntimeDatabase();
 }
 
 function isProductionRuntime(): boolean {
   return (
-    process.env.NODE_ENV === "production" ||
-    process.env.VERCEL_ENV === "production" ||
-    process.env.VERCEL === "1"
+    runtimeEnvironment().NODE_ENV === "production" ||
+    runtimeEnvironment().VERCEL_ENV === "production" ||
+    runtimeEnvironment().VERCEL === "1"
   );
 }
 
 function shouldFailClosedRateLimit(): boolean {
-  const backend = (process.env.RATE_LIMIT_BACKEND || "auto").toLowerCase();
+  const backend = (runtimeEnvironment().RATE_LIMIT_BACKEND || "auto").toLowerCase();
   return isProductionRuntime() || backend === "database";
 }
 
@@ -265,20 +269,6 @@ export async function consumeDailyQuota(
   });
 }
 
-export function parsePositiveInt(value: string | undefined, fallback: number): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
-}
-
-export function parseLimit(value: string | undefined, fallback: number): number {
-  const normalized = value?.trim().toLowerCase();
-  if (normalized && ["0", "false", "off", "none", "unlimited", "disabled"].includes(normalized)) {
-    return 0;
-  }
-
-  return parsePositiveInt(value, fallback);
-}
-
 export function sanitizeAiBody(
   body: JsonBody,
   options: {
@@ -333,23 +323,6 @@ export function sanitizeAiBody(
       studentProfileId: typeof body.studentProfileId === "string" ? body.studentProfileId.slice(0, 128) : null,
     },
   };
-}
-
-export async function withTimeout<T>(
-  operation: Promise<T>,
-  timeoutMs: number,
-  label: string
-): Promise<T> {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeout = setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs);
-  });
-
-  try {
-    return await Promise.race([operation, timeoutPromise]);
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
 }
 
 // /api/ai/chat 기본 한도 — env 미설정 시 무제한이 되지 않도록 하는 보수적 기본값.
