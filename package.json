@@ -163,6 +163,7 @@
     "ops:check:trace-coverage": "bun run scripts/check-production-trace-coverage.ts",
     "ops:check:tenant-writes": "bun run scripts/check-production-tenant-writes.ts",
     "ops:check:canary": "bun run scripts/check-production-canary.ts",
+    "ops:check:schema-parity": "bun run scripts/check-production-schema-parity.ts",
     "ops:check:rollout-readiness": "bun run scripts/check-production-rollout-readiness.ts",
     "ops:check:latency": "bun run scripts/check-production-latency.ts",
     "ops:rehearse:alert": "bun run scripts/rehearse-production-alert.ts",

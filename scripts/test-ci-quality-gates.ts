@@ -61,18 +61,74 @@ assert(workflow.includes("bun run ci:suite -- ${{ matrix.suite }}"), "CI matrix 
 assert(workflow.includes("bun run ci:suite -- e2e"), "CI must execute the e2e manifest suite");
 assert(workflow.includes("actions/upload-artifact"), "CI must upload suite, bundle and trace artifacts");
 
-for (const required of ["release:check:source", "release:check:backend", "release:check:typebot"]) {
+for (const required of [
+  "release:check:source",
+  "release:check:backend",
+  "release:check:typebot",
+  "ops:check:schema-parity",
+  "ops:check:rollout-readiness",
+]) {
   assert(scripts[required], `missing release gate script: ${required}`);
 }
-assert(deploymentWorkflow.includes("workflow_run:"), "production deploy must be triggered from a completed CI workflow");
 assert(
-  deploymentWorkflow.includes("github.event.workflow_run.conclusion == 'success'"),
-  "production deploy must require a successful CI conclusion",
+  !deploymentWorkflow.includes("workflow_run:"),
+  "production release must never start automatically after a main CI run",
 );
 assert(
-  deploymentWorkflow.includes("github.event.workflow_run.head_sha"),
-  "production deploy must checkout and verify the CI-tested SHA",
+  deploymentWorkflow.includes("workflow_dispatch:") && deploymentWorkflow.includes("operation:"),
+  "production release must be manually dispatched with an explicit operation",
 );
+assert(
+  deploymentWorkflow.includes("environment: production") && deploymentWorkflow.includes("deployment_authorized"),
+  "production deploy must require the protected production environment and an explicit authorization input",
+);
+assert(
+  deploymentWorkflow.includes("bun --env-file=\"$PRODUCTION_ENV_FILE\" run ops:check:rollout-readiness"),
+  "production deploy must pass the value-redacting rollout preflight before build, migration or deployment",
+);
+assert(
+  deploymentWorkflow.includes("inputs.operation == 'verify'") && deploymentWorkflow.includes("ops:check:schema-parity"),
+  "production release must provide a read-only migration and schema verification operation",
+);
+assert(
+  deploymentWorkflow.includes("EXPECTED_SHA: ${{ inputs.source_commit }}"),
+  "production release must checkout and verify the manually approved source SHA",
+);
+
+function deploymentStep(name: string): string {
+  const marker = `      - name: ${name}`;
+  const start = deploymentWorkflow.indexOf(marker);
+  assert(start >= 0, `production release is missing step: ${name}`);
+  const next = deploymentWorkflow.indexOf("\n      - name:", start + marker.length);
+  return deploymentWorkflow.slice(start, next >= 0 ? next : undefined);
+}
+
+for (const stepName of [
+  "Run fail-closed production rollout preflight",
+  "Check RAG serving projection drift",
+  "Build with Vercel",
+  "Apply PostgreSQL migrations",
+  "Verify post-migration schema parity",
+  "Deploy production canary without assigning domains",
+  "Verify production canary end to end",
+  "Promote verified canary to production domains",
+]) {
+  assert(
+    deploymentStep(stepName).includes("if: ${{ inputs.operation == 'deploy' }}"),
+    `${stepName} must run only for an explicitly selected deploy operation`,
+  );
+}
+assert(
+  deploymentStep("Verify applied production schema").includes("if: ${{ inputs.operation == 'verify' }}"),
+  "read-only schema verification must run only for the verify operation",
+);
+const preflightIndex = deploymentWorkflow.indexOf("- name: Run fail-closed production rollout preflight");
+for (const stepName of ["Build with Vercel", "Apply PostgreSQL migrations", "Deploy production canary without assigning domains"]) {
+  assert(
+    deploymentWorkflow.indexOf(`- name: ${stepName}`) > preflightIndex,
+    `${stepName} must remain after the fail-closed rollout preflight`,
+  );
+}
 assert(
   deploymentWorkflow.includes("bun run release:check:source"),
   "production deploy must reject a dirty or mismatched source checkout",
